@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum PropertyStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum PublicationChannel {
+  FACEBOOK
+  INSTAGRAM
+  WHATSAPP
+}
+
+enum PublicationStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+enum UserRole {
+  ADMIN
+  AGENT
+  SHOWCASE_EDITOR
+}
+
+model Tenant {
+  id                 String                @id @default(cuid())
+  name               String
+  slug               String                @unique
+  whatsapp           String                @default("")
+  email              String                @default("")
+  description        String                @default("")
+  slogan             String                @default("")
+  logoUrl            String                @default("")
+  primaryColor       String                @default("#6366f1")
+  secondaryColor     String                @default("#d4af37")
+  showcaseHeadline   String                @default("")
+  showcaseSubheadline String               @default("")
+  showcaseConfig     Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  properties         Property[]
+  publications       PropertyPublication[]
+  users              User[]
+  leads              PropertyLead[]
+}
+
+model Property {
+  id           String                @id @default(cuid())
+  tenantId     String
+  title        String
+  description  String
+  price        Decimal               @db.Decimal(12, 2)
+  cep          String?
+  address      String
+  neighborhood String                @default("")
+  city         String                @default("")
+  state        String                @default("")
+  propertyType String                @default("")
+  bedrooms     Int                   @default(0)
+  parkingSpots Int                   @default(0)
+  suites       Int                   @default(0)
+  squareFootage String               @default("")
+  status       PropertyStatus        @default(DRAFT)
+  viewCount    Int                   @default(0)
+  leadCount    Int                   @default(0)
+  saleCount    Int                   @default(0)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publications PropertyPublication[]
+  images       PropertyImage[]
+  metricEvents PropertyMetricEvent[]
+  leads        PropertyLead[]
+
+  @@index([tenantId, status])
+}
+
+model PropertyPublication {
+  id            String             @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  channel       PublicationChannel
+  status        PublicationStatus  @default(PENDING)
+  externalRef   String?
+  errorMessage  String?
+  lastAttemptAt DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property      Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, channel])
+  @@index([tenantId, status])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  username  String   @unique
+  password  String
+  role      UserRole @default(AGENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
+}
+
+enum MetricEventType {
+  VIEW
+  LEAD
+  SALE
+}
+
+model PropertyMetricEvent {
+  id         String          @id @default(cuid())
+  tenantId   String
+  propertyId String
+  type       MetricEventType
+  createdAt  DateTime        @default(now())
+  property   Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, propertyId, type, createdAt])
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  url        String
+  publicId   String?
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, propertyId, position])
+}
+
+model PropertyLead {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  name       String?
+  email      String?
+  phone      String?
+  message    String?
+  source     String   @default("showcase")
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, propertyId, createdAt])
+}
