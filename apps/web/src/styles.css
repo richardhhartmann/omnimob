@@ -85,6 +85,19 @@ body {
   margin: 0 auto;
 }
 
+/* Editor da vitrine: usa toda a largura da coluna ao lado da sidebar (sem cap a 1200px). */
+.main-content--editor-vitrine {
+  max-width: none;
+  margin: 0;
+  min-width: 0;
+  align-self: stretch;
+  padding: 20px 24px 32px;
+}
+
+.main-content--editor-vitrine .showcase-container {
+  max-width: none;
+}
+
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
@@ -819,7 +832,7 @@ button:disabled {
   border-color: rgba(15, 23, 42, 0.08);
 }
 
-.showcase-theme-light .showcase-title-section h2,
+.showcase-theme-light .showcase-title-section:not(.showcase-title-section--custom-text) h2,
 .showcase-theme-light .brand-title-group h1,
 .showcase-theme-light .brand-title-group p,
 .showcase-theme-light .showcase-top-header-inline p,
@@ -832,7 +845,7 @@ button:disabled {
   -webkit-text-fill-color: initial;
 }
 
-.showcase-theme-light .showcase-title-section p,
+.showcase-theme-light .showcase-title-section:not(.showcase-title-section--custom-text) p,
 .showcase-theme-light .card-location,
 .showcase-theme-light .stat-item,
 .showcase-theme-light .detail-description,
@@ -1042,7 +1055,9 @@ button:disabled {
   padding: 8px;
   border: 1px dashed rgba(255, 255, 255, 0.2);
   border-radius: 12px;
-  overflow: auto;
+  /* overflow:auto criava “faixas” estreitas com scroll interno; no preview o bloco deve acompanhar o conteúdo */
+  overflow: visible;
+  box-sizing: border-box;
 }
 
 .builder-delete-icon {
@@ -1108,28 +1123,61 @@ button:disabled {
   cursor: nwse-resize;
 }
 
+/* Não usar !important na cor: o seletor "Texto" do bloco aplica cor via style inline */
 .editor-headline.editable-inline {
-  color: #fff !important;
-  -webkit-text-fill-color: #fff !important;
   background: none !important;
 }
 
-.editor-headline.editable-inline:hover,
-.editor-headline.editable-inline:focus {
-  color: #fff !important;
-  -webkit-text-fill-color: #fff !important;
-}
-
-.showcase-theme-light .editor-headline.editable-inline,
-.showcase-theme-light .editor-headline.editable-inline:hover,
-.showcase-theme-light .editor-headline.editable-inline:focus {
-  color: #0f172a !important;
-  -webkit-text-fill-color: #0f172a !important;
+.showcase-theme-light .showcase-title-section:not(.showcase-title-section--custom-text) .editor-headline.editable-inline {
+  color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
 }
 
 .showcase-layout-block {
   position: absolute;
   overflow: auto;
+}
+
+/* Banner de secção (editor + vitrine): imagem + overlay + brilho sem filtrar o texto */
+.showcase-layout-block.showcase-section-has-bg,
+.builder-block.showcase-section-has-bg {
+  overflow: hidden;
+}
+
+.showcase-section-has-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--showcase-bg-url);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: brightness(var(--showcase-bg-brightness, 1));
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.showcase-section-has-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(0, 0, 0, var(--showcase-bg-overlay, 0));
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.showcase-section-has-bg > * {
+  position: relative;
+  z-index: 2;
+}
+
+.showcase-section-has-bg .builder-block-handle,
+.showcase-section-has-bg .builder-delete-icon,
+.showcase-section-has-bg .builder-block-toolbar,
+.showcase-section-has-bg .builder-resize-handle {
+  z-index: 5;
 }
 
 .builder-snap-guide {
@@ -1335,4 +1383,25 @@ button:disabled {
 .widget-fab-menu button {
   width: 100%;
   justify-content: flex-start;
+}
+
+@keyframes chicEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.page-transition {
+  animation: chicEntrance 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }

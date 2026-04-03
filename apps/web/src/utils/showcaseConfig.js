@@ -14,19 +14,26 @@ export const DEFAULT_HIGHLIGHTS = [
 ];
 
 export const DEFAULT_LAYOUT = {
-  topbar: { x: 0, y: 0, w: 100, h: 90 },
-  header: { x: 0, y: 110, w: 100, h: 130 },
-  title: { x: 0, y: 260, w: 100, h: 170 },
-  highlights: { x: 0, y: 450, w: 100, h: 220 },
-  properties: { x: 0, y: 690, w: 100, h: 920 },
-  widgets: { x: 0, y: 1640, w: 100, h: 250 },
-  footer: { x: 0, y: 1920, w: 100, h: 170 },
+  header: { x: 0, y: 0, w: 100, h: 80 },
+  title: { x: 0, y: 150, w: 100, h: 300 },
+  highlights: { x: 0, y: 380, w: 100, h: 200 },
+  properties: { x: 0, y: 580, w: 100, h: 400 },
+  widgets: { x: 0, y: 980, w: 100, h: 200 },
+  footer: { x: 0, y: 1180, w: 100, h: 150 }
 };
 
 const BLOCK_KEYS = ["topbar", "header", "title", "highlights", "properties", "widgets", "footer"];
 
 function emptyBlockStyle() {
-  return { backgroundColor: "", color: "" };
+  return { backgroundColor: "", color: "", backgroundImage: "", backgroundOverlay: 0, backgroundBrightness: 1 };
+}
+
+function clamp01(n) {
+  return Math.min(1, Math.max(0, n));
+}
+
+function clampBrightness(n) {
+  return Math.min(2, Math.max(0.3, n));
 }
 
 function normalizeBlockStyles(raw) {
@@ -34,11 +41,28 @@ function normalizeBlockStyles(raw) {
   return Object.fromEntries(
     BLOCK_KEYS.map((key) => {
       const b = base[key] || {};
+      const overlayRaw = b.backgroundOverlay;
+      const brightRaw = b.backgroundBrightness;
+      let overlay = 0;
+      if (typeof overlayRaw === "number" && Number.isFinite(overlayRaw)) overlay = clamp01(overlayRaw);
+      else if (typeof overlayRaw === "string" && overlayRaw !== "") {
+        const p = parseFloat(overlayRaw);
+        if (Number.isFinite(p)) overlay = clamp01(p);
+      }
+      let brightness = 1;
+      if (typeof brightRaw === "number" && Number.isFinite(brightRaw)) brightness = clampBrightness(brightRaw);
+      else if (typeof brightRaw === "string" && brightRaw !== "") {
+        const p = parseFloat(brightRaw);
+        if (Number.isFinite(p)) brightness = clampBrightness(p);
+      }
       return [
         key,
         {
           backgroundColor: typeof b.backgroundColor === "string" ? b.backgroundColor : "",
           color: typeof b.color === "string" ? b.color : "",
+          backgroundImage: typeof b.backgroundImage === "string" ? b.backgroundImage : "",
+          backgroundOverlay: overlay,
+          backgroundBrightness: brightness,
         },
       ];
     })
@@ -153,7 +177,36 @@ export function normalizeShowcaseConfig(raw) {
 export function mergeBlockWrapperStyle(blockStyle) {
   const s = blockStyle || emptyBlockStyle();
   const out = {};
-  if (s.backgroundColor) out.backgroundColor = s.backgroundColor;
+  const hasBgImage = typeof s.backgroundImage === "string" && s.backgroundImage.trim() !== "";
+  if (s.backgroundColor && !hasBgImage) out.backgroundColor = s.backgroundColor;
   if (s.color) out.color = s.color;
   return out;
+}
+
+function escapeUrlForCss(url) {
+  return String(url).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Estilo da secção exterior com imagem de fundo (variáveis CSS para ::before/::after).
+ * Quando não há URL, delega em mergeBlockWrapperStyle.
+ */
+export function sectionSurfaceStyle(blockStyle) {
+  const s = blockStyle || emptyBlockStyle();
+  const url = typeof s.backgroundImage === "string" && s.backgroundImage.trim();
+  if (!url) {
+    return mergeBlockWrapperStyle(s);
+  }
+  const overlay = clamp01(typeof s.backgroundOverlay === "number" ? s.backgroundOverlay : 0);
+  const brightness = clampBrightness(typeof s.backgroundBrightness === "number" ? s.backgroundBrightness : 1);
+  const out = {};
+  if (s.color) out.color = s.color;
+  out["--showcase-bg-url"] = `url("${escapeUrlForCss(url)}")`;
+  out["--showcase-bg-overlay"] = String(overlay);
+  out["--showcase-bg-brightness"] = String(brightness);
+  return out;
+}
+
+export function blockHasBackgroundImage(blockStyle) {
+  return typeof blockStyle?.backgroundImage === "string" && blockStyle.backgroundImage.trim() !== "";
 }

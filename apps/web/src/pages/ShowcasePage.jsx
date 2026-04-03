@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
-import { mergeBlockWrapperStyle, normalizeShowcaseConfig } from "../utils/showcaseConfig";
+import {
+  blockHasBackgroundImage,
+  mergeBlockWrapperStyle,
+  normalizeShowcaseConfig,
+  sectionSurfaceStyle,
+} from "../utils/showcaseConfig";
 
 export function ShowcasePage() {
   const { tenantSlug } = useParams();
@@ -73,20 +78,38 @@ export function ShowcasePage() {
   const canvasHeight = Math.max(1800, ...Object.values(layout).map((block) => (block?.y || 0) + (block?.h || 0))) + 40;
 
   function sectionCombinedStyle(key) {
-    return {
-      ...{
-        left: `${layout[key].x}%`,
-        top: `${layout[key].y}px`,
-        width: `${layout[key].w}%`,
-        minHeight: `${layout[key].h}px`,
-      },
-      ...mergeBlockWrapperStyle(blockStyles[key]),
+    const bs = blockStyles[key];
+    const hasBanner = blockHasBackgroundImage(bs);
+    
+    const layoutPart = {
+      left: hasBanner ? "calc(50% - 50vw)" : `${layout[key].x}%`,
+      top: `${layout[key].y}px`,
+      width: hasBanner ? "100vw" : `${layout[key].w}%`,
+      maxWidth: hasBanner ? "100vw" : undefined,
+      minHeight: `${layout[key].h}px`,
+      boxSizing: hasBanner ? "border-box" : undefined,
+      zIndex: hasBanner ? 0 : 10,
     };
+    
+    if (hasBanner) {
+      return { 
+        ...layoutPart, 
+        ...sectionSurfaceStyle(bs),
+        backgroundPosition: "top center"
+      };
+    }
+    return { ...layoutPart, ...mergeBlockWrapperStyle(bs) };
   }
 
   function headerInnerStyle() {
     const bs = blockStyles.header || {};
     const primary = tenant.primaryColor || "#6366f1";
+    if (blockHasBackgroundImage(bs)) {
+      return {
+        background: "transparent",
+        ...(bs.color ? { color: bs.color } : {}),
+      };
+    }
     if (bs.backgroundColor) {
       return {
         background: bs.backgroundColor,
@@ -105,74 +128,105 @@ export function ShowcasePage() {
 
   return (
     <div className={`showcase-body ${isLightMode ? "showcase-theme-light" : ""}`} style={themeStyle}>
+      {/* ADICIONE ESTE BLOCO DE STYLE AQUI: */}
+      <style>{`
+        .showcase-body span[style*="color"],
+        .showcase-body font[color] {
+          -webkit-text-fill-color: currentcolor !important;
+          -webkit-background-clip: initial !important;
+          background: none !important;
+        }
+      `}</style>
+      
       <div className="showcase-container showcase-builder-canvas" style={{ minHeight: `${canvasHeight}px` }}>
-        {isVisible("topbar") ? (
-        <section className="showcase-layout-block" style={sectionCombinedStyle("topbar")}>
-          <section className="showcase-top-header-inline" style={mergeBlockWrapperStyle(blockStyles.topbar)}>
-            <p style={blockStyles.topbar?.color ? { color: blockStyles.topbar.color } : undefined}>{showcaseConfig.topHeader.title}</p>
-            <small style={blockStyles.topbar?.color ? { color: blockStyles.topbar.color } : undefined}>{showcaseConfig.topHeader.subtitle}</small>
-          </section>
-        </section>
-        ) : null}
 
         {isVisible("header") ? (
-        <section className="showcase-layout-block" style={sectionCombinedStyle("header")}>
-          <header className="showcase-header" style={headerInnerStyle()}>
-            <div className="showcase-brand">
-              <div className="brand-logo-exclusive">
-                {tenant.logoUrl ? <img src={tenant.logoUrl} alt={`Logo ${tenantName}`} className="brand-logo-image" /> : initialLetter}
+        <section
+          id="header"
+          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.header) ? " showcase-section-has-bg" : ""}`}
+          style={{
+            ...sectionCombinedStyle("header"),
+            left: "calc(50% - 50vw)",
+            width: "100vw",
+            maxWidth: "100vw",
+            boxSizing: "border-box"
+          }}
+        >
+          <header style={{ ...headerInnerStyle(), display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 5%", width: "100%", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", fontWeight: "bold", overflow: "hidden" }}>
+                {tenant.logoUrl ? (
+                  <img src={tenant.logoUrl} alt={tenantName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  initialLetter
+                )}
               </div>
-              <div className="brand-title-group">
-                <h1 style={blockStyles.header?.color ? { color: blockStyles.header.color } : undefined}>{tenantName}</h1>
-                <p style={blockStyles.header?.color ? { color: blockStyles.header.color } : undefined}>
-                  {tenant.slogan || "Atendimento especializado em imoveis"}
-                </p>
-              </div>
+              <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700", ...(blockStyles.header?.color ? { color: blockStyles.header.color } : {}) }}>
+                {tenantName}
+              </h1>
             </div>
-            <nav className="showcase-nav">
+            
+            <nav style={{ display: "flex", gap: "32px", alignItems: "center" }}>
+              <a href="#destaques" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "16px", fontWeight: "600", cursor: "pointer" }}>
+                Ver imóveis
+              </a>
+              <a href="#footer" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "16px", fontWeight: "600", cursor: "pointer" }}>
+                Sobre nós
+              </a>
               {whatsappHref ? (
-                <a href={whatsappHref} target="_blank" rel="noreferrer" className="nav-button" style={{ fontSize: "14px" }}>
+                <a href={whatsappHref} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--accent)", color: "#fff", padding: "10px 20px", borderRadius: "8px", fontWeight: "600", textDecoration: "none" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                   Falar com consultor
                 </a>
-              ) : (
-                <a href="#destaques" className="nav-button" style={{ fontSize: "14px" }}>
-                  Ver destaques
-                </a>
-              )}
-              <Link to={`/login?tenant=${tenantSlug}`} className="nav-button" style={{ fontSize: "14px" }}>
-                Login do tenant
+              ) : null}
+              <Link to={`/login?tenant=${tenantSlug}`} style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "14px", fontWeight: "500", marginLeft: "16px", opacity: 0.8 }}>
+                Acesso
               </Link>
             </nav>
           </header>
         </section>
         ) : null}
 
-        {isVisible("title") ? (
-        <section className="showcase-layout-block" style={sectionCombinedStyle("title")}>
-          <section className="showcase-title-section" style={mergeBlockWrapperStyle(blockStyles.title)}>
+        {isVisible("title") ? (   
+        <section
+          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.title) ? " showcase-section-has-bg" : ""}`}
+          style={sectionCombinedStyle("title")}
+        >
+          <section
+            className={`showcase-title-section${titleColor ? " showcase-title-section--custom-text" : ""}`}
+            style={mergeBlockWrapperStyle(blockStyles.title)}
+          >
             <h2
               style={
                 titleColor
-                  ? { color: titleColor, WebkitTextFillColor: titleColor, background: "none", backgroundClip: "unset" }
+                  ? {
+                      color: titleColor,
+                      background: "none",
+                      backgroundImage: "none",
+                      WebkitBackgroundClip: "unset",
+                      backgroundClip: "unset",
+                    }
                   : undefined
               }
-            >
-              {showcaseHeadline}
-            </h2>
-            <p style={titleColor ? { color: titleColor } : undefined}>{showcaseSubheadline}</p>
+              dangerouslySetInnerHTML={{ __html: showcaseHeadline }}
+            />
+            <p style={titleColor ? { color: titleColor } : undefined} dangerouslySetInnerHTML={{ __html: showcaseSubheadline }} />
           </section>
         </section>
         ) : null}
 
         {isVisible("highlights") ? (
-        <section className="showcase-layout-block" style={sectionCombinedStyle("highlights")}>
+        <section
+          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.highlights) ? " showcase-section-has-bg" : ""}`}
+          style={sectionCombinedStyle("highlights")}
+        >
           <section className="showcase-highlights" style={mergeBlockWrapperStyle(blockStyles.highlights)}>
             {showcaseConfig.highlights.map((item, index) => {
               const hs = showcaseConfig.highlightStyles[index] || { backgroundColor: "", color: "" };
               return (
                 <div className="highlight-box" key={`highlight-${index}`} style={mergeBlockWrapperStyle(hs)}>
-                  <h3 style={hs.color ? { color: hs.color } : undefined}>{item.title}</h3>
-                  <p style={hs.color ? { color: hs.color } : undefined}>{item.description}</p>
+                  <h3 style={hs.color ? { color: hs.color } : undefined} dangerouslySetInnerHTML={{ __html: item.title }} />
+                  <p style={hs.color ? { color: hs.color } : undefined} dangerouslySetInnerHTML={{ __html: item.description }} />
                 </div>
               );
             })}
@@ -181,7 +235,10 @@ export function ShowcasePage() {
         ) : null}
 
         {isVisible("properties") ? (
-        <section className="showcase-layout-block" style={sectionCombinedStyle("properties")}>
+        <section
+          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.properties) ? " showcase-section-has-bg" : ""}`}
+          style={sectionCombinedStyle("properties")}
+        >
           {error ? <div className="error">{error}</div> : null}
           {loading ? <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Carregando vitrine...</p> : null}
           {!loading && properties.length === 0 ? (
@@ -275,21 +332,23 @@ export function ShowcasePage() {
         ) : null}
 
         {isVisible("widgets") ? (
-        <section className="showcase-layout-block" style={sectionCombinedStyle("widgets")}>
+        <section
+          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.widgets) ? " showcase-section-has-bg" : ""}`}
+          style={sectionCombinedStyle("widgets")}
+        >
           <div className="widget-grid" style={mergeBlockWrapperStyle(blockStyles.widgets)}>
             {showcaseConfig.widgets.map((widget) => (
               <article key={widget.id} className="widget-card" style={mergeBlockWrapperStyle(widget)}>
-                <h3>{widget.title}</h3>
-                <p>{widget.content}</p>
+                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
+                <p dangerouslySetInnerHTML={{ __html: widget.content }} />
                 {widget.type === "cta" && widget.ctaLabel ? (
                   <a
                     href={widget.ctaUrl || "#"}
                     target={widget.ctaUrl ? "_blank" : undefined}
                     rel={widget.ctaUrl ? "noreferrer" : undefined}
                     className="btn-view-details"
-                  >
-                    {widget.ctaLabel}
-                  </a>
+                    dangerouslySetInnerHTML={{ __html: widget.ctaLabel }}
+                  />
                 ) : null}
               </article>
             ))}
@@ -298,7 +357,11 @@ export function ShowcasePage() {
         ) : null}
 
         {isVisible("footer") ? (
-        <section className="showcase-layout-block" style={sectionCombinedStyle("footer")}>
+        <section
+          id="footer"
+          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.footer) ? " showcase-section-has-bg" : ""}`}
+          style={sectionCombinedStyle("footer")}
+        >
           <footer
             style={{
               marginTop: "20px",
@@ -308,16 +371,13 @@ export function ShowcasePage() {
               ...mergeBlockWrapperStyle(blockStyles.footer),
             }}
           >
-            <p style={{ fontSize: "16px", color: footerColor || (isLightMode ? "#0f172a" : "#fff"), marginBottom: "10px" }}>
-              {showcaseConfig.footerTitle} {tenantName}
-            </p>
-            <p style={{ fontSize: "12px", color: footerColor || "var(--text-muted)" }}>
-              {tenant.description || "Domus Showcase - Encontre seu proximo imovel com seguranca e transparencia."}
-            </p>
+            <p style={{ fontSize: "16px", color: footerColor || (isLightMode ? "#0f172a" : "#fff"), marginBottom: "10px" }} dangerouslySetInnerHTML={{ __html: showcaseConfig.footerTitle + " " + tenantName }} />
+            <p style={{ fontSize: "12px", color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.description || "Domus Showcase - Encontre seu proximo imovel com seguranca e transparencia." }} />
+            
             {(tenant.email || tenant.whatsapp) ? (
               <p style={{ fontSize: "12px", marginTop: "8px", color: footerColor || "var(--text-muted)" }}>
-                {tenant.email ? `Email: ${tenant.email}` : ""} {tenant.email && tenant.whatsapp ? " | " : ""}
-                {tenant.whatsapp ? `WhatsApp: ${tenant.whatsapp}` : ""}
+                {tenant.email ? <span dangerouslySetInnerHTML={{ __html: `Email: ${tenant.email}` }} /> : null} {tenant.email && tenant.whatsapp ? " | " : ""}
+                {tenant.whatsapp ? <span dangerouslySetInnerHTML={{ __html: `WhatsApp: ${tenant.whatsapp}` }} /> : null}
               </p>
             ) : null}
           </footer>

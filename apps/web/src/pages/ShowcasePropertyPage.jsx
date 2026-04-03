@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
+import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
 
 export function ShowcasePropertyPage() {
   const { tenantSlug, propertyId } = useParams();
@@ -75,8 +76,25 @@ export function ShowcasePropertyPage() {
     setCarouselIndex((prev) => (prev - 1 + images.length) % images.length);
   }
 
+  const showcaseConfig = normalizeShowcaseConfig(tenant?.showcaseConfig);
+  const isLightMode = showcaseConfig.appearanceMode === "light";
+  const themeStyle = {
+    "--accent": tenant?.primaryColor || "#818cf8",
+    "--accent-hover": tenant?.primaryColor || "#6366f1",
+    "--tenant-secondary": tenant?.secondaryColor || "#d4af37",
+  };
+
   return (
-    <div className="showcase-body">
+    <div className={`showcase-body ${isLightMode ? "showcase-theme-light" : ""}`} style={themeStyle}>
+      <style>{`
+        .showcase-body span[style*="color"],
+        .showcase-body font[color] {
+          -webkit-text-fill-color: currentcolor !important;
+          -webkit-background-clip: initial !important;
+          background: none !important;
+        }
+      `}</style>
+
       <div className="showcase-container">
         <header className="showcase-header">
           <div className="showcase-brand">
