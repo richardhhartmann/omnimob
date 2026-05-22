@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { api, setApiToken } from "./api";
 import { DashboardPage } from "./pages/DashboardPage";
+import { LeadsPage } from "./pages/LeadsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PropertyInsightsPage } from "./pages/PropertyInsightsPage";
 import { ShowcaseEditorPage } from "./pages/ShowcaseEditorPage";
@@ -10,9 +12,17 @@ import { AdminLayout } from "./components/AdminLayout";
 import { clearSession, loadSession, saveSession } from "./session";
 
 export default function App() {
-  const [session, setSession] = useState(() => loadSession());
+  const [session, setSession] = useState(() => {
+    const s = loadSession();
+    if (s?.token) setApiToken(s.token);
+    return s;
+  });
   const location = useLocation();
   const DEFAULT_PUBLIC_SHOWCASE = "/vitrine/imobiliaria-centro";
+
+  useEffect(() => {
+    setApiToken(session?.token || null);
+  }, [session]);
 
   function handleLogin(nextSession) {
     saveSession(nextSession);
@@ -50,6 +60,7 @@ export default function App() {
         }
       >
         <Route path="/" element={<DashboardPage session={session} />} />
+        <Route path="/leads" element={<LeadsPage session={session} />} />
         <Route path="/vitrine/:tenantSlug/editar" element={<ShowcaseEditorPage session={session} onSessionUpdate={setSession} />} />
         <Route path="/imoveis/:propertyId" element={<PropertyInsightsPage session={session} />} />
       </Route>

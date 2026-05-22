@@ -1,7 +1,9 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { authRouter } from "./routes/authRoutes.js";
+import { leadRouter } from "./routes/leadRoutes.js";
 import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
@@ -11,16 +13,50 @@ dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 4000);
 
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
+  : ["http://localhost:5173", "http://localhost:3000"];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
+
 app.use(express.json());
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: "Muitas tentativas de login. Tente novamente em 15 minutos." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(generalLimiter);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.use("/api/auth", authRouter);
+app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/tenants", tenantRouter);
 app.use("/api/properties", propertyRouter);
+app.use("/api/leads", leadRouter);
 app.use("/public", publicRouter);
 
 app.use((error, _req, res, _next) => {

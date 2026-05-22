@@ -69,7 +69,7 @@ model Property {
   bedrooms     Int                   @default(0)
   parkingSpots Int                   @default(0)
   suites       Int                   @default(0)
-  squareFootage String               @default("")
+  squareFootage Float                @default(0)
   status       PropertyStatus        @default(DRAFT)
   viewCount    Int                   @default(0)
   leadCount    Int                   @default(0)

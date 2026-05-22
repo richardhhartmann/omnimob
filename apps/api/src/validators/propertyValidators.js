@@ -16,7 +16,7 @@ export const createPropertySchema = z.object({
   bedrooms: z.number().int().min(0),
   parkingSpots: z.number().int().min(0),
   suites: z.number().int().min(0),
-  squareFootage: z.string().min(1),
+  squareFootage: z.number().positive(),
   status: z.nativeEnum(PropertyStatus).optional().default(PropertyStatus.DRAFT),
 });
 

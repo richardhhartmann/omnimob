@@ -137,6 +137,24 @@ export function normalizeShowcaseConfig(raw) {
         },
   };
 
+  // Mobile layout: defaults to desktop layout if not yet saved
+  const mobileLayoutRaw = cfg.mobileLayout && typeof cfg.mobileLayout === "object" ? cfg.mobileLayout : {};
+  const mobileLayout = Object.fromEntries(
+    Object.entries(DEFAULT_LAYOUT).map(([key, base]) => {
+      const next = mobileLayoutRaw[key] || {};
+      const fallback = mergedLayout[key] || base;
+      return [
+        key,
+        {
+          x: Number.isFinite(next.x) ? next.x : fallback.x,
+          y: Number.isFinite(next.y) ? next.y : fallback.y,
+          w: Number.isFinite(next.w) ? next.w : fallback.w,
+          h: Number.isFinite(next.h) ? next.h : fallback.h,
+        },
+      ];
+    })
+  );
+
   const stylesFromCfg = Array.isArray(cfg.highlightStyles) ? cfg.highlightStyles : [];
   const highlightStyles = highlights.map((_, i) => normalizeHighlightStylesRow(stylesFromCfg[i]));
 
@@ -165,6 +183,7 @@ export function normalizeShowcaseConfig(raw) {
     highlights,
     footerTitle: typeof cfg.footerTitle === "string" && cfg.footerTitle ? cfg.footerTitle : "Atendimento especializado",
     layout: mergedLayout,
+    mobileLayout,
     appearanceMode,
     blockStyles: normalizeBlockStyles(cfg.blockStyles),
     highlightStyles,

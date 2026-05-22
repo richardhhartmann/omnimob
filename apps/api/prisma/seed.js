@@ -1,8 +1,13 @@
+import bcrypt from "bcryptjs";
 import prismaPkg from "@prisma/client";
 
 const { PrismaClient, PropertyStatus, PublicationChannel, PublicationStatus } = prismaPkg;
 
 const prisma = new PrismaClient();
+
+async function hashPassword(plain) {
+  return bcrypt.hash(plain, 10);
+}
 
 async function main() {
   const tenantA = await prisma.tenant.upsert({
@@ -61,61 +66,24 @@ async function main() {
     },
   });
 
+  const adminPassword = await hashPassword("admin");
+
   await prisma.user.upsert({
     where: { username: "admin" },
-    update: {
-      tenantId: tenantA.id,
-      name: "Administrador Centro",
-      password: "admin",
-      role: "ADMIN",
-      isActive: true,
-    },
-    create: {
-      tenantId: tenantA.id,
-      name: "Administrador Centro",
-      username: "admin",
-      password: "admin",
-      role: "ADMIN",
-      isActive: true,
-    },
+    update: { tenantId: tenantA.id, name: "Administrador Centro", password: adminPassword, role: "ADMIN", isActive: true },
+    create: { tenantId: tenantA.id, name: "Administrador Centro", username: "admin", password: adminPassword, role: "ADMIN", isActive: true },
   });
 
   await prisma.user.upsert({
     where: { username: "editor" },
-    update: {
-      tenantId: tenantA.id,
-      name: "Editor Vitrine Centro",
-      password: "admin",
-      role: "SHOWCASE_EDITOR",
-      isActive: true,
-    },
-    create: {
-      tenantId: tenantA.id,
-      name: "Editor Vitrine Centro",
-      username: "editor",
-      password: "admin",
-      role: "SHOWCASE_EDITOR",
-      isActive: true,
-    },
+    update: { tenantId: tenantA.id, name: "Editor Vitrine Centro", password: adminPassword, role: "SHOWCASE_EDITOR", isActive: true },
+    create: { tenantId: tenantA.id, name: "Editor Vitrine Centro", username: "editor", password: adminPassword, role: "SHOWCASE_EDITOR", isActive: true },
   });
 
   await prisma.user.upsert({
     where: { username: "admin-casa" },
-    update: {
-      tenantId: tenantB.id,
-      name: "Administrador Casa Nobre",
-      password: "admin",
-      role: "ADMIN",
-      isActive: true,
-    },
-    create: {
-      tenantId: tenantB.id,
-      name: "Administrador Casa Nobre",
-      username: "admin-casa",
-      password: "admin",
-      role: "ADMIN",
-      isActive: true,
-    },
+    update: { tenantId: tenantB.id, name: "Administrador Casa Nobre", password: adminPassword, role: "ADMIN", isActive: true },
+    create: { tenantId: tenantB.id, name: "Administrador Casa Nobre", username: "admin-casa", password: adminPassword, role: "ADMIN", isActive: true },
   });
 
   const property = await prisma.property.upsert({
@@ -136,19 +104,14 @@ async function main() {
       bedrooms: 2,
       parkingSpots: 1,
       suites: 1,
-      squareFootage: "78m2",
+      squareFootage: 78,
       status: PropertyStatus.ACTIVE,
     },
   });
 
   for (const channel of [PublicationChannel.FACEBOOK, PublicationChannel.INSTAGRAM, PublicationChannel.WHATSAPP]) {
     await prisma.propertyPublication.upsert({
-      where: {
-        propertyId_channel: {
-          propertyId: property.id,
-          channel,
-        },
-      },
+      where: { propertyId_channel: { propertyId: property.id, channel } },
       update: {},
       create: {
         tenantId: tenantA.id,
@@ -163,9 +126,7 @@ async function main() {
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
+  .then(async () => { await prisma.$disconnect(); })
   .catch(async (error) => {
     console.error(error);
     await prisma.$disconnect();

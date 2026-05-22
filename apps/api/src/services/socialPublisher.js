@@ -3,7 +3,14 @@ import { prisma } from "../db.js";
 
 const { PublicationChannel, PublicationStatus } = prismaPkg;
 
+const CHANNELS = [
+  PublicationChannel.FACEBOOK,
+  PublicationChannel.INSTAGRAM,
+  PublicationChannel.WHATSAPP,
+];
+
 async function publishToChannel(channel, property) {
+  // TODO: integrar com APIs reais de cada canal (Meta Graph API, WhatsApp Business API)
   await new Promise((resolve) => setTimeout(resolve, 80));
   return { externalRef: `${channel.toLowerCase()}-${property.id}` };
 }
@@ -12,9 +19,7 @@ export async function enqueuePropertyPublication(tenantId, propertyId) {
   const property = await prisma.property.findFirst({ where: { id: propertyId, tenantId } });
   if (!property) return;
 
-  const channels = [PublicationChannel.FACEBOOK, PublicationChannel.INSTAGRAM, PublicationChannel.WHATSAPP];
-
-  for (const channel of channels) {
+  for (const channel of CHANNELS) {
     await prisma.propertyPublication.upsert({
       where: { propertyId_channel: { propertyId, channel } },
       update: { status: PublicationStatus.PENDING, errorMessage: null },
@@ -22,7 +27,7 @@ export async function enqueuePropertyPublication(tenantId, propertyId) {
     });
   }
 
-  for (const channel of channels) {
+  for (const channel of CHANNELS) {
     try {
       const result = await publishToChannel(channel, property);
       await prisma.propertyPublication.update({

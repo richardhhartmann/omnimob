@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
+
 export function AdminLayout({ session, onLogout }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export function AdminLayout({ session, onLogout }) {
   const showcaseEditorLink = useMemo(() => (tenantSlug ? `/vitrine/${tenantSlug}/editar` : "#"), [tenantSlug]);
 
   const isDashboard = location.pathname === "/";
+  const isLeads = location.pathname === "/leads";
   const isShowcaseEditor = location.pathname.endsWith("/editar");
   const searchParams = new URLSearchParams(location.search);
   const activeTab = searchParams.get("tab") || "create";
@@ -23,7 +25,6 @@ export function AdminLayout({ session, onLogout }) {
           <div className="tenant-logo">{initialLetter}</div>
           <div className="tenant-title-group">
             <h1>{session?.tenant?.name || "Domus"}</h1>
-            <p>Infraestrutura Domus</p>
           </div>
         </div>
 
@@ -46,16 +47,25 @@ export function AdminLayout({ session, onLogout }) {
             Portfólio Ativo
           </button>
 
+          <button
+            type="button"
+            className={`nav-button ${isLeads ? "active" : ""}`}
+            onClick={() => navigate("/leads")}
+          >
+            <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            Leads
+          </button>
+
           <div style={{ height: "1px", background: "var(--glass-border)", margin: "8px 0" }} />
 
           <Link to={showcaseEditorLink} className={`nav-button ${location.pathname.includes('/editar') ? 'active' : ''}`}>
             <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-            Editar vitrine
+            Editar página
           </Link>
 
           <Link to={showcaseLink} className="nav-button" target="_blank">
             <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-            Acessar site
+            Acessar página
           </Link>
 
           

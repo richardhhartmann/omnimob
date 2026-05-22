@@ -143,7 +143,7 @@ export function ShowcasePropertyPage() {
 
               <div className="detail-feature-grid">
                 <div><strong>Tipo:</strong> {property.propertyType}</div>
-                <div><strong>Metragem:</strong> {property.squareFootage || "-"}</div>
+                <div><strong>Metragem:</strong> {property.squareFootage != null ? `${property.squareFootage} m²` : "-"}</div>
                 <div><strong>Quartos:</strong> {property.bedrooms || 0}</div>
                 <div><strong>Suites:</strong> {property.suites || 0}</div>
                 <div><strong>Vagas:</strong> {property.parkingSpots || 0}</div>

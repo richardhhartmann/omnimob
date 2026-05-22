@@ -25,6 +25,7 @@ const EMPTY = {
   parkingSpots: "",
   suites: "",
   squareFootage: "",
+
   status: "DRAFT",
 };
 
@@ -255,7 +256,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
       bedrooms: initialData.bedrooms != null ? String(initialData.bedrooms) : "",
       parkingSpots: initialData.parkingSpots != null ? String(initialData.parkingSpots) : "",
       suites: initialData.suites != null ? String(initialData.suites) : "",
-      squareFootage: initialData.squareFootage || "",
+      squareFootage: initialData.squareFootage != null ? String(initialData.squareFootage) : "",
       status: initialData.status || "DRAFT",
     });
     setImageFiles([]);
@@ -315,6 +316,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
       return;
     }
 
+    const normalizedSquareFootage = parseFloat(form.squareFootage);
+    if (!Number.isFinite(normalizedSquareFootage) || normalizedSquareFootage <= 0) {
+      setError("Metragem invalida. Use um numero maior que zero.");
+      return;
+    }
+
     await onSubmit({
       ...form,
       cep: form.cep.replace(/\D/g, ""),
@@ -322,6 +329,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
       bedrooms: normalizedBedrooms,
       parkingSpots: normalizedParkingSpots,
       suites: normalizedSuites,
+      squareFootage: normalizedSquareFootage,
       imageFiles,
     });
     if (!isEditing) {
@@ -343,7 +351,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
           maxLength={9}
           disabled={disabled || cepLoading}
         />
-        {cepLoading ? <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Consultando base dos Correios...</p> : null}
+        {cepLoading ? <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Consultando...</p> : null}
         <input
           placeholder="Título do Imóvel"
           value={form.title}
@@ -450,7 +458,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
             disabled={disabled}
           />
           <input
-            placeholder="Metragem (ex.: 85m2)"
+            placeholder="Metragem (m²)"
+            type="number"
+            min="1"
+            step="0.01"
             value={form.squareFootage}
             onChange={(e) => setForm((prev) => ({ ...prev, squareFootage: e.target.value }))}
             required
@@ -462,7 +473,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
           onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
           disabled={disabled}
         >
-          <option value="DRAFT">Rascunho</option>
+          <option value="DRAFT">Status</option>
           <option value="ACTIVE">Ativo</option>
           <option value="INACTIVE">Inativo</option>
         </select>

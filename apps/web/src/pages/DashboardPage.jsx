@@ -24,8 +24,8 @@ export function DashboardPage({ session }) {
     setLoading(true);
     setError("");
     try {
-      const data = await api.listProperties(tenantSlug);
-      setProperties(data);
+      const result = await api.listProperties(tenantSlug);
+      setProperties(result.properties ?? result);
     } catch (err) {
       setError(err.message);
     } finally {

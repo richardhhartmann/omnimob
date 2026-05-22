@@ -62,7 +62,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
         return "Inativo";
       case "DRAFT":
       default:
-        return "Rascunho";
+        return "Status";
     }
   };
 

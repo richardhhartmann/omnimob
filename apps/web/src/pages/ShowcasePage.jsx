@@ -290,7 +290,7 @@ export function ShowcasePage() {
                         <svg className="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 4l-5 5M4 16v4m0 0h4M4 4l10 10m-4-2h10" />
                         </svg>
-                        <span>{p.squareFootage || "-"} m2</span>
+                        <span>{p.squareFootage != null ? `${p.squareFootage} m²` : "-"}</span>
                       </div>
                       <div className="stat-item">
                         <svg className="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

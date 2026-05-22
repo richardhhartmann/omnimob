@@ -12,6 +12,8 @@ export function PropertyInsightsPage({ session }) {
   const [manualImageUrl, setManualImageUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const leadRate = metrics?.summary?.leadConversionRate ?? 0;
   const saleRate = metrics?.summary?.saleConversionRate ?? 0;
@@ -24,7 +26,7 @@ export function PropertyInsightsPage({ session }) {
     return map;
   }, [metrics]);
 
-  async function loadAll() {
+  async function loadAll(from, to) {
     if (!tenantSlug || !propertyId) return;
 
     setLoading(true);
@@ -32,7 +34,7 @@ export function PropertyInsightsPage({ session }) {
     try {
       const [propertyData, metricData, imageData] = await Promise.all([
         api.getPropertyById(tenantSlug, propertyId),
-        api.getPropertyMetrics(tenantSlug, propertyId),
+        api.getPropertyMetrics(tenantSlug, propertyId, { from: from || undefined, to: to || undefined }),
         api.listPropertyImages(tenantSlug, propertyId),
       ]);
       setProperty(propertyData);
@@ -46,7 +48,7 @@ export function PropertyInsightsPage({ session }) {
   }
 
   useEffect(() => {
-    loadAll();
+    loadAll(dateFrom, dateTo);
   }, [tenantSlug, propertyId]);
 
   async function handleMetric(type) {
@@ -56,11 +58,22 @@ export function PropertyInsightsPage({ session }) {
       if (type === "VIEW") await api.registerPropertyView(tenantSlug, propertyId);
       if (type === "LEAD") await api.registerPropertyLead(tenantSlug, propertyId);
       if (type === "SALE") await api.registerPropertySale(tenantSlug, propertyId);
-      await loadAll();
+      await loadAll(dateFrom, dateTo);
     } catch (err) {
       setError(err.message);
       setLoading(false);
     }
+  }
+
+  function handleFilterApply(e) {
+    e.preventDefault();
+    loadAll(dateFrom, dateTo);
+  }
+
+  function handleFilterClear() {
+    setDateFrom("");
+    setDateTo("");
+    loadAll("", "");
   }
 
   async function handleManualImageAdd(event) {
@@ -123,6 +136,51 @@ export function PropertyInsightsPage({ session }) {
       {error ? <div className="error">{error}</div> : null}
       {loading ? <p style={{ color: "var(--text-muted)", marginBottom: "16px" }}>Processando requisição...</p> : null}
 
+      <form
+        onSubmit={handleFilterApply}
+        style={{ display: "flex", gap: "12px", alignItems: "flex-end", marginBottom: "24px", flexWrap: "wrap" }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-muted)" }}>De</label>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            disabled={loading}
+            style={{ width: "160px" }}
+          />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-muted)" }}>Até</label>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            disabled={loading}
+            style={{ width: "160px" }}
+          />
+        </div>
+        <button type="submit" style={{ width: "auto", padding: "8px 16px" }} disabled={loading}>
+          Filtrar
+        </button>
+        {(dateFrom || dateTo) ? (
+          <button
+            type="button"
+            className="button-secondary"
+            style={{ width: "auto", padding: "8px 16px" }}
+            onClick={handleFilterClear}
+            disabled={loading}
+          >
+            Limpar
+          </button>
+        ) : null}
+        {metrics?.filter ? (
+          <span style={{ fontSize: "13px", color: "var(--text-muted)", alignSelf: "center" }}>
+            Exibindo período filtrado
+          </span>
+        ) : null}
+      </form>
+
       <section className="metrics-grid">
         <div className="glass-panel metric-card">
           <p className="metric-label">Acessos</p>
@@ -150,7 +208,7 @@ export function PropertyInsightsPage({ session }) {
         <section className="glass-panel">
           <h2 style={{ marginBottom: "16px" }}>Detalhes do Ativo</h2>
           <div style={{ display: "grid", gap: "12px", color: "var(--text-muted)" }}>
-            <p><strong>Tipo:</strong> {property?.propertyType || "-"} | <strong>Área:</strong> {property?.squareFootage || "-"}</p>
+            <p><strong>Tipo:</strong> {property?.propertyType || "-"} | <strong>Área:</strong> {property?.squareFootage != null ? `${property.squareFootage} m²` : "-"}</p>
             <p><strong>Quartos:</strong> {property?.bedrooms ?? 0} | <strong>Suítes:</strong> {property?.suites ?? 0} | <strong>Vagas:</strong> {property?.parkingSpots ?? 0}</p>
             <p><strong>CEP:</strong> {property?.cep || "-"} | <strong>Bairro:</strong> {property?.neighborhood || "-"}</p>
             <p><strong>Localidade:</strong> {property?.city || "-"} / {property?.state || "-"}</p>
