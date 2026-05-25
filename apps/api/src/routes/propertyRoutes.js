@@ -1,14 +1,121 @@
 import { Router } from "express";
 import prismaPkg from "@prisma/client";
 import { prisma } from "../db.js";
+import { requireAuth } from "../middlewares/authMiddleware.js";
+import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { enqueuePropertyPublication } from "../services/socialPublisher.js";
 import { createPropertySchema, updatePropertySchema } from "../validators/propertyValidators.js";
 
 const { PropertyStatus, MetricEventType } = prismaPkg;
 
+const requireImoveis = [requireAuth, requirePermissao("gerenciarImoveis")];
+
 export const propertyRouter = Router();
 propertyRouter.use(requireTenant);
+
+const PROPERTY_INCLUDE = {
+  publications: { orderBy: { createdAt: "asc" } },
+  images: { orderBy: { position: "asc" } },
+  tipoImovel: true,
+  atributos: { include: { atributo: true } },
+};
+
+// ─── Tipos de imóvel com seus atributos ──────────────────────────────────────
+
+propertyRouter.get("/tipos", async (_req, res) => {
+  try {
+    const tipos = await prisma.tipoImovel.findMany({
+      orderBy: { id: "asc" },
+      include: { atributos: { orderBy: [{ grupo: "asc" }, { descricao: "asc" }] } },
+    });
+    return res.json(tipos);
+  } catch (err) {
+    console.error("[GET /properties/tipos]", err);
+    return res.status(500).json({ error: "Erro ao listar tipos de imovel.", detail: err.message });
+  }
+});
+
+propertyRouter.post("/tipos", requireImoveis, async (req, res) => {
+  try {
+    const { descricao } = req.body;
+    if (!descricao) return res.status(400).json({ error: "Descrição é obrigatória." });
+    const tipo = await prisma.tipoImovel.create({
+      data: { descricao },
+      include: { atributos: true },
+    });
+    return res.status(201).json(tipo);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao criar tipo de imóvel." });
+  }
+});
+
+propertyRouter.put("/tipos/:id", requireImoveis, async (req, res) => {
+  try {
+    const { descricao } = req.body;
+    const tipo = await prisma.tipoImovel.update({
+      where: { id: Number(req.params.id) },
+      data: { descricao },
+      include: { atributos: { orderBy: [{ grupo: "asc" }, { descricao: "asc" }] } },
+    });
+    return res.json(tipo);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao atualizar tipo de imóvel." });
+  }
+});
+
+propertyRouter.delete("/tipos/:id", requireImoveis, async (req, res) => {
+  try {
+    await prisma.tipoImovel.delete({ where: { id: Number(req.params.id) } });
+    return res.status(204).send();
+  } catch (err) {
+    if (err.code === "P2003") return res.status(400).json({ error: "Tipo está em uso por imóveis cadastrados." });
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao excluir tipo de imóvel." });
+  }
+});
+
+propertyRouter.post("/tipos/:tipoId/atributos", requireImoveis, async (req, res) => {
+  try {
+    const { descricao, grupo } = req.body;
+    if (!descricao) return res.status(400).json({ error: "Descrição é obrigatória." });
+    const atr = await prisma.modeloAtributo.create({
+      data: { tipoId: Number(req.params.tipoId), descricao, grupo: grupo || null },
+    });
+    return res.status(201).json(atr);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao criar atributo." });
+  }
+});
+
+propertyRouter.put("/atributos/:id", requireImoveis, async (req, res) => {
+  try {
+    const { descricao, grupo } = req.body;
+    const atr = await prisma.modeloAtributo.update({
+      where: { id: Number(req.params.id) },
+      data: { descricao, grupo: grupo || null },
+    });
+    return res.json(atr);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao atualizar atributo." });
+  }
+});
+
+propertyRouter.delete("/atributos/:id", requireImoveis, async (req, res) => {
+  try {
+    await prisma.modeloAtributo.delete({ where: { id: Number(req.params.id) } });
+    return res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao excluir atributo." });
+  }
+});
+
+// ─── Listagem ─────────────────────────────────────────────────────────────────
 
 propertyRouter.get("/", async (req, res) => {
   try {
@@ -26,10 +133,7 @@ propertyRouter.get("/", async (req, res) => {
       prisma.property.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        include: {
-          publications: { orderBy: { createdAt: "asc" } },
-          images: { orderBy: { position: "asc" } },
-        },
+        include: PROPERTY_INCLUDE,
         skip,
         take: limit,
       }),
@@ -37,8 +141,9 @@ propertyRouter.get("/", async (req, res) => {
     ]);
 
     return res.json({ properties, total, page, limit });
-  } catch {
-    return res.status(500).json({ error: "Erro ao listar imoveis." });
+  } catch (err) {
+    console.error("[GET /properties]", err);
+    return res.status(500).json({ error: "Erro ao listar imoveis.", detail: err.message });
   }
 });
 
@@ -46,10 +151,7 @@ propertyRouter.get("/:id", async (req, res) => {
   try {
     const property = await prisma.property.findFirst({
       where: { id: req.params.id, tenantId: req.tenant.id },
-      include: {
-        publications: { orderBy: { createdAt: "asc" } },
-        images: { orderBy: { position: "asc" } },
-      },
+      include: PROPERTY_INCLUDE,
     });
 
     if (!property) {
@@ -62,32 +164,51 @@ propertyRouter.get("/:id", async (req, res) => {
   }
 });
 
-propertyRouter.post("/", async (req, res) => {
+// ─── Criar ────────────────────────────────────────────────────────────────────
+
+propertyRouter.post("/", requireImoveis, async (req, res) => {
   try {
     const parsed = createPropertySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "Dados invalidos para imovel.", details: parsed.error.flatten() });
     }
 
+    const { tipoImovelId, atributosIds, ...propertyData } = parsed.data;
+
+    // Deriva propertyType do tipo selecionado para manter compatibilidade
+    let propertyType = propertyData.propertyType || "";
+    if (tipoImovelId) {
+      const tipo = await prisma.tipoImovel.findUnique({ where: { id: tipoImovelId } });
+      if (!tipo) return res.status(400).json({ error: "Tipo de imovel nao encontrado." });
+      propertyType = tipo.descricao;
+    }
+
     const property = await prisma.property.create({
-      data: { tenantId: req.tenant.id, ...parsed.data },
+      data: {
+        tenantId: req.tenant.id,
+        tipoImovelId: tipoImovelId ?? null,
+        propertyType,
+        ...propertyData,
+        ...(atributosIds.length > 0
+          ? { atributos: { create: atributosIds.map((id) => ({ atributoId: id })) } }
+          : {}),
+      },
+      include: PROPERTY_INCLUDE,
     });
 
     enqueuePropertyPublication(req.tenant.id, property.id).catch((err) =>
       console.error("Erro na publicacao do imovel:", err)
     );
 
-    const withPublications = await prisma.property.findUnique({
-      where: { id: property.id },
-      include: { publications: true },
-    });
-    return res.status(201).json(withPublications);
+    return res.status(201).json(property);
   } catch {
     return res.status(500).json({ error: "Erro ao criar imovel." });
   }
 });
 
-propertyRouter.put("/:id", async (req, res) => {
+// ─── Atualizar ────────────────────────────────────────────────────────────────
+
+propertyRouter.put("/:id", requireImoveis, async (req, res) => {
   try {
     const parsed = updatePropertySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -101,9 +222,41 @@ propertyRouter.put("/:id", async (req, res) => {
       return res.status(404).json({ error: "Imovel nao encontrado para este tenant." });
     }
 
+    const { tipoImovelId, atributosIds, ...propertyData } = parsed.data;
+
+    let propertyType = propertyData.propertyType;
+    if (tipoImovelId !== undefined) {
+      if (tipoImovelId === null) {
+        propertyType = "";
+      } else {
+        const tipo = await prisma.tipoImovel.findUnique({ where: { id: tipoImovelId } });
+        if (!tipo) return res.status(400).json({ error: "Tipo de imovel nao encontrado." });
+        propertyType = tipo.descricao;
+      }
+    }
+
+    // Atualiza atributos apenas se veio no payload
+    const atributosUpdate =
+      atributosIds !== undefined
+        ? {
+            atributos: {
+              deleteMany: {},
+              ...(atributosIds.length > 0
+                ? { create: atributosIds.map((id) => ({ atributoId: id })) }
+                : {}),
+            },
+          }
+        : {};
+
     const property = await prisma.property.update({
       where: { id: req.params.id },
-      data: parsed.data,
+      data: {
+        ...(tipoImovelId !== undefined ? { tipoImovelId } : {}),
+        ...(propertyType !== undefined ? { propertyType } : {}),
+        ...propertyData,
+        ...atributosUpdate,
+      },
+      include: PROPERTY_INCLUDE,
     });
 
     if (property.status === PropertyStatus.ACTIVE) {
@@ -112,17 +265,15 @@ propertyRouter.put("/:id", async (req, res) => {
       );
     }
 
-    const withPublications = await prisma.property.findUnique({
-      where: { id: property.id },
-      include: { publications: true },
-    });
-    return res.json(withPublications);
+    return res.json(property);
   } catch {
     return res.status(500).json({ error: "Erro ao atualizar imovel." });
   }
 });
 
-propertyRouter.delete("/:id", async (req, res) => {
+// ─── Deletar ──────────────────────────────────────────────────────────────────
+
+propertyRouter.delete("/:id", requireImoveis, async (req, res) => {
   try {
     const current = await prisma.property.findFirst({
       where: { id: req.params.id, tenantId: req.tenant.id },
@@ -138,6 +289,8 @@ propertyRouter.delete("/:id", async (req, res) => {
   }
 });
 
+// ─── Publicações ──────────────────────────────────────────────────────────────
+
 propertyRouter.get("/:id/publications", async (req, res) => {
   try {
     const publications = await prisma.propertyPublication.findMany({
@@ -149,6 +302,8 @@ propertyRouter.get("/:id/publications", async (req, res) => {
     return res.status(500).json({ error: "Erro ao buscar publicacoes." });
   }
 });
+
+// ─── Métricas ─────────────────────────────────────────────────────────────────
 
 propertyRouter.get("/:id/metrics", async (req, res) => {
   try {
@@ -247,6 +402,8 @@ async function incrementMetric(req, res, type) {
 propertyRouter.post("/:id/metrics/view", (req, res) => incrementMetric(req, res, MetricEventType.VIEW));
 propertyRouter.post("/:id/metrics/lead", (req, res) => incrementMetric(req, res, MetricEventType.LEAD));
 propertyRouter.post("/:id/metrics/sale", (req, res) => incrementMetric(req, res, MetricEventType.SALE));
+
+// ─── Imagens ──────────────────────────────────────────────────────────────────
 
 propertyRouter.get("/:id/images", async (req, res) => {
   try {

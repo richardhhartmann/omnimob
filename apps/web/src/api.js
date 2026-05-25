@@ -47,6 +47,9 @@ export const api = {
   login: (payload) =>
     request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
 
+  getMe: (tenantSlug) =>
+    request("/api/auth/me", { headers: { "x-tenant-slug": tenantSlug } }),
+
   listTenants: () => request("/api/tenants"),
 
   createTenant: (payload) =>
@@ -60,6 +63,18 @@ export const api = {
       method: "PUT",
       headers: { "x-tenant-slug": tenantSlug },
       body: JSON.stringify(payload),
+    }),
+
+  updateTenantConfiguracao: (tenantSlug, payload) =>
+    request("/api/tenants/me/configuracao", {
+      method: "PUT",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  getTiposImovel: (tenantSlug) =>
+    request("/api/properties/tipos", {
+      headers: { "x-tenant-slug": tenantSlug },
     }),
 
   listProperties: (tenantSlug, { page = 1, limit = 50, status } = {}) => {
@@ -154,6 +169,51 @@ export const api = {
       method: "DELETE",
       headers: { "x-tenant-slug": tenantSlug },
     }),
+
+  // ─── Usuários ────────────────────────────────────────────────────────────
+  listUsuarios: (tenantSlug) =>
+    request("/api/usuarios", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  createUsuario: (tenantSlug, payload) =>
+    request("/api/usuarios", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  updateUsuario: (tenantSlug, id, payload) =>
+    request(`/api/usuarios/${id}`, { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  desativarUsuario: (tenantSlug, id) =>
+    request(`/api/usuarios/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  // ─── Cargos ──────────────────────────────────────────────────────────────
+  listCargos: (tenantSlug) =>
+    request("/api/cargos", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  createCargo: (tenantSlug, payload) =>
+    request("/api/cargos", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  updateCargo: (tenantSlug, id, payload) =>
+    request(`/api/cargos/${id}`, { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  deleteCargo: (tenantSlug, id) =>
+    request(`/api/cargos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  // ─── Tipos e atributos ───────────────────────────────────────────────────
+  createTipoImovel: (tenantSlug, payload) =>
+    request("/api/properties/tipos", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  updateTipoImovel: (tenantSlug, id, payload) =>
+    request(`/api/properties/tipos/${id}`, { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  deleteTipoImovel: (tenantSlug, id) =>
+    request(`/api/properties/tipos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  createAtributo: (tenantSlug, tipoId, payload) =>
+    request(`/api/properties/tipos/${tipoId}/atributos`, { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  updateAtributo: (tenantSlug, id, payload) =>
+    request(`/api/properties/atributos/${id}`, { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  deleteAtributo: (tenantSlug, id) =>
+    request(`/api/properties/atributos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
 
   getPublicShowcase: (tenantSlug) => request(`/public/${tenantSlug}/properties`),
 

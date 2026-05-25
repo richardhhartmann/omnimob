@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
+import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
-import { createTenantSchema, updateTenantProfileSchema } from "../validators/propertyValidators.js";
+import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
 
 export const tenantRouter = Router();
 
@@ -44,7 +45,23 @@ tenantRouter.get("/me", requireTenant, async (req, res) => {
   }
 });
 
-tenantRouter.put("/me", requireTenant, async (req, res) => {
+tenantRouter.put("/me/configuracao", requireAuth, requireTenant, requirePermissao("editarPagina", "gerenciarUsuarios"), async (req, res) => {
+  try {
+    const parsed = updateTenantConfiguracaoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Dados inválidos para configuração.", details: parsed.error.flatten() });
+    }
+    const tenant = await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: parsed.data,
+    });
+    return res.json(tenant);
+  } catch {
+    return res.status(500).json({ error: "Erro ao salvar configurações." });
+  }
+});
+
+tenantRouter.put("/me", requireAuth, requireTenant, requirePermissao("editarPagina"), async (req, res) => {
   try {
     const parsed = updateTenantProfileSchema.safeParse(req.body);
     if (!parsed.success) {

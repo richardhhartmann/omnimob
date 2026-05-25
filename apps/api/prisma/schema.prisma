@@ -8,6 +8,8 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
 enum PropertyStatus {
   DRAFT
   ACTIVE
@@ -26,61 +28,223 @@ enum PublicationStatus {
   FAILED
 }
 
-enum UserRole {
-  ADMIN
-  AGENT
-  SHOWCASE_EDITOR
+enum MetricEventType {
+  VIEW
+  LEAD
+  SALE
 }
+
+enum TipoVenda {
+  VENDA
+  ALUGUEL
+}
+
+// ─── Tenant ──────────────────────────────────────────────────────────────────
 
 model Tenant {
-  id                 String                @id @default(cuid())
-  name               String
-  slug               String                @unique
-  whatsapp           String                @default("")
-  email              String                @default("")
-  description        String                @default("")
-  slogan             String                @default("")
-  logoUrl            String                @default("")
-  primaryColor       String                @default("#6366f1")
-  secondaryColor     String                @default("#d4af37")
-  showcaseHeadline   String                @default("")
-  showcaseSubheadline String               @default("")
-  showcaseConfig     Json?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  properties         Property[]
-  publications       PropertyPublication[]
-  users              User[]
-  leads              PropertyLead[]
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  cnpj                String?
+  creci               String?
+  whatsapp            String   @default("")
+  telefone            String   @default("")
+  email               String   @default("")
+  description         String   @default("")
+  slogan              String   @default("")
+  logoUrl             String   @default("")
+  primaryColor        String   @default("#6366f1")
+  secondaryColor      String   @default("#d4af37")
+  showcaseHeadline    String   @default("")
+  showcaseSubheadline String   @default("")
+  cep                 String?
+  endereco            String   @default("")
+  cidade              String   @default("")
+  estado              String   @default("")
+  showcaseConfig      Json?
+  ativo               Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  usuarios     Usuario[]
+  properties   Property[]
+  publications PropertyPublication[]
+  leads        PropertyLead[]
+  clientes     Cliente[]
+  vendas       Venda[]
+
+  @@map("tb_tenants")
 }
 
+// ─── Cargo (substitui o enum UserRole) ───────────────────────────────────────
+
+model Cargo {
+  id                Int      @id @default(autoincrement()) @map("crg_codigo")
+  descricao         String   @map("crg_descricao")
+
+  // Permissões de acesso
+  acessarPainel     Boolean  @default(false) @map("acessar_painel")
+  editarPagina      Boolean  @default(false) @map("editar_pagina")
+  gerenciarImoveis  Boolean  @default(false) @map("gerenciar_imoveis")
+  gerenciarLeads    Boolean  @default(false) @map("gerenciar_leads")
+  gerenciarUsuarios Boolean  @default(false) @map("gerenciar_usuarios")
+  gerenciarClientes Boolean  @default(false) @map("gerenciar_clientes")
+  verRelatorios     Boolean  @default(false) @map("ver_relatorios")
+  publicarRedes     Boolean  @default(false) @map("publicar_redes")
+
+  usuarios          Usuario[]
+
+  @@map("tb_cargo")
+}
+
+// ─── Usuario ─────────────────────────────────────────────────────────────────
+
+model Usuario {
+  id                String   @id @default(cuid()) @map("usu_id")
+  tenantId          String   @map("tenant_id")
+  cargoCodigo       Int      @map("crg_codigo")
+  nome              String   @map("usu_nome")
+  login             String   @unique @map("usu_login")
+  senha             String   @map("usu_senha")
+  forcaAlterarSenha Boolean  @default(false) @map("usu_forca_alterar_senha")
+  ativo             Boolean  @default(true) @map("usu_ativo")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cargo   Cargo   @relation(fields: [cargoCodigo], references: [id])
+  vendas  Venda[]
+
+  @@index([tenantId, ativo])
+  @@map("tb_usuario")
+}
+
+// ─── Cliente ─────────────────────────────────────────────────────────────────
+
+model Cliente {
+  id          String    @id @default(cuid()) @map("clt_id")
+  tenantId    String    @map("tenant_id")
+  nome        String    @map("clt_nome")
+  cpf         String?   @map("clt_cpf")
+  rg          String?   @map("clt_rg")
+  nascimento  DateTime? @map("clt_nascimento") @db.Date
+  email       String?   @map("clt_email")
+  telefone    String?   @map("clt_telefone")
+  whatsapp    String?   @map("clt_whatsapp")
+  cep         String?   @map("clt_cep")
+  endereco    String?   @map("clt_endereco")
+  bairro      String?   @map("clt_bairro")
+  cidade      String?   @map("clt_cidade")
+  estado      String?   @map("clt_estado")
+  observacoes String?   @map("clt_observacoes") @db.Text
+  ativo       Boolean   @default(true) @map("clt_ativo")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendas Venda[]
+
+  @@index([tenantId, ativo])
+  @@index([tenantId, cpf])
+  @@map("tb_cliente")
+}
+
+// ─── Venda ───────────────────────────────────────────────────────────────────
+
+model Venda {
+  id          String    @id @default(cuid()) @map("ven_id")
+  tenantId    String    @map("tenant_id")
+  propertyId  String    @map("property_id")
+  clienteId   String    @map("clt_id")
+  usuarioId   String    @map("usu_id")
+  tipo        TipoVenda @map("ven_tipo")
+  valor       Decimal   @map("ven_valor") @db.Decimal(12, 2)
+  data        DateTime  @map("ven_data") @db.Date
+  comissao    Decimal?  @map("ven_comissao") @db.Decimal(12, 2)
+  observacoes String?   @map("ven_observacoes") @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  cliente  Cliente  @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, data])
+  @@index([tenantId, propertyId])
+  @@index([tenantId, clienteId])
+  @@map("tb_venda")
+}
+
+// ─── Tipos de Imóvel e Atributos ─────────────────────────────────────────────
+
+model TipoImovel {
+  id        Int              @id @default(autoincrement()) @map("tip_id")
+  descricao String           @map("tip_descricao")
+
+  atributos ModeloAtributo[]
+  imoveis   Property[]
+
+  @@map("tb_tipo_imovel")
+}
+
+model ModeloAtributo {
+  id        Int      @id @default(autoincrement()) @map("atr_id")
+  tipoId    Int      @map("tip_id")
+  descricao String   @map("atr_descricao")
+  grupo     String?  @map("atr_grupo")
+
+  tipo    TipoImovel       @relation(fields: [tipoId], references: [id], onDelete: Cascade)
+  imoveis ImovelAtributo[]
+
+  @@map("tb_modelo_atributo")
+}
+
+model ImovelAtributo {
+  propertyId String @map("property_id")
+  atributoId Int    @map("atr_id")
+
+  property Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  atributo ModeloAtributo @relation(fields: [atributoId], references: [id], onDelete: Cascade)
+
+  @@id([propertyId, atributoId])
+  @@map("tb_imovel_atributo")
+}
+
+// ─── Imóveis ─────────────────────────────────────────────────────────────────
+
 model Property {
-  id           String                @id @default(cuid())
-  tenantId     String
-  title        String
-  description  String
-  price        Decimal               @db.Decimal(12, 2)
-  cep          String?
-  address      String
-  neighborhood String                @default("")
-  city         String                @default("")
-  state        String                @default("")
-  propertyType String                @default("")
-  bedrooms     Int                   @default(0)
-  parkingSpots Int                   @default(0)
-  suites       Int                   @default(0)
-  squareFootage Float                @default(0)
-  status       PropertyStatus        @default(DRAFT)
-  viewCount    Int                   @default(0)
-  leadCount    Int                   @default(0)
-  saleCount    Int                   @default(0)
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  id            String         @id @default(cuid())
+  tenantId      String
+  tipoImovelId  Int?           @map("tip_id")
+  propertyType  String         @default("") // mantido para compatibilidade, derivado de tipoImovel.descricao
+  title         String
+  description   String
+  price         Decimal        @db.Decimal(12, 2)
+  cep           String?
+  address       String
+  neighborhood  String         @default("")
+  city          String         @default("")
+  state         String         @default("")
+  bedrooms      Int            @default(0)
+  parkingSpots  Int            @default(0)
+  suites        Int            @default(0)
+  squareFootage Float          @default(0)
+  status        PropertyStatus @default(DRAFT)
+  viewCount     Int            @default(0)
+  leadCount     Int            @default(0)
+  saleCount     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
   tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tipoImovel   TipoImovel?           @relation(fields: [tipoImovelId], references: [id])
+  atributos    ImovelAtributo[]
   publications PropertyPublication[]
   images       PropertyImage[]
   metricEvents PropertyMetricEvent[]
   leads        PropertyLead[]
+  vendas       Venda[]
 
   @@index([tenantId, status])
 }
@@ -96,32 +260,12 @@ model PropertyPublication {
   lastAttemptAt DateTime?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
-  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  property      Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@unique([propertyId, channel])
   @@index([tenantId, status])
-}
-
-model User {
-  id        String   @id @default(cuid())
-  tenantId  String
-  name      String
-  username  String   @unique
-  password  String
-  role      UserRole @default(AGENT)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, isActive])
-}
-
-enum MetricEventType {
-  VIEW
-  LEAD
-  SALE
 }
 
 model PropertyMetricEvent {
@@ -130,7 +274,8 @@ model PropertyMetricEvent {
   propertyId String
   type       MetricEventType
   createdAt  DateTime        @default(now())
-  property   Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, propertyId, type, createdAt])
 }
@@ -143,7 +288,8 @@ model PropertyImage {
   publicId   String?
   position   Int      @default(0)
   createdAt  DateTime @default(now())
-  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, propertyId, position])
 }
@@ -158,8 +304,9 @@ model PropertyLead {
   message    String?
   source     String   @default("showcase")
   createdAt  DateTime @default(now())
-  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, propertyId, createdAt])
 }

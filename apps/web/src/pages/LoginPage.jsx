@@ -5,7 +5,7 @@ import { api } from "../api";
 export function LoginPage({ onLogin }) {
   const [searchParams] = useSearchParams();
   const tenantFromShowcase = searchParams.get("tenant") || "";
-  const [form, setForm] = useState({ username: "", password: "" });
+  const [form, setForm] = useState({ login: "", senha: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -41,17 +41,17 @@ export function LoginPage({ onLogin }) {
         
         <form className="grid" onSubmit={handleSubmit}>
           <input
-            placeholder="Usuário"
-            value={form.username}
-            onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+            placeholder="Login"
+            value={form.login}
+            onChange={(e) => setForm((prev) => ({ ...prev, login: e.target.value }))}
             required
             disabled={loading}
           />
           <input
             type="password"
             placeholder="Senha de acesso"
-            value={form.password}
-            onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+            value={form.senha}
+            onChange={(e) => setForm((prev) => ({ ...prev, senha: e.target.value }))}
             required
             disabled={loading}
           />
@@ -59,7 +59,6 @@ export function LoginPage({ onLogin }) {
             Acessar Painel
           </button>
         </form>
-        <p className="hint">Credenciais: admin/admin (painel) | editor/admin (editor da vitrine)</p>
       </main>
     </div>
   );

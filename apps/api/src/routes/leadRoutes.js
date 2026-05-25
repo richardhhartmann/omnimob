@@ -1,9 +1,13 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
+import { requireAuth } from "../middlewares/authMiddleware.js";
+import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 
 export const leadRouter = Router();
 leadRouter.use(requireTenant);
+leadRouter.use(requireAuth);
+leadRouter.use(requirePermissao("gerenciarLeads"));
 
 leadRouter.get("/", async (req, res) => {
   try {

@@ -307,9 +307,9 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 <div 
                   key={property.id} 
                   onClick={() => navigate(`/imoveis/${property.id}`)}
-                  style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: "24px", alignItems: "center", padding: "16px 24px", cursor: "pointer", background: "rgba(30, 30, 30, 0.6)", transition: "background 0.2s" }} 
-                  onMouseEnter={(e) => e.currentTarget.style.background = "rgba(40, 40, 40, 0.8)"} 
-                  onMouseLeave={(e) => e.currentTarget.style.background = "rgba(30, 30, 30, 0.6)"}
+                  style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: "24px", alignItems: "center", padding: "16px 24px", cursor: "pointer", background: "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)", transition: "background 0.2s" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)"}
                 >
                   <div>
                     <span style={{

@@ -14,11 +14,27 @@ import { BuilderSidePanel } from "../components/builder/BuilderSidePanel";
 import { OnboardingOverlay } from "../components/builder/OnboardingOverlay";
 
 const PRESET_THEMES = {
-  CLASSICO: { primaryColor: "#6366f1", secondaryColor: "#d4af37" },
+  CLASSICO:    { primaryColor: "#6366f1", secondaryColor: "#d4af37" },
   PALETA_AZUL: { primaryColor: "#2563eb", secondaryColor: "#f8fafc" },
-  ESMERALDA: { primaryColor: "#10b981", secondaryColor: "#14b8a6" },
-  OCEANO: { primaryColor: "#0ea5e9", secondaryColor: "#38bdf8" },
+  ESMERALDA:   { primaryColor: "#10b981", secondaryColor: "#14b8a6" },
+  OCEANO:      { primaryColor: "#0ea5e9", secondaryColor: "#38bdf8" },
+  LUXO:        { primaryColor: "#7c3aed", secondaryColor: "#d4af37" },
+  CORAL:       { primaryColor: "#f97316", secondaryColor: "#0ea5e9" },
+  NOITE:       { primaryColor: "#1e3a5f", secondaryColor: "#94a3b8" },
+  NATUREZA:    { primaryColor: "#16a34a", secondaryColor: "#ca8a04" },
+  ROSE:        { primaryColor: "#e11d48", secondaryColor: "#fda4af" },
+  CARVAO:      { primaryColor: "#334155", secondaryColor: "#f59e0b" },
 };
+
+const FONT_OPTIONS = [
+  { label: "Padrão (Inter)",                value: "Inter" },
+  { label: "Playfair Display — Elegante",   value: "Playfair Display" },
+  { label: "Montserrat — Moderno",          value: "Montserrat" },
+  { label: "Raleway — Sofisticado",         value: "Raleway" },
+  { label: "Lato — Limpo",                  value: "Lato" },
+  { label: "Merriweather — Clássico",       value: "Merriweather" },
+  { label: "Poppins — Contemporâneo",       value: "Poppins" },
+];
 
 function isNodeUnderFormatToolbar(node, toolbarEl) {
   if (!toolbarEl || !node) return false;
@@ -66,6 +82,36 @@ const WIDGET_LIBRARY = [
     title: "Horário de Atendimento",
     content: "Segunda a Sexta: 09h às 18h<br>Sábados: 09h às 13h<br>Domingos e Feriados: Fechado",
     preview: <div style={{display: 'grid', gap: '2px'}}><div style={{width: '80%', height: '4px', background: 'var(--text-muted)', opacity: 0.5}}/><div style={{width: '60%', height: '4px', background: 'var(--text-muted)', opacity: 0.5}}/></div>,
+  },
+  {
+    type: "testimonial",
+    title: "— Maria Silva, Compradora",
+    content: "\"Encontrei o imóvel dos meus sonhos em menos de uma semana. Atendimento excepcional e sem burocracia!\"",
+    preview: <div style={{display:'flex',gap:'4px',flexDirection:'column'}}><div style={{color:'#f59e0b',fontSize:'10px'}}>★★★★★</div><div style={{width:'100%',height:'4px',background:'var(--text-muted)',opacity:0.5,borderRadius:'2px'}}/></div>,
+  },
+  {
+    type: "stats",
+    title: "Nossos Números",
+    content: "200+|Imóveis vendidos|15 anos|De experiência|4.9★|Avaliação média",
+    preview: <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'4px'}}>{[0,1,2].map(i=><div key={i} style={{height:'20px',background:'rgba(99,102,241,0.2)',borderRadius:'4px'}}/>)}</div>,
+  },
+  {
+    type: "social",
+    title: "Siga nas Redes Sociais",
+    content: "https://wa.me/|https://instagram.com/|https://facebook.com/",
+    preview: <div style={{display:'flex',gap:'4px',marginTop:'4px'}}><div style={{width:'24px',height:'12px',background:'#25D366',borderRadius:'3px'}}/><div style={{width:'24px',height:'12px',background:'#E1306C',borderRadius:'3px'}}/><div style={{width:'24px',height:'12px',background:'#1877F2',borderRadius:'3px'}}/></div>,
+  },
+  {
+    type: "divider",
+    title: "✦  Seção  ✦",
+    content: "",
+    preview: <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'4px'}}><div style={{flex:1,height:'1px',background:'var(--text-muted)',opacity:0.4}}/><div style={{width:'6px',height:'6px',borderRadius:'50%',background:'var(--accent)'}}/><div style={{flex:1,height:'1px',background:'var(--text-muted)',opacity:0.4}}/></div>,
+  },
+  {
+    type: "map",
+    title: "Nossa Localização",
+    content: "Rua das Flores, 123 — Centro — São Paulo, SP",
+    preview: <div style={{width:'100%',height:'24px',background:'rgba(99,102,241,0.15)',borderRadius:'4px',marginTop:'4px',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{width:'8px',height:'8px',background:'var(--accent)',borderRadius:'50%'}}/></div>,
   },
 ];
 
@@ -129,6 +175,16 @@ function detectTheme(primaryColor, secondaryColor) {
 export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const tenantSlug = session?.tenant?.slug || "";
   const initializedRef = useRef(false);
+
+  // Carrega Google Fonts ao montar
+  useEffect(() => {
+    const families = FONT_OPTIONS.map(f => f.value.replace(/ /g, "+")).join("&family=");
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${families}&display=swap`;
+    document.head.appendChild(link);
+    return () => { try { document.head.removeChild(link); } catch {} };
+  }, []);
   const saveTimerRef = useRef(null);
   const canvasRef = useRef(null);
   const actionRef = useRef(null);
@@ -524,13 +580,16 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const activeLayout = previewMode === "mobile" ? showcaseConfig.mobileLayout : layout;
   const blockStyles = showcaseConfig.blockStyles;
 
+  const globalFont = showcaseConfig.globalFont || "Inter";
+
   const previewStyle = useMemo(
     () => ({
       "--accent": previewTenant.primaryColor || "#818cf8",
       "--accent-hover": previewTenant.primaryColor || "#6366f1",
       "--tenant-secondary": previewTenant.secondaryColor || "#d4af37",
+      "--showcase-font": `'${globalFont}', system-ui, sans-serif`,
     }),
-    [previewTenant.primaryColor, previewTenant.secondaryColor]
+    [previewTenant.primaryColor, previewTenant.secondaryColor, globalFont]
   );
 
   const previewHeadline = previewTenant.showcaseHeadline || "Encontre o imóvel ideal para seu próximo passo";
@@ -1079,6 +1138,59 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                       <span className="editable-inline" data-rich-sync={`widget|${index}|ctaUrl`} style={{ cursor: "text", display: "inline-block", width: "100%", fontSize: "12px", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "4px" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidget(index, "ctaUrl", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaUrl || "https://link.com" }} />
                     </div>
                   ) : null}
+
+                  {widget.type === "testimonial" ? (
+                    <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                      <div style={{ color: "#f59e0b", fontSize: "20px", letterSpacing: "2px" }}>★★★★★</div>
+                      <span style={{ fontSize: "11px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", padding: "2px 10px", borderRadius: "20px", fontWeight: "600" }}>Depoimento verificado</span>
+                    </div>
+                  ) : null}
+
+                  {widget.type === "stats" ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginTop: "12px" }}>
+                      {(widget.content || "").split("|").reduce((acc, val, i) => {
+                        if (i % 2 === 0) acc.push([val]);
+                        else acc[acc.length - 1].push(val);
+                        return acc;
+                      }, []).slice(0, 3).map(([num, label], i) => (
+                        <div key={i} style={{ textAlign: "center", padding: "12px 6px", background: "rgba(99,102,241,0.1)", borderRadius: "10px", border: "1px solid rgba(99,102,241,0.2)" }}>
+                          <div style={{ fontSize: "22px", fontWeight: "800", color: "var(--accent)", lineHeight: 1 }}>{num}</div>
+                          <div style={{ fontSize: "11px", opacity: 0.7, marginTop: "4px" }}>{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {widget.type === "social" ? (
+                    <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px", marginTop: "12px" }}>
+                      {[
+                        { label: "WhatsApp", bg: "#25D366", icon: "W" },
+                        { label: "Instagram", bg: "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)", icon: "I" },
+                        { label: "Facebook", bg: "#1877F2", icon: "F" },
+                      ].map(({ label, bg, icon }) => (
+                        <div key={label} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: bg, borderRadius: "8px", color: "#fff", fontSize: "13px", fontWeight: "600" }}>
+                          <span style={{ fontWeight: "800" }}>{icon}</span> {label}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {widget.type === "divider" ? (
+                    <div style={{ textAlign: "center", padding: "8px 0", marginTop: "4px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3))" }} />
+                        <span style={{ fontSize: "13px", opacity: 0.5, letterSpacing: "0.1em" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                        <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, rgba(255,255,255,0.3), transparent)" }} />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {widget.type === "map" ? (
+                    <div style={{ marginTop: "10px", background: "rgba(0,0,0,0.3)", borderRadius: "10px", padding: "16px", textAlign: "center", border: "1px dashed rgba(255,255,255,0.1)" }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "6px" }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0 }}>Endereço exibido abaixo</p>
+                    </div>
+                  ) : null}
                 </article>
               ));
               if (dragState && dragState.snapIndex !== -1) {
@@ -1272,6 +1384,25 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
 
+          {/* Seletor de fonte global */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5, flexShrink: 0 }}>
+              <polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>
+            </svg>
+            <select
+              value={globalFont}
+              onChange={(e) => updateShowcaseConfig((prev) => ({ ...prev, globalFont: e.target.value }))}
+              title="Fonte da vitrine"
+              style={{ padding: "5px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", fontSize: "12px", cursor: "pointer", maxWidth: "160px" }}
+            >
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value} style={{ background: "#1e293b" }}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
+
           <button type="button" className="button-secondary" onClick={resetLayoutOnly} title="Restaura posições e tamanhos para o padrão">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "5px" }}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             Posições
@@ -1319,7 +1450,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                 minHeight: `${canvasHeight}px`,
                 backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)",
                 backgroundSize: "24px 24px",
-                border: "1px solid rgba(255,255,255,0.05)"
+                border: "1px solid rgba(255,255,255,0.05)",
+                fontFamily: `'${globalFont}', system-ui, sans-serif`,
               }}
             >
               {canvasContent}

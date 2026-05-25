@@ -1,33 +1,7 @@
 import { useEffect, useState } from "react";
-
-export const INITIAL_PROPERTY_TYPES = [
-  "Casa",
-  "Apartamento",
-  "Cobertura",
-  "Studio",
-  "Terreno",
-  "Comercial",
-  "Sala Comercial",
-  "Casa em Condominio",
-];
-
-const EMPTY = {
-  cep: "",
-  title: "",
-  description: "",
-  price: "",
-  address: "",
-  neighborhood: "",
-  city: "",
-  state: "",
-  propertyType: "",
-  bedrooms: "",
-  parkingSpots: "",
-  suites: "",
-  squareFootage: "",
-
-  status: "DRAFT",
-};
+import { useNavigate } from "react-router-dom";
+import { api } from "../api.js";
+import { loadSession } from "../session.js";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -48,36 +22,126 @@ function parseCurrencyBRL(rawValue) {
   return Number(digits) / 100;
 }
 
-export function PropertyManagement({ onSubmitProperty, onSubmitType, disabled, initialData }) {
+const EMPTY = {
+  tipoImovelId: "",
+  atributosIds: [],
+  title: "",
+  description: "",
+  price: "",
+  cep: "",
+  address: "",
+  neighborhood: "",
+  city: "",
+  state: "",
+  bedrooms: "",
+  parkingSpots: "",
+  suites: "",
+  squareFootage: "",
+  status: "DRAFT",
+};
+
+// ─── Checkboxes de atributos agrupados por categoria ─────────────────────────
+
+function AtributosSection({ atributos, selecionados, onChange }) {
+  if (!atributos || atributos.length === 0) return null;
+
+  const grupos = atributos.reduce((acc, atr) => {
+    const g = atr.grupo || "Outros";
+    if (!acc[g]) acc[g] = [];
+    acc[g].push(atr);
+    return acc;
+  }, {});
+
+  function toggle(id) {
+    onChange(
+      selecionados.includes(id)
+        ? selecionados.filter((x) => x !== id)
+        : [...selecionados, id]
+    );
+  }
+
+  return (
+    <div style={{ marginTop: "8px" }}>
+      <span style={{ display: "block", marginBottom: "12px", fontSize: "14px", fontWeight: "600" }}>
+        Atributos do imóvel
+      </span>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {Object.entries(grupos).map(([grupo, itens]) => (
+          <div key={grupo}>
+            <span style={{ display: "block", fontSize: "12px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.5, marginBottom: "8px" }}>
+              {grupo}
+            </span>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "8px" }}>
+              {itens.map((atr) => {
+                const checked = selecionados.includes(atr.id);
+                return (
+                  <label
+                    key={atr.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      border: checked
+                        ? "1px solid rgba(99,102,241,0.5)"
+                        : "1px solid rgba(255,255,255,0.1)",
+                      background: checked
+                        ? "rgba(99,102,241,0.12)"
+                        : "rgba(255,255,255,0.03)",
+                      transition: "all 0.15s ease",
+                      fontSize: "13px",
+                      userSelect: "none",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(atr.id)}
+                      style={{ accentColor: "var(--primary, #6366f1)", width: "14px", height: "14px", flexShrink: 0 }}
+                    />
+                    {atr.descricao}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Menu de gerenciamento ────────────────────────────────────────────────────
+
+export function PropertyManagement({ onSubmitProperty, disabled, initialData }) {
   const [view, setView] = useState(initialData?.id ? "PROPERTY" : "MENU");
-  const [propertyTypes, setPropertyTypes] = useState(INITIAL_PROPERTY_TYPES);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (initialData?.id) setView("PROPERTY");
+  }, [initialData?.id]);
 
   return (
     <div className="management-container">
       {view === "MENU" && (
         <div className="glass-panel" style={{ textAlign: "center", padding: "56px 40px", animation: "fadeIn 0.4s ease-out" }}>
-          <h2 style={{ marginBottom: "8px", fontSize: "28px", fontWeight: "700" }}>Gerenciamento de Ativos</h2>
+          <h2 style={{ marginBottom: "8px", fontSize: "28px", fontWeight: "700" }}>Gerenciar Imóveis</h2>
           <p style={{ marginBottom: "48px", color: "var(--text-muted)", fontSize: "16px" }}>
-            Selecione o tipo de cadastro que deseja realizar no sistema.
+            Selecione o tipo de operação que deseja realizar no sistema.
           </p>
 
           <div className="grid grid-2" style={{ gap: "32px", maxWidth: "800px", margin: "0 auto" }}>
             <button
               onClick={() => setView("PROPERTY")}
               style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "48px 32px",
-                borderRadius: "24px",
-                cursor: "pointer",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                padding: "48px 32px", borderRadius: "24px", cursor: "pointer",
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 border: "1px solid rgba(255, 255, 255, 0.15)",
                 background: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
-                backdropFilter: "blur(12px)",
-                color: "inherit",
-                gap: "24px"
+                backdropFilter: "blur(12px)", color: "inherit", gap: "24px",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-6px)";
@@ -92,15 +156,7 @@ export function PropertyManagement({ onSubmitProperty, onSubmitType, disabled, i
                 e.currentTarget.style.boxShadow = "none";
               }}
             >
-              <div style={{
-                background: "rgba(255,255,255,0.1)",
-                padding: "20px",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "inset 0 2px 4px rgba(255,255,255,0.1)"
-              }}>
+              <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "inset 0 2px 4px rgba(255,255,255,0.1)" }}>
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                   <polyline points="9 22 9 12 15 12 15 22" />
@@ -115,21 +171,14 @@ export function PropertyManagement({ onSubmitProperty, onSubmitType, disabled, i
             </button>
 
             <button
-              onClick={() => setView("TYPE")}
+              onClick={() => navigate("/tipos-imovel")}
               style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "48px 32px",
-                borderRadius: "24px",
-                cursor: "pointer",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                padding: "48px 32px", borderRadius: "24px", cursor: "pointer",
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 border: "1px solid rgba(255, 255, 255, 0.15)",
                 background: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
-                backdropFilter: "blur(12px)",
-                color: "inherit",
-                gap: "24px"
+                backdropFilter: "blur(12px)", color: "inherit", gap: "24px",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-6px)";
@@ -144,15 +193,7 @@ export function PropertyManagement({ onSubmitProperty, onSubmitType, disabled, i
                 e.currentTarget.style.boxShadow = "none";
               }}
             >
-              <div style={{
-                background: "rgba(255,255,255,0.1)",
-                padding: "20px",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "inset 0 2px 4px rgba(255,255,255,0.1)"
-              }}>
+              <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "inset 0 2px 4px rgba(255,255,255,0.1)" }}>
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
                   <line x1="7" y1="7" x2="7.01" y2="7" />
@@ -175,67 +216,33 @@ export function PropertyManagement({ onSubmitProperty, onSubmitType, disabled, i
           disabled={disabled}
           initialData={initialData}
           onCancelEdit={() => setView("MENU")}
-          availableTypes={propertyTypes}
         />
       )}
 
-      {view === "TYPE" && (
-        <PropertyTypeForm
-          onSave={(newType) => {
-            setPropertyTypes((prev) => [...prev, newType]);
-            if (onSubmitType) onSubmitType(newType);
-            setView("MENU");
-          }}
-          onCancel={() => setView("MENU")}
-          disabled={disabled}
-        />
-      )}
     </div>
   );
 }
 
-export function PropertyTypeForm({ onSave, onCancel, disabled }) {
-  const [newType, setNewType] = useState("");
+// ─── Formulário principal de imóvel ──────────────────────────────────────────
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (newType.trim()) {
-      onSave(newType.trim());
-      setNewType("");
-    }
-  };
-
-  return (
-    <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-      <h2 style={{ marginBottom: "24px" }}>Nova Categoria de Imóvel</h2>
-      <form className="grid" onSubmit={handleSubmit}>
-        <input
-          placeholder="Ex: Chácara, Galpão, Loja..."
-          value={newType}
-          onChange={(e) => setNewType(e.target.value)}
-          required
-          disabled={disabled}
-        />
-        <div className="actions" style={{ marginTop: "24px" }}>
-          <button type="submit" disabled={disabled || !newType.trim()}>
-            Salvar Categoria
-          </button>
-          <button type="button" className="button-secondary" onClick={onCancel} disabled={disabled}>
-            Voltar ao Menu
-          </button>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, availableTypes = INITIAL_PROPERTY_TYPES }) {
+export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) {
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState([]);
+  const [tipos, setTipos] = useState([]);
   const isEditing = Boolean(initialData?.id);
 
+  const session = loadSession();
+  const tenantSlug = session?.tenant?.slug;
+
+  // Carrega tipos de imóvel com seus atributos
+  useEffect(() => {
+    if (!tenantSlug) return;
+    api.getTiposImovel(tenantSlug).then(setTipos).catch(() => {});
+  }, [tenantSlug]);
+
+  // Preenche form ao editar
   useEffect(() => {
     if (!initialData) {
       setForm(EMPTY);
@@ -243,16 +250,19 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
       return;
     }
 
+    const atributosIds = initialData.atributos?.map((a) => a.atributoId ?? a.atributo?.id) ?? [];
+
     setForm({
-      cep: formatCep(initialData.cep || ""),
+      tipoImovelId: initialData.tipoImovelId ? String(initialData.tipoImovelId) : "",
+      atributosIds,
       title: initialData.title || "",
       description: initialData.description || "",
       price: formatCurrencyBRL(String(initialData.price ?? "")),
+      cep: formatCep(initialData.cep || ""),
       address: initialData.address || "",
       neighborhood: initialData.neighborhood || "",
       city: initialData.city || "",
       state: initialData.state || "",
-      propertyType: initialData.propertyType || "",
       bedrooms: initialData.bedrooms != null ? String(initialData.bedrooms) : "",
       parkingSpots: initialData.parkingSpots != null ? String(initialData.parkingSpots) : "",
       suites: initialData.suites != null ? String(initialData.suites) : "",
@@ -262,24 +272,19 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
     setImageFiles([]);
   }, [initialData]);
 
+  const tipoSelecionado = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
+
   async function handleCepBlur() {
     const cleanCep = String(form.cep || "").replace(/\D/g, "");
-    if (cleanCep.length !== 8) {
-      return;
-    }
+    if (cleanCep.length !== 8) return;
 
     setCepLoading(true);
     setError("");
     try {
       const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-      if (!response.ok) {
-        throw new Error("Falha ao consultar CEP.");
-      }
-
+      if (!response.ok) throw new Error("Falha ao consultar CEP.");
       const data = await response.json();
-      if (data.erro) {
-        throw new Error("CEP não encontrado.");
-      }
+      if (data.erro) throw new Error("CEP não encontrado.");
 
       const street = [data.logradouro, data.complemento].filter(Boolean).join(" - ");
       setForm((prev) => ({
@@ -323,15 +328,24 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
     }
 
     await onSubmit({
-      ...form,
-      cep: form.cep.replace(/\D/g, ""),
+      tipoImovelId: form.tipoImovelId ? Number(form.tipoImovelId) : undefined,
+      atributosIds: form.atributosIds,
+      title: form.title,
+      description: form.description,
       price: normalizedPrice,
+      cep: form.cep.replace(/\D/g, ""),
+      address: form.address,
+      neighborhood: form.neighborhood,
+      city: form.city,
+      state: form.state,
       bedrooms: normalizedBedrooms,
       parkingSpots: normalizedParkingSpots,
       suites: normalizedSuites,
       squareFootage: normalizedSquareFootage,
+      status: form.status,
       imageFiles,
     });
+
     if (!isEditing) {
       setForm(EMPTY);
       setImageFiles([]);
@@ -342,16 +356,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
     <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       <h2 style={{ marginBottom: "24px" }}>{isEditing ? "Editar Ativo" : "Novo Ativo"}</h2>
       {error ? <div className="error">{error}</div> : null}
+
       <form className="grid" onSubmit={handleSubmit}>
-        <input
-          placeholder="CEP (opcional, preenche endereço automático)"
-          value={form.cep}
-          onChange={(e) => setForm((prev) => ({ ...prev, cep: formatCep(e.target.value) }))}
-          onBlur={handleCepBlur}
-          maxLength={9}
-          disabled={disabled || cepLoading}
-        />
-        {cepLoading ? <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Consultando...</p> : null}
+
+        {/* Informações básicas */}
         <input
           placeholder="Título do Imóvel"
           value={form.title}
@@ -378,6 +386,39 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
           required
           disabled={disabled}
         />
+
+        {/* Tipo de imóvel + atributos */}
+        <select
+          value={form.tipoImovelId}
+          onChange={(e) => setForm((prev) => ({ ...prev, tipoImovelId: e.target.value, atributosIds: [] }))}
+          required
+          disabled={disabled}
+        >
+          <option value="" disabled hidden>Tipo de imóvel</option>
+          {tipos.map((t) => (
+            <option key={t.id} value={t.id}>{t.descricao}</option>
+          ))}
+        </select>
+
+        {tipoSelecionado && (
+          <AtributosSection
+            atributos={tipoSelecionado.atributos}
+            selecionados={form.atributosIds}
+            onChange={(ids) => setForm((prev) => ({ ...prev, atributosIds: ids }))}
+          />
+        )}
+
+        {/* Localização */}
+        <input
+          placeholder="CEP (opcional, preenche endereço automático)"
+          value={form.cep}
+          onChange={(e) => setForm((prev) => ({ ...prev, cep: formatCep(e.target.value) }))}
+          onBlur={handleCepBlur}
+          maxLength={9}
+          disabled={disabled || cepLoading}
+        />
+        {cepLoading ? <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Consultando...</p> : null}
+
         <input
           placeholder="Endereço"
           value={form.address}
@@ -404,29 +445,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
             disabled={disabled}
           />
         </div>
-        <div className="grid grid-2">
-          <input
-            placeholder="Estado (UF)"
-            value={form.state}
-            onChange={(e) => setForm((prev) => ({ ...prev, state: e.target.value.toUpperCase() }))}
-            minLength={2}
-            required
-            disabled={disabled}
-          />
-          <select
-            value={form.propertyType}
-            onChange={(e) => setForm((prev) => ({ ...prev, propertyType: e.target.value }))}
-            required
-            disabled={disabled}
-          >
-            <option value="" disabled hidden>Tipo de imóvel</option>
-            {availableTypes.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
+        <input
+          placeholder="Estado (UF)"
+          value={form.state}
+          onChange={(e) => setForm((prev) => ({ ...prev, state: e.target.value.toUpperCase() }))}
+          minLength={2}
+          required
+          disabled={disabled}
+        />
+
+        {/* Características numéricas */}
         <div className="grid grid-2">
           <input
             placeholder="Quartos"
@@ -468,16 +496,18 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, av
             disabled={disabled}
           />
         </div>
+
         <select
           value={form.status}
           onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
           disabled={disabled}
         >
-          <option value="DRAFT">Status</option>
+          <option value="DRAFT">Rascunho</option>
           <option value="ACTIVE">Ativo</option>
           <option value="INACTIVE">Inativo</option>
         </select>
-        
+
+        {/* Fotos */}
         <div style={{ marginTop: "8px" }}>
           <span style={{ display: "block", marginBottom: "8px", fontSize: "14px" }}>Fotos do imóvel (opcional)</span>
           <input

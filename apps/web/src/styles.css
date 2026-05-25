@@ -411,6 +411,8 @@ button:disabled {
   align-items: center;
   gap: 14px;
   font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .nav-icon {

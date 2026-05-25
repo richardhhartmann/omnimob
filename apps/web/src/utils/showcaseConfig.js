@@ -190,6 +190,7 @@ export function normalizeShowcaseConfig(raw) {
     widgets,
     topHeader,
     hiddenBlocks,
+    globalFont: typeof cfg.globalFont === "string" && cfg.globalFont ? cfg.globalFont : "Inter",
   };
 }
 

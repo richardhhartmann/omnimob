@@ -8,6 +8,10 @@ import {
   sectionSurfaceStyle,
 } from "../utils/showcaseConfig";
 
+const SHOWCASE_FONT_FAMILIES = [
+  "Inter","Playfair+Display","Montserrat","Raleway","Lato","Merriweather","Poppins",
+];
+
 export function ShowcasePage() {
   const { tenantSlug } = useParams();
   const [payload, setPayload] = useState(null);
@@ -37,6 +41,14 @@ export function ShowcasePage() {
   useEffect(() => {
     loadShowcaseData();
   }, [tenantSlug]);
+
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${SHOWCASE_FONT_FAMILIES.join("&family=")}&display=swap`;
+    document.head.appendChild(link);
+    return () => { try { document.head.removeChild(link); } catch {} };
+  }, []);
 
   function nextImage(propertyId, total) {
     setCarouselIndexes((prev) => ({
@@ -69,10 +81,13 @@ export function ShowcasePage() {
         `Ola, tenho interesse nos imoveis da ${tenantName}.`
       )}`
     : null;
+  const globalFont = showcaseConfig.globalFont || "Inter";
   const themeStyle = {
     "--accent": tenant.primaryColor || "#818cf8",
     "--accent-hover": tenant.primaryColor || "#6366f1",
     "--tenant-secondary": tenant.secondaryColor || "#d4af37",
+    "--showcase-font": `'${globalFont}', system-ui, sans-serif`,
+    fontFamily: `'${globalFont}', system-ui, sans-serif`,
   };
   const isLightMode = showcaseConfig.appearanceMode === "light";
   const canvasHeight = Math.max(1800, ...Object.values(layout).map((block) => (block?.y || 0) + (block?.h || 0))) + 40;
@@ -349,6 +364,58 @@ export function ShowcasePage() {
                     className="btn-view-details"
                     dangerouslySetInnerHTML={{ __html: widget.ctaLabel }}
                   />
+                ) : null}
+                {widget.type === "testimonial" ? (
+                  <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                    <div style={{ color: "#f59e0b", fontSize: "20px", letterSpacing: "2px" }}>★★★★★</div>
+                    <span style={{ fontSize: "11px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", padding: "2px 10px", borderRadius: "20px", fontWeight: "600" }}>Depoimento verificado</span>
+                  </div>
+                ) : null}
+                {widget.type === "stats" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginTop: "12px" }}>
+                    {(widget.content || "").split("|").reduce((acc, val, i) => {
+                      if (i % 2 === 0) acc.push([val]);
+                      else acc[acc.length - 1].push(val);
+                      return acc;
+                    }, []).slice(0, 3).map(([num, label], i) => (
+                      <div key={i} style={{ textAlign: "center", padding: "12px 6px", background: "rgba(99,102,241,0.1)", borderRadius: "10px", border: "1px solid rgba(99,102,241,0.2)" }}>
+                        <div style={{ fontSize: "22px", fontWeight: "800", color: "var(--accent)", lineHeight: 1 }}>{num}</div>
+                        <div style={{ fontSize: "11px", opacity: 0.7, marginTop: "4px" }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {widget.type === "social" ? (
+                  <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px", marginTop: "12px" }}>
+                    {(widget.content || "").split("|").filter(Boolean).map((url, i) => {
+                      const isWa = url.includes("wa.me") || url.includes("whatsapp");
+                      const isIg = url.includes("instagram");
+                      const isFb = url.includes("facebook");
+                      const label = isWa ? "WhatsApp" : isIg ? "Instagram" : isFb ? "Facebook" : "Rede Social";
+                      const bg = isWa ? "#25D366" : isIg ? "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" : isFb ? "#1877F2" : "var(--accent)";
+                      const icon = isWa ? "W" : isIg ? "I" : isFb ? "F" : "S";
+                      return (
+                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: bg, borderRadius: "8px", color: "#fff", fontSize: "13px", fontWeight: "600", textDecoration: "none" }}>
+                          <span style={{ fontWeight: "800" }}>{icon}</span> {label}
+                        </a>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {widget.type === "divider" ? (
+                  <div style={{ textAlign: "center", padding: "8px 0", marginTop: "4px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3))" }} />
+                      <span style={{ fontSize: "13px", opacity: 0.5, letterSpacing: "0.1em" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                      <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, rgba(255,255,255,0.3), transparent)" }} />
+                    </div>
+                  </div>
+                ) : null}
+                {widget.type === "map" ? (
+                  <div style={{ marginTop: "10px", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "16px", textAlign: "center" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "6px" }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0 }} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                  </div>
                 ) : null}
               </article>
             ))}

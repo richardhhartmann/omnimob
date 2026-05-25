@@ -239,7 +239,7 @@ function BlockPanel({
           <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
         </svg>
         <p style={{ fontSize: "13px", lineHeight: "1.6", margin: 0 }}>
-          Clique em qualquer bloco para editar seus estilos aqui.
+          Clique em qualquer bloco para editar seus detalhes aqui.
         </p>
       </div>
     );

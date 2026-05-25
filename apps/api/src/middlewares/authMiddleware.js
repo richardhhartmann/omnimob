@@ -12,7 +12,7 @@ export function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     req.authUserId = payload.userId;
     req.authTenantId = payload.tenantId;
-    req.authRole = payload.role;
+    req.authCargoCodigo = payload.cargoCodigo;
     return next();
   } catch {
     return res.status(401).json({ error: "Token invalido ou expirado." });

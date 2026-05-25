@@ -126,7 +126,6 @@ export function PropertyInsightsPage({ session }) {
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
         <div>
           <h1 style={{ fontSize: "28px", marginBottom: "8px" }}>Painel de Performance</h1>
-          <p style={{ color: "var(--text-muted)" }}>{property ? property.title : "Sincronizando dados..."}</p>
         </div>
         <Link to="/" className="button-secondary link-button" style={{ width: "auto" }}>
           Voltar ao Portfólio
