@@ -18,6 +18,7 @@ export function AdminLayout({ session, onLogout }) {
   const isUsuarios = location.pathname === "/usuarios";
   const isCargos = location.pathname === "/cargos";
   const isConfiguracoes = location.pathname === "/configuracoes";
+  const isTiposImovel = location.pathname === "/tipos-imovel";
   const isShowcaseEditor = location.pathname.endsWith("/editar");
   const searchParams = new URLSearchParams(location.search);
   const activeTab = searchParams.get("tab") || "create";
@@ -46,7 +47,7 @@ export function AdminLayout({ session, onLogout }) {
             <>
               <button
                 type="button"
-                className={`nav-button ${isDashboard && searchParams.get("tab") === "create" ? "active" : ""}`}
+                className={`nav-button ${(isDashboard && searchParams.get("tab") === "create") || isTiposImovel ? "active" : ""}`}
                 onClick={() => navigate("/?tab=create")}
               >
                 <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>

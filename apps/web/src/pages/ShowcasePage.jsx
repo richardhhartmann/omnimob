@@ -64,6 +64,10 @@ export function ShowcasePage() {
     }));
   }
 
+  if (!payload && !error) {
+    return <div style={{ minHeight: "100vh", background: "#0f172a" }} />;
+  }
+
   const tenantName = payload?.tenant?.name || tenantSlug?.toUpperCase() || "Domus";
   const tenant = payload?.tenant || {};
   const showcaseConfig = normalizeShowcaseConfig(tenant.showcaseConfig);
@@ -194,9 +198,14 @@ export function ShowcasePage() {
                   Falar com consultor
                 </a>
               ) : null}
-              <Link to={`/login?tenant=${tenantSlug}`} style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "14px", fontWeight: "500", marginLeft: "16px", opacity: 0.8 }}>
+              <a
+                href={`/login?tenant=${tenantSlug}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "14px", fontWeight: "500", marginLeft: "16px", opacity: 0.8 }}
+              >
                 Acesso
-              </Link>
+              </a>
             </nav>
           </header>
         </section>

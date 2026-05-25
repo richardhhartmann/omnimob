@@ -4,6 +4,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
+import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
 import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
@@ -61,6 +62,7 @@ app.use("/api/properties", propertyRouter);
 app.use("/api/leads", leadRouter);
 app.use("/api/usuarios", usuarioRouter);
 app.use("/api/cargos", cargoRouter);
+app.use("/api/clientes", clienteRouter);
 app.use("/public", publicRouter);
 
 app.use((error, _req, res, _next) => {

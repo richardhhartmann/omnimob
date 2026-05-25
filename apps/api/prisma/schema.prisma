@@ -39,6 +39,11 @@ enum TipoVenda {
   ALUGUEL
 }
 
+enum AndamentoImovel {
+  PRONTO_PARA_MORAR
+  EM_CONSTRUCAO
+}
+
 // ─── Tenant ──────────────────────────────────────────────────────────────────
 
 model Tenant {
@@ -89,6 +94,7 @@ model Cargo {
   gerenciarLeads    Boolean  @default(false) @map("gerenciar_leads")
   gerenciarUsuarios Boolean  @default(false) @map("gerenciar_usuarios")
   gerenciarClientes Boolean  @default(false) @map("gerenciar_clientes")
+  gerenciarCargos   Boolean  @default(false) @map("gerenciar_cargos")
   verRelatorios     Boolean  @default(false) @map("ver_relatorios")
   publicarRedes     Boolean  @default(false) @map("publicar_redes")
 
@@ -230,6 +236,8 @@ model Property {
   parkingSpots  Int            @default(0)
   suites        Int            @default(0)
   squareFootage Float          @default(0)
+  andamento     AndamentoImovel?
+  aceitaPermuta Boolean         @default(false) @map("aceita_permuta")
   status        PropertyStatus @default(DRAFT)
   viewCount     Int            @default(0)
   leadCount     Int            @default(0)

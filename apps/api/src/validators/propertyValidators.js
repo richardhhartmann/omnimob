@@ -1,7 +1,7 @@
 import prismaPkg from "@prisma/client";
 import { z } from "zod";
 
-const { PropertyStatus } = prismaPkg;
+const { PropertyStatus, AndamentoImovel } = prismaPkg;
 
 export const createPropertySchema = z.object({
   tipoImovelId: z.number().int().positive().optional(),
@@ -18,6 +18,8 @@ export const createPropertySchema = z.object({
   parkingSpots: z.number().int().min(0),
   suites: z.number().int().min(0),
   squareFootage: z.number().positive(),
+  andamento: z.nativeEnum(AndamentoImovel).nullable().optional(),
+  aceitaPermuta: z.boolean().optional().default(false),
   status: z.nativeEnum(PropertyStatus).optional().default(PropertyStatus.DRAFT),
 });
 

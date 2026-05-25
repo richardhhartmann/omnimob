@@ -9,6 +9,7 @@ const PERMISSOES = [
   { key: "gerenciarLeads",    label: "Gerenciar Leads" },
   { key: "gerenciarUsuarios", label: "Gerenciar Usuários" },
   { key: "gerenciarClientes", label: "Gerenciar Clientes" },
+  { key: "gerenciarCargos",   label: "Gerenciar Cargos" },
   { key: "verRelatorios",     label: "Ver Relatórios" },
   { key: "publicarRedes",     label: "Publicar em Redes" },
 ];

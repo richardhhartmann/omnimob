@@ -37,6 +37,8 @@ const EMPTY = {
   parkingSpots: "",
   suites: "",
   squareFootage: "",
+  andamento: "",
+  aceitaPermuta: false,
   status: "DRAFT",
 };
 
@@ -267,6 +269,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       parkingSpots: initialData.parkingSpots != null ? String(initialData.parkingSpots) : "",
       suites: initialData.suites != null ? String(initialData.suites) : "",
       squareFootage: initialData.squareFootage != null ? String(initialData.squareFootage) : "",
+      andamento: initialData.andamento || "",
+      aceitaPermuta: Boolean(initialData.aceitaPermuta),
       status: initialData.status || "DRAFT",
     });
     setImageFiles([]);
@@ -342,6 +346,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       parkingSpots: normalizedParkingSpots,
       suites: normalizedSuites,
       squareFootage: normalizedSquareFootage,
+      andamento: form.andamento || null,
+      aceitaPermuta: Boolean(form.aceitaPermuta),
       status: form.status,
       imageFiles,
     });
@@ -497,15 +503,53 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
           />
         </div>
 
+        
         <select
           value={form.status}
           onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
           disabled={disabled}
         >
-          <option value="DRAFT">Rascunho</option>
+          <option value="DRAFT">Status</option>
           <option value="ACTIVE">Ativo</option>
           <option value="INACTIVE">Inativo</option>
         </select>
+
+        <select
+          value={form.andamento}
+          onChange={(e) => setForm((prev) => ({ ...prev, andamento: e.target.value }))}
+          disabled={disabled}
+        >
+          <option value="" disabled hidden>Andamento</option>
+          <option value="PRONTO_PARA_MORAR">Pronto para morar</option>
+          <option value="EM_CONSTRUCAO">Em construção</option>
+        </select>
+
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "10px 14px",
+            borderRadius: "10px",
+            cursor: disabled ? "not-allowed" : "pointer",
+            border: form.aceitaPermuta ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.1)",
+            background: form.aceitaPermuta ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.03)",
+            transition: "all 0.15s ease",
+            fontSize: "13px",
+            userSelect: "none",
+            opacity: disabled ? 0.55 : 1,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={form.aceitaPermuta}
+            onChange={(e) => setForm((prev) => ({ ...prev, aceitaPermuta: e.target.checked }))}
+            disabled={disabled}
+            style={{ accentColor: "var(--primary, #6366f1)", width: "14px", height: "14px", flexShrink: 0 }}
+          />
+          Aceita permuta
+        </label>
+
 
         {/* Fotos */}
         <div style={{ marginTop: "8px" }}>

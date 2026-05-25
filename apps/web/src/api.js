@@ -196,6 +196,19 @@ export const api = {
   deleteCargo: (tenantSlug, id) =>
     request(`/api/cargos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
 
+  // ─── Clientes ────────────────────────────────────────────────────────────
+  listClientes: (tenantSlug) =>
+    request("/api/clientes", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  createCliente: (tenantSlug, payload) =>
+    request("/api/clientes", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  updateCliente: (tenantSlug, id, payload) =>
+    request(`/api/clientes/${id}`, { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  desativarCliente: (tenantSlug, id) =>
+    request(`/api/clientes/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
   // ─── Tipos e atributos ───────────────────────────────────────────────────
   createTipoImovel: (tenantSlug, payload) =>
     request("/api/properties/tipos", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),

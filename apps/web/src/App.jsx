@@ -102,7 +102,7 @@ export default function App() {
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/cargos" element={
-          cargo?.gerenciarUsuarios
+          cargo?.gerenciarCargos
             ? <CargosPage session={session} onSessionUpdate={handleSessionUpdate} />
             : <Navigate to={defaultPublicPath} replace />
         } />

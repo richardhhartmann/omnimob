@@ -56,6 +56,7 @@ authRouter.post("/login", async (req, res) => {
           gerenciarLeads: usuario.cargo.gerenciarLeads,
           gerenciarUsuarios: usuario.cargo.gerenciarUsuarios,
           gerenciarClientes: usuario.cargo.gerenciarClientes,
+          gerenciarCargos: usuario.cargo.gerenciarCargos,
           verRelatorios: usuario.cargo.verRelatorios,
           publicarRedes: usuario.cargo.publicarRedes,
         },

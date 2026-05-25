@@ -222,6 +222,7 @@ async function main() {
         gerenciarLeads: true,
         gerenciarUsuarios: true,
         gerenciarClientes: true,
+        gerenciarCargos: true,
         verRelatorios: true,
         publicarRedes: true,
       },
