@@ -9,7 +9,8 @@ clienteRouter.use(requireAuth);
 clienteRouter.use(requireTenant);
 clienteRouter.use(requirePermissao("gerenciarClientes"));
 
-const CAMPOS = ["nome", "cpf", "rg", "email", "telefone", "whatsapp", "cep", "endereco", "bairro", "cidade", "estado", "observacoes"];
+const CAMPOS_TEXTO = ["nome", "cpf", "rg", "email", "telefone", "whatsapp",
+  "cep", "endereco", "bairro", "cidade", "estado", "observacoes"];
 
 function parseNascimento(value) {
   if (!value) return null;
@@ -19,8 +20,19 @@ function parseNascimento(value) {
 
 clienteRouter.get("/", async (req, res) => {
   try {
+    const { search = "", ativo } = req.query;
+    const where = { tenantId: req.tenant.id };
+    if (ativo !== undefined) where.ativo = ativo === "true";
+    if (search) {
+      where.OR = [
+        { nome: { contains: search, mode: "insensitive" } },
+        { cpf: { contains: search } },
+        { email: { contains: search, mode: "insensitive" } },
+        { telefone: { contains: search } },
+      ];
+    }
     const clientes = await prisma.cliente.findMany({
-      where: { tenantId: req.tenant.id },
+      where,
       orderBy: { nome: "asc" },
     });
     return res.json(clientes);
@@ -30,12 +42,25 @@ clienteRouter.get("/", async (req, res) => {
   }
 });
 
+clienteRouter.get("/:id", async (req, res) => {
+  try {
+    const cliente = await prisma.cliente.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+    });
+    if (!cliente) return res.status(404).json({ error: "Cliente não encontrado." });
+    return res.json(cliente);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao buscar cliente." });
+  }
+});
+
 clienteRouter.post("/", async (req, res) => {
   try {
     const { nome } = req.body;
     if (!nome) return res.status(400).json({ error: "Nome é obrigatório." });
     const data = { tenantId: req.tenant.id, ativo: true };
-    for (const c of CAMPOS) if (req.body[c] !== undefined) data[c] = req.body[c] || null;
+    for (const c of CAMPOS_TEXTO) data[c] = req.body[c] || null;
     data.nome = nome;
     data.nascimento = parseNascimento(req.body.nascimento);
     const cliente = await prisma.cliente.create({ data });
@@ -48,10 +73,12 @@ clienteRouter.post("/", async (req, res) => {
 
 clienteRouter.put("/:id", async (req, res) => {
   try {
-    const current = await prisma.cliente.findFirst({ where: { id: req.params.id, tenantId: req.tenant.id } });
+    const current = await prisma.cliente.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+    });
     if (!current) return res.status(404).json({ error: "Cliente não encontrado." });
     const data = {};
-    for (const c of CAMPOS) if (req.body[c] !== undefined) data[c] = req.body[c] || null;
+    for (const c of CAMPOS_TEXTO) if (req.body[c] !== undefined) data[c] = req.body[c] || null;
     if (req.body.nascimento !== undefined) data.nascimento = parseNascimento(req.body.nascimento);
     if (req.body.ativo !== undefined) data.ativo = Boolean(req.body.ativo);
     const cliente = await prisma.cliente.update({ where: { id: req.params.id }, data });
@@ -64,7 +91,9 @@ clienteRouter.put("/:id", async (req, res) => {
 
 clienteRouter.delete("/:id", async (req, res) => {
   try {
-    const current = await prisma.cliente.findFirst({ where: { id: req.params.id, tenantId: req.tenant.id } });
+    const current = await prisma.cliente.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+    });
     if (!current) return res.status(404).json({ error: "Cliente não encontrado." });
     await prisma.cliente.update({ where: { id: req.params.id }, data: { ativo: false } });
     return res.status(204).send();

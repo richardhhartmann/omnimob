@@ -10,6 +10,7 @@ import { ShowcasePropertyPage } from "./pages/ShowcasePropertyPage";
 import { ShowcasePage } from "./pages/ShowcasePage";
 import { AdminLayout } from "./components/AdminLayout";
 import { CargosPage } from "./pages/CargosPage";
+import { ClientesPage } from "./pages/ClientesPage";
 import { ConfiguracaoPage } from "./pages/ConfiguracaoPage";
 import { TiposImovelPage } from "./pages/TiposImovelPage";
 import { UsuariosPage } from "./pages/UsuariosPage";
@@ -102,8 +103,13 @@ export default function App() {
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/cargos" element={
-          cargo?.gerenciarCargos
+          cargo?.gerenciarUsuarios
             ? <CargosPage session={session} onSessionUpdate={handleSessionUpdate} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/clientes" element={
+          cargo?.gerenciarClientes
+            ? <ClientesPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/tipos-imovel" element={

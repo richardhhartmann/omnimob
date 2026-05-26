@@ -197,8 +197,13 @@ export const api = {
     request(`/api/cargos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
 
   // ─── Clientes ────────────────────────────────────────────────────────────
-  listClientes: (tenantSlug) =>
-    request("/api/clientes", { headers: { "x-tenant-slug": tenantSlug } }),
+  listClientes: (tenantSlug, { search = "", ativo } = {}) => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (ativo !== undefined) params.set("ativo", String(ativo));
+    const query = params.toString() ? `?${params}` : "";
+    return request(`/api/clientes${query}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
 
   createCliente: (tenantSlug, payload) =>
     request("/api/clientes", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),

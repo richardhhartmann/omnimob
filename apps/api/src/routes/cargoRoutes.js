@@ -7,10 +7,10 @@ import { requireTenant } from "../middlewares/tenantMiddleware.js";
 export const cargoRouter = Router();
 cargoRouter.use(requireAuth);
 cargoRouter.use(requireTenant);
-cargoRouter.use(requirePermissao("gerenciarCargos"));
+cargoRouter.use(requirePermissao("gerenciarUsuarios"));
 
 const PERMISSOES = ["acessarPainel", "editarPagina", "gerenciarImoveis", "gerenciarLeads",
-  "gerenciarUsuarios", "gerenciarClientes", "gerenciarCargos", "verRelatorios", "publicarRedes"];
+  "gerenciarUsuarios", "gerenciarClientes", "verRelatorios", "publicarRedes"];
 
 cargoRouter.get("/", async (_req, res) => {
   try {

@@ -17,6 +17,7 @@ export function AdminLayout({ session, onLogout }) {
   const isLeads = location.pathname === "/leads";
   const isUsuarios = location.pathname === "/usuarios";
   const isCargos = location.pathname === "/cargos";
+  const isClientes = location.pathname === "/clientes";
   const isConfiguracoes = location.pathname === "/configuracoes";
   const isTiposImovel = location.pathname === "/tipos-imovel";
   const isShowcaseEditor = location.pathname.endsWith("/editar");
@@ -72,6 +73,17 @@ export function AdminLayout({ session, onLogout }) {
             >
               <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               Leads
+            </button>
+          )}
+
+          {cargo?.gerenciarClientes && (
+            <button
+              type="button"
+              className={`nav-button ${isClientes ? "active" : ""}`}
+              onClick={() => navigate("/clientes")}
+            >
+              <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zM12 2a10 10 0 100 20A10 10 0 0012 2z" /></svg>
+              Clientes
             </button>
           )}
 
