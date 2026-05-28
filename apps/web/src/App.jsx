@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { api, setApiToken } from "./api";
+import { api, setApiToken, setAdminToken } from "./api";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LeadsPage } from "./pages/LeadsPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -15,6 +15,10 @@ import { ConfiguracaoPage } from "./pages/ConfiguracaoPage";
 import { TiposImovelPage } from "./pages/TiposImovelPage";
 import { UsuariosPage } from "./pages/UsuariosPage";
 import { clearSession, loadSession, saveSession } from "./session";
+import { AdminLoginPage } from "./pages/AdminLoginPage";
+import { SuperAdminPage } from "./pages/SuperAdminPage";
+import { DomusLandingPage } from "./pages/DomusLandingPage";
+import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
 
 export default function App() {
   const [session, setSession] = useState(() => {
@@ -25,9 +29,29 @@ export default function App() {
   const location = useLocation();
   const DEFAULT_PUBLIC_SHOWCASE = "/vitrine/imobiliaria-centro";
 
+  const [adminSession, setAdminSession] = useState(() => {
+    const a = loadAdminSession();
+    if (a?.token) setAdminToken(a.token);
+    return a;
+  });
+
   useEffect(() => {
     setApiToken(session?.token || null);
   }, [session]);
+
+  useEffect(() => {
+    setAdminToken(adminSession?.token || null);
+  }, [adminSession]);
+
+  function handleAdminLogin(next) {
+    saveAdminSession(next);
+    setAdminSession(next);
+  }
+  function handleAdminLogout() {
+    clearAdminSession();
+    setAdminToken(null);
+    setAdminSession(null);
+  }
 
   // Mantém referência estável à sessão para usar dentro de event listeners
   const sessionRef = useRef(session);
@@ -82,6 +106,31 @@ export default function App() {
       <Route path="/vitrine/:tenantSlug" element={<ShowcasePage />} />
       <Route path="/vitrine/:tenantSlug/imovel/:propertyId" element={<ShowcasePropertyPage />} />
 
+      {/* Painel super-admin da Domus (sessão independente do tenant) */}
+      <Route
+        path="/admin/login"
+        element={adminSession ? <Navigate to="/admin" replace /> : <AdminLoginPage onLogin={handleAdminLogin} />}
+      />
+      <Route
+        path="/admin"
+        element={adminSession ? <SuperAdminPage session={adminSession} onLogout={handleAdminLogout} /> : <Navigate to="/admin/login" replace />}
+      />
+
+      {/* Raiz: landing da Domus para visitantes; dashboard para tenant logado */}
+      <Route
+        element={
+          session && canAccessTenantPanel ? (
+            <AdminLayout session={session} onLogout={handleLogout} />
+          ) : session ? (
+            <Navigate to={defaultPublicPath} replace />
+          ) : (
+            <DomusLandingPage />
+          )
+        }
+      >
+        <Route path="/" element={<DashboardPage session={session} />} />
+      </Route>
+
       <Route
         element={
           session && canAccessTenantPanel ? (
@@ -91,7 +140,6 @@ export default function App() {
           )
         }
       >
-        <Route path="/" element={<DashboardPage session={session} />} />
         <Route path="/leads" element={
           cargo?.gerenciarLeads
             ? <LeadsPage session={session} />

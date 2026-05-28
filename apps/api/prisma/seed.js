@@ -852,12 +852,33 @@ async function seedVendas(tenants) {
 
 // ─── Orquestração ────────────────────────────────────────────────────────────
 
+async function seedSuperAdmin() {
+  console.log("→ Super-admin (base)...");
+  const email = process.env.SUPER_ADMIN_EMAIL || "super@domus.com";
+  const nome = process.env.SUPER_ADMIN_NOME || "Super Admin";
+  const senhaPlain = process.env.SUPER_ADMIN_PASSWORD || "superadmin";
+
+  const existing = await prisma.superAdmin.findUnique({ where: { email } });
+  if (existing) {
+    // Não sobrescreve a senha de um super-admin já existente.
+    await prisma.superAdmin.update({ where: { email }, data: { nome, ativo: true } });
+    console.log(`  ✓ Super-admin já existe: ${email}`);
+  } else {
+    await prisma.superAdmin.create({ data: { email, nome, senha: await hashPassword(senhaPlain), ativo: true } });
+    console.log(`  ✓ Super-admin criado: ${email}`);
+  }
+  if (!process.env.SUPER_ADMIN_PASSWORD) {
+    console.log("  ⚠ Sem SUPER_ADMIN_PASSWORD definido — senha padrão 'superadmin'. Defina em produção.");
+  }
+}
+
 async function main() {
   console.log(`\n🌱 Seed Domus — modo: ${SEED_DEV ? "DEV (base + exemplos)" : "BASE (apenas cargos/tipos/atributos)"}\n`);
 
   // Dados base — sempre
   const cargos = await seedCargos();
   const { tiposMap, atributosMap } = await seedTipos();
+  await seedSuperAdmin();
 
   if (!SEED_DEV) {
     console.log("\n✅ Dados base carregados. Imóveis de exemplo ignorados (rode com --dev para popular).");

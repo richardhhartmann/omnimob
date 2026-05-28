@@ -1,9 +1,14 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 let authToken = null;
+let adminToken = null;
 
 export function setApiToken(token) {
   authToken = token;
+}
+
+export function setAdminToken(token) {
+  adminToken = token;
 }
 
 function normalizeErrorMessage(body) {
@@ -260,4 +265,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+};
+
+// ─── Super-admin (painel da Domus) — usa token próprio ─────────────────────────
+async function adminRequest(path, options = {}) {
+  const { headers: customHeaders = {}, ...restOptions } = options;
+  const headers = { "Content-Type": "application/json", ...customHeaders };
+  if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
+
+  const response = await fetch(`${API_URL}${path}`, { ...restOptions, headers });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(normalizeErrorMessage(body));
+  }
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+export const adminApi = {
+  login: (payload) => adminRequest("/api/admin/login", { method: "POST", body: JSON.stringify(payload) }),
+  listTenants: () => adminRequest("/api/admin/tenants"),
+  getTenant: (id) => adminRequest(`/api/admin/tenants/${id}`),
+  createTenant: (payload) => adminRequest("/api/admin/tenants", { method: "POST", body: JSON.stringify(payload) }),
+  updateTenant: (id, payload) => adminRequest(`/api/admin/tenants/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteTenant: (id) => adminRequest(`/api/admin/tenants/${id}`, { method: "DELETE" }),
 };

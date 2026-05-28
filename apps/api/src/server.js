@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { adminRouter } from "./routes/adminRoutes.js";
 import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
 import { clienteRouter } from "./routes/clienteRoutes.js";
@@ -60,6 +61,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.use("/api/admin", adminRouter);
 app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/tenants", tenantRouter);
 app.use("/api/properties", propertyRouter);
