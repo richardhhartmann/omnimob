@@ -813,7 +813,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h2 style={{ margin: 0, marginBottom: "4px" }}>{isEditing ? "Editar Ativo" : "Novo Ativo"}</h2>
+          <h2 style={{ margin: 0, marginBottom: "4px" }}>{isEditing ? "Editar Imóvel" : "Novo Imóvel"}</h2>
           <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
             {isEditing ? "Atualize as informações do imóvel abaixo." : "Preencha as etapas para cadastrar um novo imóvel."}
           </p>
