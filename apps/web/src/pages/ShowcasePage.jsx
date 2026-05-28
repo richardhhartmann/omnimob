@@ -7,6 +7,7 @@ import {
   normalizeShowcaseConfig,
   sectionSurfaceStyle,
 } from "../utils/showcaseConfig";
+import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
 
 const SHOWCASE_FONT_FAMILIES = [
   "Inter","Playfair+Display","Montserrat","Raleway","Lato","Merriweather","Poppins",
@@ -18,6 +19,7 @@ export function ShowcasePage() {
   const [carouselIndexes, setCarouselIndexes] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
 
   async function loadShowcaseData() {
     if (!tenantSlug) return;
@@ -41,6 +43,12 @@ export function ShowcasePage() {
   useEffect(() => {
     loadShowcaseData();
   }, [tenantSlug]);
+
+  useEffect(() => {
+    const handler = () => setIsMobileViewport(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -72,6 +80,8 @@ export function ShowcasePage() {
   const tenant = payload?.tenant || {};
   const showcaseConfig = normalizeShowcaseConfig(tenant.showcaseConfig);
   const layout = showcaseConfig.layout;
+  const mobileLayout = showcaseConfig.mobileLayout;
+  const activeLayout = isMobileViewport ? mobileLayout : layout;
   const blockStyles = showcaseConfig.blockStyles;
   const hiddenBlocks = showcaseConfig.hiddenBlocks || [];
   const initialLetter = tenantName.charAt(0).toUpperCase();
@@ -94,56 +104,46 @@ export function ShowcasePage() {
     fontFamily: `'${globalFont}', system-ui, sans-serif`,
   };
   const isLightMode = showcaseConfig.appearanceMode === "light";
-  const canvasHeight = Math.max(1800, ...Object.values(layout).map((block) => (block?.y || 0) + (block?.h || 0))) + 40;
+  const layoutMax = Math.max(0, ...Object.values(activeLayout).map((block) => (block?.y || 0) + (block?.h || 0)));
+  const widgetMax = showcaseConfig.widgets.length > 0
+    ? Math.max(...showcaseConfig.widgets.filter(w => !w.hidden).map(w => (w.y || 0) + (w.h || 0)))
+    : 0;
+  const canvasHeight = Math.max(1800, layoutMax, widgetMax) + 40;
 
   function sectionCombinedStyle(key) {
     const bs = blockStyles[key];
     const hasBanner = blockHasBackgroundImage(bs);
-    
+    const blockLayout = activeLayout[key] || layout[key];
+
     const layoutPart = {
-      left: hasBanner ? "calc(50% - 50vw)" : `${layout[key].x}%`,
-      top: `${layout[key].y}px`,
-      width: hasBanner ? "100vw" : `${layout[key].w}%`,
+      left: hasBanner ? "calc(50% - 50vw)" : `${blockLayout.x}%`,
+      top: `${blockLayout.y}px`,
+      width: hasBanner ? "100vw" : `${blockLayout.w}%`,
       maxWidth: hasBanner ? "100vw" : undefined,
-      minHeight: `${layout[key].h}px`,
+      minHeight: `${blockLayout.h}px`,
       boxSizing: hasBanner ? "border-box" : undefined,
       zIndex: hasBanner ? 0 : 10,
     };
-    
+
     if (hasBanner) {
-      return { 
-        ...layoutPart, 
-        ...sectionSurfaceStyle(bs),
-        backgroundPosition: "top center"
-      };
+      return { ...layoutPart, ...sectionSurfaceStyle(bs), backgroundPosition: "top center" };
     }
     return { ...layoutPart, ...mergeBlockWrapperStyle(bs) };
-  }
-
-  function headerInnerStyle() {
-    const bs = blockStyles.header || {};
-    const primary = tenant.primaryColor || "#6366f1";
-    if (blockHasBackgroundImage(bs)) {
-      return {
-        background: "transparent",
-        ...(bs.color ? { color: bs.color } : {}),
-      };
-    }
-    if (bs.backgroundColor) {
-      return {
-        background: bs.backgroundColor,
-        ...(bs.color ? { color: bs.color } : {}),
-      };
-    }
-    return {
-      background: `linear-gradient(135deg, ${primary}33, rgba(255,255,255,0.03))`,
-      ...(bs.color ? { color: bs.color } : {}),
-    };
   }
 
   const titleColor = blockStyles.title?.color;
   const footerColor = blockStyles.footer?.color;
   const isVisible = (key) => !hiddenBlocks.includes(key);
+
+  function isLancamento(createdAt) {
+    if (!createdAt) return false;
+    return (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24) <= 30;
+  }
+
+  const IcPin  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
+  const IcArea = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6"/><path d="M3 3l6 6"/><path d="M21 15v6h-6"/><path d="M21 21l-6-6"/></svg>;
+  const IcBed  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4v16"/><path d="M22 8v12"/><path d="M2 8h20"/><rect x="6" y="4" width="12" height="4" rx="1"/></svg>;
+  const IcCar  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="10" width="20" height="10" rx="2"/><path d="m6 10 3-6h6l3 6"/><circle cx="7" cy="17" r="1" fill="currentColor"/><circle cx="17" cy="17" r="1" fill="currentColor"/></svg>;
 
   return (
     <div className={`showcase-body ${isLightMode ? "showcase-theme-light" : ""}`} style={themeStyle}>
@@ -157,7 +157,7 @@ export function ShowcasePage() {
         }
       `}</style>
       
-      <div className="showcase-container showcase-builder-canvas" style={{ minHeight: `${canvasHeight}px` }}>
+      <div className="showcase-container showcase-builder-canvas" style={{ minHeight: `${canvasHeight}px`, position: "relative" }}>
 
         {isVisible("header") ? (
         <section
@@ -168,46 +168,17 @@ export function ShowcasePage() {
             left: "calc(50% - 50vw)",
             width: "100vw",
             maxWidth: "100vw",
-            boxSizing: "border-box"
+            boxSizing: "border-box",
+            zIndex: 9999
           }}
         >
-          <header style={{ ...headerInnerStyle(), display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 5%", width: "100%", boxSizing: "border-box" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", fontWeight: "bold", overflow: "hidden" }}>
-                {tenant.logoUrl ? (
-                  <img src={tenant.logoUrl} alt={tenantName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : (
-                  initialLetter
-                )}
-              </div>
-              <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700", ...(blockStyles.header?.color ? { color: blockStyles.header.color } : {}) }}>
-                {tenantName}
-              </h1>
-            </div>
-            
-            <nav style={{ display: "flex", gap: "32px", alignItems: "center" }}>
-              <a href="#destaques" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "16px", fontWeight: "600", cursor: "pointer" }}>
-                Ver imóveis
-              </a>
-              <a href="#footer" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "16px", fontWeight: "600", cursor: "pointer" }}>
-                Sobre nós
-              </a>
-              {whatsappHref ? (
-                <a href={whatsappHref} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--accent)", color: "#fff", padding: "10px 20px", borderRadius: "8px", fontWeight: "600", textDecoration: "none" }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                  Falar com consultor
-                </a>
-              ) : null}
-              <a
-                href={`/login?tenant=${tenantSlug}`}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "14px", fontWeight: "500", marginLeft: "16px", opacity: 0.8 }}
-              >
-                Acesso
-              </a>
-            </nav>
-          </header>
+          <ShowcaseHeader
+            tenant={tenant}
+            tenantSlug={tenantSlug}
+            blockStyles={blockStyles}
+            isMobileViewport={isMobileViewport}
+            whatsappHref={whatsappHref}
+          />
         </section>
         ) : null}
 
@@ -274,163 +245,179 @@ export function ShowcasePage() {
               const images = p.images?.length ? p.images : [{ url: "/property-placeholder.svg" }];
               const currentIndex = carouselIndexes[p.id] || 0;
               const mainImage = images[currentIndex]?.url;
-
+              const lancamento = isLancamento(p.createdAt);
+              const andamentoLabel = { PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" }[p.andamento];
+              
               return (
-                <article key={p.id} className="property-card-luxury">
-                  <div className="card-image-wrapper">
-                    <img src={mainImage} alt={p.title} />
-                    {images.length > 1 ? (
-                      <>
-                        <button type="button" className="carousel-btn prev" onClick={() => prevImage(p.id, images.length)}>
-                          ‹
-                        </button>
-                        <button type="button" className="carousel-btn next" onClick={() => nextImage(p.id, images.length)}>
-                          ›
-                        </button>
-                        <span className="carousel-counter">
-                          {currentIndex + 1}/{images.length}
+                <Link
+                  key={p.id}
+                  to={`/vitrine/${tenantSlug}/imovel/${p.id}`}
+                  style={{ textDecoration: "none", display: "block" }}
+                >
+                  <article className={`property-card-luxury ${lancamento ? "is-lancamento" : ""}`}>
+                    <div className="card-image-wrapper">
+                      <img
+                        key={mainImage}
+                        src={mainImage}
+                        alt={p.title}
+                      />
+                      {lancamento && (
+                        <span className="featured-badge" style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)", color: "#fff", border: "none" }}>
+                          Lançamento
                         </span>
-                      </>
-                    ) : null}
-                    <span className="featured-badge">Disponivel</span>
-                  </div>
-
-                  <div className="card-info-wrapper">
-                    <h3>{p.title}</h3>
-                    <div className="card-location">
-                      <svg className="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span>{p.neighborhood}, {p.city} - {p.state}</span>
+                      )}
+                      {!lancamento && andamentoLabel && (
+                        <span className="featured-badge">
+                          {andamentoLabel}
+                        </span>
+                      )}
+                      {p.aceitaPermuta && (
+                        <span className="featured-badge" style={{ top: "auto", bottom: "16px", background: "rgba(99,102,241,0.8)", borderColor: "transparent" }}>
+                          Aceita permuta
+                        </span>
+                      )}
+                      {images.length > 1 && (
+                        <>
+                          <button type="button" className="carousel-btn prev" onClick={(e) => { e.preventDefault(); e.stopPropagation(); prevImage(p.id, images.length); }}>‹</button>
+                          <button type="button" className="carousel-btn next" onClick={(e) => { e.preventDefault(); e.stopPropagation(); nextImage(p.id, images.length); }}>›</button>
+                          <span className="carousel-counter">{currentIndex + 1}/{images.length}</span>
+                        </>
+                      )}
                     </div>
 
-                    <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "15px", lineHeight: "1.5", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {p.description || "Confira os detalhes deste imovel e fale com nossa equipe."}
-                    </p>
-
-                    <div className="card-stats-grid">
-                      <div className="stat-item">
-                        <svg className="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 4l-5 5M4 16v4m0 0h4M4 4l10 10m-4-2h10" />
-                        </svg>
-                        <span>{p.squareFootage != null ? `${p.squareFootage} m²` : "-"}</span>
-                      </div>
-                      <div className="stat-item">
-                        <svg className="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                        </svg>
-                        <span>{p.bedrooms || 0} quartos ({p.suites || 0} suites)</span>
-                      </div>
-                      <div className="stat-item">
-                        <svg className="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                        </svg>
-                        <span>{p.parkingSpots || 0} vagas</span>
-                      </div>
-                      <div className="stat-item">
-                        <svg className="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
-                        <span>{p.propertyType}</span>
-                      </div>
-                    </div>
-
-                    <div className="card-price-wrapper">
-                      <div>
-                        <span className="price-label">Valor</span>
-                        <p className="card-price">
-                          R$ {Number(p.price).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    <div className="card-info-wrapper">
+                      <h3>{p.title}</h3>
+                      {(p.neighborhood || p.city) && (
+                        <div className="card-location">
+                          <IcPin />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {[p.neighborhood, p.city, p.state].filter(Boolean).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      {p.description && (
+                        <p style={{ fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.6", margin: "0 0 16px 0", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {p.description}
                         </p>
+                      )}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
+                        {p.squareFootage ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcArea />{p.squareFootage} m²</span> : null}
+                        {p.bedrooms ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcBed />{p.bedrooms} qto{p.bedrooms !== 1 ? "s" : ""}{p.suites ? ` · ${p.suites} suíte${p.suites !== 1 ? "s" : ""}` : ""}</span> : null}
+                        {p.parkingSpots ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcCar />{p.parkingSpots} vaga{p.parkingSpots !== 1 ? "s" : ""}</span> : null}
+                      </div>
+                      <div className="card-price-wrapper">
+                        <div>
+                          <span className="price-label">Valor</span>
+                          <p className="card-price">
+                            R$ {Number(p.price).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <Link to={`/vitrine/${tenantSlug}/imovel/${p.id}`} className="btn-view-details">
-                      Ver detalhes do imovel
-                    </Link>
-                  </div>
-                </article>
+                  </article>
+                </Link>
               );
             })}
           </div>
         </section>
         ) : null}
 
-        {isVisible("widgets") ? (
+        {showcaseConfig.widgets.filter(w => !w.hidden).map((widget) => (
         <section
-          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.widgets) ? " showcase-section-has-bg" : ""}`}
-          style={sectionCombinedStyle("widgets")}
+          key={widget.id}
+          className="showcase-layout-block"
+          style={{
+            position: "absolute",
+            left: `${widget.x ?? 0}%`,
+            top: `${widget.y ?? 1080}px`,
+            width: `${widget.w ?? 50}%`,
+            minHeight: `${widget.h ?? 200}px`,
+            zIndex: 10,
+            boxSizing: "border-box",
+            padding: "8px",
+          }}
         >
-          <div className="widget-grid" style={mergeBlockWrapperStyle(blockStyles.widgets)}>
-            {showcaseConfig.widgets.map((widget) => (
-              <article key={widget.id} className="widget-card" style={mergeBlockWrapperStyle(widget)}>
+          <article className="widget-card" style={{ ...mergeBlockWrapperStyle(widget), height: "100%", boxSizing: "border-box" }}>
+            {widget.type === "testimonial" ? (
+              <div style={{ textAlign: "center", padding: "16px" }}>
+                <div className="widget-testimonial-stars">★★★★★</div>
+                <div className="widget-testimonial-content" dangerouslySetInnerHTML={{ __html: widget.content }} />
+                <h3 style={{ fontSize: "16px", fontWeight: "600", color: "var(--accent)", margin: 0 }} dangerouslySetInnerHTML={{ __html: widget.title }} />
+              </div>
+            ) : widget.type === "stats" ? (
+              <div style={{ padding: "8px" }}>
+                <h3 style={{ textAlign: "center", marginBottom: "24px" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                <div className="widget-stats-grid">
+                  {(widget.content || "").split("|").reduce((acc, val, i) => {
+                    if (i % 2 === 0) acc.push([val]);
+                    else acc[acc.length - 1].push(val);
+                    return acc;
+                  }, []).slice(0, 4).map(([num, label], i) => (
+                    <div key={i} className="widget-stat-box">
+                      <div className="widget-stat-number">{num}</div>
+                      <div className="widget-stat-label">{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : widget.type === "cta" ? (
+              <div className="widget-cta-box">
                 <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
-                <p dangerouslySetInnerHTML={{ __html: widget.content }} />
-                {widget.type === "cta" && widget.ctaLabel ? (
+                <p style={{ fontSize: "16px", margin: "16px 0" }} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                {widget.ctaLabel ? (
                   <a
                     href={widget.ctaUrl || "#"}
                     target={widget.ctaUrl ? "_blank" : undefined}
                     rel={widget.ctaUrl ? "noreferrer" : undefined}
-                    className="btn-view-details"
+                    className="widget-cta-button"
                     dangerouslySetInnerHTML={{ __html: widget.ctaLabel }}
                   />
                 ) : null}
-                {widget.type === "testimonial" ? (
-                  <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-                    <div style={{ color: "#f59e0b", fontSize: "20px", letterSpacing: "2px" }}>★★★★★</div>
-                    <span style={{ fontSize: "11px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", padding: "2px 10px", borderRadius: "20px", fontWeight: "600" }}>Depoimento verificado</span>
-                  </div>
-                ) : null}
-                {widget.type === "stats" ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginTop: "12px" }}>
-                    {(widget.content || "").split("|").reduce((acc, val, i) => {
-                      if (i % 2 === 0) acc.push([val]);
-                      else acc[acc.length - 1].push(val);
-                      return acc;
-                    }, []).slice(0, 3).map(([num, label], i) => (
-                      <div key={i} style={{ textAlign: "center", padding: "12px 6px", background: "rgba(99,102,241,0.1)", borderRadius: "10px", border: "1px solid rgba(99,102,241,0.2)" }}>
-                        <div style={{ fontSize: "22px", fontWeight: "800", color: "var(--accent)", lineHeight: 1 }}>{num}</div>
-                        <div style={{ fontSize: "11px", opacity: 0.7, marginTop: "4px" }}>{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {widget.type === "social" ? (
-                  <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px", marginTop: "12px" }}>
-                    {(widget.content || "").split("|").filter(Boolean).map((url, i) => {
-                      const isWa = url.includes("wa.me") || url.includes("whatsapp");
-                      const isIg = url.includes("instagram");
-                      const isFb = url.includes("facebook");
-                      const label = isWa ? "WhatsApp" : isIg ? "Instagram" : isFb ? "Facebook" : "Rede Social";
-                      const bg = isWa ? "#25D366" : isIg ? "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" : isFb ? "#1877F2" : "var(--accent)";
-                      const icon = isWa ? "W" : isIg ? "I" : isFb ? "F" : "S";
-                      return (
-                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: bg, borderRadius: "8px", color: "#fff", fontSize: "13px", fontWeight: "600", textDecoration: "none" }}>
-                          <span style={{ fontWeight: "800" }}>{icon}</span> {label}
-                        </a>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {widget.type === "divider" ? (
-                  <div style={{ textAlign: "center", padding: "8px 0", marginTop: "4px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3))" }} />
-                      <span style={{ fontSize: "13px", opacity: 0.5, letterSpacing: "0.1em" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
-                      <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, rgba(255,255,255,0.3), transparent)" }} />
-                    </div>
-                  </div>
-                ) : null}
-                {widget.type === "map" ? (
-                  <div style={{ marginTop: "10px", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "16px", textAlign: "center" }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "6px" }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0 }} dangerouslySetInnerHTML={{ __html: widget.content }} />
-                  </div>
-                ) : null}
-              </article>
-            ))}
-          </div>
+              </div>
+            ) : widget.type === "social" ? (
+              <div style={{ textAlign: "center", padding: "8px" }}>
+                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
+                <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "16px", marginTop: "24px" }}>
+                  {(widget.content || "").split("|").filter(Boolean).map((url, i) => {
+                    const isWa = url.includes("wa.me") || url.includes("whatsapp");
+                    const isIg = url.includes("instagram");
+                    const isFb = url.includes("facebook");
+                    const label = isWa ? "WhatsApp" : isIg ? "Instagram" : isFb ? "Facebook" : "Acessar";
+                    const bg = isWa ? "#25D366" : isIg ? "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" : isFb ? "#1877F2" : "var(--accent)";
+                    const icon = isWa ? "W" : isIg ? "I" : isFb ? "F" : "S";
+                    return (
+                      <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "14px 28px", background: bg, borderRadius: "16px", color: "#fff", fontSize: "15px", fontWeight: "600", textDecoration: "none", boxShadow: "0 8px 24px rgba(0,0,0,0.15)", transition: "transform 0.3s ease" }} onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-3px)"} onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}>
+                        <span style={{ fontWeight: "800", fontSize: "18px" }}>{icon}</span> {label}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : widget.type === "divider" ? (
+              <div style={{ textAlign: "center", padding: "32px 0", height: "100%", display: "flex", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "24px", width: "100%" }}>
+                  <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15))" }} />
+                  <span style={{ fontSize: "15px", opacity: 0.7, letterSpacing: "0.2em", textTransform: "uppercase" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                  <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, rgba(255,255,255,0.15), transparent)" }} />
+                </div>
+              </div>
+            ) : widget.type === "map" ? (
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", marginTop: "20px", background: "rgba(0,0,0,0.15)", borderRadius: "20px", padding: "32px", textAlign: "center", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "16px" }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <p style={{ fontSize: "16px", color: "var(--text-main)", margin: 0, fontWeight: "500" }} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
+                <p dangerouslySetInnerHTML={{ __html: widget.content }} />
+              </div>
+            )}
+          </article>
         </section>
-        ) : null}
+        ))}
 
         {isVisible("footer") ? (
         <section
@@ -439,23 +426,32 @@ export function ShowcasePage() {
           style={sectionCombinedStyle("footer")}
         >
           <footer
-            style={{
-              marginTop: "20px",
-              borderTop: "1px solid rgba(255,255,255,0.05)",
-              paddingTop: "40px",
-              textAlign: "center",
-              ...mergeBlockWrapperStyle(blockStyles.footer),
-            }}
+            className="showcase-footer"
+            style={mergeBlockWrapperStyle(blockStyles.footer)}
           >
-            <p style={{ fontSize: "16px", color: footerColor || (isLightMode ? "#0f172a" : "#fff"), marginBottom: "10px" }} dangerouslySetInnerHTML={{ __html: showcaseConfig.footerTitle + " " + tenantName }} />
-            <p style={{ fontSize: "12px", color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.description || "Domus Showcase - Encontre seu proximo imovel com seguranca e transparencia." }} />
+            <div className="showcase-footer-grid">
+              <div className="footer-col">
+                <h4 style={{ color: footerColor || "inherit" }} dangerouslySetInnerHTML={{ __html: showcaseConfig.footerTitle }} />
+                <p style={{ color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.description || "Encontre seu próximo imóvel com segurança e transparência." }} />
+              </div>
+              
+              <div className="footer-col">
+                <h4 style={{ color: footerColor || "inherit" }}>Imobiliária</h4>
+                <p style={{ color: footerColor || "var(--text-muted)", margin: "0 0 8px 0" }}>{tenantName}</p>
+                {tenant.creci ? <p style={{ color: footerColor || "var(--text-muted)", margin: "0 0 8px 0" }}>CRECI {tenant.creci}</p> : null}
+                {tenant.cidade ? <p style={{ color: footerColor || "var(--text-muted)", margin: "0 0 8px 0" }}>{tenant.cidade}</p> : null}
+              </div>
+
+              <div className="footer-col">
+                <h4 style={{ color: footerColor || "inherit" }}>Contato</h4>
+                {tenant.email ? <a href={`mailto:${tenant.email}`} style={{ color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.email }} /> : null}
+                {whatsappHref ? <a href={whatsappHref} target="_blank" rel="noreferrer" style={{ color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.whatsapp }} /> : null}
+              </div>
+            </div>
             
-            {(tenant.email || tenant.whatsapp) ? (
-              <p style={{ fontSize: "12px", marginTop: "8px", color: footerColor || "var(--text-muted)" }}>
-                {tenant.email ? <span dangerouslySetInnerHTML={{ __html: `Email: ${tenant.email}` }} /> : null} {tenant.email && tenant.whatsapp ? " | " : ""}
-                {tenant.whatsapp ? <span dangerouslySetInnerHTML={{ __html: `WhatsApp: ${tenant.whatsapp}` }} /> : null}
-              </p>
-            ) : null}
+            <div className="footer-bottom" style={{ color: footerColor || "var(--text-muted)" }}>
+              &copy; {new Date().getFullYear()} {tenantName}. Todos os direitos reservados.
+            </div>
           </footer>
         </section>
         ) : null}

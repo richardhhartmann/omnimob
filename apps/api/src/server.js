@@ -8,6 +8,7 @@ import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
 import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
+import { socialRouter } from "./routes/socialRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
 import { usuarioRouter } from "./routes/usuarioRoutes.js";
 
@@ -63,6 +64,7 @@ app.use("/api/leads", leadRouter);
 app.use("/api/usuarios", usuarioRouter);
 app.use("/api/cargos", cargoRouter);
 app.use("/api/clientes", clienteRouter);
+app.use("/api/social", socialRouter);
 app.use("/public", publicRouter);
 
 app.use((error, _req, res, _next) => {

@@ -232,8 +232,10 @@ export function DashboardPage({ session }) {
       }
 
       await loadProperties();
+      return targetPropertyId ? { id: targetPropertyId } : null;
     } catch (err) {
       setError(err.message);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -292,6 +294,7 @@ export function DashboardPage({ session }) {
           onDelete={handleDelete}
           onToggleStatus={handleToggleStatus}
           onEdit={handleStartEdit}
+          onPublishSuccess={loadProperties}
           disabled={!tenantSlug || loading}
         />
       )}

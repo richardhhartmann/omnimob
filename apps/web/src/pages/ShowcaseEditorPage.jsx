@@ -116,13 +116,21 @@ const WIDGET_LIBRARY = [
 ];
 
 const DEFAULT_BLOCK_LABELS = {
-  header: "Cabecalho",
-  title: "Título",
+  header:     "Cabeçalho",
+  title:      "Título",
   highlights: "Highlights",
-  properties: "Lista de imoveis",
-  widgets: "Widgets extras",
-  footer: "Rodape",
+  properties: "Lista de Imóveis",
+  footer:     "Rodapé",
 };
+
+const RANDOM_COLOR_PAIRS = [
+  ["#6366f1", "#d4af37"], ["#2563eb", "#f8fafc"], ["#10b981", "#14b8a6"],
+  ["#0ea5e9", "#38bdf8"], ["#7c3aed", "#d4af37"], ["#f97316", "#0ea5e9"],
+  ["#1e3a5f", "#94a3b8"], ["#16a34a", "#ca8a04"], ["#e11d48", "#fda4af"],
+  ["#334155", "#f59e0b"], ["#8b5cf6", "#06b6d4"], ["#ec4899", "#f59e0b"],
+  ["#0d9488", "#e11d48"], ["#84cc16", "#7c3aed"], ["#dc2626", "#fbbf24"],
+  ["#1d4ed8", "#a78bfa"], ["#059669", "#f59e0b"], ["#9333ea", "#22d3ee"],
+];
 
 function normalizeHex(value, fallback) {
   if (typeof value !== "string") return fallback;
@@ -328,7 +336,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       return;
     }
     if (kind === "widget") {
-      updateWidget(parseInt(parts[1], 10), parts[2], html);
+      updateWidgetById(parts[1], parts[2], html);
       return;
     }
   }
@@ -439,15 +447,12 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
   function resetAllBuilder() {
     if (window.confirm("Tem certeza que deseja resetar todo o layout e textos para o padrão?")) {
+      pushHistory();
       setForm((prev) => ({
         ...prev,
-        whatsapp: "",
-        email: "",
-        description: "",
-        slogan: "",
         showcaseHeadline: "",
         showcaseSubheadline: "",
-        showcaseConfig: { ...normalizeShowcaseConfig(null), hiddenBlocks: ["topbar"] },
+        showcaseConfig: normalizeShowcaseConfig(null),
       }));
     }
   }
@@ -517,6 +522,10 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
   function addWidget(template) {
     pushHistory();
+    const currentWidgets = normalizeShowcaseConfig(formRef.current?.showcaseConfig).widgets;
+    const maxY = currentWidgets.length > 0
+      ? Math.max(...currentWidgets.map(w => (w.y ?? 0) + (w.h ?? 200)))
+      : 1080;
     updateShowcaseConfig((prev) => ({
       ...prev,
       widgets: [
@@ -528,27 +537,80 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           content: template.content,
           ctaLabel: template.ctaLabel || "",
           ctaUrl: template.ctaUrl || "",
-          backgroundColor: "",
-          color: "",
+          backgroundColor: "", color: "",
+          x: 0, y: maxY + 20, w: 50, h: 200, hidden: false,
         },
       ],
     }));
     setWidgetMenuOpen(false);
   }
 
-  function updateWidget(index, field, value) {
+  function updateWidgetById(id, field, value) {
     updateShowcaseConfig((prev) => ({
       ...prev,
-      widgets: prev.widgets.map((w, i) => (i === index ? { ...w, [field]: value } : w)),
+      widgets: prev.widgets.map((w) => w.id === id ? { ...w, [field]: value } : w),
     }));
   }
 
-  function removeWidget(index) {
+  function removeWidgetById(id) {
     pushHistory();
     updateShowcaseConfig((prev) => ({
       ...prev,
-      widgets: prev.widgets.filter((_, i) => i !== index),
+      widgets: prev.widgets.filter((w) => w.id !== id),
     }));
+    setActiveBlock((prev) => prev === `widget-${id}` ? null : prev);
+  }
+
+  function startWidgetAction(widgetId, mode, event) {
+    if (!canvasRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    pushHistory();
+    const widget = normalizeShowcaseConfig(formRef.current?.showcaseConfig).widgets.find(w => w.id === widgetId);
+    if (!widget) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const startBlock = { x: widget.x ?? 0, y: widget.y ?? 1080, w: widget.w ?? 50, h: widget.h ?? 200 };
+    const startX = event.clientX;
+    const startY = event.clientY;
+
+    const onMove = (e) => {
+      const dxPct = ((e.clientX - startX) / Math.max(rect.width, 1)) * 100;
+      const dyPx = e.clientY - startY;
+      if (mode === "resize") {
+        const nextW = Math.min(Math.max(startBlock.w + dxPct, 10), 100 - startBlock.x);
+        const nextH = Math.max(80, startBlock.h + dyPx);
+        updateShowcaseConfig((prev) => ({
+          ...prev,
+          widgets: prev.widgets.map((w) => w.id === widgetId ? { ...w, w: nextW, h: nextH } : w),
+        }));
+      } else {
+        const nextX = Math.min(Math.max(startBlock.x + dxPct, 0), 100 - startBlock.w);
+        const nextY = Math.max(0, startBlock.y + dyPx);
+        updateShowcaseConfig((prev) => ({
+          ...prev,
+          widgets: prev.widgets.map((w) => w.id === widgetId ? { ...w, x: nextX, y: nextY } : w),
+        }));
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  function randomizeColors() {
+    pushHistory();
+    const current = (formRef.current?.primaryColor || "").toLowerCase();
+    let pair;
+    let attempts = 0;
+    do {
+      pair = RANDOM_COLOR_PAIRS[Math.floor(Math.random() * RANDOM_COLOR_PAIRS.length)];
+      attempts++;
+    } while (pair[0].toLowerCase() === current && attempts < 10);
+    setForm((prev) => ({ ...prev, primaryColor: pair[0], secondaryColor: pair[1] }));
   }
 
   function removeHighlight(index) {
@@ -764,70 +826,39 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   }
 
   function startWidgetDrag(template, event) {
+    // Drag ghost + drop: tries to place widget at the canvas position where released.
     event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;
-    const state = { template, x: startX, y: startY, snapIndex: -1 };
-    dragStateRef.current = state;
-    setDragState(state);
+    setDragState({ template, x: startX, y: startY });
 
-    const onMove = (e) => {
-      let snapIndex = -1;
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        if (e.clientX >= rect.left - 100 && e.clientX <= rect.right + 100 &&
-            e.clientY >= rect.top - 100 && e.clientY <= rect.bottom + 100) {
-          const dropZone = document.getElementById("widgets-drop-zone");
-          if (dropZone) {
-            const cards = Array.from(dropZone.querySelectorAll('.widget-card:not(.preview-card)'));
-            let closest = cards.length;
-            let minDist = Infinity;
-            cards.forEach((card, i) => {
-              const cr = card.getBoundingClientRect();
-              const cy = cr.top + cr.height / 2;
-              const cx = cr.left + cr.width / 2;
-              const dist = Math.hypot(cx - e.clientX, cy - e.clientY);
-              if (dist < minDist) {
-                minDist = dist;
-                closest = (e.clientY > cy || e.clientX > cx + cr.width / 2) ? i + 1 : i;
-              }
-            });
-            snapIndex = closest;
-          } else {
-            snapIndex = showcaseConfig.widgets.length;
-          }
-        }
-      }
-      dragStateRef.current = { template, x: e.clientX, y: e.clientY, snapIndex };
-      setDragState(dragStateRef.current);
-    };
+    const onMove = (e) => setDragState({ template, x: e.clientX, y: e.clientY });
 
     const onUp = (e) => {
-      const finalState = dragStateRef.current;
+      const canvas = canvasRef.current;
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
-      if (dist < 10) {
+      if (canvas && dist >= 10) {
+        const rect = canvas.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+          const yPx = e.clientY - rect.top;
+          pushHistory();
+          updateShowcaseConfig((prev) => ({
+            ...prev,
+            widgets: [...prev.widgets, {
+              id: `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              type: template.type, title: template.title, content: template.content,
+              ctaLabel: template.ctaLabel || "", ctaUrl: template.ctaUrl || "",
+              backgroundColor: "", color: "",
+              x: Math.max(0, Math.min(xPct, 60)), y: Math.max(0, yPx), w: 40, h: 200, hidden: false,
+            }],
+          }));
+        } else {
+          addWidget(template);
+        }
+      } else {
         addWidget(template);
-      } else if (finalState && finalState.snapIndex !== -1) {
-        pushHistory();
-        updateShowcaseConfig((prev) => {
-          let hiddenBlocks = prev.hiddenBlocks;
-          if (hiddenBlocks.includes("widgets")) hiddenBlocks = hiddenBlocks.filter((b) => b !== "widgets");
-          const newWidget = {
-            id: `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            type: finalState.template.type,
-            title: finalState.template.title,
-            content: finalState.template.content,
-            ctaLabel: finalState.template.ctaLabel || "",
-            ctaUrl: finalState.template.ctaUrl || "",
-            backgroundColor: "",
-            color: "",
-          };
-          const newWidgets = [...prev.widgets];
-          newWidgets.splice(finalState.snapIndex, 0, newWidget);
-          return { ...prev, hiddenBlocks, widgets: newWidgets };
-        });
-        setWidgetMenuOpen(false);
       }
       dragStateRef.current = null;
       setDragState(null);
@@ -918,8 +949,9 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const canvasHeight = useMemo(() => {
     const blocks = Object.keys(DEFAULT_BLOCK_LABELS).map(k => activeLayout?.[k] || DEFAULT_LAYOUT?.[k] || {});
     const maxBottom = blocks.reduce((acc, block) => Math.max(acc, (block.y ?? 0) + (block.h ?? 200)), 0);
-    return Math.max(1800, maxBottom + 40);
-  }, [activeLayout]);
+    const widgetMax = showcaseConfig.widgets.reduce((acc, w) => Math.max(acc, (w.y ?? 0) + (w.h ?? 200)), 0);
+    return Math.max(1800, maxBottom + 40, widgetMax + 40);
+  }, [activeLayout, showcaseConfig.widgets]);
 
   const isMobilePreview = previewMode === "mobile";
 
@@ -931,52 +963,46 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("header") ? (
-        <section className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}`} style={mergedBlockWrapper("header")} onClick={() => setActiveBlock("header")}>
-          {isMobilePreview ? (
-            <header style={{ ...headerInnerStyle(), display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", padding: "16px 20px", width: "100%", boxSizing: "border-box" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: "bold", overflow: "hidden", flexShrink: 0 }}>
-                    {previewTenant.logoUrl
-                      ? <img src={previewTenant.logoUrl} alt={previewTenant.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : (previewTenant.name || "D").charAt(0).toUpperCase()}
-                  </div>
-                  <h1 style={{ margin: 0, fontSize: "15px", fontWeight: "700", ...(blockStyles.header?.color ? { color: blockStyles.header.color } : {}) }}>
-                    {previewTenant.name}
-                  </h1>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--accent)", color: "#fff", padding: "8px 12px", borderRadius: "8px", fontWeight: "600", fontSize: "13px", flexShrink: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                  Contato
-                </div>
+        <section 
+          className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}`} 
+          style={{ ...mergedBlockWrapper("header"), zIndex: 9999 }} 
+          onClick={() => setActiveBlock("header")}
+        >
+          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("header", "drag", event)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+            Cabeçalho
+          </div>
+          <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("header"); }} title="Remover bloco">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+          
+          <div style={{ padding: isMobilePreview ? "20px 24px" : "28px 48px", maxWidth: "1400px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div className="brand-logo-exclusive" style={{ width: isMobilePreview ? "44px" : "60px", height: isMobilePreview ? "44px" : "60px", background: previewTenant.logoUrl ? "transparent" : `linear-gradient(135deg, ${previewTenant.secondaryColor || previewTenant.primaryColor || "#6366f1"}, ${previewTenant.primaryColor || "#6366f1"})` }}>
+                {previewTenant.logoUrl ? <img src={previewTenant.logoUrl} alt={previewTenant.name} className="brand-logo-image" style={{ width: "54px" }} /> : <span style={{ fontSize: "24px", fontWeight: "700" }}>{(previewTenant.name || "D").charAt(0).toUpperCase()}</span>}
               </div>
-              <nav style={{ display: "flex", gap: "16px", width: "100%", justifyContent: "center" }}>
-                <a href="#preview-destaques" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}>Ver imóveis</a>
-                <a href="#footer" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}>Sobre nós</a>
-              </nav>
-            </header>
-          ) : (
-            <header style={{ ...headerInnerStyle(), display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 40px", width: "100%", boxSizing: "border-box" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", fontWeight: "bold", overflow: "hidden" }}>
-                  {previewTenant.logoUrl
-                    ? <img src={previewTenant.logoUrl} alt={previewTenant.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : (previewTenant.name || "D").charAt(0).toUpperCase()}
-                </div>
-                <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700", ...(blockStyles.header?.color ? { color: blockStyles.header.color } : {}) }}>
-                  {previewTenant.name}
-                </h1>
+              <div className="brand-title-group" style={{ color: blockStyles.header?.color || "inherit" }}>
+                <h1 style={{ fontSize: isMobilePreview ? "16px" : "22px", letterSpacing: "-0.5px" }}>{previewTenant.name}</h1>
+                <p style={{ fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", opacity: 0.7, marginTop: "2px" }}>
+                  {[previewTenant.creci ? `CRECI ${previewTenant.creci}` : null, previewTenant.cidade || null].filter(Boolean).join(" · ") || "Alto Padrão"}
+                </p>
               </div>
-              <nav style={{ display: "flex", gap: "32px", alignItems: "center" }}>
-                <a href="#preview-destaques" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "16px", fontWeight: "600", cursor: "pointer" }}>Ver imóveis</a>
-                <a href="#footer" style={{ color: blockStyles.header?.color || "inherit", textDecoration: "none", fontSize: "16px", fontWeight: "600", cursor: "pointer" }}>Sobre nós</a>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--accent)", color: "#fff", padding: "10px 20px", borderRadius: "8px", fontWeight: "600" }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                  {renderEditableSingleLine("whatsapp", "5511999999999", "editable-inline", "#ffffff")}
-                </div>
+            </div>
+
+            {!isMobilePreview && (
+              <nav style={{ display: "flex", alignItems: "center", gap: "36px" }}>
+                <span style={{ color: blockStyles.header?.color || "inherit", fontSize: "14px", fontWeight: "500" }}>Imóveis</span>
+                <span style={{ color: blockStyles.header?.color || "inherit", fontSize: "14px", fontWeight: "500" }}>Destaques</span>
+                <span style={{ color: blockStyles.header?.color || "inherit", fontSize: "14px", fontWeight: "500" }}>Sobre nós</span>
               </nav>
-            </header>
-          )}
+            )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: `1px solid ${blockStyles.header?.color || "inherit"}`, color: blockStyles.header?.color || "inherit", padding: isMobilePreview ? "10px 16px" : "12px 28px", borderRadius: "100px", fontWeight: "600", fontSize: isMobilePreview ? "13px" : "14px" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              {renderEditableSingleLine("whatsapp", "5511999999999", "editable-inline")}
+            </div>
+          </div>
+          <div className="builder-resize-handle" onPointerDown={(event) => startBuilderAction("header", "resize", event)} />
         </section>
       ) : null}
 
@@ -1098,122 +1124,100 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         </section>
       ) : null}
 
-      {isBlockVisible("widgets") ? (
-        <section className={`builder-block${sectionBgClass("widgets")} ${activeBlock === "widgets" ? "is-active" : ""}`} style={mergedBlockWrapper("widgets")} onClick={() => setActiveBlock("widgets")}>
-          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("widgets", "drag", event)}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
-            Widgets Extras
-          </div>
-          <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("widgets"); }} title="Remover bloco">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          </button>
-          <div id="widgets-drop-zone" className="widget-grid" style={mergeBlockWrapperStyle(blockStyles.widgets)}>
-            {showcaseConfig.widgets.length === 0 && (!dragState || dragState.snapIndex === -1) ? (
-              <div style={{ textAlign: "center", padding: "40px", border: "1px dashed rgba(255,255,255,0.2)", borderRadius: "16px", gridColumn: "1 / -1" }}>
-                <p className="hint" style={{ marginTop: 0 }}>Nenhum widget. Clique no Bloco selecionado no painel direito para adicionar.</p>
+      {showcaseConfig.widgets.filter(w => !w.hidden).map((widget) => {
+          const widgetKey = `widget-${widget.id}`;
+          const isActiveWidget = activeBlock === widgetKey;
+          return (
+            <section
+              key={widget.id}
+              className={`builder-block ${isActiveWidget ? "is-active" : ""}`}
+              style={{
+                position: "absolute",
+                left: `${widget.x ?? 0}%`,
+                top: `${widget.y ?? 1080}px`,
+                width: `${widget.w ?? 50}%`,
+                minHeight: `${widget.h ?? 200}px`,
+                zIndex: isActiveWidget ? 50 : 10,
+                boxSizing: "border-box",
+                borderRadius: "16px",
+                padding: "18px",
+                ...(widget.backgroundColor ? { backgroundColor: widget.backgroundColor } : {}),
+                ...(widget.color ? { color: widget.color } : {}),
+              }}
+              onClick={(e) => { e.stopPropagation(); setActiveBlock(widgetKey); }}
+            >
+              <div className="builder-block-handle" onPointerDown={(e) => startWidgetAction(widget.id, "drag", e)}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                {(widget.title || "Widget").replace(/<[^>]*>/g, "").slice(0, 28)}
               </div>
-            ) : null}
-            {(() => {
-              const renderedCards = showcaseConfig.widgets.map((widget, index) => (
-                <article key={widget.id} className="widget-card" style={{ ...mergeBlockWrapperStyle(widget), transition: "all 0.3s" }}>
-                  <button type="button" className="builder-delete-icon widget-delete" onClick={() => removeWidget(index)} title="Remover widget">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                  </button>
-                  <div className="highlight-mini-toolbar" onPointerDown={(e) => e.stopPropagation()}>
-                    <label className="builder-color-mini">
-                      Fundo
-                      <input type="color" value={widget.backgroundColor || "#1e293b"} onChange={(e) => updateWidget(index, "backgroundColor", e.target.value)} style={{ width: "20px", height: "20px" }} />
-                    </label>
-                    <label className="builder-color-mini">
-                      Texto
-                      <input type="color" value={widget.color || "#f8fafc"} onChange={(e) => updateWidget(index, "color", e.target.value)} style={{ width: "20px", height: "20px" }} />
-                    </label>
+              <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); removeWidgetById(widget.id); }} title="Remover widget">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+              <div className="highlight-mini-toolbar" onPointerDown={(e) => e.stopPropagation()}>
+                <label className="builder-color-mini">Fundo<input type="color" value={widget.backgroundColor || "#1e293b"} onChange={(e) => updateWidgetById(widget.id, "backgroundColor", e.target.value)} style={{ width: "20px", height: "20px" }} /></label>
+                <label className="builder-color-mini">Texto<input type="color" value={widget.color || "#f8fafc"} onChange={(e) => updateWidgetById(widget.id, "color", e.target.value)} style={{ width: "20px", height: "20px" }} /></label>
+              </div>
+
+              {widget.type === "testimonial" ? (
+                <div style={{ textAlign: "center", padding: "16px" }}>
+                  <div className="widget-testimonial-stars">★★★★★</div>
+                  <div className="widget-testimonial-content editable-inline" data-rich-sync={`widget|${widget.id}|content`} style={{ cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                  <h3 className="editable-inline" data-rich-sync={`widget|${widget.id}|title`} style={{ fontSize: "16px", fontWeight: "600", cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                </div>
+              ) : widget.type === "stats" ? (
+                <div style={{ padding: "8px" }}>
+                  <h3 className="editable-inline" data-rich-sync={`widget|${widget.id}|title`} style={{ textAlign: "center", marginBottom: "24px", cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                  <div className="editable-inline" data-rich-sync={`widget|${widget.id}|content`} style={{ cursor: "text", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                </div>
+              ) : widget.type === "cta" ? (
+                <div className="widget-cta-box">
+                  <h3 className="editable-inline" data-rich-sync={`widget|${widget.id}|title`} style={{ cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                  <p className="editable-inline" data-rich-sync={`widget|${widget.id}|content`} style={{ fontSize: "16px", margin: "16px 0", cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                  <div style={{ marginTop: "16px", padding: "12px", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
+                    <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px", fontWeight: "600", textTransform: "uppercase" }}>Configuração do Botão</p>
+                    <span className="editable-inline" data-rich-sync={`widget|${widget.id}|ctaLabel`} style={{ cursor: "text", display: "inline-block", width: "100%", background: "var(--accent)", color: "#fff", padding: "8px", borderRadius: "6px", textAlign: "center", fontWeight: "600", marginBottom: "8px" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "ctaLabel", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaLabel || "Texto do Botão" }} />
+                    <span className="editable-inline" data-rich-sync={`widget|${widget.id}|ctaUrl`} style={{ cursor: "text", display: "inline-block", width: "100%", fontSize: "12px", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "4px" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "ctaUrl", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaUrl || "https://link.com" }} />
                   </div>
-                  <h3 className="editable-inline" data-rich-sync={`widget|${index}|title`} style={{ cursor: "text", display: "inline-block", width: "100%" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidget(index, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
-                  <p className="editable-inline" data-rich-sync={`widget|${index}|content`} style={{ cursor: "text", display: "inline-block", width: "100%" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidget(index, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
-                  {widget.type === "cta" ? (
-                    <div style={{ marginTop: "16px", padding: "12px", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
-                      <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px", fontWeight: "600", textTransform: "uppercase" }}>Configuração do Botão</p>
-                      <span className="editable-inline" data-rich-sync={`widget|${index}|ctaLabel`} style={{ cursor: "text", display: "inline-block", width: "100%", background: "var(--accent)", color: "#fff", padding: "8px", borderRadius: "6px", textAlign: "center", fontWeight: "600", marginBottom: "8px" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidget(index, "ctaLabel", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaLabel || "Texto do Botão" }} />
-                      <span className="editable-inline" data-rich-sync={`widget|${index}|ctaUrl`} style={{ cursor: "text", display: "inline-block", width: "100%", fontSize: "12px", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "4px" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidget(index, "ctaUrl", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaUrl || "https://link.com" }} />
-                    </div>
-                  ) : null}
+                </div>
+              ) : widget.type === "social" ? (
+                <div style={{ textAlign: "center", padding: "8px" }}>
+                  <h3 className="editable-inline" data-rich-sync={`widget|${widget.id}|title`} style={{ cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                  <p className="editable-inline" data-rich-sync={`widget|${widget.id}|content`} style={{ fontSize: "12px", margin: "16px 0", cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                </div>
+              ) : widget.type === "divider" ? (
+                <div style={{ textAlign: "center", padding: "32px 0", height: "100%", display: "flex", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "24px", width: "100%" }}>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15))" }} />
+                    <span className="editable-inline" data-rich-sync={`widget|${widget.id}|title`} style={{ fontSize: "15px", opacity: 0.7, letterSpacing: "0.2em", textTransform: "uppercase", cursor: "text" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, rgba(255,255,255,0.15), transparent)" }} />
+                  </div>
+                </div>
+              ) : widget.type === "map" ? (
+                <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                  <h3 className="editable-inline" data-rich-sync={`widget|${widget.id}|title`} style={{ cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", marginTop: "20px", background: "rgba(0,0,0,0.15)", borderRadius: "20px", padding: "32px", textAlign: "center", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "16px" }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <p className="editable-inline" data-rich-sync={`widget|${widget.id}|content`} style={{ fontSize: "16px", color: "var(--text-main)", margin: 0, fontWeight: "500", cursor: "text", display: "inline-block", width: "100%" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <h3 className="editable-inline" data-rich-sync={`widget|${widget.id}|title`} style={{ cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "title", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.title }} />
+                  <p className="editable-inline" data-rich-sync={`widget|${widget.id}|content`} style={{ cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
+                </div>
+              )}
+              <div className="builder-resize-handle" onPointerDown={(e) => startWidgetAction(widget.id, "resize", e)} />
+            </section>
+          );
+        })}
 
-                  {widget.type === "testimonial" ? (
-                    <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-                      <div style={{ color: "#f59e0b", fontSize: "20px", letterSpacing: "2px" }}>★★★★★</div>
-                      <span style={{ fontSize: "11px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", padding: "2px 10px", borderRadius: "20px", fontWeight: "600" }}>Depoimento verificado</span>
-                    </div>
-                  ) : null}
-
-                  {widget.type === "stats" ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginTop: "12px" }}>
-                      {(widget.content || "").split("|").reduce((acc, val, i) => {
-                        if (i % 2 === 0) acc.push([val]);
-                        else acc[acc.length - 1].push(val);
-                        return acc;
-                      }, []).slice(0, 3).map(([num, label], i) => (
-                        <div key={i} style={{ textAlign: "center", padding: "12px 6px", background: "rgba(99,102,241,0.1)", borderRadius: "10px", border: "1px solid rgba(99,102,241,0.2)" }}>
-                          <div style={{ fontSize: "22px", fontWeight: "800", color: "var(--accent)", lineHeight: 1 }}>{num}</div>
-                          <div style={{ fontSize: "11px", opacity: 0.7, marginTop: "4px" }}>{label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {widget.type === "social" ? (
-                    <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px", marginTop: "12px" }}>
-                      {[
-                        { label: "WhatsApp", bg: "#25D366", icon: "W" },
-                        { label: "Instagram", bg: "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)", icon: "I" },
-                        { label: "Facebook", bg: "#1877F2", icon: "F" },
-                      ].map(({ label, bg, icon }) => (
-                        <div key={label} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: bg, borderRadius: "8px", color: "#fff", fontSize: "13px", fontWeight: "600" }}>
-                          <span style={{ fontWeight: "800" }}>{icon}</span> {label}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {widget.type === "divider" ? (
-                    <div style={{ textAlign: "center", padding: "8px 0", marginTop: "4px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3))" }} />
-                        <span style={{ fontSize: "13px", opacity: 0.5, letterSpacing: "0.1em" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
-                        <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, rgba(255,255,255,0.3), transparent)" }} />
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {widget.type === "map" ? (
-                    <div style={{ marginTop: "10px", background: "rgba(0,0,0,0.3)", borderRadius: "10px", padding: "16px", textAlign: "center", border: "1px dashed rgba(255,255,255,0.1)" }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "6px" }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                      <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0 }}>Endereço exibido abaixo</p>
-                    </div>
-                  ) : null}
-                </article>
-              ));
-              if (dragState && dragState.snapIndex !== -1) {
-                const previewElement = (
-                  <article key="dnd-preview" className="widget-card preview-card" style={{ border: '2px dashed var(--accent)', background: 'rgba(255,255,255,0.05)', opacity: 0.9, pointerEvents: 'none', transform: 'scale(1.02)', transition: 'all 0.2s', zIndex: 10 }}>
-                    <h3 style={{ color: 'var(--accent)', marginTop: 0 }} dangerouslySetInnerHTML={{ __html: dragState.template.title }} />
-                    <p dangerouslySetInnerHTML={{ __html: dragState.template.content }} />
-                    {dragState.template.type === 'cta' ? (
-                      <div style={{ marginTop: "16px", padding: "8px", background: "var(--accent)", color: "#fff", borderRadius: "6px", textAlign: "center", fontWeight: "600" }} dangerouslySetInnerHTML={{ __html: dragState.template.ctaLabel || "Texto do Botão" }} />
-                    ) : null}
-                  </article>
-                );
-                renderedCards.splice(dragState.snapIndex, 0, previewElement);
-              }
-              return renderedCards;
-            })()}
-          </div>
-          <div className="builder-resize-handle" onPointerDown={(event) => startBuilderAction("widgets", "resize", event)} />
-        </section>
-      ) : null}
-
-      {isBlockVisible("footer") ? (
-        <section className={`builder-block${sectionBgClass("footer")} ${activeBlock === "footer" ? "is-active" : ""}`} style={mergedBlockWrapper("footer")} onClick={() => setActiveBlock("footer")}>
+        {isBlockVisible("footer") ? (
+        <section
+          id="footer"
+          className={`builder-block${sectionBgClass("footer")} ${activeBlock === "footer" ? "is-active" : ""}`}
+          style={mergedBlockWrapper("footer")}
+          onClick={() => setActiveBlock("footer")}
+        >
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("footer", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Rodapé
@@ -1221,29 +1225,48 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("footer"); }} title="Remover bloco">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
-          <footer style={{ marginTop: "20px", paddingTop: "40px", textAlign: "center", ...mergeBlockWrapperStyle(blockStyles.footer) }}>
-            <p
-              className="editable-inline"
-              data-rich-sync="footerTitle"
-              style={{ fontSize: "18px", fontWeight: "700", marginBottom: "12px", color: blockStyles.footer?.color || "#fff", cursor: "text" }}
-              contentEditable suppressContentEditableWarning
-              onBlur={(e) => updateShowcaseConfig((prev) => ({ ...prev, footerTitle: e.currentTarget.innerHTML }))}
-              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
-              dangerouslySetInnerHTML={{ __html: showcaseConfig.footerTitle }}
-            />
-            {renderEditableText("description", "Domus Showcase - Encontre seu próximo imóvel com segurança e transparência.", "editable-footer", "p", blockStyles.footer?.color)}
-            <div style={{ display: "flex", justifyContent: "center", gap: "24px", marginTop: "20px", flexWrap: "wrap" }}>
-              <p style={{ fontSize: "13px", color: blockStyles.footer?.color || "var(--text-muted)" }}>
-                Email: {renderEditableSingleLine("email", "contato@imobiliaria.com", "editable-inline small-inline", blockStyles.footer?.color)}
-              </p>
-              <p style={{ fontSize: "13px", color: blockStyles.footer?.color || "var(--text-muted)" }}>
-                WhatsApp: {renderEditableSingleLine("whatsapp", "5511999999999", "editable-inline small-inline", blockStyles.footer?.color)}
-              </p>
+          
+          <footer className="showcase-footer" style={mergeBlockWrapperStyle(blockStyles.footer)}>
+            <div className="showcase-footer-grid">
+              <div className="footer-col">
+                <h4
+                  className="editable-inline"
+                  data-rich-sync="footerTitle"
+                  style={{ color: blockStyles.footer?.color || "inherit", cursor: "text" }}
+                  contentEditable suppressContentEditableWarning
+                  onBlur={(e) => updateShowcaseConfig((prev) => ({ ...prev, footerTitle: e.currentTarget.innerHTML }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                  dangerouslySetInnerHTML={{ __html: showcaseConfig.footerTitle }}
+                />
+                {renderEditableText("description", "Encontre seu próximo imóvel com segurança e transparência.", "editable-footer", "p", blockStyles.footer?.color)}
+              </div>
+              
+              <div className="footer-col">
+                <h4 style={{ color: blockStyles.footer?.color || "inherit" }}>Imobiliária</h4>
+                <p style={{ color: blockStyles.footer?.color || "var(--text-muted)", margin: "0 0 8px 0" }}>{previewTenant.name}</p>
+                {previewTenant.creci ? <p style={{ color: blockStyles.footer?.color || "var(--text-muted)", margin: "0 0 8px 0" }}>CRECI {previewTenant.creci}</p> : null}
+                {previewTenant.cidade ? <p style={{ color: blockStyles.footer?.color || "var(--text-muted)", margin: "0 0 8px 0" }}>{previewTenant.cidade}</p> : null}
+              </div>
+
+              <div className="footer-col">
+                <h4 style={{ color: blockStyles.footer?.color || "inherit" }}>Contato</h4>
+                <p style={{ color: blockStyles.footer?.color || "var(--text-muted)" }}>
+                  Email: {renderEditableSingleLine("email", "contato@imobiliaria.com", "editable-inline small-inline", blockStyles.footer?.color)}
+                </p>
+                <p style={{ color: blockStyles.footer?.color || "var(--text-muted)" }}>
+                  WhatsApp: {renderEditableSingleLine("whatsapp", "5511999999999", "editable-inline small-inline", blockStyles.footer?.color)}
+                </p>
+              </div>
+            </div>
+            
+            <div className="footer-bottom" style={{ color: blockStyles.footer?.color || "var(--text-muted)" }}>
+              &copy; {new Date().getFullYear()} {previewTenant.name}. Todos os direitos reservados.
             </div>
           </footer>
+
           <div className="builder-resize-handle" onPointerDown={(event) => startBuilderAction("footer", "resize", event)} />
         </section>
-      ) : null}
+        ) : null}
     </>
   );
 
@@ -1286,6 +1309,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         .widget-card .widget-delete, .widget-card .highlight-mini-toolbar { opacity: 0; visibility: hidden; transition: all 0.2s ease; }
         .widget-card:hover .widget-delete, .widget-card:hover .highlight-mini-toolbar { opacity: 1; visibility: visible; }
         .editable-inline span[style*="color"], .editable-inline font[color] { -webkit-text-fill-color: currentcolor !important; -webkit-background-clip: initial !important; background: none !important; }
+        @keyframes builderModeIn { from { opacity: 0; transform: scale(0.975) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .builder-canvas-anim { animation: builderModeIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
       `}</style>
 
       {textSelection
@@ -1403,6 +1428,10 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
 
+          <button type="button" className="button-secondary" onClick={randomizeColors} title="Gerar combinação de cores aleatória" style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            Cores
+          </button>
           <button type="button" className="button-secondary" onClick={resetLayoutOnly} title="Restaura posições e tamanhos para o padrão">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "5px" }}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             Posições
@@ -1427,13 +1456,14 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         {/* Canvas area */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {isMobilePreview ? (
-            <div style={{ display: "flex", justifyContent: "center", padding: "32px 24px", background: "radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)", backgroundSize: "24px 24px" }}>
+            <div key="mobile" className="builder-canvas-anim" style={{ display: "flex", justifyContent: "center", padding: "32px 24px", background: "radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)", backgroundSize: "24px 24px" }}>
               <div style={{ width: "480px", flexShrink: 0, border: "10px solid #0f172a", borderRadius: "44px", overflow: "hidden", boxShadow: "0 30px 60px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.08)", position: "relative" }}>
                 <div style={{ width: "60px", height: "6px", background: "#0f172a", borderRadius: "0 0 8px 8px", position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 100 }} />
                 <div
                   className={`showcase-container showcase-builder-canvas ${isLightMode ? "showcase-theme-light" : ""}`}
                   ref={canvasRef}
-                  style={{ position: "relative", width: "100%", overflow: "hidden", minHeight: `${canvasHeight}px`, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+                  onClick={(e) => { if (e.target === canvasRef.current) setActiveBlock(null); }}
+                  style={{ position: "relative", width: "100%", overflow: "hidden", minHeight: `${canvasHeight}px`, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)", backgroundSize: "24px 24px", fontFamily: `'${globalFont}', system-ui, sans-serif` }}
                 >
                   {canvasContent}
                 </div>
@@ -1441,7 +1471,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             </div>
           ) : (
             <div
-              className="showcase-container showcase-builder-canvas"
+              key="desktop"
+              className="showcase-container showcase-builder-canvas builder-canvas-anim"
               ref={canvasRef}
               onClick={(e) => { if (e.target === canvasRef.current) setActiveBlock(null); }}
               style={{
@@ -1507,6 +1538,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         <BuilderSidePanel
           activeBlock={activeBlock}
           form={form}
+          tenantName={session?.tenant?.name || ""}
           showcaseConfig={showcaseConfig}
           blockStyles={blockStyles}
           currentTheme={currentTheme}
@@ -1525,8 +1557,9 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           removeHighlight={removeHighlight}
           updateHighlightStyle={updateHighlightStyle}
           addWidget={addWidget}
-          removeWidget={removeWidget}
-          updateWidget={updateWidget}
+          activeWidgetData={activeBlock?.startsWith("widget-") ? showcaseConfig.widgets.find(w => w.id === activeBlock.replace("widget-", "")) : null}
+          updateActiveWidget={(field, value) => { if (activeBlock?.startsWith("widget-")) updateWidgetById(activeBlock.replace("widget-", ""), field, value); }}
+          removeActiveWidget={() => { if (activeBlock?.startsWith("widget-")) removeWidgetById(activeBlock.replace("widget-", "")); }}
         />
       </div>
 
@@ -1537,7 +1570,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           pointerEvents: "none", zIndex: 99999, background: "var(--bg-gradient-2, #1e293b)",
           padding: "14px", borderRadius: "12px", border: "1px solid var(--accent)",
           boxShadow: "0 10px 25px rgba(0,0,0,0.5)", width: "220px",
-          opacity: (dragState.snapIndex !== -1 && document.getElementById("widgets-drop-zone")) ? 0 : 0.9,
+          opacity: 0.9,
           transition: "opacity 0.2s",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>

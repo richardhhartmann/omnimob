@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
 
@@ -37,9 +37,9 @@ const EMPTY = {
   parkingSpots: "",
   suites: "",
   squareFootage: "",
-  andamento: "",
+  andamento: "PRONTO_PARA_MORAR",
   aceitaPermuta: false,
-  status: "DRAFT",
+  status: "ACTIVE",
 };
 
 const STEPS = [
@@ -47,6 +47,7 @@ const STEPS = [
   { key: "localizacao", label: "Localização" },
   { key: "detalhes", label: "Detalhes" },
   { key: "fotos", label: "Fotos" },
+  { key: "divulgar", label: "Divulgar" },
 ];
 
 // ─── Ícones ───────────────────────────────────────────────────────────────────
@@ -106,13 +107,14 @@ function IconCheck() {
 
 // ─── Indicador de etapas (clicável) ──────────────────────────────────────────
 
-function StepIndicator({ current, onStepClick }) {
+function StepIndicator({ current, onStepClick, lockedSteps = [] }) {
   return (
     <div style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
       {STEPS.map((step, i) => {
         const done = i < current;
         const active = i === current;
-        const clickable = i !== current;
+        const locked = lockedSteps.includes(i);
+        const clickable = i !== current && !locked;
         return (
           <div key={step.key} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "none" }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
@@ -121,11 +123,12 @@ function StepIndicator({ current, onStepClick }) {
                 style={{
                   width: "32px", height: "32px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: "12px", fontWeight: "700", flexShrink: 0, transition: "all 0.3s ease",
-                  background: done ? "var(--primary, #6366f1)" : active ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
-                  border: done ? "2px solid var(--primary, #6366f1)" : active ? "2px solid rgba(99,102,241,0.8)" : "2px solid rgba(255,255,255,0.12)",
-                  color: done ? "#fff" : active ? "rgba(99,102,241,1)" : "var(--text-muted)",
+                  background: locked ? "rgba(255,255,255,0.03)" : done ? "var(--primary, #6366f1)" : active ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
+                  border: locked ? "2px dashed rgba(255,255,255,0.12)" : done ? "2px solid var(--primary, #6366f1)" : active ? "2px solid rgba(99,102,241,0.8)" : "2px solid rgba(255,255,255,0.12)",
+                  color: locked ? "rgba(255,255,255,0.2)" : done ? "#fff" : active ? "rgba(99,102,241,1)" : "var(--text-muted)",
                   boxShadow: active ? "0 0 0 4px rgba(99,102,241,0.15)" : "none",
-                  cursor: clickable ? "pointer" : "default",
+                  cursor: locked ? "not-allowed" : clickable ? "pointer" : "default",
+                  opacity: locked ? 0.5 : 1,
                 }}
               >
                 {done ? <IconCheck /> : i + 1}
@@ -134,9 +137,10 @@ function StepIndicator({ current, onStepClick }) {
                 onClick={() => clickable && onStepClick(i)}
                 style={{
                   fontSize: "11px", fontWeight: active ? "600" : "400",
-                  color: active ? "var(--text)" : "var(--text-muted)",
+                  color: locked ? "rgba(255,255,255,0.2)" : active ? "var(--text)" : "var(--text-muted)",
                   whiteSpace: "nowrap", transition: "all 0.3s",
-                  cursor: clickable ? "pointer" : "default",
+                  cursor: locked ? "not-allowed" : clickable ? "pointer" : "default",
+                  opacity: locked ? 0.5 : 1,
                 }}
               >
                 {step.label}
@@ -524,8 +528,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [tipos, setTipos] = useState([]);
   const isEditing = Boolean(initialData?.id);
 
+  // ── Estado do step "Divulgar" ──
+  const [savedPropertyId, setSavedPropertyId] = useState(null);
+  const [caption, setCaption] = useState("");
+  const [socialStatus, setSocialStatus] = useState(null);
+  const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
+  const [publishResults, setPublishResults] = useState({});
+  const [, setSearchParams] = useSearchParams();
+
   const session = loadSession();
   const tenantSlug = session?.tenant?.slug;
+  const cargo = session?.usuario?.cargo;
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -536,6 +549,44 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   useEffect(() => {
     return () => { images.forEach((img) => URL.revokeObjectURL(img.previewUrl)); };
   }, []);
+
+  // Carrega status social e gera legenda ao entrar no step Divulgar
+  useEffect(() => {
+    if (step !== 4 || !tenantSlug || !savedPropertyId) return;
+    api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
+
+    const price = parseCurrencyBRL(String(form.price));
+    const priceStr = Number.isFinite(price) && price > 0
+      ? `R$ ${price.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+      : "";
+    const location = [form.neighborhood, form.city, form.state].filter(Boolean).join(", ");
+    const stats = [
+      form.bedrooms ? `${form.bedrooms} quarto${form.bedrooms !== "1" ? "s" : ""}` : "",
+      form.squareFootage ? `${form.squareFootage} m²` : "",
+      form.parkingSpots ? `${form.parkingSpots} vaga${form.parkingSpots !== "1" ? "s" : ""}` : "",
+    ].filter(Boolean).join(" · ");
+    const tipoSel = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
+    const atribs = tipoSel?.atributos
+      ?.filter((a) => form.atributosIds.includes(a.id))
+      .map((a) => a.descricao) || [];
+    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
+    const whatsapp = session?.tenant?.whatsapp || "";
+
+    const lines = [
+      `🏠 ${form.title}`,
+      location ? `📍 ${location}` : "",
+      priceStr ? `💰 ${priceStr}` : "",
+      stats ? `📐 ${stats}` : "",
+      atribs.length > 0 ? `✅ ${atribs.join(" · ")}` : "",
+      form.aceitaPermuta ? "🔄 Aceita permuta" : "",
+      "",
+      form.description || "",
+      "",
+      `🔗 Ver detalhes: ${vitrineUrl}`,
+      whatsapp ? `📲 Contato: ${whatsapp}` : "",
+    ].filter((l, i, arr) => !(l === "" && arr[i - 1] === ""));
+    setCaption(lines.join("\n").trim());
+  }, [step, savedPropertyId]);
 
   useEffect(() => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
@@ -632,14 +683,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
   function handleStepClick(target) {
     if (target === step) return;
+    if (target === 4 && !savedPropertyId) return; // travado até salvar
     if (target < step) {
-      // Voltar: sempre permitido
       setError("");
       setStep(target);
       return;
     }
-    // Avançar: valida todos os steps intermediários
     for (let s = step; s < target; s++) {
+      if (s >= 3) break; // não valida step 4
       const err = validateStep(s);
       if (err) { setError(err); return; }
     }
@@ -667,7 +718,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       if (err) { setStep(i); setError(err); return; }
     }
     const normalizedPrice = parseCurrencyBRL(String(form.price));
-    await onSubmit({
+    const saved = await onSubmit({
       tipoImovelId: form.tipoImovelId ? Number(form.tipoImovelId) : undefined,
       atributosIds: form.atributosIds,
       title: form.title,
@@ -689,10 +740,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     });
 
     if (!isEditing) {
-      setForm(EMPTY);
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
       setImages([]);
-      setStep(0);
+      if (saved?.id) {
+        setSavedPropertyId(saved.id);
+        setPublishResults({});
+        setStep(4);
+      } else {
+        setForm(EMPTY);
+        setStep(0);
+      }
     }
   }
 
@@ -722,6 +779,28 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
+  async function handlePublish(platform) {
+    if (!tenantSlug || !savedPropertyId) return;
+    setPublishLoading((prev) => ({ ...prev, [platform]: true }));
+    try {
+      const result = await api.publishProperty(tenantSlug, savedPropertyId, {
+        platforms: [platform],
+        caption,
+      });
+      setPublishResults((prev) => ({ ...prev, ...result }));
+    } catch (err) {
+      setPublishResults((prev) => ({ ...prev, [platform]: { success: false, error: err.message } }));
+    } finally {
+      setPublishLoading((prev) => ({ ...prev, [platform]: false }));
+    }
+  }
+
+  function handleWhatsApp() {
+    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
+    const text = caption || `🏠 ${form.title}\n🔗 ${vitrineUrl}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  }
+
   const inputStyle = {
     width: "100%", boxSizing: "border-box",
     background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
@@ -739,19 +818,22 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             {isEditing ? "Atualize as informações do imóvel abaixo." : "Preencha as etapas para cadastrar um novo imóvel."}
           </p>
         </div>
-        <button type="button" className="button-secondary" onClick={onCancelEdit} disabled={disabled} style={{ fontSize: "13px", padding: "8px 16px" }}>
+        <button type="button" className="button-secondary" onClick={onCancelEdit} disabled={disabled} style={{ fontSize: "13px", padding: "8px 16px", width: "auto" }}>
           {isEditing ? "Cancelar edição" : "Voltar ao menu"}
         </button>
       </div>
 
-      <StepIndicator current={step} onStepClick={handleStepClick} />
+      <StepIndicator current={step} onStepClick={handleStepClick} lockedSteps={savedPropertyId ? [] : [4]} />
 
       {error ? <div className="error" style={{ marginBottom: "16px" }}>{error}</div> : null}
 
       <div style={{ display: "flex", gap: "40px", alignItems: "flex-start" }}>
 
         {/* ── Painel do formulário ─── */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div style={step === 4
+          ? { width: "100%", maxWidth: "660px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "20px" }
+          : { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "20px" }
+        }>
 
           {/* Etapa 0 — Identificação */}
           {step === 0 && (
@@ -896,31 +978,178 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             </>
           )}
 
-          {/* Navegação */}
-          <div style={{ display: "flex", gap: "12px", marginTop: "8px", flexWrap: "wrap" }}>
-            {step > 0 && (
-              <button type="button" className="button-secondary" onClick={handleBack} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-                Voltar
-              </button>
-            )}
-            {step < STEPS.length - 1 ? (
-              <button type="button" onClick={handleNext} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                Continuar
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-              </button>
-            ) : (
-              <button type="button" onClick={handleSubmit} disabled={disabled}>
-                {isEditing ? "Salvar alterações" : "Publicar imóvel"}
-              </button>
-            )}
-          </div>
+          {/* Etapa 4 — Divulgar */}
+          {step === 4 && (
+            <>
+              {/* Banner de sucesso */}
+              <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px", borderRadius: "14px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "rgba(16,185,129,0.2)", color: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                </div>
+                <div>
+                  <div style={{ fontWeight: "600", fontSize: "14px" }}>Imóvel salvo com sucesso!</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                    Agora você pode divulgá-lo nas redes sociais.
+                  </div>
+                </div>
+              </div>
+
+              {/* Legenda editável */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Legenda do post
+                </label>
+                <textarea
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  rows={8}
+                  style={{ ...inputStyle, resize: "vertical", lineHeight: "1.6", fontFamily: "inherit", minHeight: "160px" }}
+                  placeholder="Escreva a legenda do post..."
+                />
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>
+                  Edite a legenda antes de publicar. Ela será usada no Facebook e Instagram.
+                </span>
+              </div>
+
+              {/* Aviso se não tem permissão de publicar nas redes */}
+              {!cargo?.publicarRedes && (
+                <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "13px", color: "#fbbf24" }}>
+                  Você não tem permissão para publicar nas redes sociais. Contate o administrador.
+                </div>
+              )}
+
+              {/* Botões de publicação */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {/* Facebook */}
+                {cargo?.publicarRedes && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "600", fontSize: "13px" }}>Facebook</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
+                        {socialStatus === null ? "Verificando conexão…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações"}
+                      </div>
+                    </div>
+                    {publishResults.facebook ? (
+                      <span style={{ fontSize: "12px", fontWeight: "600", color: publishResults.facebook.success ? "#10b981" : "#ef4444", whiteSpace: "nowrap" }}>
+                        {publishResults.facebook.success ? "✓ Publicado" : `✗ ${publishResults.facebook.error}`}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handlePublish("facebook")}
+                        disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
+                        style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#1877f2", color: "#fff", border: "none", cursor: socialStatus?.facebook?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.facebook?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
+                      >
+                        {publishLoading.facebook ? "Publicando…" : "Publicar"}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Instagram */}
+                {cargo?.publicarRedes && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "600", fontSize: "13px" }}>Instagram</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
+                        {socialStatus === null ? "Verificando conexão…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — vincule ao Facebook em Configurações"}
+                      </div>
+                    </div>
+                    {publishResults.instagram ? (
+                      <span style={{ fontSize: "12px", fontWeight: "600", color: publishResults.instagram.success ? "#10b981" : "#ef4444", whiteSpace: "nowrap" }}>
+                        {publishResults.instagram.success ? "✓ Publicado" : `✗ ${publishResults.instagram.error}`}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handlePublish("instagram")}
+                        disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
+                        style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", color: "#fff", border: "none", cursor: socialStatus?.instagram?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.instagram?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
+                      >
+                        {publishLoading.instagram ? "Publicando…" : "Publicar"}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* WhatsApp — sempre disponível */}
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#25d366", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.785.476 3.456 1.302 4.914L2 22l5.233-1.274A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: "600", fontSize: "13px" }}>WhatsApp</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
+                      Abre o WhatsApp com a legenda pronta para compartilhar
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleWhatsApp}
+                    style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#25d366", color: "#fff", border: "none", cursor: "pointer", flexShrink: 0, width: "auto" }}
+                  >
+                    Compartilhar
+                  </button>
+                </div>
+              </div>
+
+              {/* Ações finais */}
+              <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <button
+                  type="button"
+                  onClick={() => { setSavedPropertyId(null); setForm(EMPTY); setStep(0); setPublishResults({}); }}
+                  style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 20px", borderRadius: "10px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "rgba(99,102,241,1)", fontSize: "13px", fontWeight: "600", cursor: "pointer", width: "auto" }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                  Cadastrar novo imóvel
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setSearchParams({ tab: "list" })}
+                  style={{ fontSize: "13px", padding: "9px 20px", width: "auto" }}
+                >
+                  Ver portfólio
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Navegação (steps 0–3) */}
+          {step < 4 && (
+            <div style={{ display: "flex", gap: "12px", marginTop: "8px", flexWrap: "wrap" }}>
+              {step > 0 && (
+                <button type="button" className="button-secondary" onClick={handleBack} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  Voltar
+                </button>
+              )}
+              {step < 3 ? (
+                <button type="button" onClick={handleNext} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  Continuar
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                </button>
+              ) : (
+                <button type="button" onClick={handleSubmit} disabled={disabled}>
+                  {isEditing ? "Salvar alterações" : "Publicar imóvel"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* ── Painel de preview ─── */}
-        <div style={{ width: "300px", flexShrink: 0 }}>
-          <PropertyPreviewCard form={form} previewUrls={previewUrls} />
-        </div>
+        {/* ── Painel de preview (apenas steps 0–3) ─── */}
+        {step < 4 && (
+          <div style={{ width: "300px", flexShrink: 0 }}>
+            <PropertyPreviewCard form={form} previewUrls={previewUrls} />
+          </div>
+        )}
       </div>
     </section>
   );

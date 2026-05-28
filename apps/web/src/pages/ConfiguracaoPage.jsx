@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
@@ -192,6 +193,67 @@ export function ConfiguracaoPage({ session }) {
   const [cepLoading, setCepLoading] = useState(false);
   const loadedRef = useRef(false);
   const debounceRef = useRef(null);
+
+  // ── Redes Sociais ──
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [socialStatus, setSocialStatus] = useState(null);
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [socialMsg, setSocialMsg] = useState(null); // { type: "success"|"error", text }
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [disconnectLoading, setDisconnectLoading] = useState(false);
+
+  // Processa retorno do OAuth Meta na URL
+  useEffect(() => {
+    const social = searchParams.get("social");
+    if (!social) return;
+    const page = searchParams.get("page");
+    const msg = searchParams.get("msg");
+    const hasIg = searchParams.get("instagram") === "ok";
+    if (social === "connected") {
+      const igText = hasIg ? " e Instagram" : ". Instagram não conectado (vincule sua conta Business ao Facebook).";
+      setSocialMsg({ type: "success", text: `Facebook${igText} conectados com sucesso! Página: "${page}".` });
+    } else if (social === "error") {
+      setSocialMsg({ type: "error", text: msg || "Erro ao conectar conta." });
+    }
+    // Limpa params da URL
+    setSearchParams({}, { replace: true });
+  }, []);
+
+  // Carrega status das redes sociais
+  useEffect(() => {
+    if (!tenantSlug) return;
+    setSocialLoading(true);
+    api.getSocialStatus(tenantSlug)
+      .then(setSocialStatus)
+      .catch(() => {})
+      .finally(() => setSocialLoading(false));
+  }, [tenantSlug]);
+
+  async function handleConectarRedes() {
+    if (!tenantSlug) return;
+    setOauthLoading(true);
+    try {
+      const { url } = await api.getSocialOAuthUrl(tenantSlug);
+      window.location.href = url;
+    } catch (err) {
+      setSocialMsg({ type: "error", text: err.message || "Não foi possível iniciar a autenticação." });
+      setOauthLoading(false);
+    }
+  }
+
+  async function handleDesconectarRedes() {
+    if (!tenantSlug) return;
+    setDisconnectLoading(true);
+    try {
+      await api.disconnectSocial(tenantSlug);
+      setSocialStatus({ facebook: { connected: false, pageName: null }, instagram: { connected: false } });
+      setSocialMsg({ type: "success", text: "Contas desconectadas com sucesso." });
+    } catch (err) {
+      setSocialMsg({ type: "error", text: err.message || "Erro ao desconectar." });
+    } finally {
+      setDisconnectLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -440,6 +502,90 @@ export function ConfiguracaoPage({ session }) {
                 Disponível
               </span>
             </div>
+          </Secao>
+
+          {/* Redes Sociais */}
+          <Secao cor="#1877f2" titulo="Redes Sociais" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+            </svg>
+          }>
+            {/* Mensagem de retorno do OAuth */}
+            {socialMsg && (
+              <div style={{
+                padding: "12px 14px", borderRadius: "10px", fontSize: "13px",
+                background: socialMsg.type === "success" ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+                border: `1px solid ${socialMsg.type === "success" ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
+                color: socialMsg.type === "success" ? "#6ee7b7" : "#fca5a5",
+                display: "flex", alignItems: "flex-start", gap: "10px",
+              }}>
+                <span style={{ marginTop: "1px" }}>{socialMsg.type === "success" ? "✓" : "✗"}</span>
+                <span>{socialMsg.text}</span>
+                <button type="button" onClick={() => setSocialMsg(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.6, fontSize: "14px", flexShrink: 0 }}>✕</button>
+              </div>
+            )}
+
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.6" }}>
+              Conecte sua <strong style={{ color: "var(--text)" }}>Página do Facebook</strong> e conta <strong style={{ color: "var(--text)" }}>Business do Instagram</strong> para publicar imóveis diretamente pelo painel.
+            </p>
+
+            {/* Status das plataformas */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {/* Facebook */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: "600", fontSize: "13px" }}>Facebook</div>
+                  <div style={{ fontSize: "11px", marginTop: "2px", color: socialStatus?.facebook?.connected ? "#6ee7b7" : "var(--text-muted)" }}>
+                    {socialLoading ? "Verificando…" : socialStatus?.facebook?.connected ? `✓ Página: "${socialStatus.facebook.pageName}"` : "Não conectado"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Instagram */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: "600", fontSize: "13px" }}>Instagram</div>
+                  <div style={{ fontSize: "11px", marginTop: "2px", color: socialStatus?.instagram?.connected ? "#6ee7b7" : "var(--text-muted)" }}>
+                    {socialLoading ? "Verificando…" : socialStatus?.instagram?.connected ? "✓ Conta Business conectada" : "Não conectado"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Ações */}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleConectarRedes}
+                disabled={oauthLoading}
+                style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 18px", borderRadius: "9px", fontSize: "13px", fontWeight: "600", background: "rgba(24,119,242,0.15)", border: "1px solid rgba(24,119,242,0.4)", color: "#60a5fa", cursor: oauthLoading ? "wait" : "pointer", opacity: oauthLoading ? 0.6 : 1 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" /></svg>
+                {oauthLoading ? "Redirecionando…" : socialStatus?.facebook?.connected ? "Reconectar conta" : "Conectar Facebook & Instagram"}
+              </button>
+
+              {socialStatus?.facebook?.connected && (
+                <button
+                  type="button"
+                  onClick={handleDesconectarRedes}
+                  disabled={disconnectLoading}
+                  style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 18px", borderRadius: "9px", fontSize: "13px", fontWeight: "600", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5", cursor: disconnectLoading ? "wait" : "pointer", opacity: disconnectLoading ? 0.6 : 1 }}
+                >
+                  {disconnectLoading ? "Desconectando…" : "Desconectar"}
+                </button>
+              )}
+            </div>
+
+            <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)", opacity: 0.6, lineHeight: "1.6" }}>
+              <strong>Pré-requisito:</strong> a conta do Instagram deve ser do tipo Business ou Creator, vinculada à Página do Facebook. A autenticação usa o Meta Graph API v19.0 com permissões <code>pages_manage_posts</code> e <code>instagram_content_publish</code>.
+            </p>
           </Secao>
 
         </div>

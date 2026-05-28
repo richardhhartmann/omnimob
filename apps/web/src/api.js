@@ -233,6 +233,23 @@ export const api = {
   deleteAtributo: (tenantSlug, id) =>
     request(`/api/properties/atributos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
 
+  // ─── Redes Sociais ───────────────────────────────────────────────────────
+  getSocialOAuthUrl: (tenantSlug) =>
+    request("/api/social/oauth/url", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  getSocialStatus: (tenantSlug) =>
+    request("/api/social/status", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  disconnectSocial: (tenantSlug) =>
+    request("/api/social/disconnect", { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  publishProperty: (tenantSlug, propertyId, payload) =>
+    request(`/api/social/publish/${propertyId}`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
   getPublicShowcase: (tenantSlug) => request(`/public/${tenantSlug}/properties`),
 
   getPublicPropertyById: (tenantSlug, propertyId) =>

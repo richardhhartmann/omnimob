@@ -14,15 +14,59 @@ export const DEFAULT_HIGHLIGHTS = [
 ];
 
 export const DEFAULT_LAYOUT = {
-  header: { x: 0, y: 0, w: 100, h: 80 },
-  title: { x: 0, y: 150, w: 100, h: 300 },
-  highlights: { x: 0, y: 380, w: 100, h: 200 },
-  properties: { x: 0, y: 580, w: 100, h: 400 },
-  widgets: { x: 0, y: 980, w: 100, h: 200 },
-  footer: { x: 0, y: 1180, w: 100, h: 150 }
+  header:     { x: 0, y: 0,    w: 100, h: 80  },
+  title:      { x: 0, y: 120,  w: 100, h: 240 },
+  highlights: { x: 0, y: 400,  w: 100, h: 220 },
+  properties: { x: 0, y: 680,  w: 100, h: 600 },
+  footer:     { x: 0, y: 1900, w: 100, h: 180 },
 };
 
-const BLOCK_KEYS = ["topbar", "header", "title", "highlights", "properties", "widgets", "footer"];
+export const DEFAULT_MOBILE_LAYOUT = {
+  header:     { x: 0, y: 0,    w: 100, h: 80  },
+  title:      { x: 0, y: 100,  w: 100, h: 320 },
+  highlights: { x: 0, y: 440,  w: 100, h: 800 },
+  properties: { x: 0, y: 1260, w: 100, h: 1200 },
+  footer:     { x: 0, y: 3200, w: 100, h: 400 },
+};
+
+export const DEFAULT_WIDGETS = [
+  {
+    id: "default-stats",
+    type: "stats",
+    title: "Nossos Números",
+    content: "200+|Imóveis vendidos|15 anos|De experiência|4.9★|Avaliação média",
+    ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
+    x: 0, y: 1080, w: 100, h: 230, hidden: false,
+  },
+  {
+    id: "default-testimonial",
+    type: "testimonial",
+    title: "— Maria Silva, Compradora",
+    content: "\"Encontrei o imóvel dos meus sonhos em menos de uma semana. Atendimento excepcional e sem burocracia!\"",
+    ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
+    x: 0, y: 1330, w: 49, h: 210, hidden: false,
+  },
+  {
+    id: "default-hours",
+    type: "hours",
+    title: "Horário de Atendimento",
+    content: "Segunda a Sexta: 09h às 18h<br>Sábados: 09h às 13h<br>Domingos e Feriados: Fechado",
+    ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
+    x: 51, y: 1330, w: 49, h: 210, hidden: false,
+  },
+  {
+    id: "default-cta",
+    type: "cta",
+    title: "Pronto para encontrar seu imóvel?",
+    content: "Fale com nossa equipe e receba as melhores opções para o seu perfil de comprador.",
+    ctaLabel: "Falar no WhatsApp",
+    ctaUrl: "https://wa.me/",
+    backgroundColor: "", color: "",
+    x: 0, y: 1560, w: 100, h: 200, hidden: false,
+  },
+];
+
+const BLOCK_KEYS = ["topbar", "header", "title", "highlights", "properties", "footer"];
 
 function emptyBlockStyle() {
   return { backgroundColor: "", color: "", backgroundImage: "", backgroundOverlay: 0, backgroundBrightness: 1 };
@@ -88,6 +132,11 @@ function normalizeWidget(widget, index) {
     ctaUrl: typeof w.ctaUrl === "string" ? w.ctaUrl : "",
     backgroundColor: typeof w.backgroundColor === "string" ? w.backgroundColor : "",
     color: typeof w.color === "string" ? w.color : "",
+    x: Number.isFinite(Number(w.x)) ? Number(w.x) : 0,
+    y: Number.isFinite(Number(w.y)) ? Number(w.y) : 1080 + index * 230,
+    w: Number.isFinite(Number(w.w)) ? Number(w.w) : 50,
+    h: Number.isFinite(Number(w.h)) ? Number(w.h) : 200,
+    hidden: w.hidden === true,
   };
 }
 
@@ -112,7 +161,7 @@ export function normalizeShowcaseConfig(raw) {
   }
 
   const layout = cfg.layout && typeof cfg.layout === "object" ? cfg.layout : {};
-  const mergedLayoutBase = Object.fromEntries(
+  const mergedLayout = Object.fromEntries(
     Object.entries(DEFAULT_LAYOUT).map(([key, base]) => {
       const next = layout[key] || {};
       return [
@@ -126,30 +175,19 @@ export function normalizeShowcaseConfig(raw) {
       ];
     })
   );
-  // Avoid overlap for older saved layouts that do not have widgets.
-  const mergedLayout = {
-    ...mergedLayoutBase,
-    widgets: layout.widgets
-      ? mergedLayoutBase.widgets
-      : {
-          ...mergedLayoutBase.widgets,
-          y: mergedLayoutBase.footer.y + mergedLayoutBase.footer.h + 20,
-        },
-  };
 
   // Mobile layout: defaults to desktop layout if not yet saved
   const mobileLayoutRaw = cfg.mobileLayout && typeof cfg.mobileLayout === "object" ? cfg.mobileLayout : {};
   const mobileLayout = Object.fromEntries(
-    Object.entries(DEFAULT_LAYOUT).map(([key, base]) => {
+    Object.entries(DEFAULT_MOBILE_LAYOUT).map(([key, base]) => {
       const next = mobileLayoutRaw[key] || {};
-      const fallback = mergedLayout[key] || base;
       return [
         key,
         {
-          x: Number.isFinite(next.x) ? next.x : fallback.x,
-          y: Number.isFinite(next.y) ? next.y : fallback.y,
-          w: Number.isFinite(next.w) ? next.w : fallback.w,
-          h: Number.isFinite(next.h) ? next.h : fallback.h,
+          x: Number.isFinite(next.x) ? next.x : base.x,
+          y: Number.isFinite(next.y) ? next.y : base.y,
+          w: Number.isFinite(next.w) ? next.w : base.w,
+          h: Number.isFinite(next.h) ? next.h : base.h,
         },
       ];
     })
@@ -159,7 +197,13 @@ export function normalizeShowcaseConfig(raw) {
   const highlightStyles = highlights.map((_, i) => normalizeHighlightStylesRow(stylesFromCfg[i]));
 
   const appearanceMode = cfg.appearanceMode === "light" ? "light" : "dark";
-  const widgets = Array.isArray(cfg.widgets) ? cfg.widgets.map(normalizeWidget) : [];
+
+  // Widgets: use saved array or DEFAULT_WIDGETS
+  const widgetsRaw = Array.isArray(cfg.widgets) ? cfg.widgets : null;
+  const widgets = widgetsRaw === null
+    ? DEFAULT_WIDGETS.map((w) => ({ ...w }))
+    : widgetsRaw.map(normalizeWidget);
+
   const hiddenBlocksRaw = Array.isArray(cfg.hiddenBlocks) ? cfg.hiddenBlocks : [];
   const hiddenBlocks = hiddenBlocksRaw.filter((key) => BLOCK_KEYS.includes(key));
   const topHeader =

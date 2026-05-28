@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 function SectionTitle({ children }) {
   return (
@@ -102,7 +102,7 @@ function BlockStyleSection({ blockKey, blockStyles, updateBlockStyle, clearBlock
 }
 
 function PagePanel({
-  form, updateField, showcaseConfig,
+  form, updateField, tenantName, showcaseConfig,
   isLightMode, setAppearanceMode,
   currentTheme, applyPreset, PRESET_THEMES,
   DEFAULT_BLOCK_LABELS, restoreBlock,
@@ -192,11 +192,21 @@ function PagePanel({
       <Divider />
       <SectionTitle>Dados da Empresa</SectionTitle>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
-        <FieldInput label="Logo URL" value={form.logoUrl} onChange={(v) => updateField("logoUrl", v)} placeholder="https://..." />
-        <FieldInput label="Slogan" value={form.slogan} onChange={(v) => updateField("slogan", v)} placeholder="Seu novo endereço..." />
-        <FieldInput label="WhatsApp" value={form.whatsapp} onChange={(v) => updateField("whatsapp", v)} placeholder="5511999999999" />
-        <FieldInput label="Email" type="email" value={form.email} onChange={(v) => updateField("email", v)} placeholder="contato@..." />
+      <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginBottom: "12px" }}>
+        {[
+          { label: "Nome", value: tenantName },
+          { label: "WhatsApp", value: form.whatsapp },
+          { label: "E-mail", value: form.email },
+          { label: "Slogan", value: form.slogan },
+          { label: "Logo URL", value: form.logoUrl },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ padding: "7px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <span style={{ display: "block", fontSize: "9px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px" }}>{label}</span>
+            <span style={{ display: "block", fontSize: "12px", color: value ? "#cbd5e1" : "rgba(148,163,184,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {value || "—"}
+            </span>
+          </div>
+        ))}
       </div>
 
       {showcaseConfig.hiddenBlocks.filter((k) => k !== "topbar").length > 0 ? (
@@ -228,8 +238,8 @@ function BlockPanel({
   activeBlock, blockStyles, updateBlockStyle, clearBlockStyle,
   hideBlock, showcaseConfig,
   updateHighlightStyle, addHighlight, removeHighlight,
-  updateWidget, removeWidget, addWidget,
-  WIDGET_LIBRARY, DEFAULT_BLOCK_LABELS,
+  addWidget, WIDGET_LIBRARY, DEFAULT_BLOCK_LABELS,
+  activeWidgetData, updateActiveWidget, removeActiveWidget,
 }) {
   if (!activeBlock) {
     return (
@@ -241,6 +251,39 @@ function BlockPanel({
         <p style={{ fontSize: "13px", lineHeight: "1.6", margin: 0 }}>
           Clique em qualquer bloco para editar seus detalhes aqui.
         </p>
+      </div>
+    );
+  }
+
+  // Widget individual selecionado
+  if (activeBlock.startsWith("widget-") && activeWidgetData) {
+    const w = activeWidgetData;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <span style={{ fontSize: "13px", fontWeight: "700", color: "#fff" }}
+          dangerouslySetInnerHTML={{ __html: (w.title || "Widget").replace(/<[^>]*>/g, "").slice(0, 40) }}
+        />
+        <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+          Tipo: {w.type}
+        </span>
+        <Divider />
+        <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>Cor de Fundo</span>
+          <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: w.backgroundColor || "#1e293b", overflow: "hidden" }}>
+            <input type="color" value={w.backgroundColor || "#1e293b"} onChange={(e) => updateActiveWidget("backgroundColor", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
+          </div>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>Cor do Texto</span>
+          <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: w.color || "#f8fafc", overflow: "hidden" }}>
+            <input type="color" value={w.color || "#f8fafc"} onChange={(e) => updateActiveWidget("color", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
+          </div>
+        </label>
+        <button type="button" onClick={removeActiveWidget}
+          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#fca5a5", fontSize: "11px", cursor: "pointer", marginTop: "8px" }}
+        >
+          Remover Widget
+        </button>
       </div>
     );
   }
@@ -312,42 +355,6 @@ function BlockPanel({
         </>
       ) : null}
 
-      {activeBlock === "widgets" ? (
-        <>
-          <Divider />
-          <SectionTitle>Adicionar Widget</SectionTitle>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
-            {WIDGET_LIBRARY.map((template) => (
-              <button key={template.type} type="button" onClick={() => addWidget(template)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "var(--text-muted)", fontSize: "12px", cursor: "pointer", textAlign: "left" }}
-              >
-                + {template.title}
-              </button>
-            ))}
-          </div>
-
-          {showcaseConfig.widgets.length > 0 ? (
-            <>
-              <SectionTitle>Widgets Ativos</SectionTitle>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                {showcaseConfig.widgets.map((widget, index) => (
-                  <div key={widget.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)" }}>
-                    <span style={{ fontSize: "12px", color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                      dangerouslySetInnerHTML={{ __html: widget.title.replace(/<[^>]+>/g, "") }}
-                    />
-                    <button type="button" onClick={() => removeWidget(index)}
-                      style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", flexShrink: 0 }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : null}
-        </>
-      ) : null}
-
       {activeBlock === "properties" ? (
         <>
           <Divider />
@@ -365,6 +372,7 @@ function BlockPanel({
 export function BuilderSidePanel({
   activeBlock,
   form,
+  tenantName,
   showcaseConfig,
   blockStyles,
   currentTheme,
@@ -383,14 +391,15 @@ export function BuilderSidePanel({
   removeHighlight,
   updateHighlightStyle,
   addWidget,
-  removeWidget,
-  updateWidget,
+  activeWidgetData,
+  updateActiveWidget,
+  removeActiveWidget,
 }) {
-  const [activeTab, setActiveTab] = useState("page");
-
-  useEffect(() => {
-    if (activeBlock) setActiveTab("block");
-  }, [activeBlock]);
+  const contextLabel = activeBlock
+    ? activeBlock.startsWith("widget-")
+      ? "Widget"
+      : (DEFAULT_BLOCK_LABELS[activeBlock] || activeBlock)
+    : "Configurações";
 
   return (
     <div style={{
@@ -407,41 +416,14 @@ export function BuilderSidePanel({
       overflow: "hidden",
       alignSelf: "flex-start",
     }}>
-      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-        {[["page", "Página"], ["block", "Bloco"]].map(([tab, label]) => {
-          const isActive = activeTab === tab;
-          return (
-            <button key={tab} type="button" onClick={() => setActiveTab(tab)}
-              style={{
-                flex: 1, padding: "12px 8px", border: "none",
-                borderBottom: isActive ? "2px solid var(--accent, #818cf8)" : "2px solid transparent",
-                background: "transparent",
-                color: isActive ? "#fff" : "var(--text-muted)",
-                fontSize: "13px", fontWeight: isActive ? "600" : "400",
-                cursor: "pointer", transition: "all 0.2s",
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", gap: "8px", minHeight: "44px" }}>
+        <span style={{ fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.09em" }}>
+          {contextLabel}
+        </span>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "16px", scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
-        {activeTab === "page" ? (
-          <PagePanel
-            form={form}
-            updateField={updateField}
-            showcaseConfig={showcaseConfig}
-            isLightMode={isLightMode}
-            setAppearanceMode={setAppearanceMode}
-            currentTheme={currentTheme}
-            applyPreset={applyPreset}
-            PRESET_THEMES={PRESET_THEMES}
-            DEFAULT_BLOCK_LABELS={DEFAULT_BLOCK_LABELS}
-            restoreBlock={restoreBlock}
-          />
-        ) : (
+        {activeBlock ? (
           <BlockPanel
             activeBlock={activeBlock}
             blockStyles={blockStyles}
@@ -452,11 +434,26 @@ export function BuilderSidePanel({
             updateHighlightStyle={updateHighlightStyle}
             addHighlight={addHighlight}
             removeHighlight={removeHighlight}
-            updateWidget={updateWidget}
-            removeWidget={removeWidget}
             addWidget={addWidget}
             WIDGET_LIBRARY={WIDGET_LIBRARY}
             DEFAULT_BLOCK_LABELS={DEFAULT_BLOCK_LABELS}
+            activeWidgetData={activeWidgetData}
+            updateActiveWidget={updateActiveWidget}
+            removeActiveWidget={removeActiveWidget}
+          />
+        ) : (
+          <PagePanel
+            form={form}
+            updateField={updateField}
+            tenantName={tenantName}
+            showcaseConfig={showcaseConfig}
+            isLightMode={isLightMode}
+            setAppearanceMode={setAppearanceMode}
+            currentTheme={currentTheme}
+            applyPreset={applyPreset}
+            PRESET_THEMES={PRESET_THEMES}
+            DEFAULT_BLOCK_LABELS={DEFAULT_BLOCK_LABELS}
+            restoreBlock={restoreBlock}
           />
         )}
       </div>
