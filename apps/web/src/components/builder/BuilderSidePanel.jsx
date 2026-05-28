@@ -394,12 +394,44 @@ export function BuilderSidePanel({
   activeWidgetData,
   updateActiveWidget,
   removeActiveWidget,
+  collapsed = false,
+  onToggleCollapse,
 }) {
   const contextLabel = activeBlock
     ? activeBlock.startsWith("widget-")
       ? "Widget"
       : (DEFAULT_BLOCK_LABELS[activeBlock] || activeBlock)
     : "Configurações";
+
+  // Barra estreita quando recolhido: dá mais espaço ao preview e mantém um botão para expandir.
+  if (collapsed) {
+    return (
+      <div style={{
+        width: "40px",
+        flexShrink: 0,
+        background: "rgba(10, 15, 28, 0.97)",
+        backdropFilter: "blur(24px)",
+        borderLeft: "1px solid rgba(255,255,255,0.06)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        paddingTop: "12px",
+        gap: "16px",
+        position: "sticky",
+        top: "56px",
+        height: "calc(100vh - 56px)",
+        alignSelf: "flex-start",
+      }}>
+        <button type="button" onClick={onToggleCollapse} title="Expandir configurações de estilo"
+          style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+        </button>
+        <span style={{ writingMode: "vertical-rl", fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.12em", userSelect: "none" }}>
+          Configurações de estilo
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -416,10 +448,14 @@ export function BuilderSidePanel({
       overflow: "hidden",
       alignSelf: "flex-start",
     }}>
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", gap: "8px", minHeight: "44px" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "44px" }}>
         <span style={{ fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.09em" }}>
           {contextLabel}
         </span>
+        <button type="button" onClick={onToggleCollapse} title="Recolher painel"
+          style={{ width: "26px", height: "26px", borderRadius: "7px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+        </button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "16px", scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>

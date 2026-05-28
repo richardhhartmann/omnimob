@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import {
@@ -13,6 +13,15 @@ const SHOWCASE_FONT_FAMILIES = [
   "Inter","Playfair+Display","Montserrat","Raleway","Lato","Merriweather","Poppins",
 ];
 
+// Elemento interno (sem min-height) usado para medir a altura REAL de cada bloco.
+const SECTION_INNER_SEL = {
+  title: ".showcase-title-section",
+  highlights: ".showcase-highlights",
+  properties: "#destaques",
+  footer: ".showcase-footer",
+};
+const STACK_BLOCK_ORDER = ["header", "title", "highlights", "properties", "footer"];
+
 export function ShowcasePage() {
   const { tenantSlug } = useParams();
   const [payload, setPayload] = useState(null);
@@ -20,6 +29,11 @@ export function ShowcasePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
+  const [reflowTick, setReflowTick] = useState(0);
+  // Desktop: ajuste do bloco de imóveis (altura real do grid + deslocamento dos blocos abaixo).
+  const [propsShift, setPropsShift] = useState(null);
+  // Mobile: empilhamento vertical de todas as seções/widgets por conteúdo (coluna única).
+  const [mobileStack, setMobileStack] = useState(null);
 
   async function loadShowcaseData() {
     if (!tenantSlug) return;
@@ -45,7 +59,10 @@ export function ShowcasePage() {
   }, [tenantSlug]);
 
   useEffect(() => {
-    const handler = () => setIsMobileViewport(window.innerWidth < 768);
+    const handler = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+      setReflowTick((t) => t + 1);
+    };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
@@ -57,6 +74,58 @@ export function ShowcasePage() {
     document.head.appendChild(link);
     return () => { try { document.head.removeChild(link); } catch {} };
   }, []);
+
+  // O layout salvo (posições absolutas) é medido no editor, em larguras diferentes
+  // das do visitante. Aqui medimos o conteúdo real e ajustamos as posições:
+  //  - Desktop: mantém o layout livre, só desloca os blocos abaixo de "imóveis"
+  //    conforme a grade cresce/encolhe (evita sobreposição e vão gigante).
+  //  - Mobile: empilha tudo numa coluna única por conteúdo (os widgets não têm
+  //    posição mobile própria, então cairiam em cima dos cards de imóveis).
+  useLayoutEffect(() => {
+    if (!payload) { setPropsShift(null); setMobileStack(null); return; }
+    const cfg = normalizeShowcaseConfig(payload.tenant?.showcaseConfig);
+    const hidden = cfg.hiddenBlocks || [];
+    const measureInner = (sel) => {
+      const el = sel ? document.querySelector(sel) : null;
+      return el ? Math.ceil(el.getBoundingClientRect().height) : null;
+    };
+
+    if (isMobileViewport) {
+      setPropsShift(null);
+      const al = cfg.mobileLayout || {};
+      const items = [];
+      for (const k of STACK_BLOCK_ORDER) {
+        if (hidden.includes(k)) continue;
+        const lay = al[k] || {};
+        const h = k === "header" ? (lay.h || 80) : (measureInner(SECTION_INNER_SEL[k]) ?? lay.h ?? 120);
+        items.push({ key: k, y: lay.y ?? 0, h });
+      }
+      for (const w of cfg.widgets || []) {
+        if (w.hidden) continue;
+        items.push({ key: `widget-${w.id}`, y: w.y ?? 1080, h: w.h ?? 200 });
+      }
+      items.sort((a, b) => a.y - b.y);
+      const GAP = 22;
+      let cursor = 0;
+      const stack = {};
+      for (const it of items) {
+        stack[it.key] = { y: cursor, h: it.h };
+        cursor += it.h + GAP;
+      }
+      setMobileStack({ ...stack, __bottom: cursor });
+      return;
+    }
+
+    // Desktop
+    setMobileStack(null);
+    if (hidden.includes("properties")) { setPropsShift(null); return; }
+    const propsLayout = (cfg.layout || {}).properties;
+    const gridH = measureInner("#destaques");
+    if (!propsLayout || gridH == null) { setPropsShift(null); return; }
+    const naturalH = gridH + 56;
+    const delta = naturalH - (propsLayout.h || 0);
+    setPropsShift(Math.abs(delta) < 8 ? null : { y: propsLayout.y || 0, h: naturalH, delta });
+  }, [payload, isMobileViewport, reflowTick]);
 
   function nextImage(propertyId, total) {
     setCarouselIndexes((prev) => ({
@@ -108,19 +177,44 @@ export function ShowcasePage() {
   const widgetMax = showcaseConfig.widgets.length > 0
     ? Math.max(...showcaseConfig.widgets.filter(w => !w.hidden).map(w => (w.y || 0) + (w.h || 0)))
     : 0;
-  const canvasHeight = Math.max(1800, layoutMax, widgetMax) + 40;
+  const canvasHeight = mobileStack
+    ? mobileStack.__bottom + 60
+    : Math.max(1800, layoutMax, widgetMax) + 40 + (propsShift ? propsShift.delta : 0);
+
+  // Desktop: desloca os blocos abaixo de "imóveis" conforme a grade real.
+  function shiftedY(y) {
+    return propsShift && (y || 0) > propsShift.y ? (y || 0) + propsShift.delta : (y || 0);
+  }
+
+  // Posição final do widget (mobile = coluna única empilhada; desktop = layout salvo + shift).
+  function widgetPos(w) {
+    const ms = mobileStack && mobileStack[`widget-${w.id}`];
+    if (ms) return { left: 0, top: ms.y, width: 100, minHeight: ms.h };
+    return { left: w.x ?? 0, top: shiftedY(w.y ?? 1080), width: w.w ?? 50, minHeight: w.h ?? 200 };
+  }
 
   function sectionCombinedStyle(key) {
     const bs = blockStyles[key];
     const hasBanner = blockHasBackgroundImage(bs);
     const blockLayout = activeLayout[key] || layout[key];
 
+    let topY = blockLayout.y;
+    let minH = blockLayout.h;
+    const ms = mobileStack && mobileStack[key];
+    if (ms) {
+      topY = ms.y;
+      minH = ms.h;
+    } else if (propsShift) {
+      if (key === "properties") minH = propsShift.h;
+      else topY = shiftedY(blockLayout.y);
+    }
+
     const layoutPart = {
       left: hasBanner ? "calc(50% - 50vw)" : `${blockLayout.x}%`,
-      top: `${blockLayout.y}px`,
+      top: `${topY}px`,
       width: hasBanner ? "100vw" : `${blockLayout.w}%`,
       maxWidth: hasBanner ? "100vw" : undefined,
-      minHeight: `${blockLayout.h}px`,
+      minHeight: `${minH}px`,
       boxSizing: hasBanner ? "border-box" : undefined,
       zIndex: hasBanner ? 0 : 10,
     };
@@ -328,10 +422,10 @@ export function ShowcasePage() {
           className="showcase-layout-block"
           style={{
             position: "absolute",
-            left: `${widget.x ?? 0}%`,
-            top: `${widget.y ?? 1080}px`,
-            width: `${widget.w ?? 50}%`,
-            minHeight: `${widget.h ?? 200}px`,
+            left: `${widgetPos(widget).left}%`,
+            top: `${widgetPos(widget).top}px`,
+            width: `${widgetPos(widget).width}%`,
+            minHeight: `${widgetPos(widget).minHeight}px`,
             zIndex: 10,
             boxSizing: "border-box",
             padding: "8px",

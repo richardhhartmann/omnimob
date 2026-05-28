@@ -13,12 +13,14 @@ export const DEFAULT_HIGHLIGHTS = [
   },
 ];
 
+// Ritmo vertical consistente (~60px entre blocos) e sem sobreposição com os
+// widgets padrão, para que "Resetar Tudo" gere uma página espaçada e moderna.
 export const DEFAULT_LAYOUT = {
-  header:     { x: 0, y: 0,    w: 100, h: 80  },
-  title:      { x: 0, y: 120,  w: 100, h: 240 },
-  highlights: { x: 0, y: 400,  w: 100, h: 220 },
-  properties: { x: 0, y: 680,  w: 100, h: 600 },
-  footer:     { x: 0, y: 1900, w: 100, h: 180 },
+  header:     { x: 0, y: 0,    w: 100, h: 90  },
+  title:      { x: 0, y: 150,  w: 100, h: 260 },
+  highlights: { x: 0, y: 470,  w: 100, h: 240 },
+  properties: { x: 0, y: 770,  w: 100, h: 640 },
+  footer:     { x: 0, y: 2360, w: 100, h: 220 },
 };
 
 export const DEFAULT_MOBILE_LAYOUT = {
@@ -36,7 +38,7 @@ export const DEFAULT_WIDGETS = [
     title: "Nossos Números",
     content: "200+|Imóveis vendidos|15 anos|De experiência|4.9★|Avaliação média",
     ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
-    x: 0, y: 1080, w: 100, h: 230, hidden: false,
+    x: 0, y: 1470, w: 100, h: 240, hidden: false,
   },
   {
     id: "default-testimonial",
@@ -44,7 +46,7 @@ export const DEFAULT_WIDGETS = [
     title: "— Maria Silva, Compradora",
     content: "\"Encontrei o imóvel dos meus sonhos em menos de uma semana. Atendimento excepcional e sem burocracia!\"",
     ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
-    x: 0, y: 1330, w: 49, h: 210, hidden: false,
+    x: 0, y: 1770, w: 49, h: 240, hidden: false,
   },
   {
     id: "default-hours",
@@ -52,7 +54,7 @@ export const DEFAULT_WIDGETS = [
     title: "Horário de Atendimento",
     content: "Segunda a Sexta: 09h às 18h<br>Sábados: 09h às 13h<br>Domingos e Feriados: Fechado",
     ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
-    x: 51, y: 1330, w: 49, h: 210, hidden: false,
+    x: 51, y: 1770, w: 49, h: 240, hidden: false,
   },
   {
     id: "default-cta",
@@ -62,7 +64,7 @@ export const DEFAULT_WIDGETS = [
     ctaLabel: "Falar no WhatsApp",
     ctaUrl: "https://wa.me/",
     backgroundColor: "", color: "",
-    x: 0, y: 1560, w: 100, h: 200, hidden: false,
+    x: 0, y: 2070, w: 100, h: 230, hidden: false,
   },
 ];
 

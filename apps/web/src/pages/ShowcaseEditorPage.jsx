@@ -193,6 +193,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     document.head.appendChild(link);
     return () => { try { document.head.removeChild(link); } catch {} };
   }, []);
+
   const saveTimerRef = useRef(null);
   const canvasRef = useRef(null);
   const actionRef = useRef(null);
@@ -202,6 +203,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const redoStackRef = useRef([]);
   const undoFnRef = useRef(null);
   const redoFnRef = useRef(null);
+  // Modos de preview que ainda precisam de reflow (preenchido ao resetar).
+  const reflowPendingRef = useRef(new Set());
 
   const [activeBlock, setActiveBlock] = useState(null);
   const [dragState, setDragState] = useState(null);
@@ -214,7 +217,19 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const formatToolbarRef = useRef(null);
   const isFormattingRef = useRef(false);
   const [previewMode, setPreviewMode] = useState("desktop");
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("domus-builder-onboarded"));
+
+  // Ao trocar de preview (desktop/mobile), reempilha aquele modo se ainda estiver
+  // pendente de um reset — assim o mobile também fica sem sobreposição.
+  // O canvas remonta e roda a animação de entrada (builderModeIn, 0.35s) que aplica
+  // transform: scale(); medir durante ela distorce as alturas, então esperamos terminar.
+  useEffect(() => {
+    if (!reflowPendingRef.current.has(previewMode)) return;
+    const t = setTimeout(() => reflowToContentHeights(), 420);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewMode]);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -443,6 +458,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ...prev,
       [layoutKey]: Object.fromEntries(Object.entries(DEFAULT_LAYOUT).map(([k, v]) => [k, { ...v }])),
     }));
+    reflowPendingRef.current = new Set([previewMode]);
+    scheduleReflow();
   }
 
   function resetAllBuilder() {
@@ -454,7 +471,75 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         showcaseSubheadline: "",
         showcaseConfig: normalizeShowcaseConfig(null),
       }));
+      // Ambos os modos precisam ser reempilhados; o ativo agora, o outro ao ser exibido.
+      reflowPendingRef.current = new Set(["desktop", "mobile"]);
+      scheduleReflow();
     }
+  }
+
+  // Aguarda o DOM repintar com o conteúdo resetado antes de medir/reposicionar.
+  function scheduleReflow() {
+    requestAnimationFrame(() => requestAnimationFrame(() => reflowToContentHeights()));
+  }
+
+  // Mede a altura REAL renderizada de cada bloco/widget no canvas e reempilha tudo
+  // sem sobreposição. Necessário porque o bloco de imóveis cresce conforme a
+  // quantidade de anúncios, enquanto o layout guarda apenas uma altura fixa.
+  function reflowToContentHeights() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const GAP = 56; // respiro vertical entre seções empilhadas
+    const layoutKey = previewMode === "mobile" ? "mobileLayout" : "layout";
+
+    const measured = {};
+    canvas.querySelectorAll("[data-reflow-key]").forEach((el) => {
+      const key = el.getAttribute("data-reflow-key");
+      if (key) measured[key] = Math.ceil(el.getBoundingClientRect().height);
+    });
+    if (Object.keys(measured).length === 0) return;
+    reflowPendingRef.current.delete(previewMode);
+
+    updateShowcaseConfig((prev) => {
+      const baseLayout = prev[layoutKey] || {};
+      const widgets = prev.widgets || [];
+      const map = {};
+      const keys = [];
+
+      // Blocos fixos (header/title/highlights/properties/footer)
+      for (const k of Object.keys(DEFAULT_BLOCK_LABELS)) {
+        if (prev.hiddenBlocks?.includes(k)) continue;
+        if (measured[k] == null) continue;
+        const src = baseLayout[k] || DEFAULT_LAYOUT[k] || { x: 0, y: 0, w: 100, h: 200 };
+        // Infla a altura com o GAP só para o cálculo de empilhamento.
+        map[k] = { x: src.x ?? 0, y: src.y ?? 0, w: src.w ?? 100, h: measured[k] + GAP };
+        keys.push(k);
+      }
+      // Widgets
+      widgets.forEach((w) => {
+        if (w.hidden) return;
+        const wk = `widget-${w.id}`;
+        if (measured[wk] == null) return;
+        map[wk] = { x: w.x ?? 0, y: w.y ?? 0, w: w.w ?? 50, h: measured[wk] + GAP };
+        keys.push(wk);
+      });
+      if (keys.length === 0) return prev;
+
+      const placed = cascadePushLayout(map, keys);
+
+      const newLayout = { ...baseLayout };
+      for (const k of Object.keys(DEFAULT_BLOCK_LABELS)) {
+        if (!placed[k]) continue;
+        // Guarda a posição empilhada, mas a altura REAL (sem o GAP inflado).
+        newLayout[k] = { ...newLayout[k], x: placed[k].x, y: placed[k].y, w: placed[k].w, h: measured[k] };
+      }
+      const newWidgets = widgets.map((w) => {
+        const wk = `widget-${w.id}`;
+        if (!placed[wk]) return w;
+        return { ...w, x: placed[wk].x, y: placed[wk].y, h: measured[wk] };
+      });
+
+      return { ...prev, [layoutKey]: newLayout, widgets: newWidgets };
+    });
   }
 
   function isBlockVisible(blockKey) {
@@ -963,9 +1048,10 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("header") ? (
-        <section 
-          className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}`} 
-          style={{ ...mergedBlockWrapper("header"), zIndex: 9999 }} 
+        <section
+          data-reflow-key="header"
+          className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}`}
+          style={{ ...mergedBlockWrapper("header"), zIndex: 9999 }}
           onClick={() => setActiveBlock("header")}
         >
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("header", "drag", event)}>
@@ -1007,7 +1093,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("title") ? (
-        <section className={`builder-block${sectionBgClass("title")} ${activeBlock === "title" ? "is-active" : ""}`} style={mergedBlockWrapper("title")} onClick={() => setActiveBlock("title")}>
+        <section data-reflow-key="title" className={`builder-block${sectionBgClass("title")} ${activeBlock === "title" ? "is-active" : ""}`} style={mergedBlockWrapper("title")} onClick={() => setActiveBlock("title")}>
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("title", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Hero / Título
@@ -1027,7 +1113,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("highlights") ? (
-        <section className={`builder-block${sectionBgClass("highlights")} ${activeBlock === "highlights" ? "is-active" : ""}`} style={mergedBlockWrapper("highlights")} onClick={() => setActiveBlock("highlights")}>
+        <section data-reflow-key="highlights" className={`builder-block${sectionBgClass("highlights")} ${activeBlock === "highlights" ? "is-active" : ""}`} style={mergedBlockWrapper("highlights")} onClick={() => setActiveBlock("highlights")}>
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("highlights", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Destaques
@@ -1078,7 +1164,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("properties") ? (
-        <section className={`builder-block${sectionBgClass("properties")} ${activeBlock === "properties" ? "is-active" : ""}`} style={mergedBlockWrapper("properties")} onClick={() => setActiveBlock("properties")}>
+        <section data-reflow-key="properties" className={`builder-block${sectionBgClass("properties")} ${activeBlock === "properties" ? "is-active" : ""}`} style={mergedBlockWrapper("properties")} onClick={() => setActiveBlock("properties")}>
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("properties", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Lista de Imóveis
@@ -1130,6 +1216,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           return (
             <section
               key={widget.id}
+              data-reflow-key={widgetKey}
               className={`builder-block ${isActiveWidget ? "is-active" : ""}`}
               style={{
                 position: "absolute",
@@ -1214,6 +1301,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         {isBlockVisible("footer") ? (
         <section
           id="footer"
+          data-reflow-key="footer"
           className={`builder-block${sectionBgClass("footer")} ${activeBlock === "footer" ? "is-active" : ""}`}
           style={mergedBlockWrapper("footer")}
           onClick={() => setActiveBlock("footer")}
@@ -1491,7 +1579,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
           {/* Widget FAB — offset to avoid side panel overlap */}
           {true ? (
-            <div className="widget-fab-shell" style={{ right: "calc(272px + 48px)" }}>
+            <div className="widget-fab-shell" style={{ right: panelCollapsed ? "calc(40px + 24px)" : "calc(272px + 48px)", transition: "right 0.25s ease" }}>
               {widgetMenuOpen ? (
                 <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: -1, animation: "fadeIn 0.2s" }} onClick={() => setWidgetMenuOpen(false)} />
               ) : null}
@@ -1536,6 +1624,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
         {/* Side panel */}
         <BuilderSidePanel
+          collapsed={panelCollapsed}
+          onToggleCollapse={() => setPanelCollapsed((v) => !v)}
           activeBlock={activeBlock}
           form={form}
           tenantName={session?.tenant?.name || ""}
