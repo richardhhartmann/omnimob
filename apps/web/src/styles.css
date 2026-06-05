@@ -47,7 +47,9 @@ body {
   gap: 32px;
   position: sticky;
   top: 0;
+  align-self: start;
   height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebar-header h1 {
@@ -1034,7 +1036,9 @@ button:disabled {
   scrollbar-color: var(--glass-highlight) transparent;
 }
 
-.showcase-theme-light {
+/* O fundo/cor do tema claro NÃO se aplica ao container do editor (.showcase-editor-full),
+   apenas à vitrine pública e ao canvas de preview — assim o chrome do admin segue escuro. */
+.showcase-theme-light:not(.showcase-editor-full) {
   color: #0f172a;
   background: linear-gradient(135deg, #f8fafc, #e2e8f0, #dbeafe);
 }
@@ -1137,6 +1141,7 @@ button:disabled {
 
 .luxury-nav-link {
   position: relative;
+  color: inherit;
 }
 
 .luxury-nav-link::after {
@@ -1335,15 +1340,21 @@ button:disabled {
   min-width: 80px;
 }
 
-.showcase-theme-light,
-.showcase-theme-light .showcase-builder-canvas,
-.showcase-body.showcase-theme-light {
+/* Vitrine pública (fora do editor) e o canvas de preview ficam claros.
+   O container do editor é excluído para o chrome do admin permanecer escuro. */
+.showcase-theme-light:not(.showcase-editor-full),
+.showcase-theme-light .showcase-builder-canvas {
   background-color: #f8fafc !important;
   background-image: none !important;
   min-height: 100vh;
 }
 
-body:has(.showcase-theme-light) {
+.showcase-theme-light .showcase-builder-canvas {
+  color: #0f172a;
+}
+
+/* Fundo claro do body só quando NÃO estamos no editor (página pública). */
+body:has(.showcase-theme-light):not(:has(.showcase-editor-full)) {
   background-color: #f8fafc !important;
   background-image: none !important;
 }

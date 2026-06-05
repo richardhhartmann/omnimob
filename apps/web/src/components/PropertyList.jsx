@@ -197,28 +197,56 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
 
 // ─── Badges de publicação social ─────────────────────────────────────────────
 
+const SOCIAL_PLATFORMS = [
+  {
+    channel: "FACEBOOK",
+    label: "Facebook",
+    brand: "#1877f2",
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>,
+  },
+  {
+    channel: "INSTAGRAM",
+    label: "Instagram",
+    brand: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)",
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>,
+  },
+];
+
 function SocialBadges({ publications }) {
   return (
-    <div style={{ display: "flex", gap: "5px" }}>
-      {["FACEBOOK", "INSTAGRAM"].map(channel => {
+    <div style={{ display: "flex", gap: "7px" }}>
+      {SOCIAL_PLATFORMS.map(({ channel, label, brand, icon }) => {
         const pub = publications?.find(p => p.channel === channel);
         const ok = pub?.status === "PUBLISHED";
         const fail = pub?.status === "FAILED";
-        const label = channel === "FACEBOOK" ? "FB" : "IG";
-        const title = channel === "FACEBOOK" ? "Facebook" : "Instagram";
-        const dotColor = ok ? "#4ade80" : fail ? "#f87171" : "rgba(255,255,255,0.18)";
         return (
           <span key={channel}
-            title={`${title}: ${ok ? "Publicado" : fail ? "Falhou" : "Não publicado"}`}
+            title={`${label}: ${ok ? "Publicado" : fail ? "Falhou" : "Não publicado"}`}
             style={{
-              display: "inline-flex", alignItems: "center", gap: "3px",
-              padding: "2px 7px", borderRadius: "999px", fontSize: "10px", fontWeight: "600",
-              background: ok ? "rgba(34,197,94,0.12)" : fail ? "rgba(239,68,68,0.1)" : "rgba(255,255,255,0.04)",
-              border: `1px solid ${ok ? "rgba(34,197,94,0.3)" : fail ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.08)"}`,
-              color: ok ? "#4ade80" : fail ? "#fca5a5" : "rgba(255,255,255,0.22)",
+              position: "relative",
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: "28px", height: "28px", borderRadius: "9px",
+              background: ok ? brand : "rgba(255,255,255,0.04)",
+              border: ok ? "none" : "1px solid rgba(255,255,255,0.08)",
+              color: ok ? "#fff" : "rgba(255,255,255,0.28)",
+              filter: fail ? "grayscale(1)" : "none",
+              boxShadow: ok ? "0 2px 8px rgba(0,0,0,0.25)" : "none",
+              transition: "all 0.2s",
             }}>
-            <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
-            {label}
+            {icon}
+            {(ok || fail) && (
+              <span style={{
+                position: "absolute", top: "-3px", right: "-3px",
+                width: "12px", height: "12px", borderRadius: "50%",
+                background: ok ? "#22c55e" : "#ef4444",
+                border: "2px solid #12121e",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                  {ok ? <polyline points="20 6 9 17 4 12" /> : <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>}
+                </svg>
+              </span>
+            )}
           </span>
         );
       })}

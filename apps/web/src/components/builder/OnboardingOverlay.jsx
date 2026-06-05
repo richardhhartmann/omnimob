@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+
 export function OnboardingOverlay({ onDismiss }) {
   const tips = [
     { icon: "🖱️", title: "Clique para selecionar", desc: "Clique em qualquer bloco do canvas para editá-lo. Os controles de estilo aparecem no painel direito." },
@@ -7,7 +9,7 @@ export function OnboardingOverlay({ onDismiss }) {
     { icon: "⌘Z", title: "Desfazer / Refazer", desc: "Ctrl+Z desfaz e Ctrl+Y (ou Ctrl+Shift+Z) refaz qualquer ação no editor." },
   ];
 
-  return (
+  return createPortal(
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(6px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}
       onClick={onDismiss}
@@ -43,6 +45,7 @@ export function OnboardingOverlay({ onDismiss }) {
           Entendido — vamos começar!
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

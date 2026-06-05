@@ -44,6 +44,13 @@ enum AndamentoImovel {
   EM_CONSTRUCAO
 }
 
+enum StatusPagamento {
+  TRIAL
+  EM_DIA
+  ATRASADO
+  CANCELADO
+}
+
 // ─── Tenant ──────────────────────────────────────────────────────────────────
 
 model Tenant {
@@ -72,6 +79,10 @@ model Tenant {
   facebookPageName    String?
   instagramBusinessId String?
   ativo               Boolean  @default(true)
+  plano               String?
+  statusPagamento     StatusPagamento @default(TRIAL)
+  proximoVencimento   DateTime?
+  valorMensal         Decimal?        @db.Decimal(10, 2)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -83,6 +94,20 @@ model Tenant {
   vendas       Venda[]
 
   @@map("tb_tenants")
+}
+
+// ─── Super Admin (acesso ao painel da Domus, fora dos tenants) ────────────────
+
+model SuperAdmin {
+  id        String   @id @default(cuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tb_super_admin")
 }
 
 // ─── Cargo (substitui o enum UserRole) ───────────────────────────────────────
