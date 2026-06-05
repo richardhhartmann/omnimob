@@ -18,8 +18,13 @@ export const createPropertySchema = z.object({
   parkingSpots: z.number().int().min(0),
   suites: z.number().int().min(0),
   squareFootage: z.number().positive(),
+  finalidade: z.enum(["RESIDENCIAL", "COMERCIAL"]).nullable().optional(),
+  areaConstruida: z.number().nonnegative().nullable().optional(),
+  areaPrivativa: z.number().nonnegative().nullable().optional(),
+  areaTotal: z.number().nonnegative().nullable().optional(),
   andamento: z.nativeEnum(AndamentoImovel).nullable().optional(),
   aceitaPermuta: z.boolean().optional().default(false),
+  comodidades: z.record(z.boolean()).nullable().optional(),
   status: z.nativeEnum(PropertyStatus).optional().default(PropertyStatus.DRAFT),
 });
 

@@ -8,6 +8,7 @@ import {
   sectionSurfaceStyle,
 } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
+import { comodidadesAtivas } from "../utils/comodidades";
 
 const SHOWCASE_FONT_FAMILIES = [
   "Inter","Playfair+Display","Montserrat","Raleway","Lato","Merriweather","Poppins",
@@ -305,6 +306,24 @@ export function ShowcasePage() {
                         {p.bedrooms ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcBed />{p.bedrooms} qto{p.bedrooms !== 1 ? "s" : ""}{p.suites ? ` · ${p.suites} suíte${p.suites !== 1 ? "s" : ""}` : ""}</span> : null}
                         {p.parkingSpots ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcCar />{p.parkingSpots} vaga{p.parkingSpots !== 1 ? "s" : ""}</span> : null}
                       </div>
+                      {(() => {
+                        const ativas = comodidadesAtivas(p.comodidades);
+                        if (ativas.length === 0) return null;
+                        const visiveis = ativas.slice(0, 6);
+                        const restantes = ativas.length - visiveis.length;
+                        return (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
+                            {visiveis.map((c) => (
+                              <span key={c.key} title={c.label} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>
+                                <span style={{ fontSize: "13px", lineHeight: 1 }}>{c.icon}</span>{c.label}
+                              </span>
+                            ))}
+                            {restantes > 0 && (
+                              <span style={{ display: "flex", alignItems: "center", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>+{restantes}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="card-price-wrapper">
                         <div>
                           <span className="price-label">Valor</span>

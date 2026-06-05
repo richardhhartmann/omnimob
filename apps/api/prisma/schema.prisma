@@ -240,8 +240,13 @@ model Property {
   parkingSpots  Int            @default(0)
   suites        Int            @default(0)
   squareFootage Float          @default(0)
+  finalidade    String?        // RESIDENCIAL | COMERCIAL
+  areaConstruida Float?        @map("area_construida")
+  areaPrivativa Float?         @map("area_privativa")
+  areaTotal     Float?         @map("area_total")
   andamento     AndamentoImovel?
   aceitaPermuta Boolean         @default(false) @map("aceita_permuta")
+  comodidades   Json?           // comodidades da regiao detectadas pelo CEP (ex.: { possuiMercado: true })
   status        PropertyStatus @default(DRAFT)
   viewCount     Int            @default(0)
   leadCount     Int            @default(0)

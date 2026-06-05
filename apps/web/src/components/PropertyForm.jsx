@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
+import { COMODIDADES, EMPTY_COMODIDADES, OSM_TO_KEY } from "../utils/comodidades.js";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -22,6 +23,63 @@ function parseCurrencyBRL(rawValue) {
   return Number(digits) / 100;
 }
 
+// ─── Enriquecimento de endereço por CEP (ViaCEP → Nominatim → Overpass) ────────
+
+// Converte um endereço em latitude/longitude usando o Nominatim (OpenStreetMap).
+// Tenta primeiro com logradouro; se falhar, tenta só pelo bairro.
+async function geocodeEndereco({ logradouro, bairro, cidade, uf }) {
+  const tentativas = [
+    [logradouro, bairro, cidade, uf, "Brasil"].filter(Boolean).join(", "),
+    [bairro, cidade, uf, "Brasil"].filter(Boolean).join(", "),
+  ].filter((q) => q && q.length > "Brasil".length);
+
+  for (const q of tentativas) {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&limit=1`;
+    const res = await fetch(url, { headers: { "Accept-Language": "pt-BR" } });
+    if (!res.ok) continue;
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+    }
+  }
+  return null;
+}
+
+// Consulta o Overpass API por pontos de interesse num raio de 2 km.
+async function buscarPois(lat, lon) {
+  const query = `[out:json];
+(
+  node(around:2000,${lat},${lon})["amenity"];
+  node(around:2000,${lat},${lon})["shop"];
+  node(around:2000,${lat},${lon})["tourism"];
+  node(around:2000,${lat},${lon})["leisure"];
+);
+out body;`;
+
+  const res = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    body: query,
+  });
+  if (!res.ok) throw new Error("Falha ao consultar pontos de interesse.");
+  const data = await res.json();
+  return Array.isArray(data.elements) ? data.elements : [];
+}
+
+// Analisa os POIs e retorna quais comodidades existem na região (sempre true).
+function detectarComodidades(elements) {
+  const detectadas = {};
+  for (const el of elements) {
+    const tags = el.tags || {};
+    for (const valor of [tags.amenity, tags.shop, tags.tourism, tags.leisure]) {
+      const key = OSM_TO_KEY[valor];
+      if (key) detectadas[key] = true;
+    }
+  }
+  return detectadas;
+}
+
 const EMPTY = {
   tipoImovelId: "",
   atributosIds: [],
@@ -37,9 +95,14 @@ const EMPTY = {
   parkingSpots: "",
   suites: "",
   squareFootage: "",
+  finalidade: "RESIDENCIAL",
+  areaConstruida: "",
+  areaPrivativa: "",
+  areaTotal: "",
   andamento: "PRONTO_PARA_MORAR",
   aceitaPermuta: false,
   status: "ACTIVE",
+  comodidades: { ...EMPTY_COMODIDADES },
 };
 
 const STEPS = [
@@ -523,6 +586,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
+  const [comodidadesLoading, setComodidadesLoading] = useState(false);
+  const [comodidadesMsg, setComodidadesMsg] = useState("");
   // images: Array<{ id: string, file: File, previewUrl: string }>
   const [images, setImages] = useState([]);
   const [tipos, setTipos] = useState([]);
@@ -613,10 +678,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       parkingSpots: initialData.parkingSpots != null ? String(initialData.parkingSpots) : "",
       suites: initialData.suites != null ? String(initialData.suites) : "",
       squareFootage: initialData.squareFootage != null ? String(initialData.squareFootage) : "",
+      finalidade: initialData.finalidade || "",
+      areaConstruida: initialData.areaConstruida != null ? String(initialData.areaConstruida) : "",
+      areaPrivativa: initialData.areaPrivativa != null ? String(initialData.areaPrivativa) : "",
+      areaTotal: initialData.areaTotal != null ? String(initialData.areaTotal) : "",
       andamento: initialData.andamento || "",
       aceitaPermuta: Boolean(initialData.aceitaPermuta),
       status: initialData.status || "DRAFT",
+      comodidades: { ...EMPTY_COMODIDADES, ...(initialData.comodidades || {}) },
     });
+    setComodidadesMsg("");
     setStep(0);
   }, [initialData]);
 
@@ -677,6 +748,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
         return "Quartos, vagas e suítes devem ser números inteiros ≥ 0.";
       const sqft = parseFloat(form.squareFootage);
       if (!Number.isFinite(sqft) || sqft <= 0) return "Informe a metragem (m²).";
+      const areas = [
+        ["área construída", form.areaConstruida],
+        ["área privativa", form.areaPrivativa],
+        ["área total", form.areaTotal],
+      ];
+      for (const [nome, valor] of areas) {
+        if (valor === "" || valor == null) continue;
+        const n = parseFloat(valor);
+        if (!Number.isFinite(n) || n < 0) return `Informe um valor válido para ${nome} (m²).`;
+      }
     }
     return null;
   }
@@ -733,9 +814,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       parkingSpots: Number(form.parkingSpots),
       suites: Number(form.suites),
       squareFootage: parseFloat(form.squareFootage),
+      finalidade: form.finalidade || null,
+      areaConstruida: form.areaConstruida !== "" ? parseFloat(form.areaConstruida) : null,
+      areaPrivativa: form.areaPrivativa !== "" ? parseFloat(form.areaPrivativa) : null,
+      areaTotal: form.areaTotal !== "" ? parseFloat(form.areaTotal) : null,
       andamento: form.andamento || null,
       aceitaPermuta: Boolean(form.aceitaPermuta),
       status: form.status,
+      comodidades: form.comodidades,
       imageFiles: images.map((img) => img.file),
     });
 
@@ -772,11 +858,56 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
         city: data.localidade || prev.city,
         state: data.uf || prev.state,
       }));
+      // Enriquece em segundo plano: geocodifica e detecta comodidades da região.
+      enriquecerComodidades({
+        logradouro: data.logradouro,
+        bairro: data.bairro,
+        cidade: data.localidade,
+        uf: data.uf,
+      });
     } catch (err) {
       setError(err.message || "Não foi possível buscar o CEP.");
     } finally {
       setCepLoading(false);
     }
+  }
+
+  // Geocodifica o endereço, busca POIs próximos e marca as comodidades
+  // encontradas. Nunca desmarca o que já estava marcado.
+  async function enriquecerComodidades({ logradouro, bairro, cidade, uf }) {
+    if (!cidade || !uf) return;
+    setComodidadesLoading(true);
+    setComodidadesMsg("");
+    try {
+      const coords = await geocodeEndereco({ logradouro, bairro, cidade, uf });
+      if (!coords) {
+        setComodidadesMsg("Não foi possível localizar as coordenadas deste endereço.");
+        return;
+      }
+      const pois = await buscarPois(coords.lat, coords.lon);
+      const detectadas = detectarComodidades(pois);
+      const qtd = Object.keys(detectadas).length;
+      setForm((prev) => ({
+        ...prev,
+        comodidades: { ...prev.comodidades, ...detectadas },
+      }));
+      setComodidadesMsg(
+        qtd > 0
+          ? `${qtd} tipo(s) de comodidade detectado(s) num raio de 2 km.`
+          : "Nenhuma comodidade detectada nas proximidades."
+      );
+    } catch {
+      setComodidadesMsg("Não foi possível analisar as comodidades da região.");
+    } finally {
+      setComodidadesLoading(false);
+    }
+  }
+
+  function toggleComodidade(key) {
+    setForm((prev) => ({
+      ...prev,
+      comodidades: { ...prev.comodidades, [key]: !prev.comodidades?.[key] },
+    }));
   }
 
   async function handlePublish(platform) {
@@ -884,17 +1015,67 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               <Field label="Estado (UF)">
                 <input style={{ ...inputStyle, maxWidth: "100px", textTransform: "uppercase" }} placeholder="GO" maxLength={2} value={form.state} onChange={(e) => set("state", e.target.value.toUpperCase())} disabled={disabled} />
               </Field>
+
+              {/* Comodidades da região — detectadas automaticamente pelo CEP */}
+              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "4px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-muted)" }}>
+                    Comodidades da região
+                  </span>
+                  {comodidadesLoading ? (
+                    <span style={{ fontSize: "12px", color: "rgba(99,102,241,1)" }}>Analisando proximidades…</span>
+                  ) : comodidadesMsg ? (
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{comodidadesMsg}</span>
+                  ) : null}
+                </div>
+                <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", opacity: 0.7, marginBottom: "12px" }}>
+                  Preenchido automaticamente a partir do CEP. Você pode ajustar manualmente.
+                </span>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "8px" }}>
+                  {COMODIDADES.map((c) => {
+                    const checked = Boolean(form.comodidades?.[c.key]);
+                    return (
+                      <label key={c.key} style={{
+                        display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
+                        borderRadius: "8px", cursor: disabled ? "not-allowed" : "pointer",
+                        border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                        background: checked ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.02)",
+                        transition: "all 0.15s ease", fontSize: "13px", userSelect: "none",
+                        opacity: disabled ? 0.55 : 1,
+                      }}>
+                        <input
+                          type="checkbox" checked={checked} onChange={() => toggleComodidade(c.key)} disabled={disabled}
+                          style={{ accentColor: "var(--primary, #6366f1)", width: "14px", height: "14px", flexShrink: 0 }}
+                        />
+                        {c.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             </>
           )}
 
           {/* Etapa 2 — Detalhes */}
           {step === 2 && (
             <>
+              <Field label="Finalidade">
+                <select style={selectStyle} value={form.finalidade} onChange={(e) => set("finalidade", e.target.value)} disabled={disabled}>
+                  <option value="">Não informado</option>
+                  <option value="RESIDENCIAL">Residencial</option>
+                  <option value="COMERCIAL">Comercial</option>
+                </select>
+              </Field>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <Field label="Quartos"><input style={inputStyle} type="number" min="0" placeholder="0" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} disabled={disabled} /></Field>
                 <Field label="Suítes"><input style={inputStyle} type="number" min="0" placeholder="0" value={form.suites} onChange={(e) => set("suites", e.target.value)} disabled={disabled} /></Field>
                 <Field label="Vagas de garagem"><input style={inputStyle} type="number" min="0" placeholder="0" value={form.parkingSpots} onChange={(e) => set("parkingSpots", e.target.value)} disabled={disabled} /></Field>
                 <Field label="Metragem (m²)"><input style={inputStyle} type="number" min="1" step="0.01" placeholder="0,00" value={form.squareFootage} onChange={(e) => set("squareFootage", e.target.value)} disabled={disabled} /></Field>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                <Field label="Área construída (m²)"><input style={inputStyle} type="number" min="0" step="0.01" placeholder="0,00" value={form.areaConstruida} onChange={(e) => set("areaConstruida", e.target.value)} disabled={disabled} /></Field>
+                <Field label="Área privativa (m²)"><input style={inputStyle} type="number" min="0" step="0.01" placeholder="0,00" value={form.areaPrivativa} onChange={(e) => set("areaPrivativa", e.target.value)} disabled={disabled} /></Field>
+                <Field label="Área total (m²)"><input style={inputStyle} type="number" min="0" step="0.01" placeholder="0,00" value={form.areaTotal} onChange={(e) => set("areaTotal", e.target.value)} disabled={disabled} /></Field>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <Field label="Status">

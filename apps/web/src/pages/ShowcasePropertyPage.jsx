@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
+import { comodidadesAtivas } from "../utils/comodidades";
 
 const IcPin  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
 const IcArea = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6"/><path d="M3 3l6 6"/><path d="M21 15v6h-6"/><path d="M21 21l-6-6"/></svg>;
@@ -266,6 +267,30 @@ export function ShowcasePropertyPage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Comodidades da região */}
+                {(() => {
+                  const ativas = comodidadesAtivas(property.comodidades);
+                  if (ativas.length === 0) return null;
+                  return (
+                    <div>
+                      <p style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)", marginBottom: "12px" }}>
+                        O que tem por perto
+                      </p>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px" }}>
+                        {ativas.map((c) => (
+                          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", background: "rgba(255,255,255,0.04)", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.07)" }}>
+                            <span style={{ fontSize: "22px", lineHeight: 1, flexShrink: 0 }}>{c.icon}</span>
+                            <span style={{ fontSize: "14px", fontWeight: "600", color: isLightMode ? "#0f172a" : "#fff" }}>{c.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "12px 0 0", opacity: 0.75 }}>
+                        Estabelecimentos identificados num raio de aproximadamente 2 km.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Right: lead form */}

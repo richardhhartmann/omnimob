@@ -12,6 +12,7 @@ import {
 } from "../utils/showcaseConfig";
 import { BuilderSidePanel } from "../components/builder/BuilderSidePanel";
 import { OnboardingOverlay } from "../components/builder/OnboardingOverlay";
+import { comodidadesAtivas } from "../utils/comodidades";
 
 const PRESET_THEMES = {
   CLASSICO:    { primaryColor: "#6366f1", secondaryColor: "#d4af37" },
@@ -1108,6 +1109,24 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                     <h3>{p.title}</h3>
                     <div className="card-location"><span>{p.neighborhood}, {p.city} - {p.state}</span></div>
                     <p className="hint" style={{ textAlign: "left", marginTop: 0 }}>{p.description}</p>
+                    {(() => {
+                      const ativas = comodidadesAtivas(p.comodidades);
+                      if (ativas.length === 0) return null;
+                      const visiveis = ativas.slice(0, 6);
+                      const restantes = ativas.length - visiveis.length;
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "0 0 14px" }}>
+                          {visiveis.map((c) => (
+                            <span key={c.key} title={c.label} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>
+                              <span style={{ fontSize: "13px", lineHeight: 1 }}>{c.icon}</span>{c.label}
+                            </span>
+                          ))}
+                          {restantes > 0 && (
+                            <span style={{ display: "flex", alignItems: "center", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>+{restantes}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div className="card-price-wrapper">
                       <div>
                         <span className="price-label">Valor</span>
