@@ -19,6 +19,7 @@ export const createPropertySchema = z.object({
   suites: z.number().int().min(0),
   squareFootage: z.number().positive(),
   finalidade: z.enum(["RESIDENCIAL", "COMERCIAL"]).nullable().optional(),
+  areaTerreno: z.number().nonnegative().nullable().optional(),
   areaConstruida: z.number().nonnegative().nullable().optional(),
   areaPrivativa: z.number().nonnegative().nullable().optional(),
   areaTotal: z.number().nonnegative().nullable().optional(),

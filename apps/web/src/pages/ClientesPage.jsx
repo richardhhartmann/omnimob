@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnNovo } from "../components/ActionIcons";
+import { Avatar, Chip, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
 
 const FORM_EMPTY = {
   nome: "", cpf: "", rg: "", nascimento: "", email: "", telefone: "", whatsapp: "",
@@ -13,6 +14,16 @@ function formatarData(iso) {
   return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
+const IconWhats = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg>
+);
+const IconMail = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 6-10 7L2 6" /></svg>
+);
+const IconPin = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+);
+
 export function ClientesPage({ session }) {
   const tenantSlug = session?.tenant?.slug;
   const [clientes, setClientes] = useState([]);
@@ -22,6 +33,7 @@ export function ClientesPage({ session }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); // all | active | inactive
   const searchTimer = useRef(null);
 
   function carregarClientes(searchTerm = "") {
@@ -99,9 +111,23 @@ export function ClientesPage({ session }) {
 
   function setField(k, v) { setForm((p) => ({ ...p, [k]: v })); }
 
+  const stats = useMemo(() => {
+    const mesAtual = new Date().getMonth();
+    return {
+      total: clientes.length,
+      ativos: clientes.filter((c) => c.ativo).length,
+      inativos: clientes.filter((c) => !c.ativo).length,
+      aniversariantes: clientes.filter((c) => c.nascimento && new Date(c.nascimento).getUTCMonth() === mesAtual).length,
+    };
+  }, [clientes]);
+
+  const visiveis = useMemo(() => clientes.filter((c) =>
+    statusFilter === "all" || (statusFilter === "active" ? c.ativo : !c.ativo)
+  ), [clientes, statusFilter]);
+
   if (view === "form") {
     return (
-      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
         <h2 style={{ marginBottom: "24px" }}>{editando ? "Editar Cliente" : "Novo Cliente"}</h2>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
@@ -172,72 +198,75 @@ export function ClientesPage({ session }) {
   }
 
   return (
-    <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-        <h2 style={{ margin: 0 }}>Clientes</h2>
+    <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Clientes</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: "4px 0 0" }}>Sua base de clientes e contatos.</p>
+        </div>
         <BtnNovo onClick={abrirCriar} label="Novo Cliente" />
       </div>
 
-      <input
-        placeholder="Buscar por nome, CPF, e-mail ou telefone…"
-        value={search}
-        onChange={handleSearchChange}
-        style={{ marginBottom: "16px" }}
-      />
+      <StatGrid>
+        <StatCard label="Total" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
+        <StatCard label="Ativos" value={stats.ativos} accent="#10b981" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>} />
+        <StatCard label="Inativos" value={stats.inativos} accent="#94a3b8" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>} />
+        <StatCard label="Aniversários no mês" value={stats.aniversariantes} accent="#f59e0b" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8" /><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1" /><path d="M2 21h20" /><path d="M7 8v3M12 8v3M17 8v3M7 4h.01M12 4h.01M17 4h.01" /></svg>} />
+      </StatGrid>
 
-      {clientes.length === 0 ? (
-        <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "48px 0" }}>
-          {search ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado."}
-        </p>
+      <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        <SearchInput value={search} onChange={handleSearchChange} placeholder="Buscar por nome, CPF, e-mail ou telefone…" />
+        <FilterTabs value={statusFilter} onChange={setStatusFilter} options={[
+          { key: "all", label: "Todos" },
+          { key: "active", label: "Ativos" },
+          { key: "inactive", label: "Inativos" },
+        ]} />
+      </div>
+
+      {visiveis.length === 0 ? (
+        <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
+          <p style={{ color: "var(--text-muted)", margin: 0 }}>
+            {search || statusFilter !== "all" ? "Nenhum cliente encontrado com estes filtros." : "Nenhum cliente cadastrado."}
+          </p>
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          {clientes.map((c) => (
-            <div key={c.id} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px",
-              padding: "14px 18px", borderRadius: "12px",
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-              opacity: c.ativo ? 1 : 0.6,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                <div style={{
-                  width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
-                  background: c.ativo ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.06)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "15px", fontWeight: "700",
-                }}>
-                  {c.nome.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div style={{ fontWeight: "600", fontSize: "15px" }}>{c.nome}</div>
-                  <div style={{ fontSize: "12px", opacity: 0.5, marginTop: "2px" }}>
-                    {[
-                      c.cpf && `CPF: ${c.cpf}`,
-                      c.email,
-                      c.telefone || c.whatsapp,
-                      c.cidade && c.estado ? `${c.cidade}/${c.estado}` : c.cidade,
-                      c.nascimento && formatarData(c.nascimento),
-                    ].filter(Boolean).join(" · ") || "Sem informações de contato"}
+          {visiveis.map((c) => {
+            const whats = (c.whatsapp || c.telefone || "").replace(/\D/g, "");
+            const local = c.cidade && c.estado ? `${c.cidade}/${c.estado}` : (c.cidade || c.estado);
+            return (
+              <div key={c.id} className="glass-panel" style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px",
+                padding: "14px 18px", opacity: c.ativo ? 1 : 0.6,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0, flex: 1 }}>
+                  <Avatar name={c.nome} seed={c.nome + c.id} size={42} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: "600", fontSize: "15px" }}>{c.nome}</span>
+                      {c.cpf ? <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>CPF {c.cpf}</span> : null}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+                      {whats ? <Chip color="#25d366" href={`https://wa.me/${whats}`}><IconWhats /> {c.whatsapp || c.telefone}</Chip> : null}
+                      {c.email ? <Chip color="#0ea5e9" href={`mailto:${c.email}`}><IconMail /> {c.email}</Chip> : null}
+                      {local ? <Chip color="#a78bfa"><IconPin /> {local}</Chip> : null}
+                      {!whats && !c.email && !local ? <span style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic" }}>Sem informações de contato</span> : null}
+                    </div>
                   </div>
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <StatusPill active={c.ativo} />
+                  <BtnEditar onClick={() => abrirEditar(c)} />
+                  {c.ativo
+                    ? <BtnDesativar onClick={() => toggleAtivo(c)} />
+                    : <BtnAtivar onClick={() => toggleAtivo(c)} />
+                  }
+                </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{
-                  fontSize: "11px", fontWeight: "600", padding: "3px 10px", borderRadius: "20px",
-                  background: c.ativo ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.06)",
-                  color: c.ativo ? "#10b981" : "var(--text-muted)",
-                }}>
-                  {c.ativo ? "Ativo" : "Inativo"}
-                </span>
-                <BtnEditar onClick={() => abrirEditar(c)} />
-                {c.ativo
-                  ? <BtnDesativar onClick={() => toggleAtivo(c)} />
-                  : <BtnAtivar onClick={() => toggleAtivo(c)} />
-                }
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
-    </section>
+    </div>
   );
 }

@@ -266,6 +266,7 @@ model Property {
   suites        Int            @default(0)
   squareFootage Float          @default(0)
   finalidade    String?        // RESIDENCIAL | COMERCIAL
+  areaTerreno   Float?         @map("area_terreno")
   areaConstruida Float?        @map("area_construida")
   areaPrivativa Float?         @map("area_privativa")
   areaTotal     Float?         @map("area_total")

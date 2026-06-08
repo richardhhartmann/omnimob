@@ -28,7 +28,11 @@ export function AdminLayout({ session, onLogout }) {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div className="tenant-logo">{initialLetter}</div>
+          <div className="tenant-logo">
+            {session?.tenant?.logoUrl
+              ? <img src={session.tenant.logoUrl} alt={session?.tenant?.name || "Logo"} style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+              : initialLetter}
+          </div>
           <div className="tenant-title-group">
             <h1>{session?.tenant?.name || "Domus"}</h1>
           </div>

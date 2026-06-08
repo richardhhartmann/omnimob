@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
@@ -13,6 +14,8 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
   const [socialStatus, setSocialStatus] = useState(null);
   const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
   const [publishResults, setPublishResults] = useState({});
+  const [removeLoading, setRemoveLoading] = useState({ facebook: false, instagram: false });
+  const [removeNote, setRemoveNote] = useState({});
 
   useEffect(() => {
     const price = Number(property.price);
@@ -45,15 +48,41 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
     setCaption(lines.join("\n").trim());
 
     // Pre-populate results from existing successful publications
-    const results = {};
-    const fbPub = property.publications?.find(p => p.channel === "FACEBOOK" && p.status === "PUBLISHED");
-    const igPub = property.publications?.find(p => p.channel === "INSTAGRAM" && p.status === "PUBLISHED");
-    if (fbPub) results.facebook = { success: true };
-    if (igPub) results.instagram = { success: true };
-    setPublishResults(results);
+    setPublishResults(resultsFromPublications(property.publications));
 
     api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
+
+    // Reconcilia com as redes: se o post foi apagado manualmente, o status some.
+    api.reconcileProperty(tenantSlug, property.id)
+      .then((data) => setPublishResults(resultsFromPublications(data.publications)))
+      .catch(() => {});
   }, [property.id]);
+
+  // Deriva o estado dos botões a partir das publicações PUBLISHED de cada canal.
+  function resultsFromPublications(pubs) {
+    const results = {};
+    if (pubs?.some(p => p.channel === "FACEBOOK" && p.status === "PUBLISHED")) results.facebook = { success: true };
+    if (pubs?.some(p => p.channel === "INSTAGRAM" && p.status === "PUBLISHED")) results.instagram = { success: true };
+    return results;
+  }
+
+  async function handleRemove(platform) {
+    const nome = platform === "facebook" ? "Facebook" : "Instagram";
+    if (!window.confirm(`Remover este imóvel do ${nome}?`)) return;
+    setRemoveLoading(prev => ({ ...prev, [platform]: true }));
+    setRemoveNote(prev => ({ ...prev, [platform]: "" }));
+    try {
+      const channel = platform === "facebook" ? "FACEBOOK" : "INSTAGRAM";
+      const result = await api.removePublication(tenantSlug, property.id, channel);
+      setPublishResults(prev => { const next = { ...prev }; delete next[platform]; return next; });
+      if (result?.note) setRemoveNote(prev => ({ ...prev, [platform]: result.note }));
+      onSuccess?.();
+    } catch (err) {
+      setRemoveNote(prev => ({ ...prev, [platform]: err.message }));
+    } finally {
+      setRemoveLoading(prev => ({ ...prev, [platform]: false }));
+    }
+  }
 
   async function handlePublish(platform) {
     setPublishLoading(prev => ({ ...prev, [platform]: true }));
@@ -82,7 +111,13 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
     lineHeight: "1.6", fontFamily: "inherit",
   };
 
-  return (
+  const removeBtnStyle = {
+    padding: "6px 12px", borderRadius: "7px", fontSize: "12px", fontWeight: "600",
+    background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)",
+    cursor: "pointer", flexShrink: 0, width: "auto",
+  };
+
+  return createPortal(
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease-out" }}
       onClick={onClose}
@@ -99,7 +134,7 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
           </div>
           <button
             onClick={onClose}
-            style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", cursor: "pointer", padding: "6px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            style={{ width: "32px", height: "32px", padding: 0, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", cursor: "pointer", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -135,10 +170,14 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
                   {socialStatus === null ? "Verificando…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações"}
                 </div>
               </div>
-              {publishResults.facebook ? (
-                <span style={{ fontSize: "11px", fontWeight: "600", color: publishResults.facebook.success ? "#10b981" : "#ef4444", whiteSpace: "nowrap", flexShrink: 0 }}>
-                  {publishResults.facebook.success ? "✓ Publicado" : "✗ Erro"}
-                </span>
+              {publishResults.facebook?.success ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                  <span style={{ fontSize: "11px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                  <button type="button" onClick={() => handleRemove("facebook")} disabled={removeLoading.facebook}
+                    style={removeBtnStyle}>
+                    {removeLoading.facebook ? "…" : "Remover"}
+                  </button>
+                </div>
               ) : (
                 <button type="button" onClick={() => handlePublish("facebook")}
                   disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
@@ -161,10 +200,14 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
                   {socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — configure em Configurações"}
                 </div>
               </div>
-              {publishResults.instagram ? (
-                <span style={{ fontSize: "11px", fontWeight: "600", color: publishResults.instagram.success ? "#10b981" : "#ef4444", whiteSpace: "nowrap", flexShrink: 0 }}>
-                  {publishResults.instagram.success ? "✓ Publicado" : "✗ Erro"}
-                </span>
+              {publishResults.instagram?.success ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                  <span style={{ fontSize: "11px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                  <button type="button" onClick={() => handleRemove("instagram")} disabled={removeLoading.instagram}
+                    style={removeBtnStyle}>
+                    {removeLoading.instagram ? "…" : "Remover"}
+                  </button>
+                </div>
               ) : (
                 <button type="button" onClick={() => handlePublish("instagram")}
                   disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
@@ -178,7 +221,7 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
           {/* WhatsApp */}
           <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#25d366", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.785.476 3.456 1.302 4.914L2 22l5.233-1.274A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: "600", fontSize: "13px" }}>WhatsApp</div>
@@ -190,8 +233,17 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
             </button>
           </div>
         </div>
+
+        {/* Avisos de remoção (ex.: Instagram não permite exclusão por API) */}
+        {(removeNote.facebook || removeNote.instagram) && (
+          <div style={{ marginTop: "12px", padding: "10px 14px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "12px", color: "#fbbf24", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {removeNote.facebook && <span>{removeNote.facebook}</span>}
+            {removeNote.instagram && <span>{removeNote.instagram}</span>}
+          </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -254,6 +306,49 @@ function SocialBadges({ publications }) {
   );
 }
 
+// ─── Carrossel de fotos do card ───────────────────────────────────────────────
+
+function PropertyCarousel({ images = [] }) {
+  const [idx, setIdx] = useState(0);
+  const urls = (images || []).map((img) => img.url).filter(Boolean);
+
+  if (urls.length === 0) {
+    return (
+      <div style={{ height: "190px", background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.18)" }}>
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+        </svg>
+      </div>
+    );
+  }
+
+  const safe = idx % urls.length;
+  const prev = (e) => { e.stopPropagation(); setIdx((i) => (i - 1 + urls.length) % urls.length); };
+  const next = (e) => { e.stopPropagation(); setIdx((i) => (i + 1) % urls.length); };
+  const chevron = {
+    position: "absolute", top: "50%", transform: "translateY(-50%)",
+    width: "30px", height: "30px", padding: 0, borderRadius: "50%",
+    background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.3)",
+    color: "#fff", fontSize: "18px", lineHeight: 1, cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  };
+
+  return (
+    <div style={{ position: "relative", height: "190px", overflow: "hidden", background: "rgba(0,0,0,0.25)" }}>
+      <img key={urls[safe]} src={urls[safe]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.25s ease-in-out" }} />
+      {urls.length > 1 && (
+        <>
+          <button type="button" onClick={prev} style={{ ...chevron, left: "8px" }}>‹</button>
+          <button type="button" onClick={next} style={{ ...chevron, right: "8px" }}>›</button>
+          <span style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: "10px", fontWeight: "600", padding: "2px 8px", borderRadius: "999px" }}>
+            {safe + 1}/{urls.length}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Lista de imóveis ─────────────────────────────────────────────────────────
 
 export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit, onPublishSuccess, disabled }) {
@@ -269,6 +364,20 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
   const [bedroomsFilter, setBedroomsFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [publishingProperty, setPublishingProperty] = useState(null);
+
+  // Auto-sincroniza ao abrir o portfólio (sem o usuário precisar clicar), em
+  // segundo plano. Throttle de 60s via localStorage para não martelar a Graph API
+  // a cada navegação. Se algo foi removido das redes, recarrega para sumir o ícone.
+  useEffect(() => {
+    if (!tenantSlug) return;
+    const key = `domus_social_sync_${tenantSlug}`;
+    const last = Number(localStorage.getItem(key) || 0);
+    if (Date.now() - last < 60 * 1000) return;
+    localStorage.setItem(key, String(Date.now()));
+    api.reconcileAllSocial(tenantSlug)
+      .then((res) => { if (res.removedCount > 0) onPublishSuccess?.(); })
+      .catch(() => {});
+  }, [tenantSlug]);
 
   const uniqueCities = useMemo(() => {
     const cities = properties.map((p) => p.city).filter(Boolean);
@@ -330,7 +439,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
   };
 
   return (
-    <section style={{ animation: "fadeIn 0.4s ease-out", display: "flex", flexDirection: "column", gap: "24px" }}>
+    <section className="main-content" style={{ animation: "fadeIn 0.4s ease-out", display: "flex", flexDirection: "column", gap: "24px" }}>
       <div className="glass-panel" style={{ padding: "24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
           <div>
@@ -416,7 +525,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
 
       {/* ── Grade ─── */}
       {viewMode === "grid" && filteredProperties.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "24px" }}>
           {filteredProperties.map((property) => {
             const statusStyle = getStatusColor(property.status);
             return (
@@ -428,6 +537,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 24px rgba(0,0,0,0.2)"; e.currentTarget.style.border = "1px solid rgba(255,255,255,0.25)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.border = "1px solid rgba(255, 255, 255, 0.15)"; }}
               >
+                <PropertyCarousel images={property.images} />
                 <div style={{ padding: "24px", flex: 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
                     <div style={{ flex: 1, paddingRight: "12px" }}>
@@ -457,7 +567,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     </span>
                   </div>
 
-                  <div style={{ display: "flex", gap: "16px", padding: "16px 0", borderTop: "1px solid rgba(255,255,255,0.1)", borderBottom: "1px solid rgba(255,255,255,0.1)", marginBottom: "20px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 16px", padding: "16px 0", borderTop: "1px solid rgba(255,255,255,0.1)", borderBottom: "1px solid rgba(255,255,255,0.1)", marginBottom: "20px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#e2e8f0" }} title="Quartos">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22v-8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" /><path d="M7 22v-2" /><path d="M17 22v-2" /><path d="M5 12V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5" /></svg>
                       <strong>{property.bedrooms ?? 0}</strong>
@@ -478,7 +588,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 </div>
 
                 {/* Footer com badges sociais + ações */}
-                <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px 8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                   <SocialBadges publications={property.publications} />
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ ...btnShare }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar nas redes sociais">
@@ -505,15 +615,18 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
       {viewMode === "list" && filteredProperties.length > 0 && (
         <div className="glass-panel" style={{ padding: "0", overflow: "hidden" }}>
           <div style={{ display: "grid", gap: "1px", background: "rgba(255,255,255,0.05)" }}>
-            {filteredProperties.map((property) => {
+            {filteredProperties.map((property, index) => {
               const statusStyle = getStatusColor(property.status);
+              // Efeito zebrado: linhas alternam o tom de fundo para facilitar a leitura.
+              const rowBg = index % 2 === 0 ? "rgba(255,255,255,0.015)" : "rgba(255,255,255,0.055)";
+              const rowHover = "rgba(255,255,255,0.10)";
               return (
                 <div
                   key={property.id}
                   onClick={() => navigate(`/imoveis/${property.id}`)}
-                  style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: "20px", alignItems: "center", padding: "14px 24px", cursor: "pointer", background: "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)", transition: "background 0.2s" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)"}
+                  style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: "20px", alignItems: "center", padding: "14px 24px", cursor: "pointer", background: rowBg, transition: "background 0.2s" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = rowHover}
+                  onMouseLeave={(e) => e.currentTarget.style.background = rowBg}
                 >
                   <div>
                     <span style={{ background: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.border}`, padding: "4px 8px", borderRadius: "16px", fontSize: "11px", fontWeight: "600", whiteSpace: "nowrap", display: "inline-block", marginBottom: "8px" }}>

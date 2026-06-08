@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
+import { Avatar, SearchInput, StatCard, StatGrid } from "../components/adminUi";
 
 const PERMISSOES = [
   { key: "acessarPainel",     label: "Acessar Painel" },
@@ -29,11 +30,24 @@ export function CargosPage({ session, onSessionUpdate }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!tenantSlug) return;
     api.listCargos(tenantSlug).then(setCargos).catch(() => {});
   }, [tenantSlug]);
+
+  const stats = useMemo(() => ({
+    total: cargos.length,
+    usuarios: cargos.reduce((sum, c) => sum + (c._count?.usuarios || 0), 0),
+    semPermissao: cargos.filter((c) => PERMISSOES.every((p) => !c[p.key])).length,
+  }), [cargos]);
+
+  const visiveis = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return cargos;
+    return cargos.filter((c) => c.descricao?.toLowerCase().includes(q));
+  }, [cargos, search]);
 
   function abrirCriar() {
     setEditando(null);
@@ -117,7 +131,7 @@ export function CargosPage({ session, onSessionUpdate }) {
     const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
 
     return (
-      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
         <h2 style={{ marginBottom: "24px" }}>{editando ? "Editar Cargo" : "Novo Cargo"}</h2>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
@@ -189,29 +203,46 @@ export function CargosPage({ session, onSessionUpdate }) {
   }
 
   return (
-    <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
-        <h2 style={{ margin: 0 }}>Cargos e Permissões</h2>
+    <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Cargos e Permissões</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: "4px 0 0" }}>Defina o que cada cargo pode fazer no painel.</p>
+        </div>
         <BtnNovo onClick={abrirCriar} label="Novo Cargo" />
       </div>
 
-      {cargos.length === 0 ? (
-        <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "48px 0" }}>Nenhum cargo cadastrado.</p>
+      <StatGrid>
+        <StatCard label="Cargos" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>} />
+        <StatCard label="Usuários vinculados" value={stats.usuarios} accent="#10b981" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
+        <StatCard label="Sem permissões" value={stats.semPermissao} accent="#f59e0b" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>} />
+      </StatGrid>
+
+      <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cargo…" />
+      </div>
+
+      {visiveis.length === 0 ? (
+        <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
+          <p style={{ color: "var(--text-muted)", margin: 0 }}>
+            {search ? "Nenhum cargo encontrado." : "Nenhum cargo cadastrado."}
+          </p>
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {cargos.map((c) => (
-            <div key={c.id} style={{
-              padding: "16px 20px", borderRadius: "12px",
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
-                <div>
-                  <span style={{ fontWeight: "600", fontSize: "15px" }}>{c.descricao}</span>
-                  {c._count?.usuarios > 0 && (
-                    <span style={{ marginLeft: "10px", fontSize: "12px", opacity: 0.4 }}>
-                      {c._count.usuarios} usuário(s)
-                    </span>
-                  )}
+          {visiveis.map((c) => (
+            <div key={c.id} className="glass-panel" style={{ padding: "16px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <Avatar name={c.descricao} seed={c.descricao + c.id} size={38} />
+                  <div>
+                    <div style={{ fontWeight: "600", fontSize: "15px" }}>{c.descricao}</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                      {c._count?.usuarios > 0 ? `${c._count.usuarios} usuário${c._count.usuarios !== 1 ? "s" : ""}` : "Nenhum usuário"}
+                      {" · "}
+                      {PERMISSOES.filter((p) => c[p.key]).length} permiss{PERMISSOES.filter((p) => c[p.key]).length !== 1 ? "ões" : "ão"}
+                    </div>
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: "6px" }}>
                   <BtnEditar onClick={() => abrirEditar(c)} />
@@ -235,6 +266,6 @@ export function CargosPage({ session, onSessionUpdate }) {
           ))}
         </div>
       )}
-    </section>
+    </div>
   );
 }

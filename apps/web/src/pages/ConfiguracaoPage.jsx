@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -185,12 +186,14 @@ const EMPTY = {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
-export function ConfiguracaoPage({ session }) {
+export function ConfiguracaoPage({ session, onSessionUpdate }) {
   const tenantSlug = session?.tenant?.slug;
   const [form, setForm] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState("idle");
   const [cepLoading, setCepLoading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoMsg, setLogoMsg] = useState("");
   const loadedRef = useRef(false);
   const debounceRef = useRef(null);
 
@@ -293,6 +296,13 @@ export function ConfiguracaoPage({ session }) {
           cep: form.cep.replace(/\D/g, ""),
         });
         setSaveStatus("saved");
+        // Sincroniza a sessão local para a sidebar do admin refletir logo/nome/slogan na hora.
+        if (onSessionUpdate && session?.tenant) {
+          onSessionUpdate({
+            ...session,
+            tenant: { ...session.tenant, name: form.name, slogan: form.slogan, logoUrl: form.logoUrl },
+          });
+        }
         debounceRef.current = setTimeout(() => setSaveStatus("idle"), 3000);
       } catch {
         setSaveStatus("error");
@@ -302,6 +312,25 @@ export function ConfiguracaoPage({ session }) {
 
   function set(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleLogoUpload(file) {
+    if (!file) return;
+    setLogoUploading(true);
+    setLogoMsg("");
+    try {
+      const result = await uploadLogoWithBackgroundRemoval(file);
+      set("logoUrl", result.url);
+      setLogoMsg(
+        result.bgRemoved
+          ? "Logo enviada e fundo removido automaticamente."
+          : "Logo enviada. Não foi possível remover o fundo automaticamente — a imagem original foi usada."
+      );
+    } catch (err) {
+      setLogoMsg(err.message || "Falha ao enviar a logo.");
+    } finally {
+      setLogoUploading(false);
+    }
   }
 
   async function handleCepBlur() {
@@ -361,7 +390,7 @@ export function ConfiguracaoPage({ session }) {
   };
 
   return (
-    <div style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div className="main-content" style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "24px" }}>
 
       {/* ── Cabeçalho ─── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
@@ -463,15 +492,26 @@ export function ConfiguracaoPage({ session }) {
               <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
             </svg>
           }>
-            <Campo label="URL do Logotipo" hint="Cole o endereço de uma imagem hospedada online.">
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <input style={{ ...inputStyle, flex: 1 }} value={form.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} placeholder="https://..." />
+            <Campo label="Logotipo" hint="Envie uma imagem (o fundo é removido automaticamente) ou cole a URL de uma imagem hospedada online.">
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <input style={{ ...inputStyle, flex: 1, minWidth: "180px" }} value={form.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} placeholder="https://..." />
+                <label style={{
+                  display: "inline-flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap",
+                  padding: "10px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: "600",
+                  background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)", color: "#c4b5fd",
+                  cursor: logoUploading ? "default" : "pointer", opacity: logoUploading ? 0.6 : 1, flexShrink: 0,
+                }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                  {logoUploading ? "Enviando…" : "Enviar imagem"}
+                  <input type="file" accept="image/*" disabled={logoUploading} onChange={(e) => { handleLogoUpload(e.target.files?.[0]); e.target.value = ""; }} style={{ display: "none" }} />
+                </label>
                 {form.logoUrl && (
                   <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <img src={form.logoUrl} alt="logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
                   </div>
                 )}
               </div>
+              {logoMsg && <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "8px 0 0" }}>{logoMsg}</p>}
             </Campo>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>

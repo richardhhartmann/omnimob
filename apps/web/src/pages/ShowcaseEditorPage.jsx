@@ -1071,7 +1071,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
               <div className="brand-title-group" style={{ color: blockStyles.header?.color || "inherit" }}>
                 <h1 style={{ fontSize: isMobilePreview ? "16px" : "22px", letterSpacing: "-0.5px" }}>{previewTenant.name}</h1>
                 <p style={{ fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", opacity: 0.7, marginTop: "2px" }}>
-                  {[previewTenant.creci ? `CRECI ${previewTenant.creci}` : null, previewTenant.cidade || null].filter(Boolean).join(" · ") || "Alto Padrão"}
+                  {previewTenant.slogan || [previewTenant.creci ? `CRECI ${previewTenant.creci}` : null, previewTenant.cidade || null].filter(Boolean).join(" · ") || "Alto Padrão"}
                 </p>
               </div>
             </div>
@@ -1104,7 +1104,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           </button>
           <section
             className={`showcase-title-section${blockStyles.title?.color ? " showcase-title-section--custom-text" : ""}`}
-            style={{ ...mergeBlockWrapperStyle(blockStyles.title), padding: "40px 0" }}
+            style={{ ...mergeBlockWrapperStyle(blockStyles.title), padding: 0 }}
           >
             {renderEditableText("showcaseHeadline", previewHeadline, "editor-headline", "h2")}
             {renderEditableText("showcaseSubheadline", previewSubheadline, "", "p")}
@@ -1281,7 +1281,17 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                   <p className="editable-inline" data-rich-sync={`widget|${widget.id}|content`} style={{ fontSize: "16px", margin: "16px 0", cursor: "text", display: "inline-block", width: "100%", ...(widget.color ? { color: widget.color } : {}) }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "content", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.content }} />
                   <div style={{ marginTop: "16px", padding: "12px", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
                     <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px", fontWeight: "600", textTransform: "uppercase" }}>Configuração do Botão</p>
-                    <span className="editable-inline" data-rich-sync={`widget|${widget.id}|ctaLabel`} style={{ cursor: "text", display: "inline-block", width: "100%", background: "var(--accent)", color: "#fff", padding: "8px", borderRadius: "6px", textAlign: "center", fontWeight: "600", marginBottom: "8px" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "ctaLabel", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaLabel || "Texto do Botão" }} />
+                    {(() => {
+                      const isWhats = /wa\.me|whatsapp|api\.whatsapp/i.test(widget.ctaUrl || "");
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: isWhats ? "#25d366" : "var(--accent)", color: "#fff", padding: "11px 14px", borderRadius: "8px", fontWeight: "700", marginBottom: "8px", boxShadow: isWhats ? "0 4px 14px rgba(37,211,102,0.35)" : "0 4px 14px rgba(99,102,241,0.3)" }}>
+                          {isWhats ? (
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff" style={{ flexShrink: 0 }}><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg>
+                          ) : null}
+                          <span className="editable-inline" data-rich-sync={`widget|${widget.id}|ctaLabel`} style={{ cursor: "text", outline: "none" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "ctaLabel", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaLabel || "Texto do Botão" }} />
+                        </div>
+                      );
+                    })()}
                     <span className="editable-inline" data-rich-sync={`widget|${widget.id}|ctaUrl`} style={{ cursor: "text", display: "inline-block", width: "100%", fontSize: "12px", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "4px" }} contentEditable suppressContentEditableWarning onBlur={(e) => updateWidgetById(widget.id, "ctaUrl", e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: widget.ctaUrl || "https://link.com" }} />
                   </div>
                 </div>
@@ -1596,8 +1606,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             </div>
           )}
 
-          {/* Widget FAB — offset to avoid side panel overlap */}
-          {true ? (
+          {/* Widget FAB — fixo na viewport via portal (escapa de ancestrais com transform) */}
+          {createPortal(
             <div className="widget-fab-shell" style={{ right: panelCollapsed ? "calc(40px + 24px)" : "calc(272px + 48px)", transition: "right 0.25s ease" }}>
               {widgetMenuOpen ? (
                 <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: -1, animation: "fadeIn 0.2s" }} onClick={() => setWidgetMenuOpen(false)} />
@@ -1637,8 +1647,9 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
               >
                 +
               </button>
-            </div>
-          ) : null}
+            </div>,
+            document.body
+          )}
         </div>
 
         {/* Side panel */}

@@ -60,7 +60,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
           <div className="brand-title-group" style={{ color: dynamicColor }}>
             <h1 style={{ fontSize: isScrolled ? "18px" : "22px", letterSpacing: "-0.5px", transition: "font-size 0.4s ease" }}>{tenantName}</h1>
             <p style={{ fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", opacity: 0.7, marginTop: "2px" }}>
-              {[tenant?.creci ? `CRECI ${tenant.creci}` : null, tenant?.cidade || null].filter(Boolean).join(" · ") || "Alto Padrão"}
+              {tenant?.slogan || [tenant?.creci ? `CRECI ${tenant.creci}` : null, tenant?.cidade || null].filter(Boolean).join(" · ") || "Alto Padrão"}
             </p>
           </div>
         </a>

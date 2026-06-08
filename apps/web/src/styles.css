@@ -1729,6 +1729,11 @@ body:has(.showcase-theme-light):not(:has(.showcase-editor-full)) {
   }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .page-transition {
   animation: chicEntrance 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   width: 100%;

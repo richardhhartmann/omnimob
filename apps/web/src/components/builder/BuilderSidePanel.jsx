@@ -34,11 +34,14 @@ function FieldInput({ label, value, onChange, type = "text", placeholder }) {
   );
 }
 
-function BlockStyleSection({ blockKey, blockStyles, updateBlockStyle, clearBlockStyle }) {
+function BlockStyleSection({ blockKey, blockStyles, updateBlockStyle, clearBlockStyle, isLightMode }) {
   const s = blockStyles[blockKey] || {};
   const hasBanner = typeof s.backgroundImage === "string" && s.backgroundImage.trim() !== "";
   const overlayPct = Math.round((typeof s.backgroundOverlay === "number" ? s.backgroundOverlay : 0) * 100);
   const brightSlider = Math.round((typeof s.backgroundBrightness === "number" ? s.backgroundBrightness : 1) * 100);
+  // Cores padrão reais conforme o modo (refletem o que a vitrine usa quando não há cor custom).
+  const defBg = isLightMode ? "#f8fafc" : "#1e293b";
+  const defText = isLightMode ? "#0f172a" : "#f8fafc";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -53,8 +56,8 @@ function BlockStyleSection({ blockKey, blockStyles, updateBlockStyle, clearBlock
         <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>
           Cor de Fundo{hasBanner ? " (bloqueada com banner)" : ""}
         </span>
-        <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: s.backgroundColor || "#1e293b", overflow: "hidden" }}>
-          <input type="color" value={s.backgroundColor || "#1e293b"}
+        <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: s.backgroundColor || defBg, overflow: "hidden" }}>
+          <input type="color" value={s.backgroundColor || defBg}
             onChange={(e) => updateBlockStyle(blockKey, "backgroundColor", e.target.value)}
             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
         </div>
@@ -85,8 +88,8 @@ function BlockStyleSection({ blockKey, blockStyles, updateBlockStyle, clearBlock
 
       <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
         <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>Cor do Texto</span>
-        <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: s.color || "#f8fafc", overflow: "hidden" }}>
-          <input type="color" value={s.color || "#f8fafc"}
+        <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: s.color || defText, overflow: "hidden" }}>
+          <input type="color" value={s.color || defText}
             onChange={(e) => updateBlockStyle(blockKey, "color", e.target.value)}
             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
         </div>
@@ -240,7 +243,10 @@ function BlockPanel({
   updateHighlightStyle, addHighlight, removeHighlight,
   addWidget, WIDGET_LIBRARY, DEFAULT_BLOCK_LABELS,
   activeWidgetData, updateActiveWidget, removeActiveWidget,
+  isLightMode,
 }) {
+  const defBg = isLightMode ? "#f8fafc" : "#1e293b";
+  const defText = isLightMode ? "#0f172a" : "#f8fafc";
   if (!activeBlock) {
     return (
       <div style={{ textAlign: "center", padding: "48px 16px", color: "var(--text-muted)" }}>
@@ -269,14 +275,14 @@ function BlockPanel({
         <Divider />
         <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
           <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>Cor de Fundo</span>
-          <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: w.backgroundColor || "#1e293b", overflow: "hidden" }}>
-            <input type="color" value={w.backgroundColor || "#1e293b"} onChange={(e) => updateActiveWidget("backgroundColor", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
+          <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: w.backgroundColor || defBg, overflow: "hidden" }}>
+            <input type="color" value={w.backgroundColor || defBg} onChange={(e) => updateActiveWidget("backgroundColor", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
           </div>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
           <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>Cor do Texto</span>
-          <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: w.color || "#f8fafc", overflow: "hidden" }}>
-            <input type="color" value={w.color || "#f8fafc"} onChange={(e) => updateActiveWidget("color", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
+          <div style={{ position: "relative", height: "34px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: w.color || defText, overflow: "hidden" }}>
+            <input type="color" value={w.color || defText} onChange={(e) => updateActiveWidget("color", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
           </div>
         </label>
         <button type="button" onClick={removeActiveWidget}
@@ -306,6 +312,7 @@ function BlockPanel({
         blockStyles={blockStyles}
         updateBlockStyle={updateBlockStyle}
         clearBlockStyle={clearBlockStyle}
+        isLightMode={isLightMode}
       />
 
       {activeBlock === "highlights" ? (
@@ -369,6 +376,31 @@ function BlockPanel({
   );
 }
 
+// Handle centralizado na borda esquerda do painel: recolhe/expande.
+// Chevron preenchido apontando para a direita quando expandido e para a esquerda quando recolhido.
+function CollapseHandle({ collapsed, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={collapsed ? "Expandir painel" : "Recolher painel"}
+      style={{
+        position: "absolute", top: "50%", left: 0, transform: "translate(-100%, -50%)",
+        width: "22px", height: "60px", padding: 0,
+        borderRadius: "8px 0 0 8px",
+        border: "1px solid rgba(255,255,255,0.1)", borderRight: "none",
+        background: "rgba(20, 27, 45, 0.97)", color: "rgba(255,255,255,0.75)",
+        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 30, boxShadow: "-6px 0 16px rgba(0,0,0,0.25)",
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        {collapsed ? <path d="M15 5l-8 7 8 7z" /> : <path d="M9 5l8 7-8 7z" />}
+      </svg>
+    </button>
+  );
+}
+
 export function BuilderSidePanel({
   activeBlock,
   form,
@@ -422,11 +454,8 @@ export function BuilderSidePanel({
         height: "calc(100vh - 56px)",
         alignSelf: "flex-start",
       }}>
-        <button type="button" onClick={onToggleCollapse} title="Expandir configurações de estilo"
-          style={{ width: "28px", height: "28px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-        </button>
-        <span style={{ writingMode: "vertical-rl", fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.12em", userSelect: "none" }}>
+        <CollapseHandle collapsed onToggle={onToggleCollapse} />
+        <span style={{ writingMode: "vertical-rl", fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.12em", userSelect: "none", marginTop: "8px" }}>
           Configurações de estilo
         </span>
       </div>
@@ -445,17 +474,14 @@ export function BuilderSidePanel({
       position: "sticky",
       top: "56px",
       height: "calc(100vh - 56px)",
-      overflow: "hidden",
+      overflow: "visible",
       alignSelf: "flex-start",
     }}>
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", minHeight: "44px" }}>
+      <CollapseHandle collapsed={false} onToggle={onToggleCollapse} />
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", gap: "8px", minHeight: "44px" }}>
         <span style={{ fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.09em" }}>
           {contextLabel}
         </span>
-        <button type="button" onClick={onToggleCollapse} title="Recolher painel"
-          style={{ width: "26px", height: "26px", borderRadius: "7px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-        </button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "16px", scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
@@ -465,6 +491,7 @@ export function BuilderSidePanel({
             blockStyles={blockStyles}
             updateBlockStyle={updateBlockStyle}
             clearBlockStyle={clearBlockStyle}
+            isLightMode={isLightMode}
             hideBlock={hideBlock}
             showcaseConfig={showcaseConfig}
             updateHighlightStyle={updateHighlightStyle}

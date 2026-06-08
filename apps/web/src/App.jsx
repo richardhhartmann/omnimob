@@ -167,7 +167,7 @@ export default function App() {
         } />
         <Route path="/configuracoes" element={
           cargo?.editarPagina || cargo?.gerenciarUsuarios
-            ? <ConfiguracaoPage session={session} />
+            ? <ConfiguracaoPage session={session} onSessionUpdate={handleSessionUpdate} />
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/vitrine/:tenantSlug/editar" element={

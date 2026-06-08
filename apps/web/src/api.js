@@ -255,6 +255,24 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  removePublication: (tenantSlug, propertyId, channel) =>
+    request(`/api/social/publish/${propertyId}/${channel}`, {
+      method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  reconcileProperty: (tenantSlug, propertyId) =>
+    request(`/api/social/reconcile/${propertyId}`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  reconcileAllSocial: (tenantSlug) =>
+    request("/api/social/reconcile", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
   getPublicShowcase: (tenantSlug) => request(`/public/${tenantSlug}/properties`),
 
   getPublicPropertyById: (tenantSlug, propertyId) =>

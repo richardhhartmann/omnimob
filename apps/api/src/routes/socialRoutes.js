@@ -13,6 +13,72 @@ const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 
 export const socialRouter = Router();
 
+// ─── Helpers de remoção / verificação na Graph API ───────────────────────────
+
+// Refs gerados pelo publisher placeholder (enqueuePropertyPublication) têm a forma
+// "facebook-<id>" / "instagram-<id>" / "whatsapp-<id>" e não correspondem a posts reais.
+// A reconciliação e a exclusão na rede só fazem sentido para refs reais da Meta.
+function isRealMetaRef(ref) {
+  if (!ref) return false;
+  return !/^(facebook|instagram|whatsapp)-/i.test(ref);
+}
+
+// Apaga um post do Facebook via Graph API. Considera "já inexistente" como sucesso.
+async function deleteFacebookPost(pageToken, externalRef) {
+  try {
+    const res = await fetch(`${META_BASE}/${externalRef}?access_token=${encodeURIComponent(pageToken)}`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data?.error) {
+      // Objeto já não existe na rede — tratamos como removido com sucesso.
+      if (data.error.code === 100 || /does not exist|Unsupported get request/i.test(data.error.message || "")) {
+        return { ok: true };
+      }
+      return { ok: false, error: data.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+// Verifica se um objeto ainda existe na Graph API.
+// true = existe, false = não existe mais, null = indeterminado (não mexer no status).
+async function checkPostExists(token, externalRef) {
+  try {
+    const res = await fetch(`${META_BASE}/${externalRef}?fields=id&access_token=${encodeURIComponent(token)}`);
+    const data = await res.json().catch(() => ({}));
+    if (data?.error) {
+      if (data.error.code === 100 || res.status === 404 || /does not exist|Unsupported get request/i.test(data.error.message || "")) {
+        return false;
+      }
+      return null; // token expirado / erro transitório — não untrack
+    }
+    return Boolean(data?.id);
+  } catch {
+    return null;
+  }
+}
+
+// Reconcilia as publicações PUBLISHED (FB/IG com ref real) de um conjunto: apaga da
+// Domus as que não existem mais na rede. Retorna a lista de canais removidos.
+async function reconcilePublications(publications, token) {
+  const removed = [];
+  if (!token) return removed;
+  for (const pub of publications) {
+    if (pub.status !== "PUBLISHED") continue;
+    if (pub.channel !== "FACEBOOK" && pub.channel !== "INSTAGRAM") continue;
+    if (!isRealMetaRef(pub.externalRef)) continue;
+    const exists = await checkPostExists(token, pub.externalRef);
+    if (exists === false) {
+      await prisma.propertyPublication.delete({ where: { id: pub.id } }).catch(() => {});
+      removed.push(pub.channel);
+    }
+  }
+  return removed;
+}
+
 // ─── Estado OAuth temporário (em memória, TTL 10min) ─────────────────────────
 
 const oauthStates = new Map();
@@ -376,3 +442,102 @@ socialRouter.post(
     return res.json(results);
   }
 );
+
+// ─── DELETE /api/social/publish/:propertyId/:channel ─────────────────────────
+// Remove o post da rede social (quando a API permite) e some com o registro na Domus.
+
+socialRouter.delete(
+  "/publish/:propertyId/:channel",
+  requireAuth,
+  requireTenant,
+  requirePermissao("publicarRedes"),
+  async (req, res) => {
+    const { propertyId } = req.params;
+    const channel = String(req.params.channel || "").toUpperCase();
+
+    if (!["FACEBOOK", "INSTAGRAM", "WHATSAPP"].includes(channel)) {
+      return res.status(400).json({ error: "Canal inválido." });
+    }
+
+    const publication = await prisma.propertyPublication.findFirst({
+      where: { propertyId, channel, tenantId: req.tenant.id },
+    });
+    if (!publication) {
+      return res.status(404).json({ error: "Publicação não encontrada." });
+    }
+
+    // Facebook: exclusão real via Graph API.
+    if (channel === "FACEBOOK" && isRealMetaRef(publication.externalRef)) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: { facebookPageToken: true },
+      });
+      if (!tenant?.facebookPageToken) {
+        return res.status(400).json({ error: "Página do Facebook não conectada." });
+      }
+      const result = await deleteFacebookPost(tenant.facebookPageToken, publication.externalRef);
+      if (!result.ok) {
+        return res.status(502).json({ error: result.error || "Falha ao remover o post do Facebook." });
+      }
+      await prisma.propertyPublication.delete({ where: { id: publication.id } });
+      return res.json({ removed: true, deletedFromNetwork: true });
+    }
+
+    // Instagram: a Meta não oferece API de exclusão — apenas paramos de rastrear.
+    if (channel === "INSTAGRAM") {
+      await prisma.propertyPublication.delete({ where: { id: publication.id } });
+      return res.json({
+        removed: true,
+        deletedFromNetwork: false,
+        note: "O Instagram não permite exclusão por API. Apague o post manualmente no app do Instagram.",
+      });
+    }
+
+    // WhatsApp ou ref placeholder: só remove o registro.
+    await prisma.propertyPublication.delete({ where: { id: publication.id } });
+    return res.json({ removed: true, deletedFromNetwork: false });
+  }
+);
+
+// ─── POST /api/social/reconcile/:propertyId ──────────────────────────────────
+// Confere na Graph API se os posts de um imóvel ainda existem; remove os que sumiram.
+
+socialRouter.post("/reconcile/:propertyId", requireAuth, requireTenant, async (req, res) => {
+  const { propertyId } = req.params;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.tenant.id },
+    select: { facebookPageToken: true },
+  });
+
+  const publications = await prisma.propertyPublication.findMany({
+    where: { propertyId, tenantId: req.tenant.id },
+  });
+
+  const removed = await reconcilePublications(publications, tenant?.facebookPageToken);
+
+  const current = await prisma.propertyPublication.findMany({
+    where: { propertyId, tenantId: req.tenant.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return res.json({ publications: current, removed });
+});
+
+// ─── POST /api/social/reconcile ──────────────────────────────────────────────
+// Reconcilia todas as publicações do tenant (acionado pelo botão "Sincronizar redes").
+
+socialRouter.post("/reconcile", requireAuth, requireTenant, async (req, res) => {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.tenant.id },
+    select: { facebookPageToken: true },
+  });
+
+  const publications = await prisma.propertyPublication.findMany({
+    where: { tenantId: req.tenant.id, status: "PUBLISHED" },
+  });
+
+  const removed = await reconcilePublications(publications, tenant?.facebookPageToken);
+
+  return res.json({ removedCount: removed.length, removed });
+});

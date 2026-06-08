@@ -164,6 +164,24 @@ propertyRouter.get("/:id", async (req, res) => {
   }
 });
 
+// Valida que os atributosIds existem e (quando há tipo) pertencem ao tipo escolhido.
+// Retorna null se tudo OK, ou um objeto de erro pronto para responder com 400.
+async function validarAtributos(atributosIds, tipoImovelId) {
+  const encontrados = await prisma.modeloAtributo.findMany({
+    where: {
+      id: { in: atributosIds },
+      ...(tipoImovelId ? { tipoId: tipoImovelId } : {}),
+    },
+    select: { id: true },
+  });
+  const validos = new Set(encontrados.map((a) => a.id));
+  const invalidos = atributosIds.filter((id) => !validos.has(id));
+  if (invalidos.length > 0) {
+    return { error: "Alguns atributos selecionados não existem ou não pertencem ao tipo de imóvel escolhido.", invalidos };
+  }
+  return null;
+}
+
 // ─── Criar ────────────────────────────────────────────────────────────────────
 
 propertyRouter.post("/", requireImoveis, async (req, res) => {
@@ -181,6 +199,12 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
       const tipo = await prisma.tipoImovel.findUnique({ where: { id: tipoImovelId } });
       if (!tipo) return res.status(400).json({ error: "Tipo de imovel nao encontrado." });
       propertyType = tipo.descricao;
+    }
+
+    // Garante que os atributos existem (e pertencem ao tipo), evitando erro de FK (P2003).
+    if (atributosIds.length > 0) {
+      const erroAtributos = await validarAtributos(atributosIds, tipoImovelId);
+      if (erroAtributos) return res.status(400).json(erroAtributos);
     }
 
     const property = await prisma.property.create({
@@ -201,8 +225,9 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
     );
 
     return res.status(201).json(property);
-  } catch {
-    return res.status(500).json({ error: "Erro ao criar imovel." });
+  } catch (err) {
+    console.error("[POST /properties]", err);
+    return res.status(500).json({ error: "Erro ao criar imovel.", detail: err.message });
   }
 });
 
@@ -233,6 +258,13 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
         if (!tipo) return res.status(400).json({ error: "Tipo de imovel nao encontrado." });
         propertyType = tipo.descricao;
       }
+    }
+
+    // Garante que os atributos existem (e pertencem ao tipo), evitando erro de FK (P2003).
+    if (atributosIds !== undefined && atributosIds.length > 0) {
+      const tipoAlvo = tipoImovelId !== undefined ? tipoImovelId : current.tipoImovelId;
+      const erroAtributos = await validarAtributos(atributosIds, tipoAlvo ?? undefined);
+      if (erroAtributos) return res.status(400).json(erroAtributos);
     }
 
     // Atualiza atributos apenas se veio no payload
@@ -266,8 +298,9 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
     }
 
     return res.json(property);
-  } catch {
-    return res.status(500).json({ error: "Erro ao atualizar imovel." });
+  } catch (err) {
+    console.error("[PUT /properties/:id]", err);
+    return res.status(500).json({ error: "Erro ao atualizar imovel.", detail: err.message });
   }
 });
 

@@ -96,6 +96,7 @@ const EMPTY = {
   suites: "",
   squareFootage: "",
   finalidade: "RESIDENCIAL",
+  areaTerreno: "",
   areaConstruida: "",
   areaPrivativa: "",
   areaTotal: "",
@@ -112,6 +113,113 @@ const STEPS = [
   { key: "fotos", label: "Fotos" },
   { key: "divulgar", label: "Divulgar" },
 ];
+
+// Campos de área, com rótulo amigável. Estrutura única usada para todos os tipos.
+const AREA_FIELDS = {
+  areaTerreno: "Área do terreno",
+  areaConstruida: "Área construída",
+  areaPrivativa: "Área privativa",
+  areaTotal: "Área total",
+};
+const TODAS_AREAS = ["areaTerreno", "areaConstruida", "areaPrivativa", "areaTotal"];
+
+// Quais áreas exibir por tipo de imóvel (na ordem; a primeira é a principal).
+// Chave = nome do tipo normalizado (minúsculo, sem acento). Tipos fora da lista
+// mostram todas as áreas.
+const TIPO_AREAS = {
+  "casa": ["areaTerreno", "areaConstruida"],
+  "apartamento": ["areaPrivativa", "areaTotal"],
+  "cobertura": ["areaPrivativa", "areaTotal"],
+  "studio": ["areaPrivativa"],
+  "terreno": ["areaTerreno"],
+  "comercial": ["areaConstruida", "areaTotal"],
+  "sala comercial": ["areaPrivativa", "areaTotal"],
+  "casa em condominio": ["areaTerreno", "areaConstruida"],
+  "kitnet": ["areaPrivativa"],
+  "loft": ["areaPrivativa"],
+  "sobrado": ["areaTerreno", "areaConstruida"],
+  "flat": ["areaPrivativa"],
+  "casa de praia": ["areaTerreno", "areaConstruida"],
+  "chacara": ["areaTerreno", "areaConstruida"],
+  "sitio": ["areaTerreno", "areaConstruida"],
+  "lote em condominio": ["areaTerreno"],
+  "galpao": ["areaTerreno", "areaConstruida"],
+  "loja": ["areaPrivativa", "areaTotal"],
+  "predio comercial": ["areaTerreno", "areaConstruida", "areaTotal"],
+};
+
+function normalizarTipo(str) {
+  // Minúsculo e sem acentos (remove a faixa de marcas diacríticas combinantes).
+  return String(str || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+}
+
+// Metragem para exibir em cards/preview/legenda: 1ª área preenchida, ou squareFootage.
+function metragemExibicao(form) {
+  const v = TODAS_AREAS.map((f) => form[f]).find((x) => x !== "" && x != null);
+  return (v != null ? v : form.squareFootage) || "";
+}
+
+// Lista de campos de área a exibir para um tipo (por descrição). A primeira é a principal.
+function areasParaTipo(descricao) {
+  if (!descricao) return TODAS_AREAS;
+  return TIPO_AREAS[normalizarTipo(descricao)] || TODAS_AREAS;
+}
+
+// Em qual etapa cada campo obrigatório aparece, e o rótulo amigável de cada um.
+// Usados para validar o cadastro só ao finalizar e indicar onde falta preencher.
+const FIELD_STEP = {
+  title: 0, description: 0, tipoImovelId: 0, price: 0,
+  address: 1, neighborhood: 1, city: 1, state: 1,
+  bedrooms: 2, parkingSpots: 2, suites: 2,
+  areaTerreno: 2, areaConstruida: 2, areaPrivativa: 2, areaTotal: 2,
+};
+
+const FIELD_LABELS = {
+  title: "Título", description: "Descrição", tipoImovelId: "Tipo de imóvel", price: "Preço",
+  address: "Endereço", neighborhood: "Bairro", city: "Cidade", state: "Estado (UF)",
+  bedrooms: "Quartos", parkingSpots: "Vagas", suites: "Suítes",
+  ...AREA_FIELDS,
+};
+
+// Valida o formulário inteiro de uma vez e retorna um mapa { campo: mensagem }.
+// Vazio = tudo certo. Só é chamada ao finalizar o cadastro (não bloqueia a navegação).
+// areaFields = áreas exibidas para o tipo escolhido (a 1ª é obrigatória).
+function getValidationErrors(form, areaFields = TODAS_AREAS) {
+  const fe = {};
+
+  // Etapa 0 — Identificação
+  if (!form.title || form.title.trim().length < 3) fe.title = "Informe um título com ao menos 3 caracteres.";
+  if (!form.description || form.description.trim().length < 10) fe.description = "A descrição deve ter ao menos 10 caracteres.";
+  if (!form.tipoImovelId) fe.tipoImovelId = "Selecione o tipo de imóvel.";
+  const p = parseCurrencyBRL(String(form.price));
+  if (!Number.isFinite(p) || p <= 0) fe.price = "Informe um preço válido maior que zero.";
+
+  // Etapa 1 — Localização
+  if (!form.address || form.address.trim().length < 5) fe.address = "Informe o endereço completo.";
+  if (!form.neighborhood || form.neighborhood.trim().length < 2) fe.neighborhood = "Informe o bairro.";
+  if (!form.city || form.city.trim().length < 2) fe.city = "Informe a cidade.";
+  if (!form.state || form.state.trim().length < 2) fe.state = "Informe o estado (UF).";
+
+  // Etapa 2 — Detalhes
+  for (const [field, label] of [["bedrooms", "Quartos"], ["parkingSpots", "Vagas"], ["suites", "Suítes"]]) {
+    if (form[field] === "" || form[field] == null) continue; // opcionais: vazio = 0
+    const n = Number(form[field]);
+    if (!Number.isInteger(n) || n < 0) fe[field] = `${label} deve ser um número inteiro ≥ 0.`;
+  }
+  // Valida qualquer área preenchida; exige a área principal do tipo escolhido.
+  for (const field of TODAS_AREAS) {
+    if (form[field] === "" || form[field] == null) continue;
+    const n = parseFloat(form[field]);
+    if (!Number.isFinite(n) || n < 0) fe[field] = `Informe um valor válido para ${AREA_FIELDS[field]} (m²).`;
+  }
+  const principal = areaFields[0];
+  if (principal && !fe[principal]) {
+    const v = parseFloat(form[principal]);
+    if (!Number.isFinite(v) || v <= 0) fe[principal] = `Informe a ${AREA_FIELDS[principal].toLowerCase()} (m²).`;
+  }
+
+  return fe;
+}
 
 // ─── Ícones ───────────────────────────────────────────────────────────────────
 
@@ -292,7 +400,8 @@ function PropertyPreviewCard({ form, previewUrls }) {
   const price = parseCurrencyBRL(String(form.price));
   const hasPrice = Number.isFinite(price) && price > 0;
   const hasLocation = form.neighborhood || form.city || form.state;
-  const hasStats = form.squareFootage || form.bedrooms || form.parkingSpots;
+  const areaExibicao = metragemExibicao(form);
+  const hasStats = areaExibicao || form.bedrooms || form.parkingSpots;
   const statusLabel = { ACTIVE: "Ativo", INACTIVE: "Inativo", DRAFT: "Rascunho" }[form.status] || "Rascunho";
   const statusColor = { ACTIVE: "#10b981", INACTIVE: "#ef4444", DRAFT: "#f59e0b" }[form.status] || "#f59e0b";
   const currentUrl = previewUrls[idx] || null;
@@ -376,9 +485,9 @@ function PropertyPreviewCard({ form, previewUrls }) {
 
           {hasStats && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "2px" }}>
-              {form.squareFootage && (
+              {areaExibicao && (
                 <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
-                  <IconArea /> {form.squareFootage} m²
+                  <IconArea /> {areaExibicao} m²
                 </span>
               )}
               {form.bedrooms && (
@@ -409,14 +518,17 @@ function PropertyPreviewCard({ form, previewUrls }) {
 
 // ─── Campo com label ──────────────────────────────────────────────────────────
 
-function Field({ label, children, hint }) {
+function Field({ label, children, hint, required, error }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
       <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         {label}
+        {required && <span style={{ color: "#ef4444", marginLeft: "4px" }} title="Campo obrigatório">*</span>}
       </label>
       {children}
-      {hint && <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>{hint}</span>}
+      {error
+        ? <span style={{ fontSize: "11px", color: "#f87171", fontWeight: "500" }}>{error}</span>
+        : hint && <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>{hint}</span>}
     </div>
   );
 }
@@ -585,6 +697,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [form, setForm] = useState(EMPTY);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
+  // Erros por campo (mapa { campo: mensagem }), preenchido só ao finalizar o cadastro.
+  const [fieldErrors, setFieldErrors] = useState({});
   const [cepLoading, setCepLoading] = useState(false);
   const [comodidadesLoading, setComodidadesLoading] = useState(false);
   const [comodidadesMsg, setComodidadesMsg] = useState("");
@@ -599,6 +713,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [socialStatus, setSocialStatus] = useState(null);
   const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
   const [publishResults, setPublishResults] = useState({});
+  const [removeLoading, setRemoveLoading] = useState({ facebook: false, instagram: false });
+  const [removeNote, setRemoveNote] = useState({});
   const [, setSearchParams] = useSearchParams();
 
   const session = loadSession();
@@ -625,9 +741,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       ? `R$ ${price.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
       : "";
     const location = [form.neighborhood, form.city, form.state].filter(Boolean).join(", ");
+    const areaLegenda = metragemExibicao(form);
     const stats = [
       form.bedrooms ? `${form.bedrooms} quarto${form.bedrooms !== "1" ? "s" : ""}` : "",
-      form.squareFootage ? `${form.squareFootage} m²` : "",
+      areaLegenda ? `${areaLegenda} m²` : "",
       form.parkingSpots ? `${form.parkingSpots} vaga${form.parkingSpots !== "1" ? "s" : ""}` : "",
     ].filter(Boolean).join(" · ");
     const tipoSel = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
@@ -657,6 +774,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
     setImages([]);
 
+    setFieldErrors({});
+
     if (!initialData) {
       setForm(EMPTY);
       setStep(0);
@@ -679,6 +798,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       suites: initialData.suites != null ? String(initialData.suites) : "",
       squareFootage: initialData.squareFootage != null ? String(initialData.squareFootage) : "",
       finalidade: initialData.finalidade || "",
+      areaTerreno: initialData.areaTerreno != null ? String(initialData.areaTerreno) : "",
       areaConstruida: initialData.areaConstruida != null ? String(initialData.areaConstruida) : "",
       areaPrivativa: initialData.areaPrivativa != null ? String(initialData.areaPrivativa) : "",
       areaTotal: initialData.areaTotal != null ? String(initialData.areaTotal) : "",
@@ -692,6 +812,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }, [initialData]);
 
   const tipoSelecionado = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
+  // Áreas a exibir/exigir conforme o tipo de imóvel escolhido.
+  const areaFields = areasParaTipo(tipoSelecionado?.descricao);
 
   // URLs para o preview: novas selecionadas, ou imagens já salvas no servidor
   const existingUrls = initialData?.images?.map((img) => img.url) ?? [];
@@ -699,6 +821,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
+    clearFieldError(field);
+  }
+
+  // Remove o destaque de erro de um campo assim que o usuário começa a corrigi-lo.
+  function clearFieldError(field) {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   }
 
   function addImages(files) {
@@ -726,62 +859,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     });
   }
 
-  function validateStep(s) {
-    if (s === 0) {
-      if (!form.title || form.title.length < 3) return "Título deve ter ao menos 3 caracteres.";
-      if (!form.description || form.description.length < 10) return "Descrição deve ter ao menos 10 caracteres.";
-      if (!form.tipoImovelId) return "Selecione o tipo de imóvel.";
-      const p = parseCurrencyBRL(String(form.price));
-      if (!Number.isFinite(p) || p <= 0) return "Informe um preço válido maior que zero.";
-    }
-    if (s === 1) {
-      if (!form.address || form.address.length < 5) return "Informe o endereço completo.";
-      if (!form.neighborhood || form.neighborhood.length < 2) return "Informe o bairro.";
-      if (!form.city || form.city.length < 2) return "Informe a cidade.";
-      if (!form.state || form.state.length < 2) return "Informe o estado (UF).";
-    }
-    if (s === 2) {
-      const bed = Number(form.bedrooms);
-      const park = Number(form.parkingSpots);
-      const suite = Number(form.suites);
-      if ([bed, park, suite].some((v) => !Number.isInteger(v) || v < 0))
-        return "Quartos, vagas e suítes devem ser números inteiros ≥ 0.";
-      const sqft = parseFloat(form.squareFootage);
-      if (!Number.isFinite(sqft) || sqft <= 0) return "Informe a metragem (m²).";
-      const areas = [
-        ["área construída", form.areaConstruida],
-        ["área privativa", form.areaPrivativa],
-        ["área total", form.areaTotal],
-      ];
-      for (const [nome, valor] of areas) {
-        if (valor === "" || valor == null) continue;
-        const n = parseFloat(valor);
-        if (!Number.isFinite(n) || n < 0) return `Informe um valor válido para ${nome} (m²).`;
-      }
-    }
-    return null;
-  }
-
+  // Navegação livre entre as etapas — sem validação. Só o step "Divulgar"
+  // (4) fica travado até o imóvel ser salvo. A validação acontece ao finalizar.
   function handleStepClick(target) {
     if (target === step) return;
     if (target === 4 && !savedPropertyId) return; // travado até salvar
-    if (target < step) {
-      setError("");
-      setStep(target);
-      return;
-    }
-    for (let s = step; s < target; s++) {
-      if (s >= 3) break; // não valida step 4
-      const err = validateStep(s);
-      if (err) { setError(err); return; }
-    }
     setError("");
     setStep(target);
   }
 
   function handleNext() {
-    const err = validateStep(step);
-    if (err) { setError(err); return; }
     setError("");
     setStep((s) => s + 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -793,12 +880,41 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }
 
   async function handleSubmit() {
-    setError("");
-    for (let i = 0; i <= 2; i++) {
-      const err = validateStep(i);
-      if (err) { setStep(i); setError(err); return; }
+    // Valida tudo só agora, ao finalizar. Se houver pendências, destaca os
+    // campos, monta um resumo do que falta e leva o usuário até a 1ª etapa incompleta.
+    const fe = getValidationErrors(form, areaFields);
+    const fields = Object.keys(fe);
+    if (fields.length > 0) {
+      setFieldErrors(fe);
+
+      const byStep = {};
+      for (const f of fields) {
+        const st = FIELD_STEP[f];
+        (byStep[st] ||= []).push(FIELD_LABELS[f]);
+      }
+      const orderedSteps = Object.keys(byStep).map(Number).sort((a, b) => a - b);
+      const parts = orderedSteps.map((st) => `${STEPS[st].label} (${byStep[st].join(", ")})`);
+      setError(`Faltam campos obrigatórios para publicar: ${parts.join(" · ")}. Revise as etapas destacadas.`);
+
+      setStep(orderedSteps[0]);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
     }
+
+    setFieldErrors({});
+    setError("");
     const normalizedPrice = parseCurrencyBRL(String(form.price));
+    // squareFootage (metragem usada nos cards/preview) é derivado da 1ª área
+    // preenchida do tipo; se nenhuma, mantém a antiga (edição) ou 0.
+    const areaPrincipal = areaFields
+      .map((f) => parseFloat(form[f]))
+      .find((v) => Number.isFinite(v) && v > 0);
+    const squareFootage = areaPrincipal ?? (parseFloat(form.squareFootage) || 0);
+    // Salva só as áreas relevantes ao tipo escolhido; descarta valores digitados
+    // para campos que não pertencem ao tipo (ex.: área preenchida antes do tipo).
+    const areaPayload = Object.fromEntries(
+      TODAS_AREAS.map((f) => [f, areaFields.includes(f) && form[f] !== "" ? parseFloat(form[f]) : null])
+    );
     const saved = await onSubmit({
       tipoImovelId: form.tipoImovelId ? Number(form.tipoImovelId) : undefined,
       atributosIds: form.atributosIds,
@@ -813,11 +929,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       bedrooms: Number(form.bedrooms),
       parkingSpots: Number(form.parkingSpots),
       suites: Number(form.suites),
-      squareFootage: parseFloat(form.squareFootage),
+      squareFootage,
       finalidade: form.finalidade || null,
-      areaConstruida: form.areaConstruida !== "" ? parseFloat(form.areaConstruida) : null,
-      areaPrivativa: form.areaPrivativa !== "" ? parseFloat(form.areaPrivativa) : null,
-      areaTotal: form.areaTotal !== "" ? parseFloat(form.areaTotal) : null,
+      ...areaPayload,
       andamento: form.andamento || null,
       aceitaPermuta: Boolean(form.aceitaPermuta),
       status: form.status,
@@ -825,18 +939,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       imageFiles: images.map((img) => img.file),
     });
 
-    if (!isEditing) {
+    if (!isEditing && saved?.id) {
+      // Sucesso: libera as prévias, limpa as fotos e segue para a etapa Divulgar.
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
       setImages([]);
-      if (saved?.id) {
-        setSavedPropertyId(saved.id);
-        setPublishResults({});
-        setStep(4);
-      } else {
-        setForm(EMPTY);
-        setStep(0);
-      }
+      setSavedPropertyId(saved.id);
+      setPublishResults({});
+      setStep(4);
     }
+    // Em caso de falha (saved == null), mantém o formulário preenchido para o
+    // usuário corrigir e tentar de novo; o erro é exibido pelo componente pai.
   }
 
   async function handleCepBlur() {
@@ -926,6 +1038,24 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
+  async function handleRemove(platform) {
+    if (!tenantSlug || !savedPropertyId) return;
+    const nome = platform === "facebook" ? "Facebook" : "Instagram";
+    if (!window.confirm(`Remover este imóvel do ${nome}?`)) return;
+    setRemoveLoading((prev) => ({ ...prev, [platform]: true }));
+    setRemoveNote((prev) => ({ ...prev, [platform]: "" }));
+    try {
+      const channel = platform === "facebook" ? "FACEBOOK" : "INSTAGRAM";
+      const result = await api.removePublication(tenantSlug, savedPropertyId, channel);
+      setPublishResults((prev) => { const next = { ...prev }; delete next[platform]; return next; });
+      if (result?.note) setRemoveNote((prev) => ({ ...prev, [platform]: result.note }));
+    } catch (err) {
+      setRemoveNote((prev) => ({ ...prev, [platform]: err.message }));
+    } finally {
+      setRemoveLoading((prev) => ({ ...prev, [platform]: false }));
+    }
+  }
+
   function handleWhatsApp() {
     const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
     const text = caption || `🏠 ${form.title}\n🔗 ${vitrineUrl}`;
@@ -939,6 +1069,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     outline: "none", transition: "border-color 0.2s",
   };
   const selectStyle = { ...inputStyle, cursor: "pointer" };
+  // Aplica borda vermelha quando o campo tem erro de validação.
+  const withError = (field, base = inputStyle) =>
+    fieldErrors[field] ? { ...base, border: "1px solid rgba(239,68,68,0.6)" } : base;
 
   return (
     <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
@@ -969,17 +1102,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
           {/* Etapa 0 — Identificação */}
           {step === 0 && (
             <>
-              <Field label="Título do imóvel">
-                <input style={inputStyle} placeholder="Ex: Apartamento 3 quartos no Setor Bueno" value={form.title} onChange={(e) => set("title", e.target.value)} disabled={disabled} />
+              <Field label="Título do imóvel" required error={fieldErrors.title}>
+                <input style={withError("title")} placeholder="Ex: Apartamento 3 quartos no Setor Bueno" value={form.title} onChange={(e) => set("title", e.target.value)} disabled={disabled} />
               </Field>
-              <Field label="Descrição">
-                <textarea style={{ ...inputStyle, resize: "vertical", minHeight: "100px", lineHeight: "1.6" }} placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..." value={form.description} onChange={(e) => set("description", e.target.value)} rows={4} disabled={disabled} />
+              <Field label="Descrição" required error={fieldErrors.description}>
+                <textarea style={{ ...withError("description"), resize: "vertical", minHeight: "100px", lineHeight: "1.6" }} placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..." value={form.description} onChange={(e) => set("description", e.target.value)} rows={4} disabled={disabled} />
               </Field>
-              <Field label="Preço">
-                <input style={inputStyle} placeholder="R$ 0,00" type="text" inputMode="numeric" value={form.price} onChange={(e) => set("price", formatCurrencyBRL(e.target.value))} disabled={disabled} />
+              <Field label="Preço" required error={fieldErrors.price}>
+                <input style={withError("price")} placeholder="R$ 0,00" type="text" inputMode="numeric" value={form.price} onChange={(e) => set("price", formatCurrencyBRL(e.target.value))} disabled={disabled} />
               </Field>
-              <Field label="Tipo de imóvel">
-                <select style={selectStyle} value={form.tipoImovelId} onChange={(e) => setForm((prev) => ({ ...prev, tipoImovelId: e.target.value, atributosIds: [] }))} disabled={disabled}>
+              <Field label="Tipo de imóvel" required error={fieldErrors.tipoImovelId}>
+                <select style={withError("tipoImovelId", selectStyle)} value={form.tipoImovelId} onChange={(e) => { setForm((prev) => ({ ...prev, tipoImovelId: e.target.value, atributosIds: [] })); clearFieldError("tipoImovelId"); }} disabled={disabled}>
                   <option value="" disabled hidden>Selecione uma categoria...</option>
                   {tipos.map((t) => <option key={t.id} value={t.id}>{t.descricao}</option>)}
                 </select>
@@ -1001,19 +1134,19 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   {cepLoading && <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>Consultando...</span>}
                 </div>
               </Field>
-              <Field label="Endereço">
-                <input style={inputStyle} placeholder="Rua, número, complemento" value={form.address} onChange={(e) => set("address", e.target.value)} disabled={disabled} />
+              <Field label="Endereço" required error={fieldErrors.address}>
+                <input style={withError("address")} placeholder="Rua, número, complemento" value={form.address} onChange={(e) => set("address", e.target.value)} disabled={disabled} />
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                <Field label="Bairro">
-                  <input style={inputStyle} placeholder="Bairro" value={form.neighborhood} onChange={(e) => set("neighborhood", e.target.value)} disabled={disabled} />
+                <Field label="Bairro" required error={fieldErrors.neighborhood}>
+                  <input style={withError("neighborhood")} placeholder="Bairro" value={form.neighborhood} onChange={(e) => set("neighborhood", e.target.value)} disabled={disabled} />
                 </Field>
-                <Field label="Cidade">
-                  <input style={inputStyle} placeholder="Cidade" value={form.city} onChange={(e) => set("city", e.target.value)} disabled={disabled} />
+                <Field label="Cidade" required error={fieldErrors.city}>
+                  <input style={withError("city")} placeholder="Cidade" value={form.city} onChange={(e) => set("city", e.target.value)} disabled={disabled} />
                 </Field>
               </div>
-              <Field label="Estado (UF)">
-                <input style={{ ...inputStyle, maxWidth: "100px", textTransform: "uppercase" }} placeholder="GO" maxLength={2} value={form.state} onChange={(e) => set("state", e.target.value.toUpperCase())} disabled={disabled} />
+              <Field label="Estado (UF)" required error={fieldErrors.state}>
+                <input style={{ ...withError("state"), maxWidth: "100px", textTransform: "uppercase" }} placeholder="GO" maxLength={2} value={form.state} onChange={(e) => set("state", e.target.value.toUpperCase())} disabled={disabled} />
               </Field>
 
               {/* Comodidades da região — detectadas automaticamente pelo CEP */}
@@ -1066,16 +1199,24 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   <option value="COMERCIAL">Comercial</option>
                 </select>
               </Field>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                <Field label="Quartos"><input style={inputStyle} type="number" min="0" placeholder="0" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} disabled={disabled} /></Field>
-                <Field label="Suítes"><input style={inputStyle} type="number" min="0" placeholder="0" value={form.suites} onChange={(e) => set("suites", e.target.value)} disabled={disabled} /></Field>
-                <Field label="Vagas de garagem"><input style={inputStyle} type="number" min="0" placeholder="0" value={form.parkingSpots} onChange={(e) => set("parkingSpots", e.target.value)} disabled={disabled} /></Field>
-                <Field label="Metragem (m²)"><input style={inputStyle} type="number" min="1" step="0.01" placeholder="0,00" value={form.squareFootage} onChange={(e) => set("squareFootage", e.target.value)} disabled={disabled} /></Field>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+                <Field label="Quartos" error={fieldErrors.bedrooms}><input style={withError("bedrooms")} type="number" min="0" placeholder="0" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} disabled={disabled} /></Field>
+                <Field label="Suítes" error={fieldErrors.suites}><input style={withError("suites")} type="number" min="0" placeholder="0" value={form.suites} onChange={(e) => set("suites", e.target.value)} disabled={disabled} /></Field>
+                <Field label="Vagas de garagem" error={fieldErrors.parkingSpots}><input style={withError("parkingSpots")} type="number" min="0" placeholder="0" value={form.parkingSpots} onChange={(e) => set("parkingSpots", e.target.value)} disabled={disabled} /></Field>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
-                <Field label="Área construída (m²)"><input style={inputStyle} type="number" min="0" step="0.01" placeholder="0,00" value={form.areaConstruida} onChange={(e) => set("areaConstruida", e.target.value)} disabled={disabled} /></Field>
-                <Field label="Área privativa (m²)"><input style={inputStyle} type="number" min="0" step="0.01" placeholder="0,00" value={form.areaPrivativa} onChange={(e) => set("areaPrivativa", e.target.value)} disabled={disabled} /></Field>
-                <Field label="Área total (m²)"><input style={inputStyle} type="number" min="0" step="0.01" placeholder="0,00" value={form.areaTotal} onChange={(e) => set("areaTotal", e.target.value)} disabled={disabled} /></Field>
+
+              {/* Áreas — exibidas conforme o tipo de imóvel selecionado (a 1ª é a principal) */}
+              {!tipoSelecionado && (
+                <div style={{ padding: "10px 14px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "12px", color: "#fbbf24" }}>
+                  Selecione o tipo de imóvel na etapa "Identificação" para ver os campos de área corretos.
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(areaFields.length, 3)}, 1fr)`, gap: "16px" }}>
+                {areaFields.map((field, idx) => (
+                  <Field key={field} label={`${AREA_FIELDS[field]} (m²)`} required={idx === 0} error={fieldErrors[field]}>
+                    <input style={withError(field)} type="number" min="0" step="0.01" placeholder="0,00" value={form[field]} onChange={(e) => set(field, e.target.value)} disabled={disabled} />
+                  </Field>
+                ))}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <Field label="Status">
@@ -1213,10 +1354,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                         {socialStatus === null ? "Verificando conexão…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações"}
                       </div>
                     </div>
-                    {publishResults.facebook ? (
-                      <span style={{ fontSize: "12px", fontWeight: "600", color: publishResults.facebook.success ? "#10b981" : "#ef4444", whiteSpace: "nowrap" }}>
-                        {publishResults.facebook.success ? "✓ Publicado" : `✗ ${publishResults.facebook.error}`}
-                      </span>
+                    {publishResults.facebook?.success ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                        <button type="button" onClick={() => handleRemove("facebook")} disabled={removeLoading.facebook}
+                          style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
+                          {removeLoading.facebook ? "…" : "Remover"}
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -1242,10 +1387,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                         {socialStatus === null ? "Verificando conexão…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — vincule ao Facebook em Configurações"}
                       </div>
                     </div>
-                    {publishResults.instagram ? (
-                      <span style={{ fontSize: "12px", fontWeight: "600", color: publishResults.instagram.success ? "#10b981" : "#ef4444", whiteSpace: "nowrap" }}>
-                        {publishResults.instagram.success ? "✓ Publicado" : `✗ ${publishResults.instagram.error}`}
-                      </span>
+                    {publishResults.instagram?.success ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                        <button type="button" onClick={() => handleRemove("instagram")} disabled={removeLoading.instagram}
+                          style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
+                          {removeLoading.instagram ? "…" : "Remover"}
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -1279,6 +1428,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   </button>
                 </div>
               </div>
+
+              {/* Avisos de remoção (ex.: Instagram não permite exclusão por API) */}
+              {(removeNote.facebook || removeNote.instagram) && (
+                <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "13px", color: "#fbbf24", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {removeNote.facebook && <span>{removeNote.facebook}</span>}
+                  {removeNote.instagram && <span>{removeNote.instagram}</span>}
+                </div>
+              )}
 
               {/* Ações finais */}
               <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>

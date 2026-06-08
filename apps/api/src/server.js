@@ -10,6 +10,7 @@ import { leadRouter } from "./routes/leadRoutes.js";
 import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
 import { socialRouter } from "./routes/socialRoutes.js";
+import { socialWebhookRouter } from "./routes/socialWebhookRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
 import { usuarioRouter } from "./routes/usuarioRoutes.js";
 
@@ -36,6 +37,10 @@ app.use(
     credentials: true,
   })
 );
+
+// Webhook do Meta — montado ANTES do express.json() e com corpo cru, pois a
+// validação de assinatura (X-Hub-Signature-256) exige o body sem parsing.
+app.use("/api/social/webhook", express.raw({ type: "*/*" }), socialWebhookRouter);
 
 app.use(express.json());
 
