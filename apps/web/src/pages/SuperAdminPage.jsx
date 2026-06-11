@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "../api";
+import { useConfirm } from "../components/ConfirmModal";
 
 const STATUS_META = {
   TRIAL: { label: "Trial", color: "#a5b4fc", bg: "rgba(129,140,248,0.15)", border: "rgba(129,140,248,0.3)" },
@@ -35,6 +36,7 @@ const inputStyle = {
 };
 
 export function SuperAdminPage({ session, onLogout }) {
+  const { confirm, modal: confirmModal } = useConfirm();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -126,7 +128,7 @@ export function SuperAdminPage({ session, onLogout }) {
   }
 
   async function handleDelete(t) {
-    if (!window.confirm(`Excluir o tenant "${t.name}"? Isso remove usuários, imóveis e leads. Esta ação é irreversível.`)) return;
+    if (!await confirm(`Excluir o tenant "${t.name}"? Isso remove usuários, imóveis e leads. Esta ação é irreversível.`, "Excluir")) return;
     try {
       await adminApi.deleteTenant(t.id);
       await load();
@@ -144,6 +146,7 @@ export function SuperAdminPage({ session, onLogout }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f172a, #1e1b4b, #312e81)", color: "#f8fafc" }}>
+      {confirmModal}
       {/* Topbar */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 28px", borderBottom: "1px solid rgba(255,255,255,0.08)", position: "sticky", top: 0, background: "rgba(15,23,42,0.85)", backdropFilter: "blur(12px)", zIndex: 10 }}>
         <div>

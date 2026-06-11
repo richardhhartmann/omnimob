@@ -38,10 +38,10 @@ propertyRouter.get("/tipos", async (_req, res) => {
 
 propertyRouter.post("/tipos", requireImoveis, async (req, res) => {
   try {
-    const { descricao } = req.body;
+    const { descricao, areaFields } = req.body;
     if (!descricao) return res.status(400).json({ error: "Descrição é obrigatória." });
     const tipo = await prisma.tipoImovel.create({
-      data: { descricao },
+      data: { descricao, areaFields: Array.isArray(areaFields) ? areaFields : [] },
       include: { atributos: true },
     });
     return res.status(201).json(tipo);
@@ -53,10 +53,13 @@ propertyRouter.post("/tipos", requireImoveis, async (req, res) => {
 
 propertyRouter.put("/tipos/:id", requireImoveis, async (req, res) => {
   try {
-    const { descricao } = req.body;
+    const { descricao, areaFields } = req.body;
+    const data = {};
+    if (descricao !== undefined) data.descricao = descricao;
+    if (Array.isArray(areaFields)) data.areaFields = areaFields;
     const tipo = await prisma.tipoImovel.update({
       where: { id: Number(req.params.id) },
-      data: { descricao },
+      data,
       include: { atributos: { orderBy: [{ grupo: "asc" }, { descricao: "asc" }] } },
     });
     return res.json(tipo);
@@ -492,6 +495,24 @@ propertyRouter.post("/:id/images", async (req, res) => {
     return res.status(201).json(image);
   } catch {
     return res.status(500).json({ error: "Erro ao adicionar imagem." });
+  }
+});
+
+propertyRouter.put("/:id/images/reorder", async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) return res.status(400).json({ error: "order deve ser um array de IDs." });
+    await Promise.all(
+      order.map((imageId, i) =>
+        prisma.propertyImage.updateMany({
+          where: { id: imageId, propertyId: req.params.id, tenantId: req.tenant.id },
+          data: { position: i + 1 },
+        })
+      )
+    );
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ error: "Erro ao reordenar imagens." });
   }
 });
 

@@ -101,6 +101,19 @@ export function StatusPill({ active }) {
   );
 }
 
+// Cabeçalho padronizado de página com título, subtítulo opcional e ação à direita.
+export function PageHeader({ title, subtitle, action }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "28px", gap: "16px" }}>
+      <div>
+        <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "700", letterSpacing: "-0.3px" }}>{title}</h2>
+        {subtitle && <p style={{ margin: "5px 0 0", color: "var(--text-muted)", fontSize: "14px" }}>{subtitle}</p>}
+      </div>
+      {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+    </div>
+  );
+}
+
 // Chip pequeno (contato, localização, etc.).
 export function Chip({ color = "#94a3b8", href, children, title }) {
   const style = {

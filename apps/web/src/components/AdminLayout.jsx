@@ -1,164 +1,444 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { api } from "../api";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import {
+  House,
+  Buildings,
+  SquaresFour,
+  Users,
+  UserCircle,
+  UserSquare,
+  Shield,
+  GearSix,
+  PencilSimple,
+  ArrowSquareOut,
+  SignOut,
+  CaretLeft,
+  CaretRight,
+  CheckCircle,
+  XCircle,
+  WarningCircle,
+} from "@phosphor-icons/react";
 
+// ── Paleta da sidebar ─────────────────────────────────────────────────────────
+const S = {
+  bg:         "#0c0f1a",
+  border:     "rgba(255,255,255,0.07)",
+  text:       "#64748b",
+  textActive: "#f1f5f9",
+  hover:      "rgba(255,255,255,0.05)",
+  active:     "rgba(129,140,248,0.10)",
+  separator:  "rgba(255,255,255,0.06)",
+  avatarBg:   "#4f46e5",
+};
 
+// ── Tooltip lateral (só quando recolhida) ─────────────────────────────────────
+function SideTooltip({ label, collapsed, children }) {
+  if (!collapsed) return children;
+  return (
+    <Tooltip.Root delayDuration={300}>
+      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          side="right"
+          sideOffset={10}
+          style={{
+            background: "rgba(15,23,42,0.95)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "6px",
+            padding: "5px 10px",
+            fontSize: "12px",
+            fontWeight: 500,
+            color: "#f1f5f9",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            zIndex: 9999,
+          }}
+        >
+          {label}
+          <Tooltip.Arrow style={{ fill: "rgba(15,23,42,0.95)" }} />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+
+// ── Item de navegação ──────────────────────────────────────────────────────────
+function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge }) {
+  const baseStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: collapsed ? 0 : "10px",
+    justifyContent: collapsed ? "center" : "flex-start",
+    width: "100%",
+    padding: collapsed ? "8px" : "8px 10px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    fontWeight: 500,
+    cursor: "pointer",
+    textDecoration: "none",
+    background: active ? S.active : "transparent",
+    color: active ? S.textActive : S.text,
+    border: "none",
+    boxShadow: "none",
+    transform: "none",
+    transition: "background 0.15s, color 0.15s",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textAlign: "left",
+  };
+
+  function handleMouseEnter(e) {
+    if (!active) {
+      e.currentTarget.style.background = S.hover;
+      e.currentTarget.style.color = S.textActive;
+    }
+  }
+  function handleMouseLeave(e) {
+    if (!active) {
+      e.currentTarget.style.background = "transparent";
+      e.currentTarget.style.color = S.text;
+    }
+  }
+
+  const content = (
+    <>
+      <span style={{ display: "flex", flexShrink: 0, color: active ? "#fff" : "currentColor", position: "relative" }}>
+        <Icon size={16} weight={active ? "fill" : "regular"} />
+        {collapsed && badge > 0 && (
+          <span style={{ position: "absolute", top: "-4px", right: "-4px", width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444", border: "1.5px solid #0c0f1a" }} />
+        )}
+      </span>
+      {!collapsed && (
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{label}</span>
+      )}
+      {!collapsed && badge > 0 && (
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "18px", height: "18px", padding: "0 5px", borderRadius: "999px", background: "#ef4444", color: "#fff", fontSize: "10px", fontWeight: 700, flexShrink: 0 }}>
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
+    </>
+  );
+
+  const el = href ? (
+    <Link
+      to={href}
+      style={baseStyle}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer" : undefined}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {content}
+    </Link>
+  ) : (
+    <button
+      type="button"
+      style={baseStyle}
+      onClick={onClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {content}
+    </button>
+  );
+
+  return <SideTooltip label={label} collapsed={collapsed}>{el}</SideTooltip>;
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+const TOAST_META = {
+  success: { Icon: CheckCircle,   bg: "rgba(16,185,129,0.92)" },
+  error:   { Icon: XCircle,       bg: "rgba(239,68,68,0.92)"  },
+  warning: { Icon: WarningCircle, bg: "rgba(245,158,11,0.92)" },
+};
+
+// ── Layout principal ───────────────────────────────────────────────────────────
 export function AdminLayout({ session, onLogout }) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const tenantSlug = session?.tenant?.slug || "";
-  const initialLetter = session?.tenant?.name?.charAt(0)?.toUpperCase() || "D";
+  const location  = useLocation();
+  const navigate  = useNavigate();
+  const tenantSlug = session?.tenant?.slug  || "";
+  const tenantName = session?.tenant?.name  || "Domus";
   const userInitial = session?.usuario?.nome?.charAt(0)?.toUpperCase() || "U";
-  const cargo = session?.usuario?.cargo;
+  const userName    = session?.usuario?.nome || "";
+  const userRole    = session?.usuario?.cargo?.descricao || "Operador";
+  const cargo       = session?.usuario?.cargo;
 
-  const showcaseLink = useMemo(() => (tenantSlug ? `/vitrine/${tenantSlug}` : "#"), [tenantSlug]);
-  const showcaseEditorLink = useMemo(() => (tenantSlug ? `/vitrine/${tenantSlug}/editar` : "#"), [tenantSlug]);
+  // ── Colapso ──────────────────────────────────────────────────────────────────
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
+  });
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem("sidebar-collapsed", String(next)); } catch {}
+      return next;
+    });
+  }
 
-  const isDashboard = location.pathname === "/";
-  const isLeads = location.pathname === "/leads";
-  const isUsuarios = location.pathname === "/usuarios";
-  const isCargos = location.pathname === "/cargos";
-  const isClientes = location.pathname === "/clientes";
-  const isConfiguracoes = location.pathname === "/configuracoes";
-  const isTiposImovel = location.pathname === "/tipos-imovel";
-  const isShowcaseEditor = location.pathname.endsWith("/editar");
-  const searchParams = new URLSearchParams(location.search);
-  const activeTab = searchParams.get("tab") || "create";
+  // ── Toast ─────────────────────────────────────────────────────────────────────
+  const [toasts, setToasts] = useState([]);
+  const showToast = useCallback((message, type = "success") => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+  }, []);
+
+  // ── Links ─────────────────────────────────────────────────────────────────────
+  const showcaseLink       = useMemo(() => tenantSlug ? `/vitrine/${tenantSlug}`         : "#", [tenantSlug]);
+  const showcaseEditorLink = useMemo(() => tenantSlug ? `/vitrine/${tenantSlug}/editar`  : "#", [tenantSlug]);
+
+  // ── Estado ativo ──────────────────────────────────────────────────────────────
+  const p = location.pathname;
+  const isDashboard     = p === "/";
+  const isImovelNovo    = p === "/imoveis/novo" || p === "/tipos-imovel";
+  const isImovelList    = p === "/imoveis";
+  const isInsights      = p.startsWith("/imoveis/") && !isImovelNovo;
+  const isLeads         = p === "/leads";
+  const isClientes      = p === "/clientes";
+  const isUsuarios      = p === "/usuarios";
+  const isCargos        = p === "/cargos";
+  const isConfiguracoes = p === "/configuracoes";
+  const isShowcaseEditor = p.endsWith("/editar");
+
+  // ── Badge de novos leads ──────────────────────────────────────────────────────
+  const [leadsBadge, setLeadsBadge] = useState(0);
+  const canSeeLeads = Boolean(cargo?.gerenciarLeads);
+  useEffect(() => {
+    if (!tenantSlug || !canSeeLeads) return;
+    function checkLeads() {
+      api.listLeads(tenantSlug, { page: 1, limit: 1 }).then((result) => {
+        const total = result.total ?? (result.leads?.length ?? 0);
+        try {
+          const seen = parseInt(localStorage.getItem(`domus_leads_seen_${tenantSlug}`) || "0", 10);
+          setLeadsBadge(Math.max(0, total - seen));
+        } catch { setLeadsBadge(0); }
+      }).catch(() => {});
+    }
+    checkLeads();
+    window.addEventListener("focus", checkLeads);
+    return () => window.removeEventListener("focus", checkLeads);
+  }, [tenantSlug, canSeeLeads]);
+  useEffect(() => { if (isLeads) setLeadsBadge(0); }, [isLeads]);
+
+  const c = collapsed;
+  const sidebarWidth = c ? 64 : 240;
 
   return (
-    <div className="app-layout">
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <div className="tenant-logo">
-            {session?.tenant?.logoUrl
-              ? <img src={session.tenant.logoUrl} alt={session?.tenant?.name || "Logo"} style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
-              : initialLetter}
+    <Tooltip.Provider>
+      <div style={{ display: "flex", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}>
+
+        {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
+        <aside style={{
+          width: `${sidebarWidth}px`,
+          minWidth: `${sidebarWidth}px`,
+          height: "100vh",
+          position: "sticky",
+          top: 0,
+          display: "flex",
+          flexDirection: "column",
+          background: S.bg,
+          borderRight: `1px solid ${S.border}`,
+          overflowX: "hidden",
+          overflowY: "auto",
+          transition: "width 0.25s cubic-bezier(0.4,0,0.2,1), min-width 0.25s cubic-bezier(0.4,0,0.2,1)",
+          flexShrink: 0,
+          zIndex: 10,
+        }}>
+
+          {/* Header da sidebar */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: c ? 0 : "10px",
+            justifyContent: c ? "center" : "flex-start",
+            height: "56px",
+            padding: c ? "0" : "0 14px",
+            borderBottom: `1px solid ${S.border}`,
+            flexShrink: 0,
+          }}>
+            <div style={{
+              width: "28px",
+              height: "28px",
+              borderRadius: "6px",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              background: session?.tenant?.logoUrl ? "transparent" : S.avatarBg,
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: "13px",
+            }}>
+              {session?.tenant?.logoUrl
+                ? <img src={session.tenant.logoUrl} alt={tenantName} style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                : tenantName.charAt(0).toUpperCase()}
+            </div>
+            {!c && (
+              <span style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: S.textActive,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                letterSpacing: "-0.01em",
+              }}>
+                {tenantName}
+              </span>
+            )}
           </div>
-          <div className="tenant-title-group">
-            <h1>{session?.tenant?.name || "Domus"}</h1>
-          </div>
-        </div>
 
-        <nav className="sidebar-nav" style={{ marginTop: "24px" }}>
-          <button
-            type="button"
-            className={`nav-button ${isDashboard && searchParams.get("tab") === null ? "active" : ""}`}
-            onClick={() => navigate("/")}
-          >
-            <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-            Início
-          </button>
+          {/* Navegação */}
+          <nav style={{ flex: 1, overflowY: "auto", padding: "8px", display: "flex", flexDirection: "column", gap: "2px" }}>
+            <NavItem Icon={House}          label="Início"           active={isDashboard}              onClick={() => navigate("/")}            collapsed={c} />
 
-          {cargo?.gerenciarImoveis && (
-            <>
+            {cargo?.gerenciarImoveis && (<>
+              <NavItem Icon={Buildings}    label="Gerenciar Imóveis" active={isImovelNovo}             onClick={() => navigate("/imoveis/novo")} collapsed={c} />
+              <NavItem Icon={SquaresFour}  label="Portfólio Ativo"   active={isImovelList || isInsights} onClick={() => navigate("/imoveis")}   collapsed={c} />
+            </>)}
+
+            {cargo?.gerenciarLeads && (
+              <NavItem Icon={Users}        label="Leads"             active={isLeads}                  onClick={() => navigate("/leads")}       collapsed={c} badge={leadsBadge} />
+            )}
+
+            {cargo?.gerenciarClientes && (
+              <NavItem Icon={UserCircle}   label="Clientes"          active={isClientes}               onClick={() => navigate("/clientes")}    collapsed={c} />
+            )}
+
+            {cargo?.gerenciarUsuarios && (
+              <NavItem Icon={UserSquare}   label="Usuários"          active={isUsuarios}               onClick={() => navigate("/usuarios")}    collapsed={c} />
+            )}
+            {cargo?.gerenciarCargos && (
+              <NavItem Icon={Shield}       label="Cargos"            active={isCargos}                 onClick={() => navigate("/cargos")}      collapsed={c} />
+            )}
+
+            <div style={{ height: "1px", background: S.separator, margin: "6px 4px" }} />
+
+            {(cargo?.editarPagina || cargo?.gerenciarUsuarios) && (
+              <NavItem Icon={GearSix}      label="Configurações"     active={isConfiguracoes}          onClick={() => navigate("/configuracoes")} collapsed={c} />
+            )}
+
+            {cargo?.editarPagina && (
+              <NavItem Icon={PencilSimple} label="Editar página"    active={isShowcaseEditor}         href={showcaseEditorLink}               collapsed={c} />
+            )}
+
+            <NavItem Icon={ArrowSquareOut} label="Ver página"        href={showcaseLink} external      collapsed={c} />
+          </nav>
+
+          {/* Rodapé */}
+          <div style={{ padding: "8px", borderTop: `1px solid ${S.border}`, display: "flex", flexDirection: "column", gap: "2px", flexShrink: 0 }}>
+            {/* Toggle colapso */}
+            <SideTooltip label={c ? "Expandir" : ""} collapsed={c}>
               <button
                 type="button"
-                className={`nav-button ${(isDashboard && searchParams.get("tab") === "create") || isTiposImovel ? "active" : ""}`}
-                onClick={() => navigate("/?tab=create")}
+                onClick={toggleCollapsed}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: c ? 0 : "10px",
+                  justifyContent: c ? "center" : "flex-start",
+                  width: "100%",
+                  padding: c ? "8px" : "8px 10px",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  background: "transparent",
+                  color: S.text,
+                  border: "none",
+                  boxShadow: "none",
+                  transform: "none",
+                  transition: "background 0.15s, color 0.15s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = S.hover; e.currentTarget.style.color = S.textActive; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = S.text; }}
               >
-                <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                Gerenciar Imóveis
+                <span style={{ display: "flex", flexShrink: 0 }}>
+                  {c ? <CaretRight size={16} /> : <CaretLeft size={16} />}
+                </span>
+                {!c && <span>Recolher menu</span>}
               </button>
-              <button
-                type="button"
-                className={`nav-button ${(isDashboard && searchParams.get("tab") === "list") || location.pathname.startsWith("/imoveis/") ? "active" : ""}`}
-                onClick={() => navigate("/?tab=list")}
-              >
-                <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                Portfólio Ativo
-              </button>
-            </>
-          )}
+            </SideTooltip>
 
-          {cargo?.gerenciarLeads && (
-            <button
-              type="button"
-              className={`nav-button ${isLeads ? "active" : ""}`}
-              onClick={() => navigate("/leads")}
-            >
-              <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-              Leads
-            </button>
-          )}
+            <NavItem Icon={SignOut} label="Encerrar Sessão" onClick={onLogout} collapsed={c} />
 
-          {cargo?.gerenciarClientes && (
-            <button
-              type="button"
-              className={`nav-button ${isClientes ? "active" : ""}`}
-              onClick={() => navigate("/clientes")}
-            >
-              <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zM12 2a10 10 0 100 20A10 10 0 0012 2z" /></svg>
-              Clientes
-            </button>
-          )}
-
-          {cargo?.gerenciarUsuarios && (
-            <>
-              <button
-                type="button"
-                className={`nav-button ${isUsuarios ? "active" : ""}`}
-                onClick={() => navigate("/usuarios")}
-              >
-                <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                Usuários
-              </button>
-              <button
-                type="button"
-                className={`nav-button ${isCargos ? "active" : ""}`}
-                onClick={() => navigate("/cargos")}
-              >
-                <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                Cargos
-              </button>
-            </>
-          )}
-
-          <div style={{ height: "1px", background: "var(--glass-border)", margin: "8px 0" }} />
-
-          {(cargo?.editarPagina || cargo?.gerenciarUsuarios) && (
-            <button
-              type="button"
-              className={`nav-button ${isConfiguracoes ? "active" : ""}`}
-              onClick={() => navigate("/configuracoes")}
-            >
-              <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
-              Configurações
-            </button>
-          )}
-
-          {cargo?.editarPagina && (
-            <Link to={showcaseEditorLink} className={`nav-button ${location.pathname.includes('/editar') ? 'active' : ''}`} style={{ textDecoration: "none" }}>
-              <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-              Editar vitrine
-            </Link>
-          )}
-
-          <Link to={showcaseLink} className="nav-button" target="_blank" style={{ textDecoration: "none" }}>
-            <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-            Ver página
-          </Link>
-        </nav>
-
-        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column" }}>
-          <button type="button" className="nav-button" onClick={onLogout} style={{ marginBottom: "16px" }}>
-            <svg className="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            Encerrar Sessão
-          </button>
-
-          <div className="user-profile" style={{ marginTop: 0 }}>
-            <div className="avatar">{userInitial}</div>
-            <div className="user-details">
-              <span className="user-name">{session?.usuario?.nome}</span>
-              <span className="user-role">{session?.usuario?.cargo?.descricao || "Operador"}</span>
+            {/* Perfil */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              justifyContent: c ? "center" : "flex-start",
+              padding: c ? "8px" : "8px 10px",
+              marginTop: "2px",
+            }}>
+              <div style={{
+                width: "24px",
+                height: "24px",
+                borderRadius: "50%",
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: S.avatarBg,
+                color: "#fff",
+                fontSize: "11px",
+                fontWeight: 700,
+              }}>
+                {userInitial}
+              </div>
+              {!c && (
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: "12px", fontWeight: 500, color: S.textActive, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 }}>{userName}</p>
+                  <p style={{ margin: "1px 0 0", fontSize: "11px", color: S.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 }}>{userRole}</p>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      </aside>
+        </aside>
 
-      <main className={`main-content${isShowcaseEditor ? " main-content--editor-vitrine" : ""}`}>
-        <div key={location.pathname} style={{ animation: "chicEntrance 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}>
-          <Outlet />
+        {/* ── Conteúdo principal ───────────────────────────────────────────────── */}
+        <main
+          className={isShowcaseEditor ? "main-content--editor-vitrine" : "main-content"}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          <div key={location.pathname} style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}>
+            <Outlet context={{ showToast }} />
+          </div>
+        </main>
+
+        {/* ── Toasts ───────────────────────────────────────────────────────────── */}
+        <div style={{ position: "fixed", bottom: "24px", right: "24px", zIndex: 99999, display: "flex", flexDirection: "column", gap: "8px", pointerEvents: "none" }}>
+          {toasts.map((toast) => {
+            const meta = TOAST_META[toast.type] ?? TOAST_META.success;
+            return (
+              <div
+                key={toast.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "12px 16px",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "#fff",
+                  background: meta.bg,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  maxWidth: "360px",
+                  pointerEvents: "auto",
+                  animation: "toastIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+                }}
+              >
+                <meta.Icon size={15} weight="fill" />
+                <span>{toast.message}</span>
+              </div>
+            );
+          })}
         </div>
-      </main>
-    </div>
+      </div>
+    </Tooltip.Provider>
   );
 }

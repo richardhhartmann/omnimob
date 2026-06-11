@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, setApiToken, setAdminToken } from "./api";
-import { DashboardPage } from "./pages/DashboardPage";
+import { DashboardPage, ImovelListPage, ImovelFormPage } from "./pages/DashboardPage";
 import { LeadsPage } from "./pages/LeadsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PropertyInsightsPage } from "./pages/PropertyInsightsPage";
@@ -140,6 +140,16 @@ export default function App() {
           )
         }
       >
+        <Route path="/imoveis" element={
+          cargo?.gerenciarImoveis
+            ? <ImovelListPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/imoveis/novo" element={
+          cargo?.gerenciarImoveis
+            ? <ImovelFormPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
         <Route path="/leads" element={
           cargo?.gerenciarLeads
             ? <LeadsPage session={session} />
@@ -151,7 +161,7 @@ export default function App() {
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/cargos" element={
-          cargo?.gerenciarUsuarios
+          cargo?.gerenciarCargos
             ? <CargosPage session={session} onSessionUpdate={handleSessionUpdate} />
             : <Navigate to={defaultPublicPath} replace />
         } />

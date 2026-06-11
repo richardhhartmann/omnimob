@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Raio padrão shadcn ── */
+  --radius: 0.5rem;
+
+  /* ── Paleta de cores da sidebar ── */
+  --color-sidebar:                  hsl(224 20% 7%);
+  --color-sidebar-foreground:       hsl(215 20% 65%);
+  --color-sidebar-foreground-active: hsl(210 40% 98%);
+  --color-sidebar-accent:           hsl(217 25% 13%);
+  --color-sidebar-accent-foreground: hsl(210 40% 98%);
+  --color-sidebar-border:           hsl(217 20% 12%);
+  --color-sidebar-primary:          hsl(239 84% 67%);
+  --color-sidebar-primary-foreground: hsl(0 0% 100%);
+
+  /* ── Superfícies gerais ── */
+  --color-background: hsl(222 47% 5%);
+  --color-foreground:  hsl(210 40% 98%);
+  --color-muted:       hsl(217 25% 13%);
+  --color-muted-foreground: hsl(215 20% 55%);
+  --color-border:      hsl(217 20% 12%);
+
+  /* ── Feedback ── */
+  --color-success: hsl(158 64% 52%);
+  --color-warning: hsl(38 92% 50%);
+  --color-destructive: hsl(0 63% 55%);
+}

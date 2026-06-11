@@ -214,8 +214,9 @@ model Venda {
 // ─── Tipos de Imóvel e Atributos ─────────────────────────────────────────────
 
 model TipoImovel {
-  id        Int              @id @default(autoincrement()) @map("tip_id")
-  descricao String           @map("tip_descricao")
+  id         Int              @id @default(autoincrement()) @map("tip_id")
+  descricao  String           @map("tip_descricao")
+  areaFields Json             @default("[]") @map("tip_area_fields")
 
   atributos ModeloAtributo[]
   imoveis   Property[]

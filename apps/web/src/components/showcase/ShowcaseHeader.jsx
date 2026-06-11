@@ -31,7 +31,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
       <div className={getHeaderClass()}>
         <div style={{ padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "70px" }}>
           <a href={`/vitrine/${tenantSlug}`} style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none" }}>
-            <div className="brand-logo-exclusive" style={{ width: isScrolled ? "36px" : "44px", height: isScrolled ? "36px" : "44px", background: tenant?.logoUrl ? "transparent" : `linear-gradient(135deg, ${tenant?.secondaryColor || primary}, ${primary})`, transition: "all 0.4s ease" }}>
+            <div className="brand-logo-exclusive" style={{ width: isScrolled ? "36px" : "44px", height: isScrolled ? "36px" : "44px", background: tenant?.logoUrl ? "transparent" : `linear-gradient(135deg, ${tenant?.secondaryColor || primary}, ${primary})`, boxShadow: tenant?.logoUrl ? "none" : undefined, transition: "all 0.4s ease" }}>
               {logoEl}
             </div>
             <div className="brand-title-group" style={{ minWidth: 0, color: dynamicColor }}>
@@ -54,7 +54,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
     <div className={getHeaderClass()}>
       <div style={{ padding: "0 48px", maxWidth: "1400px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <a href={`/vitrine/${tenantSlug}`} style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "16px" }}>
-          <div className="brand-logo-exclusive" style={{ width: isScrolled ? "46px" : "60px", height: isScrolled ? "46px" : "60px", background: tenant?.logoUrl ? "transparent" : `linear-gradient(135deg, ${tenant?.secondaryColor || primary}, ${primary})`, transition: "all 0.4s ease" }}>
+          <div className="brand-logo-exclusive" style={{ width: isScrolled ? "46px" : "60px", height: isScrolled ? "46px" : "60px", background: tenant?.logoUrl ? "transparent" : `linear-gradient(135deg, ${tenant?.secondaryColor || primary}, ${primary})`, boxShadow: tenant?.logoUrl ? "none" : undefined, transition: "all 0.4s ease" }}>
             {logoEl}
           </div>
           <div className="brand-title-group" style={{ color: dynamicColor }}>

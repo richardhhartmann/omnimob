@@ -12,6 +12,7 @@ import {
 } from "../utils/showcaseConfig";
 import { BuilderSidePanel } from "../components/builder/BuilderSidePanel";
 import { OnboardingOverlay } from "../components/builder/OnboardingOverlay";
+import { useConfirm } from "../components/ConfirmModal";
 import { comodidadesAtivas } from "../utils/comodidades";
 
 const PRESET_THEMES = {
@@ -182,6 +183,7 @@ function detectTheme(primaryColor, secondaryColor) {
 }
 
 export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
+  const { confirm, modal: confirmModal } = useConfirm();
   const tenantSlug = session?.tenant?.slug || "";
   const initializedRef = useRef(false);
 
@@ -463,8 +465,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     scheduleReflow();
   }
 
-  function resetAllBuilder() {
-    if (window.confirm("Tem certeza que deseja resetar todo o layout e textos para o padrão?")) {
+  async function resetAllBuilder() {
+    if (await confirm("Tem certeza que deseja resetar todo o layout e textos para o padrão?", "Resetar tudo")) {
       pushHistory();
       setForm((prev) => ({
         ...prev,
@@ -1065,7 +1067,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           
           <div style={{ padding: isMobilePreview ? "20px 24px" : "28px 48px", maxWidth: "1400px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <div className="brand-logo-exclusive" style={{ width: isMobilePreview ? "44px" : "60px", height: isMobilePreview ? "44px" : "60px", background: previewTenant.logoUrl ? "transparent" : `linear-gradient(135deg, ${previewTenant.secondaryColor || previewTenant.primaryColor || "#6366f1"}, ${previewTenant.primaryColor || "#6366f1"})` }}>
+              <div className="brand-logo-exclusive" style={{ width: isMobilePreview ? "44px" : "60px", height: isMobilePreview ? "44px" : "60px", background: previewTenant.logoUrl ? "transparent" : `linear-gradient(135deg, ${previewTenant.secondaryColor || previewTenant.primaryColor || "#6366f1"}, ${previewTenant.primaryColor || "#6366f1"})`, boxShadow: previewTenant.logoUrl ? "none" : undefined }}>
                 {previewTenant.logoUrl ? <img src={previewTenant.logoUrl} alt={previewTenant.name} className="brand-logo-image" style={{ width: "54px" }} /> : <span style={{ fontSize: "24px", fontWeight: "700" }}>{(previewTenant.name || "D").charAt(0).toUpperCase()}</span>}
               </div>
               <div className="brand-title-group" style={{ color: blockStyles.header?.color || "inherit" }}>
@@ -1406,6 +1408,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       className={`showcase-body showcase-editor-full ${isLightMode ? "showcase-theme-light" : ""} page-transition`}
       style={{ ...previewStyle, display: "flex", flexDirection: "column", minHeight: "100vh" }}
     >
+      {confirmModal}
       <style>{`
         .builder-block { border-color: transparent !important; transition: border-color 0.2s ease-in-out; }
         .builder-block:hover { border-color: rgba(255, 255, 255, 0.3) !important; }

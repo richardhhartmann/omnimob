@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
+import {
+  Buildings,
+  SquaresFour,
+  Users,
+  UserCircle,
+  UserSquare,
+  Shield,
+  GearSix,
+  PencilSimple,
+  ArrowSquareOut,
+} from "@phosphor-icons/react";
 import { api } from "../api";
 import { PropertyManagement } from "../components/PropertyForm";
 import { PropertyList } from "../components/PropertyList";
@@ -7,99 +18,111 @@ import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 
 // ─── Landing page ─────────────────────────────────────────────────────────────
 
+function KpiCard({ label, value, accent, icon, loading }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
+      <div style={{ width: "40px", height: "40px", borderRadius: "10px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `${accent}22`, color: accent }}>
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: "22px", fontWeight: 700, lineHeight: 1, color: loading ? "var(--text-muted)" : "inherit" }}>
+          {loading ? "—" : value}
+        </div>
+        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
 function HomePage({ session }) {
   const navigate = useNavigate();
   const cargo = session?.usuario?.cargo;
   const tenantSlug = session?.tenant?.slug;
   const primeiroNome = session?.usuario?.nome?.split(" ")[0] || "Usuário";
 
+  const [kpis, setKpis] = useState(null);
+  useEffect(() => {
+    if (!tenantSlug) return;
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    Promise.all([
+      cargo?.gerenciarImoveis
+        ? api.listProperties(tenantSlug, { limit: 500 }).catch(() => null)
+        : Promise.resolve(null),
+      cargo?.gerenciarLeads
+        ? api.listLeads(tenantSlug, { page: 1, limit: 100 }).catch(() => null)
+        : Promise.resolve(null),
+    ]).then(([propsResult, leadsResult]) => {
+      const props = propsResult?.properties ?? (Array.isArray(propsResult) ? propsResult : []);
+      const activeProps = props.filter((p) => p.status === "ACTIVE").length;
+      const allLeads = leadsResult?.leads ?? [];
+      const totalLeads = leadsResult?.total ?? allLeads.length;
+      const recentLeads = allLeads.filter((l) => new Date(l.createdAt).getTime() >= sevenDaysAgo).length;
+      setKpis({ activeProps, totalLeads, recentLeads });
+    });
+  }, [tenantSlug]);
+
+  const showKpis = cargo?.gerenciarImoveis || cargo?.gerenciarLeads;
+
   const cards = [
     cargo?.gerenciarImoveis && {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-      ),
+      icon: <Buildings size={32} weight="duotone" />,
       title: "Gerenciar Imóveis",
       description: "Adicione um novo ativo ao portfólio da imobiliária.",
-      onClick: () => navigate("/?tab=create"),
+      onClick: () => navigate("/imoveis/novo"),
       accent: "#6366f1",
     },
     cargo?.gerenciarImoveis && {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-      ),
+      icon: <SquaresFour size={32} weight="duotone" />,
       title: "Portfólio Ativo",
       description: "Visualize e gerencie os imóveis cadastrados.",
-      onClick: () => navigate("/?tab=list"),
+      onClick: () => navigate("/imoveis"),
       accent: "#6366f1",
     },
     cargo?.gerenciarLeads && {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      ),
+      icon: <Users size={32} weight="duotone" />,
       title: "Leads",
       description: "Acompanhe os contatos interessados nos imóveis.",
       onClick: () => navigate("/leads"),
       accent: "#10b981",
     },
+    cargo?.gerenciarClientes && {
+      icon: <UserCircle size={32} weight="duotone" />,
+      title: "Clientes",
+      description: "Gerencie os clientes cadastrados na imobiliária.",
+      onClick: () => navigate("/clientes"),
+      accent: "#06b6d4",
+    },
     cargo?.gerenciarUsuarios && {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      ),
+      icon: <UserSquare size={32} weight="duotone" />,
       title: "Usuários",
       description: "Gerencie os membros e acessos da equipe.",
       onClick: () => navigate("/usuarios"),
       accent: "#f59e0b",
     },
-    cargo?.gerenciarUsuarios && {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-        </svg>
-      ),
+    cargo?.gerenciarCargos && {
+      icon: <Shield size={32} weight="duotone" />,
       title: "Cargos",
       description: "Gerencie os cargos e permissões da equipe.",
       onClick: () => navigate("/cargos"),
       accent: "#e04212",
     },
     (cargo?.editarPagina || cargo?.gerenciarUsuarios) && {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-      ),
+      icon: <GearSix size={32} weight="duotone" />,
       title: "Configurações",
       description: "Dados legais, contato, endereço e identidade visual.",
       onClick: () => navigate("/configuracoes"),
       accent: "#64748b",
     },
     cargo?.editarPagina && {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-        </svg>
-      ),
-      title: "Editar Vitrine",
+      icon: <PencilSimple size={32} weight="duotone" />,
+      title: "Editar página",
       description: "Personalize a página pública da imobiliária.",
       onClick: () => navigate(`/vitrine/${tenantSlug}/editar`),
       accent: "#8b5cf6",
     },
     {
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-      ),
-      title: "Ver Vitrine",
+      icon: <ArrowSquareOut size={32} weight="duotone" />,
+      title: "Ver página",
       description: "Veja sua página pública como um cliente veria.",
       onClick: () => window.open(`/vitrine/${tenantSlug}`, "_blank"),
       accent: "#475569",
@@ -108,7 +131,7 @@ function HomePage({ session }) {
 
   return (
     <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-      <div className="glass-panel" style={{ marginBottom: "24px", padding: "32px 40px" }}>
+      <div style={{ marginBottom: "24px", padding: "32px 0px" }}>
         <h2 style={{ margin: "0 0 6px 0", fontSize: "26px", fontWeight: "700" }}>
           Olá, {primeiroNome}!
         </h2>
@@ -171,22 +194,16 @@ function HomePage({ session }) {
   );
 }
 
-// ─── Dashboard principal ──────────────────────────────────────────────────────
+// ─── Lista de imóveis ─────────────────────────────────────────────────────────
 
-export function DashboardPage({ session }) {
+export function ImovelListPage({ session }) {
+  const navigate = useNavigate();
+  const ctx = useOutletContext();
+  const showToast = ctx?.showToast;
   const tenantSlug = session?.tenant?.slug || "";
-  const cargo = session?.usuario?.cargo;
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [editingProperty, setEditingProperty] = useState(null);
-
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab");
-
-  const showCreate = tab === "create" && cargo?.gerenciarImoveis;
-  const showList = tab === "list" && cargo?.gerenciarImoveis;
-  const showHome = !showCreate && !showList;
 
   async function loadProperties() {
     if (!tenantSlug) { setProperties([]); return; }
@@ -202,12 +219,71 @@ export function DashboardPage({ session }) {
     }
   }
 
-  useEffect(() => {
-    if (showList || showCreate) loadProperties();
-  }, [tenantSlug, tab]);
+  useEffect(() => { loadProperties(); }, [tenantSlug]);
 
-  async function handleCreateOrUpdateProperty(payload) {
-    if (!tenantSlug) return;
+  async function handleDelete(propertyId) {
+    setLoading(true);
+    setError("");
+    try {
+      await api.deleteProperty(tenantSlug, propertyId);
+      await loadProperties();
+      showToast?.("Imóvel excluído com sucesso.");
+    } catch (err) {
+      setError(err.message);
+      showToast?.(err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleToggleStatus(propertyId, nextStatus) {
+    setLoading(true);
+    setError("");
+    try {
+      await api.updateProperty(tenantSlug, propertyId, { status: nextStatus });
+      await loadProperties();
+      showToast?.(nextStatus === "ACTIVE" ? "Imóvel ativado." : "Imóvel desativado.");
+    } catch (err) {
+      setError(err.message);
+      showToast?.(err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleStartEdit(property) {
+    navigate("/imoveis/novo", { state: { editingProperty: property } });
+  }
+
+  return (
+    <>
+      {error ? <div className="error">{error}</div> : null}
+      <PropertyList
+        properties={properties}
+        onDelete={handleDelete}
+        onToggleStatus={handleToggleStatus}
+        onEdit={handleStartEdit}
+        onPublishSuccess={loadProperties}
+        disabled={!tenantSlug || loading}
+      />
+    </>
+  );
+}
+
+// ─── Formulário de imóvel (criar / editar) ────────────────────────────────────
+
+export function ImovelFormPage({ session }) {
+  const { state } = useLocation();
+  const navigate = useNavigate();
+  const ctx = useOutletContext();
+  const showToast = ctx?.showToast;
+  const tenantSlug = session?.tenant?.slug || "";
+  const editingProperty = state?.editingProperty || null;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(payload) {
+    if (!tenantSlug) return null;
     setLoading(true);
     setError("");
     try {
@@ -217,11 +293,12 @@ export function DashboardPage({ session }) {
       if (editingProperty?.id) {
         const updated = await api.updateProperty(tenantSlug, editingProperty.id, propertyPayload);
         targetPropertyId = updated.id;
-        setEditingProperty(null);
-        setSearchParams({ tab: "list" });
+        showToast?.("Imóvel atualizado com sucesso!");
+        navigate("/imoveis");
       } else {
         const created = await api.createProperty(tenantSlug, propertyPayload);
         targetPropertyId = created.id;
+        showToast?.("Imóvel criado com sucesso!");
       }
 
       if (targetPropertyId && imageFiles.length > 0) {
@@ -231,73 +308,40 @@ export function DashboardPage({ session }) {
         }
       }
 
-      await loadProperties();
       return targetPropertyId ? { id: targetPropertyId } : null;
     } catch (err) {
       setError(err.message);
+      showToast?.(err.message, "error");
       return null;
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleDelete(propertyId) {
-    if (!tenantSlug) return;
-    setLoading(true);
-    setError("");
-    try {
-      await api.deleteProperty(tenantSlug, propertyId);
-      await loadProperties();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleToggleStatus(propertyId, nextStatus) {
-    if (!tenantSlug) return;
-    setLoading(true);
-    setError("");
-    try {
-      await api.updateProperty(tenantSlug, propertyId, { status: nextStatus });
-      await loadProperties();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleStartEdit(property) {
-    setEditingProperty(property);
-    setSearchParams({ tab: "create" });
-  }
-
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
-
-      {showHome && <HomePage session={session} />}
-
-      {showCreate && (
-        <PropertyManagement
-          onSubmitProperty={handleCreateOrUpdateProperty}
-          disabled={!tenantSlug || loading}
-          initialData={editingProperty}
-        />
-      )}
-
-      {showList && (
-        <PropertyList
-          properties={properties}
-          onDelete={handleDelete}
-          onToggleStatus={handleToggleStatus}
-          onEdit={handleStartEdit}
-          onPublishSuccess={loadProperties}
-          disabled={!tenantSlug || loading}
-        />
-      )}
+      <PropertyManagement
+        onSubmitProperty={handleSubmit}
+        disabled={!tenantSlug || loading}
+        initialData={editingProperty}
+      />
     </>
   );
+}
+
+// ─── Dashboard principal ──────────────────────────────────────────────────────
+
+export function DashboardPage({ session }) {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Redireciona URLs legadas com ?tab= para as rotas novas
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "create") navigate("/imoveis/novo", { replace: true });
+    else if (tab === "list") navigate("/imoveis", { replace: true });
+  }, []);
+
+  return <HomePage session={session} />;
 }

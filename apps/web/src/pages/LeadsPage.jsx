@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useConfirm } from "../components/ConfirmModal";
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -74,6 +75,7 @@ function StatCard({ label, value, accent, icon }) {
 
 export function LeadsPage({ session }) {
   const tenantSlug = session?.tenant?.slug || "";
+  const { confirm, modal: confirmModal } = useConfirm();
   const [data, setData] = useState({ leads: [], total: 0, page: 1, limit: 100 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -94,6 +96,8 @@ export function LeadsPage({ session }) {
     try {
       const result = await api.listLeads(tenantSlug, { page: 1, limit: 100 });
       setData(result);
+      // Atualiza o "último total visto" para sumir o badge na sidebar
+      try { localStorage.setItem(`domus_leads_seen_${tenantSlug}`, String(result.total ?? (result.leads?.length ?? 0))); } catch {}
     } catch (err) {
       setError(err.message);
     } finally {
@@ -102,10 +106,32 @@ export function LeadsPage({ session }) {
   }
 
   useEffect(() => { loadLeads(); }, [tenantSlug]);
+
+  function exportCSV() {
+    const rows = [
+      ["Nome", "Telefone", "E-mail", "Imóvel", "Mensagem", "Data"],
+      ...allLeads.map((l) => [
+        l.name || "",
+        l.phone || "",
+        l.email || "",
+        l.property?.title || "",
+        (l.message || "").replace(/\n/g, " "),
+        formatDate(l.createdAt),
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads-${tenantSlug}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
   useEffect(() => { setPage(1); }, [search, propertyFilter, contactFilter, sortOrder]);
 
   async function handleDelete(leadId) {
-    if (!window.confirm("Remover este lead?")) return;
+    if (!await confirm("Remover este lead?", "Remover")) return;
     setDeletingId(leadId);
     try {
       await api.deleteLead(tenantSlug, leadId);
@@ -191,6 +217,7 @@ export function LeadsPage({ session }) {
 
   return (
     <div className="main-content" style={{ maxWidth: "1100px" }}>
+      {confirmModal}
       <header style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "28px", marginBottom: "6px" }}>Gestão de Leads</h1>
         <p style={{ color: "var(--text-muted)", margin: 0 }}>
@@ -214,6 +241,26 @@ export function LeadsPage({ session }) {
 
       {/* Barra de filtros */}
       <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        {allLeads.length > 0 && (
+          <button
+            type="button"
+            onClick={exportCSV}
+            style={{
+              display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px",
+              borderRadius: "8px", border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.05)", color: "#94a3b8",
+              fontSize: "13px", fontWeight: 500, cursor: "pointer", width: "auto",
+              boxShadow: "none", transform: "none", transition: "background 0.15s, color 0.15s", flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.10)"; e.currentTarget.style.color = "#f1f5f9"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#94a3b8"; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Exportar CSV
+          </button>
+        )}
         <div style={{ position: "relative", flex: 1, minWidth: "220px" }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <input

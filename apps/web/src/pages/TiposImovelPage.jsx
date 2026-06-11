@@ -1,13 +1,71 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnGerenciar, BtnNovo, BtnVoltar } from "../components/ActionIcons";
+import { useConfirm } from "../components/ConfirmModal";
+
+const AREA_OPTIONS = [
+  { key: "areaTerreno",    label: "Área do terreno" },
+  { key: "areaConstruida", label: "Área construída" },
+  { key: "areaPrivativa",  label: "Área privativa" },
+  { key: "areaTotal",      label: "Área total" },
+];
+
+const AREA_LABEL = Object.fromEntries(AREA_OPTIONS.map((o) => [o.key, o.label]));
 
 function emptyTipoForm() {
-  return { descricao: "" };
+  return { descricao: "", areaFields: [] };
 }
 
 function emptyAtributoForm() {
   return { descricao: "", grupo: "" };
+}
+
+// ── Checkboxes de campos de área ──────────────────────────────────────────────
+function AreaFieldsEditor({ value, onChange }) {
+  function toggle(key) {
+    onChange(value.includes(key) ? value.filter((k) => k !== key) : [...value, key]);
+  }
+
+  return (
+    <div>
+      <span style={{ display: "block", marginBottom: "10px", fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        Campos de área exibidos no formulário
+      </span>
+      <p style={{ fontSize: "12px", color: "var(--text-muted)", opacity: 0.7, marginBottom: "12px", lineHeight: 1.5 }}>
+        O primeiro campo marcado será obrigatório. Se nenhum for marcado, todos os campos aparecem.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px" }}>
+        {AREA_OPTIONS.map((opt, i) => {
+          const checked = value.includes(opt.key);
+          const isPrincipal = checked && value[0] === opt.key;
+          return (
+            <label key={opt.key} style={{
+              display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px",
+              borderRadius: "10px", cursor: "pointer",
+              border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.08)",
+              background: checked ? "rgba(99,102,241,0.10)" : "rgba(255,255,255,0.02)",
+              transition: "all 0.15s", userSelect: "none",
+            }}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggle(opt.key)}
+                style={{ accentColor: "#6366f1", width: "14px", height: "14px", flexShrink: 0 }}
+              />
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: "13px", fontWeight: 500 }}>{opt.label}</span>
+                {isPrincipal && (
+                  <span style={{ display: "block", fontSize: "10px", fontWeight: 600, color: "#818cf8", marginTop: "2px" }}>
+                    principal · obrigatório
+                  </span>
+                )}
+              </div>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function TiposImovelPage({ session }) {
@@ -21,6 +79,7 @@ export function TiposImovelPage({ session }) {
   const [atributoForm, setAtributoForm] = useState(emptyAtributoForm());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, modal: confirmModal } = useConfirm();
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -38,7 +97,10 @@ export function TiposImovelPage({ session }) {
 
   function abrirEditarTipo(t) {
     setEditandoTipo(t);
-    setTipoForm({ descricao: t.descricao });
+    setTipoForm({
+      descricao: t.descricao,
+      areaFields: Array.isArray(t.areaFields) ? t.areaFields : [],
+    });
     setError("");
     setView("tipoForm");
   }
@@ -50,7 +112,7 @@ export function TiposImovelPage({ session }) {
     try {
       if (editandoTipo) {
         const updated = await api.updateTipoImovel(tenantSlug, editandoTipo.id, tipoForm);
-        setTipos((prev) => prev.map((t) => t.id === updated.id ? { ...t, descricao: updated.descricao } : t));
+        setTipos((prev) => prev.map((t) => t.id === updated.id ? { ...t, descricao: updated.descricao, areaFields: updated.areaFields } : t));
       } else {
         const created = await api.createTipoImovel(tenantSlug, tipoForm);
         setTipos((prev) => [...prev, { ...created, atributos: [] }]);
@@ -64,7 +126,7 @@ export function TiposImovelPage({ session }) {
   }
 
   async function handleDeleteTipo(t) {
-    if (!confirm(`Excluir o tipo "${t.descricao}" e todos os seus atributos?`)) return;
+    if (!await confirm(`Excluir o tipo "${t.descricao}" e todos os seus atributos?`, "Excluir")) return;
     try {
       await api.deleteTipoImovel(tenantSlug, t.id);
       setTipos((prev) => prev.filter((x) => x.id !== t.id));
@@ -122,7 +184,7 @@ export function TiposImovelPage({ session }) {
   }
 
   async function handleDeleteAtributo(a) {
-    if (!confirm(`Excluir o atributo "${a.descricao}"?`)) return;
+    if (!await confirm(`Excluir o atributo "${a.descricao}"?`, "Excluir")) return;
     try {
       await api.deleteAtributo(tenantSlug, a.id);
       setTipos((prev) => prev.map((t) =>
@@ -139,16 +201,30 @@ export function TiposImovelPage({ session }) {
   if (view === "tipoForm") {
     return (
       <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+        {confirmModal}
         <h2 style={{ marginBottom: "24px" }}>{editandoTipo ? "Editar Tipo de Imóvel" : "Novo Tipo de Imóvel"}</h2>
         {error ? <div className="error">{error}</div> : null}
-        <form className="grid" onSubmit={handleTipoSubmit}>
-          <input
-            placeholder="Nome do tipo (ex: Apartamento, Casa, Terreno)"
-            value={tipoForm.descricao}
-            onChange={(e) => setTipoForm((p) => ({ ...p, descricao: e.target.value }))}
-            required disabled={loading}
-          />
-          <div className="actions" style={{ marginTop: "24px" }}>
+        <form onSubmit={handleTipoSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div>
+            <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Nome do tipo <span style={{ color: "#ef4444" }}>*</span>
+            </label>
+            <input
+              placeholder="Ex: Apartamento, Casa, Terreno"
+              value={tipoForm.descricao}
+              onChange={(e) => setTipoForm((p) => ({ ...p, descricao: e.target.value }))}
+              required disabled={loading}
+            />
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
+            <AreaFieldsEditor
+              value={tipoForm.areaFields}
+              onChange={(v) => setTipoForm((p) => ({ ...p, areaFields: v }))}
+            />
+          </div>
+
+          <div className="actions" style={{ marginTop: "8px" }}>
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               {editandoTipo ? "Salvar Alterações" : "Criar Tipo"}
             </button>
@@ -164,8 +240,13 @@ export function TiposImovelPage({ session }) {
   // ─── Formulário de Atributo ───────────────────────────────────────────────
 
   if (view === "atributoForm") {
+    const gruposExistentes = [...new Set(
+      (tipoAtivo?.atributos || []).map((a) => a.grupo).filter(Boolean)
+    )].sort();
+
     return (
       <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+        {confirmModal}
         <h2 style={{ marginBottom: "4px" }}>{editandoAtributo ? "Editar Atributo" : "Novo Atributo"}</h2>
         <p style={{ fontSize: "13px", opacity: 0.5, marginBottom: "24px" }}>Tipo: {tipoAtivo?.descricao}</p>
         {error ? <div className="error">{error}</div> : null}
@@ -176,12 +257,20 @@ export function TiposImovelPage({ session }) {
             onChange={(e) => setAtributoForm((p) => ({ ...p, descricao: e.target.value }))}
             required disabled={loading}
           />
-          <input
-            placeholder="Grupo (ex: Lazer, Segurança, Infraestrutura) — opcional"
-            value={atributoForm.grupo}
-            onChange={(e) => setAtributoForm((p) => ({ ...p, grupo: e.target.value }))}
-            disabled={loading}
-          />
+          <div>
+            <input
+              list="grupos-existentes"
+              placeholder="Grupo (ex: Lazer, Segurança) — opcional"
+              value={atributoForm.grupo}
+              onChange={(e) => setAtributoForm((p) => ({ ...p, grupo: e.target.value }))}
+              disabled={loading}
+            />
+            {gruposExistentes.length > 0 && (
+              <datalist id="grupos-existentes">
+                {gruposExistentes.map((g) => <option key={g} value={g} />)}
+              </datalist>
+            )}
+          </div>
           <div className="actions" style={{ marginTop: "24px" }}>
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               {editandoAtributo ? "Salvar Alterações" : "Criar Atributo"}
@@ -202,6 +291,7 @@ export function TiposImovelPage({ session }) {
 
     return (
       <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+        {confirmModal}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
           <BtnVoltar onClick={() => setView("list")} label="Tipos" />
           <h2 style={{ margin: 0 }}>Atributos — {tipoAtivo.descricao}</h2>
@@ -251,6 +341,7 @@ export function TiposImovelPage({ session }) {
 
   return (
     <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      {confirmModal}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
         <h2 style={{ margin: 0 }}>Tipos de Imóvel e Atributos</h2>
         <BtnNovo onClick={abrirCriarTipo} label="Novo Tipo" />
@@ -260,38 +351,64 @@ export function TiposImovelPage({ session }) {
         <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "48px 0" }}>Nenhum tipo de imóvel cadastrado.</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {tipos.map((t) => (
-            <div key={t.id} style={{
-              padding: "16px 20px", borderRadius: "12px",
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-                <div>
-                  <span style={{ fontWeight: "600", fontSize: "15px" }}>{t.descricao}</span>
-                  <span style={{ marginLeft: "10px", fontSize: "12px", opacity: 0.4 }}>
-                    {(t.atributos || []).length} atributo(s)
-                  </span>
-                </div>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  <BtnGerenciar onClick={() => abrirGerenciarAtributos(t)} title="Gerenciar atributos" />
-                  <BtnEditar onClick={() => abrirEditarTipo(t)} />
-                  <BtnExcluir onClick={() => handleDeleteTipo(t)} />
+          {tipos.map((t) => {
+            const fields = Array.isArray(t.areaFields) ? t.areaFields : [];
+            return (
+              <div key={t.id} style={{
+                padding: "16px 20px", borderRadius: "12px",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+              }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: "600", fontSize: "15px" }}>{t.descricao}</span>
+                      <span style={{ fontSize: "12px", opacity: 0.4 }}>
+                        {(t.atributos || []).length} atributo(s)
+                      </span>
+                    </div>
+
+                    {/* Campos de área */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginTop: "8px" }}>
+                      {fields.length === 0 ? (
+                        <span style={{ fontSize: "11px", opacity: 0.35, fontStyle: "italic" }}>
+                          Todos os campos de área (não configurado)
+                        </span>
+                      ) : fields.map((k, i) => (
+                        <span key={k} style={{
+                          fontSize: "11px", fontWeight: "600", padding: "2px 9px", borderRadius: "20px",
+                          background: i === 0 ? "rgba(99,102,241,0.18)" : "rgba(255,255,255,0.07)",
+                          color: i === 0 ? "#a5b4fc" : "var(--text-muted)",
+                          border: i === 0 ? "1px solid rgba(99,102,241,0.3)" : "1px solid transparent",
+                        }}>
+                          {i === 0 ? "★ " : ""}{AREA_LABEL[k] ?? k}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Atributos */}
+                    {(t.atributos || []).length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginTop: "8px" }}>
+                        {(t.atributos || []).map((a) => (
+                          <span key={a.id} style={{
+                            fontSize: "11px", fontWeight: "600", padding: "2px 9px", borderRadius: "20px",
+                            background: "rgba(16,185,129,0.10)", color: "#6ee7b7",
+                          }}>
+                            {a.descricao}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                    <BtnGerenciar onClick={() => abrirGerenciarAtributos(t)} title="Gerenciar atributos" />
+                    <BtnEditar onClick={() => abrirEditarTipo(t)} />
+                    <BtnExcluir onClick={() => handleDeleteTipo(t)} />
+                  </div>
                 </div>
               </div>
-              {(t.atributos || []).length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "10px" }}>
-                  {(t.atributos || []).map((a) => (
-                    <span key={a.id} style={{
-                      fontSize: "11px", fontWeight: "600", padding: "2px 9px", borderRadius: "20px",
-                      background: "rgba(16,185,129,0.12)", color: "#6ee7b7",
-                    }}>
-                      {a.descricao}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

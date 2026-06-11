@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useConfirm } from "./ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
@@ -7,6 +8,7 @@ import { loadSession } from "../session.js";
 // ─── Modal de publicação retroativa ──────────────────────────────────────────
 
 function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
+  const { confirm, modal: confirmModal } = useConfirm();
   const session = loadSession();
   const cargo = session?.usuario?.cargo;
 
@@ -68,7 +70,7 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
 
   async function handleRemove(platform) {
     const nome = platform === "facebook" ? "Facebook" : "Instagram";
-    if (!window.confirm(`Remover este imóvel do ${nome}?`)) return;
+    if (!await confirm(`Remover este imóvel do ${nome}?`, "Remover")) return;
     setRemoveLoading(prev => ({ ...prev, [platform]: true }));
     setRemoveNote(prev => ({ ...prev, [platform]: "" }));
     try {
@@ -118,6 +120,8 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
   };
 
   return createPortal(
+    <>
+      {confirmModal}
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease-out" }}
       onClick={onClose}
@@ -242,7 +246,8 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
           </div>
         )}
       </div>
-    </div>,
+    </div>
+    </>,
     document.body
   );
 }
@@ -352,9 +357,15 @@ function PropertyCarousel({ images = [] }) {
 // ─── Lista de imóveis ─────────────────────────────────────────────────────────
 
 export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit, onPublishSuccess, disabled }) {
+  const { confirm, modal: confirmModal } = useConfirm();
   const navigate = useNavigate();
   const session = loadSession();
   const tenantSlug = session?.tenant?.slug;
+
+  async function handleDelete(id) {
+    if (!await confirm("Excluir este imóvel permanentemente?", "Excluir")) return;
+    onDelete(id);
+  }
 
   const [viewMode, setViewMode] = useState("grid");
   const [searchTerm, setSearchTerm] = useState("");
@@ -440,6 +451,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
 
   return (
     <section className="main-content" style={{ animation: "fadeIn 0.4s ease-out", display: "flex", flexDirection: "column", gap: "24px" }}>
+      {confirmModal}
       <div className="glass-panel" style={{ padding: "24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
           <div>
@@ -600,7 +612,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     <button onClick={(e) => { e.stopPropagation(); onToggleStatus(property.id, property.status === "ACTIVE" ? "INACTIVE" : "ACTIVE"); }} disabled={disabled} style={{ ...btnShare }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title={property.status === "ACTIVE" ? "Desativar" : "Ativar"}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(property.id); }} disabled={disabled} style={{ padding: "10px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(property.id); }} disabled={disabled} style={{ padding: "10px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                     </button>
                   </div>
@@ -655,7 +667,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     <button onClick={(e) => { e.stopPropagation(); onEdit(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Editar">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(property.id); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(property.id); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                     </button>
                   </div>

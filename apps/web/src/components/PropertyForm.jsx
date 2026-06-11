@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
+import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
 import { COMODIDADES, EMPTY_COMODIDADES, OSM_TO_KEY } from "../utils/comodidades.js";
 
@@ -694,6 +695,7 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
 // ─── Formulário principal em etapas ──────────────────────────────────────────
 
 export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) {
+  const { confirm, modal: confirmModal } = useConfirm();
   const [form, setForm] = useState(EMPTY);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
@@ -706,6 +708,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [images, setImages] = useState([]);
   const [tipos, setTipos] = useState([]);
   const isEditing = Boolean(initialData?.id);
+
+  // ── Fotos já salvas (modo edição) ──
+  const [existingImages, setExistingImages] = useState([]);
 
   // ── Estado do step "Divulgar" ──
   const [savedPropertyId, setSavedPropertyId] = useState(null);
@@ -778,9 +783,13 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
     if (!initialData) {
       setForm(EMPTY);
+      setExistingImages([]);
       setStep(0);
       return;
     }
+    setExistingImages(
+      [...(initialData.images || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    );
     const atributosIds = initialData.atributos?.map((a) => a.atributoId ?? a.atributo?.id) ?? [];
     setForm({
       tipoImovelId: initialData.tipoImovelId ? String(initialData.tipoImovelId) : "",
@@ -812,11 +821,15 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }, [initialData]);
 
   const tipoSelecionado = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
-  // Áreas a exibir/exigir conforme o tipo de imóvel escolhido.
-  const areaFields = areasParaTipo(tipoSelecionado?.descricao);
+  // Usa areaFields do banco quando disponível; fallback para o mapa estático.
+  const areaFields = (() => {
+    const fromDB = tipoSelecionado?.areaFields;
+    if (Array.isArray(fromDB) && fromDB.length > 0) return fromDB;
+    return areasParaTipo(tipoSelecionado?.descricao);
+  })();
 
-  // URLs para o preview: novas selecionadas, ou imagens já salvas no servidor
-  const existingUrls = initialData?.images?.map((img) => img.url) ?? [];
+  // URLs para o preview: novas selecionadas, ou imagens já salvas no servidor (na ordem atual)
+  const existingUrls = existingImages.map((img) => img.url);
   const previewUrls = images.length > 0 ? images.map((img) => img.previewUrl) : existingUrls;
 
   function set(field, value) {
@@ -857,6 +870,28 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       arr.splice(to, 0, moved);
       return arr;
     });
+  }
+
+  function handleReorderExisting(from, to) {
+    setExistingImages((prev) => {
+      const arr = [...prev];
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+      const order = arr.map((img) => img.id);
+      api.reorderPropertyImages(tenantSlug, initialData.id, order).catch(() => {});
+      return arr;
+    });
+  }
+
+  async function handleRemoveExisting(i) {
+    const img = existingImages[i];
+    if (!img) return;
+    setExistingImages((prev) => prev.filter((_, idx) => idx !== i));
+    try {
+      await api.deletePropertyImage(tenantSlug, initialData.id, img.id);
+    } catch {
+      setExistingImages((prev) => { const arr = [...prev]; arr.splice(i, 0, img); return arr; });
+    }
   }
 
   // Navegação livre entre as etapas — sem validação. Só o step "Divulgar"
@@ -1041,7 +1076,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   async function handleRemove(platform) {
     if (!tenantSlug || !savedPropertyId) return;
     const nome = platform === "facebook" ? "Facebook" : "Instagram";
-    if (!window.confirm(`Remover este imóvel do ${nome}?`)) return;
+    if (!await confirm(`Remover este imóvel do ${nome}?`, "Remover")) return;
     setRemoveLoading((prev) => ({ ...prev, [platform]: true }));
     setRemoveNote((prev) => ({ ...prev, [platform]: "" }));
     try {
@@ -1075,6 +1110,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
   return (
     <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      {confirmModal}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h2 style={{ margin: 0, marginBottom: "4px" }}>{isEditing ? "Editar Imóvel" : "Novo Imóvel"}</h2>
@@ -1253,6 +1289,31 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
           {/* Etapa 3 — Fotos */}
           {step === 3 && (
             <>
+              {/* Fotos já salvas (modo edição) */}
+              {isEditing && existingImages.length > 0 && (
+                <div>
+                  <span style={{ display: "block", marginBottom: "10px", fontSize: "13px", fontWeight: "600", color: "var(--text-muted)" }}>
+                    Fotos salvas ({existingImages.length}) — arraste para reordenar, ✕ para remover
+                  </span>
+                  <PhotoGrid
+                    images={existingImages.map((img) => ({ ...img, previewUrl: img.url }))}
+                    onRemove={handleRemoveExisting}
+                    onReorder={handleReorderExisting}
+                  />
+                </div>
+              )}
+
+              {/* Separador quando há fotos existentes e novas */}
+              {isEditing && existingImages.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
+                    Adicionar novas fotos
+                  </span>
+                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
+                </div>
+              )}
+
               {/* Área de upload */}
               <div style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
                 <div style={{ color: "rgba(255,255,255,0.2)", marginBottom: "14px" }}>
@@ -1289,7 +1350,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </label>
               </div>
 
-              {/* Grade de fotos com drag-to-reorder */}
+              {/* Grade de novas fotos com drag-to-reorder */}
               <PhotoGrid images={images} onRemove={removeImage} onReorder={reorderImages} />
 
               {images.length > 1 && (

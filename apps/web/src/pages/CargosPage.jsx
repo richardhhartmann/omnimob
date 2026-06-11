@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { Avatar, SearchInput, StatCard, StatGrid } from "../components/adminUi";
+import { useConfirm } from "../components/ConfirmModal";
 
 const PERMISSOES = [
   { key: "acessarPainel",     label: "Acessar Painel" },
@@ -23,6 +24,7 @@ function emptyForm() {
 
 export function CargosPage({ session, onSessionUpdate }) {
   const tenantSlug = session?.tenant?.slug;
+  const { confirm, modal: confirmModal } = useConfirm();
   const [cargos, setCargos] = useState([]);
   const [view, setView] = useState("list");
   const [editando, setEditando] = useState(null);
@@ -118,7 +120,7 @@ export function CargosPage({ session, onSessionUpdate }) {
   }
 
   async function handleDelete(c) {
-    if (!confirm(`Excluir o cargo "${c.descricao}"?`)) return;
+    if (!await confirm(`Excluir o cargo "${c.descricao}"?`, "Excluir")) return;
     try {
       await api.deleteCargo(tenantSlug, c.id);
       setCargos((prev) => prev.filter((x) => x.id !== c.id));
@@ -204,6 +206,7 @@ export function CargosPage({ session, onSessionUpdate }) {
 
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      {confirmModal}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h2 style={{ margin: 0 }}>Cargos e Permissões</h2>

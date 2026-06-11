@@ -72,6 +72,7 @@ const CARGOS = [
 const TIPOS_IMOVEL = [
   {
     descricao: "Casa",
+    areaFields: ["areaTerreno", "areaConstruida"],
     atributos: [
       { descricao: "Piscina", grupo: "Lazer" },
       { descricao: "Quintal", grupo: "Lazer" },
@@ -91,6 +92,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Apartamento",
+    areaFields: ["areaPrivativa", "areaTotal"],
     atributos: [
       { descricao: "Piscina", grupo: "Lazer" },
       { descricao: "Salão de Festas", grupo: "Lazer" },
@@ -111,6 +113,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Cobertura",
+    areaFields: ["areaPrivativa", "areaTotal"],
     atributos: [
       { descricao: "Piscina Privativa", grupo: "Lazer" },
       { descricao: "Churrasqueira", grupo: "Lazer" },
@@ -126,6 +129,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Studio",
+    areaFields: ["areaPrivativa"],
     atributos: [
       { descricao: "Mobiliado", grupo: "Infraestrutura" },
       { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
@@ -139,6 +143,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Kitnet",
+    areaFields: ["areaPrivativa"],
     atributos: [
       { descricao: "Mobiliado", grupo: "Infraestrutura" },
       { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
@@ -150,6 +155,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Loft",
+    areaFields: ["areaPrivativa"],
     atributos: [
       { descricao: "Pé-direito Alto", grupo: "Infraestrutura" },
       { descricao: "Mezanino", grupo: "Infraestrutura" },
@@ -162,6 +168,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Sobrado",
+    areaFields: ["areaTerreno", "areaConstruida"],
     atributos: [
       { descricao: "Quintal", grupo: "Lazer" },
       { descricao: "Churrasqueira", grupo: "Lazer" },
@@ -175,6 +182,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Flat",
+    areaFields: ["areaPrivativa"],
     atributos: [
       { descricao: "Mobiliado", grupo: "Infraestrutura" },
       { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
@@ -188,6 +196,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Casa em Condominio",
+    areaFields: ["areaTerreno", "areaConstruida"],
     atributos: [
       { descricao: "Piscina", grupo: "Lazer" },
       { descricao: "Churrasqueira", grupo: "Lazer" },
@@ -204,6 +213,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Casa de Praia",
+    areaFields: ["areaTerreno", "areaConstruida"],
     atributos: [
       { descricao: "Vista para o Mar", grupo: "Lazer" },
       { descricao: "Piscina", grupo: "Lazer" },
@@ -217,6 +227,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Chácara",
+    areaFields: ["areaTerreno", "areaConstruida"],
     atributos: [
       { descricao: "Piscina", grupo: "Lazer" },
       { descricao: "Churrasqueira", grupo: "Lazer" },
@@ -231,6 +242,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Sítio",
+    areaFields: ["areaTerreno", "areaConstruida"],
     atributos: [
       { descricao: "Nascente/Água", grupo: "Infraestrutura" },
       { descricao: "Casa Sede", grupo: "Infraestrutura" },
@@ -244,6 +256,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Terreno",
+    areaFields: ["areaTerreno"],
     atributos: [
       { descricao: "Murado", grupo: "Infraestrutura" },
       { descricao: "Área Verde", grupo: "Infraestrutura" },
@@ -257,6 +270,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Lote em Condominio",
+    areaFields: ["areaTerreno"],
     atributos: [
       { descricao: "Plano", grupo: "Topografia" },
       { descricao: "Área Verde Próxima", grupo: "Localização" },
@@ -269,6 +283,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Galpão",
+    areaFields: ["areaTerreno", "areaConstruida"],
     atributos: [
       { descricao: "Pé-direito Alto", grupo: "Infraestrutura" },
       { descricao: "Doca de Carga", grupo: "Infraestrutura" },
@@ -282,6 +297,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Loja",
+    areaFields: ["areaPrivativa", "areaTotal"],
     atributos: [
       { descricao: "Vitrine", grupo: "Infraestrutura" },
       { descricao: "Depósito", grupo: "Infraestrutura" },
@@ -295,6 +311,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Comercial",
+    areaFields: ["areaConstruida", "areaTotal"],
     atributos: [
       { descricao: "Estacionamento", grupo: "Infraestrutura" },
       { descricao: "Gerador", grupo: "Infraestrutura" },
@@ -314,6 +331,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Sala Comercial",
+    areaFields: ["areaPrivativa", "areaTotal"],
     atributos: [
       { descricao: "Ar-condicionado", grupo: "Comodidades" },
       { descricao: "Recepção Compartilhada", grupo: "Comodidades" },
@@ -328,6 +346,7 @@ const TIPOS_IMOVEL = [
   },
   {
     descricao: "Prédio Comercial",
+    areaFields: ["areaTerreno", "areaConstruida", "areaTotal"],
     atributos: [
       { descricao: "Elevador", grupo: "Acessibilidade" },
       { descricao: "Estacionamento", grupo: "Infraestrutura" },
@@ -641,7 +660,12 @@ async function seedTipos() {
   for (const tipo of TIPOS_IMOVEL) {
     let tipoRecord = await prisma.tipoImovel.findFirst({ where: { descricao: tipo.descricao } });
     if (!tipoRecord) {
-      tipoRecord = await prisma.tipoImovel.create({ data: { descricao: tipo.descricao } });
+      tipoRecord = await prisma.tipoImovel.create({ data: { descricao: tipo.descricao, areaFields: tipo.areaFields ?? [] } });
+    } else {
+      const current = Array.isArray(tipoRecord.areaFields) ? tipoRecord.areaFields : [];
+      if (current.length === 0 && tipo.areaFields?.length > 0) {
+        tipoRecord = await prisma.tipoImovel.update({ where: { id: tipoRecord.id }, data: { areaFields: tipo.areaFields } });
+      }
     }
     tiposMap[tipo.descricao] = tipoRecord;
     atributosMap[tipo.descricao] = {};

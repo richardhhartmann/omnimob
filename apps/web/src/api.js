@@ -161,6 +161,13 @@ export const api = {
       headers: { "x-tenant-slug": tenantSlug },
     }),
 
+  reorderPropertyImages: (tenantSlug, propertyId, order) =>
+    request(`/api/properties/${propertyId}/images/reorder`, {
+      method: "PUT",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ order }),
+    }),
+
   listLeads: (tenantSlug, { page = 1, limit = 20, propertyId } = {}) => {
     const params = new URLSearchParams({ page, limit });
     if (propertyId) params.set("propertyId", propertyId);
