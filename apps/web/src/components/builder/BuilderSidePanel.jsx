@@ -242,7 +242,8 @@ function BlockPanel({
   hideBlock, showcaseConfig,
   updateHighlightStyle, addHighlight, removeHighlight,
   addWidget, WIDGET_LIBRARY, DEFAULT_BLOCK_LABELS,
-  activeWidgetData, updateActiveWidget, removeActiveWidget,
+  activeWidgetData, updateActiveWidget, removeActiveWidget, duplicateActiveWidget,
+  copiedBlockStyle, onCopyStyle, onPasteStyle,
   isLightMode,
 }) {
   const defBg = isLightMode ? "#f8fafc" : "#1e293b";
@@ -285,8 +286,14 @@ function BlockPanel({
             <input type="color" value={w.color || defText} onChange={(e) => updateActiveWidget("color", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
           </div>
         </label>
+        {/* Feature 1: Duplicar widget */}
+        <button type="button" onClick={duplicateActiveWidget}
+          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid rgba(99,102,241,0.3)", background: "rgba(99,102,241,0.08)", color: "var(--accent,#818cf8)", fontSize: "11px", cursor: "pointer" }}
+        >
+          Duplicar Widget
+        </button>
         <button type="button" onClick={removeActiveWidget}
-          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#fca5a5", fontSize: "11px", cursor: "pointer", marginTop: "8px" }}
+          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#fca5a5", fontSize: "11px", cursor: "pointer" }}
         >
           Remover Widget
         </button>
@@ -294,12 +301,29 @@ function BlockPanel({
     );
   }
 
+  const canPaste = copiedBlockStyle !== null && copiedBlockStyle.blockKey !== activeBlock;
+
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
         <span style={{ fontSize: "13px", fontWeight: "700", color: "#fff" }}>
           {DEFAULT_BLOCK_LABELS[activeBlock] || activeBlock}
         </span>
+        {/* Feature 5: Copiar/colar estilo */}
+        <div style={{ display: "flex", gap: "6px" }}>
+          <button type="button" onClick={() => onCopyStyle(activeBlock)}
+            style={{ flex: 1, padding: "6px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", fontSize: "11px", cursor: "pointer" }}
+          >
+            Copiar Estilo
+          </button>
+          {canPaste && (
+            <button type="button" onClick={() => onPasteStyle(activeBlock)}
+              style={{ flex: 1, padding: "6px 8px", borderRadius: "6px", border: "1px solid rgba(99,102,241,0.3)", background: "rgba(99,102,241,0.08)", color: "var(--accent,#818cf8)", fontSize: "11px", cursor: "pointer" }}
+            >
+              Colar Estilo
+            </button>
+          )}
+        </div>
         <button type="button" onClick={() => hideBlock(activeBlock)}
           style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#fca5a5", fontSize: "11px", cursor: "pointer", width: "100%" }}
         >
@@ -426,6 +450,10 @@ export function BuilderSidePanel({
   activeWidgetData,
   updateActiveWidget,
   removeActiveWidget,
+  duplicateActiveWidget,
+  copiedBlockStyle,
+  onCopyStyle,
+  onPasteStyle,
   collapsed = false,
   onToggleCollapse,
 }) {
@@ -503,6 +531,10 @@ export function BuilderSidePanel({
             activeWidgetData={activeWidgetData}
             updateActiveWidget={updateActiveWidget}
             removeActiveWidget={removeActiveWidget}
+            duplicateActiveWidget={duplicateActiveWidget}
+            copiedBlockStyle={copiedBlockStyle}
+            onCopyStyle={onCopyStyle}
+            onPasteStyle={onPasteStyle}
           />
         ) : (
           <PagePanel

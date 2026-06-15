@@ -28,6 +28,13 @@ const PRESET_THEMES = {
   CARVAO:      { primaryColor: "#334155", secondaryColor: "#f59e0b" },
 };
 
+const BUILDER_TEMPLATES = [
+  { id: "classico", name: "Clássico", desc: "Moderno e elegante, modo escuro", icon: "🌙", appearanceMode: "dark", primaryColor: "#6366f1", secondaryColor: "#d4af37" },
+  { id: "luminoso", name: "Luminoso", desc: "Limpo e profissional, modo claro", icon: "☀️", appearanceMode: "light", primaryColor: "#2563eb", secondaryColor: "#0ea5e9" },
+  { id: "luxo", name: "Luxo", desc: "Premium com acento dourado", icon: "✦", appearanceMode: "dark", primaryColor: "#7c3aed", secondaryColor: "#d4af37" },
+  { id: "natureza", name: "Natureza", desc: "Tons naturais e terrosos", icon: "🌿", appearanceMode: "dark", primaryColor: "#16a34a", secondaryColor: "#ca8a04" },
+];
+
 const FONT_OPTIONS = [
   { label: "Padrão (Inter)",                value: "Inter" },
   { label: "Playfair Display — Elegante",   value: "Playfair Display" },
@@ -199,6 +206,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
   const saveTimerRef = useRef(null);
   const canvasRef = useRef(null);
+  const canvasContainerRef = useRef(null);
   const actionRef = useRef(null);
   const dragStateRef = useRef(null);
   const formRef = useRef(null);
@@ -206,6 +214,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const redoStackRef = useRef([]);
   const undoFnRef = useRef(null);
   const redoFnRef = useRef(null);
+  const canvasZoomRef = useRef(1.0);
+  const multiSelectionRef = useRef(new Set());
   // Modos de preview que ainda precisam de reflow (preenchido ao resetar).
   const reflowPendingRef = useRef(new Set());
 
@@ -222,6 +232,24 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const [previewMode, setPreviewMode] = useState("desktop");
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("domus-builder-onboarded"));
+  // Feature: Canvas Zoom
+  const [canvasZoom, setCanvasZoom] = useState(1.0);
+  // Feature: Multi-selection
+  const [multiSelection, setMultiSelection] = useState(new Set());
+  // Feature: Templates
+  const [showTemplates, setShowTemplates] = useState(false);
+  // Feature: Copiar/colar estilo de bloco
+  const [copiedBlockStyle, setCopiedBlockStyle] = useState(null);
+  // Feature: Prévia compartilhável
+  const [linkCopied, setLinkCopied] = useState(false);
+  // Feature: Histórico visual
+  const [historySnapshots, setHistorySnapshots] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  // Snap magnético aprimorado
+  const [snapLines, setSnapLines] = useState({ x: null, y: null });
+  // Widget drag-to-canvas
+  const [isDraggingWidget, setIsDraggingWidget] = useState(false);
+  const [newWidgetId, setNewWidgetId] = useState(null);
 
   // Ao trocar de preview (desktop/mobile), reempilha aquele modo se ainda estiver
   // pendente de um reset — assim o mobile também fica sem sobreposição.
@@ -256,6 +284,8 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const [success, setSuccess] = useState("");
 
   useEffect(() => { formRef.current = form; }, [form]);
+  useEffect(() => { canvasZoomRef.current = canvasZoom; }, [canvasZoom]);
+  useEffect(() => { multiSelectionRef.current = multiSelection; }, [multiSelection]);
 
   function pushHistory() {
     const snapshot = JSON.stringify(formRef.current);
@@ -299,6 +329,29 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Canvas wheel zoom (desktop only, passive:false to allow preventDefault)
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+    const handler = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setCanvasZoom((prev) => Math.min(1.6, Math.max(0.4, prev - e.deltaY * 0.001)));
+      }
+    };
+    container.addEventListener("wheel", handler, { passive: false });
+    return () => container.removeEventListener("wheel", handler);
+  });
+
+  // Carregar snapshots do histórico ao montar
+  useEffect(() => {
+    if (!tenantSlug) return;
+    try {
+      const raw = localStorage.getItem(`domus-builder-history-${tenantSlug}`);
+      if (raw) setHistorySnapshots(JSON.parse(raw));
+    } catch {}
+  }, [tenantSlug]);
 
   useEffect(() => {
     async function loadEditorData() {
@@ -651,19 +704,23 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
   function startWidgetAction(widgetId, mode, event) {
     if (!canvasRef.current) return;
+    // Feature 2: widget travado — não permite arrastar/redimensionar
+    const currentWidget = normalizeShowcaseConfig(formRef.current?.showcaseConfig).widgets.find(w => w.id === widgetId);
+    if (currentWidget?.locked) return;
     event.preventDefault();
     event.stopPropagation();
     pushHistory();
-    const widget = normalizeShowcaseConfig(formRef.current?.showcaseConfig).widgets.find(w => w.id === widgetId);
+    const widget = currentWidget;
     if (!widget) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const startBlock = { x: widget.x ?? 0, y: widget.y ?? 1080, w: widget.w ?? 50, h: widget.h ?? 200 };
     const startX = event.clientX;
     const startY = event.clientY;
+    const zoom = previewMode === "mobile" ? 1 : canvasZoomRef.current;
 
     const onMove = (e) => {
       const dxPct = ((e.clientX - startX) / Math.max(rect.width, 1)) * 100;
-      const dyPx = e.clientY - startY;
+      const dyPx = (e.clientY - startY) / zoom;
       if (mode === "resize") {
         const nextW = Math.min(Math.max(startBlock.w + dxPct, 10), 100 - startBlock.x);
         const nextH = Math.max(80, startBlock.h + dyPx);
@@ -672,8 +729,14 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           widgets: prev.widgets.map((w) => w.id === widgetId ? { ...w, w: nextW, h: nextH } : w),
         }));
       } else {
-        const nextX = Math.min(Math.max(startBlock.x + dxPct, 0), 100 - startBlock.w);
+        let nextX = Math.min(Math.max(startBlock.x + dxPct, 0), 100 - startBlock.w);
         const nextY = Math.max(0, startBlock.y + dyPx);
+        const snapThreshPct = (10 / Math.max(rect.width, 1)) * 100;
+        let snapLineX = null;
+        for (const cx of [0, 25, 50 - startBlock.w / 2, 75, 100 - startBlock.w]) {
+          if (Math.abs(nextX - cx) <= snapThreshPct) { nextX = clamp(cx, 0, 100 - startBlock.w); snapLineX = cx; break; }
+        }
+        setSnapLines({ x: snapLineX, y: null });
         updateShowcaseConfig((prev) => ({
           ...prev,
           widgets: prev.widgets.map((w) => w.id === widgetId ? { ...w, x: nextX, y: nextY } : w),
@@ -682,6 +745,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     };
 
     const onUp = () => {
+      setSnapLines({ x: null, y: null });
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
@@ -763,6 +827,14 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         saveSession(nextSession);
         onSessionUpdate(nextSession);
         setSuccess("Alterações salvas.");
+        // Histórico visual: salvar snapshot após sucesso
+        const snapLabel = "Auto-salvo";
+        const newSnap = { id: Date.now(), label: snapLabel, timestamp: new Date().toLocaleString("pt-BR"), data: JSON.stringify(formRef.current) };
+        setHistorySnapshots((prev) => {
+          const next = [newSnap, ...prev].slice(0, 10);
+          try { localStorage.setItem(`domus-builder-history-${tenantSlug}`, JSON.stringify(next)); } catch {}
+          return next;
+        });
       } catch (err) {
         setError(err.message);
       } finally {
@@ -795,8 +867,100 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     return Math.min(Math.max(value, min), max);
   }
 
+  // Feature 1: Duplicar widget
+  function duplicateWidget(widgetId) {
+    pushHistory();
+    updateShowcaseConfig((prev) => {
+      const w = prev.widgets.find((w) => w.id === widgetId);
+      if (!w) return prev;
+      const newWidget = {
+        ...w,
+        id: `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        x: Math.min(w.x + 5, 100 - (w.w ?? 50)),
+        y: (w.y ?? 0) + 20,
+        locked: false,
+      };
+      return { ...prev, widgets: [...prev.widgets, newWidget] };
+    });
+  }
+
+  // Feature 2: Travar blocos e widgets
+  function toggleLockBlock(blockKey) {
+    updateShowcaseConfig((prev) => {
+      const isLocked = (prev.lockedBlocks || []).includes(blockKey);
+      return {
+        ...prev,
+        lockedBlocks: isLocked
+          ? (prev.lockedBlocks || []).filter((k) => k !== blockKey)
+          : [...(prev.lockedBlocks || []), blockKey],
+      };
+    });
+  }
+
+  function toggleLockWidget(widgetId) {
+    updateShowcaseConfig((prev) => ({
+      ...prev,
+      widgets: prev.widgets.map((w) => w.id === widgetId ? { ...w, locked: !w.locked } : w),
+    }));
+  }
+
+  // Feature 4: Templates
+  function applyTemplate(template) {
+    pushHistory();
+    setForm((prev) => ({ ...prev, primaryColor: template.primaryColor, secondaryColor: template.secondaryColor }));
+    updateShowcaseConfig((prev) => ({ ...prev, appearanceMode: template.appearanceMode }));
+    setShowTemplates(false);
+  }
+
+  // Feature 5: Copiar/colar estilo de bloco
+  function copyBlockStyle(blockKey) {
+    const style = showcaseConfig.blockStyles[blockKey];
+    setCopiedBlockStyle({ blockKey, style: { ...style } });
+  }
+
+  function pasteBlockStyle(targetBlockKey) {
+    if (!copiedBlockStyle) return;
+    pushHistory();
+    updateShowcaseConfig((prev) => ({
+      ...prev,
+      blockStyles: { ...prev.blockStyles, [targetBlockKey]: { ...copiedBlockStyle.style } },
+    }));
+  }
+
+  // Feature 6: Seleção múltipla
+  function handleBlockClick(blockKey, e) {
+    if (e.shiftKey) {
+      setMultiSelection((prev) => {
+        const n = new Set(prev);
+        n.has(blockKey) ? n.delete(blockKey) : n.add(blockKey);
+        return n;
+      });
+    } else {
+      setActiveBlock(blockKey);
+      setMultiSelection(new Set([blockKey]));
+    }
+  }
+
+  // Feature 8: Histórico — salvar snapshot manualmente
+  function saveHistorySnapshotNow() {
+    const newSnap = { id: Date.now(), label: "Versão manual", timestamp: new Date().toLocaleString("pt-BR"), data: JSON.stringify(formRef.current) };
+    setHistorySnapshots((prev) => {
+      const next = [newSnap, ...prev].slice(0, 10);
+      try { localStorage.setItem(`domus-builder-history-${tenantSlug}`, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
+  function restoreHistorySnapshot(snapshot) {
+    pushHistory();
+    try { setForm(JSON.parse(snapshot.data)); } catch {}
+    setShowHistory(false);
+  }
+
   function startBuilderAction(blockKey, mode, event) {
     if (!canvasRef.current) return;
+    // Feature 2: bloco travado — não permite arrastar/redimensionar
+    if ((normalizeShowcaseConfig(formRef.current?.showcaseConfig).lockedBlocks || []).includes(blockKey)) return;
     event.preventDefault();
     pushHistory();
     const isMobile = previewMode === "mobile";
@@ -828,6 +992,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       lastValidX: startBlock.x, lastValidY: startBlock.y,
       lastValidW: startBlock.w, lastValidH: startBlock.h,
       isMobile, layoutKey,
+      zoom: isMobile ? 1 : canvasZoomRef.current,
     };
 
     const onMove = (moveEvent) => {
@@ -835,7 +1000,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       if (!action || !canvasRef.current) return;
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const dxPx = moveEvent.clientX - action.startX;
-      const dyPx = moveEvent.clientY - action.startY;
+      const dyPx = (moveEvent.clientY - action.startY) / (action.zoom || 1);
       const dxPercent = (dxPx / Math.max(canvasRect.width, 1)) * 100;
 
       const checkCollision = (testRect) => {
@@ -872,15 +1037,28 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
       let nextX = clamp(action.startBlock.x + dxPercent, 0, 100 - action.startBlock.w);
       const center = nextX + action.startBlock.w / 2;
-      const thresholdPct = (8 / Math.max(canvasRect.width, 1)) * 100;
+      const thresholdPct = (10 / Math.max(canvasRect.width, 1)) * 100;
       let snapped = false;
+      let snapLineX = null;
       if (Math.abs(center - 50) <= thresholdPct) {
         nextX = clamp(50 - action.startBlock.w / 2, 0, 100 - action.startBlock.w);
-        snapped = true;
+        snapped = true; snapLineX = 50;
+      } else {
+        for (const cx of [0, 25, 75, 100 - action.startBlock.w]) {
+          if (Math.abs(nextX - cx) <= thresholdPct * 1.4) { nextX = clamp(cx, 0, 100 - action.startBlock.w); snapLineX = cx; break; }
+        }
       }
       let nextY = action.startBlock.y + dyPx;
       let snappedTop = false;
-      if (nextY <= 15) { nextY = 0; snappedTop = true; }
+      let snapLineY = null;
+      if (nextY <= 15) {
+        nextY = 0; snappedTop = true;
+      } else {
+        for (const other of action.staticBlocks) {
+          if (Math.abs(nextY - other.y) <= 14) { nextY = other.y; snapLineY = other.y; break; }
+          if (Math.abs(nextY - (other.y + other.h)) <= 14) { nextY = other.y + other.h; snapLineY = other.y + other.h; break; }
+        }
+      }
 
       const finalX = nextX;
       const finalY = Math.max(0, nextY);
@@ -888,6 +1066,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       action.lastValidY = finalY;
       setSnapCenterActive(snapped);
       setSnapTopActive(snappedTop);
+      setSnapLines({ x: snapLineX, y: snapLineY });
       updateShowcaseConfig((prev) => {
         const prevLayout = prev[action.layoutKey] || {};
         const allKeys = [...action.staticBlocks.map(b => b.key), action.blockKey];
@@ -899,6 +1078,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     const onUp = () => {
       setSnapCenterActive(false);
       setSnapTopActive(false);
+      setSnapLines({ x: null, y: null });
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       actionRef.current = null;
@@ -914,40 +1094,41 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   }
 
   function startWidgetDrag(template, event) {
-    // Drag ghost + drop: tries to place widget at the canvas position where released.
     event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;
     setDragState({ template, x: startX, y: startY });
+    setIsDraggingWidget(true);
 
     const onMove = (e) => setDragState({ template, x: e.clientX, y: e.clientY });
 
     const onUp = (e) => {
       const canvas = canvasRef.current;
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
-      if (canvas && dist >= 10) {
+      if (canvas && dist >= 12) {
         const rect = canvas.getBoundingClientRect();
         if (e.clientX >= rect.left && e.clientX <= rect.right &&
             e.clientY >= rect.top && e.clientY <= rect.bottom) {
           const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-          const yPx = e.clientY - rect.top;
+          const yPx = (e.clientY - rect.top) / canvasZoomRef.current;
+          const newId = `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           pushHistory();
           updateShowcaseConfig((prev) => ({
             ...prev,
             widgets: [...prev.widgets, {
-              id: `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              id: newId,
               type: template.type, title: template.title, content: template.content,
               ctaLabel: template.ctaLabel || "", ctaUrl: template.ctaUrl || "",
               backgroundColor: "", color: "",
-              x: Math.max(0, Math.min(xPct, 60)), y: Math.max(0, yPx), w: 40, h: 200, hidden: false,
+              x: Math.max(0, Math.min(xPct, 60)), y: Math.max(0, yPx), w: 40, h: 200, hidden: false, locked: false,
             }],
           }));
-        } else {
-          addWidget(template);
+          setNewWidgetId(newId);
+          setTimeout(() => setNewWidgetId(null), 700);
+          setWidgetMenuOpen(false);
         }
-      } else {
-        addWidget(template);
       }
+      setIsDraggingWidget(false);
       dragStateRef.current = null;
       setDragState(null);
       window.removeEventListener("pointermove", onMove);
@@ -1047,23 +1228,36 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     <>
       {snapCenterActive ? <div className="builder-snap-guide" aria-hidden /> : null}
       {snapTopActive ? (
-        <div aria-hidden style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: "#4ade80", zIndex: 9999, boxShadow: "0 0 12px #4ade80" }} />
+        <div aria-hidden style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: "#4ade80", zIndex: 9999, boxShadow: "0 0 10px 2px rgba(74,222,128,0.7)" }} />
+      ) : null}
+      {snapLines.x !== null && !snapCenterActive ? (
+        <div aria-hidden className="snap-guide-v" style={{ left: `${snapLines.x}%` }} />
+      ) : null}
+      {snapLines.y !== null ? (
+        <div aria-hidden className="snap-guide-h" style={{ top: `${snapLines.y}px` }} />
+      ) : null}
+      {isDraggingWidget ? (
+        <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: 9990, pointerEvents: "none", border: "2px dashed var(--accent)", borderRadius: "inherit", background: "rgba(99,102,241,0.04)", animation: "canvasDropPulse 1s ease-in-out infinite" }} />
       ) : null}
 
       {isBlockVisible("header") ? (
         <section
           data-reflow-key="header"
-          className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}`}
-          style={{ ...mergedBlockWrapper("header"), zIndex: 9999 }}
-          onClick={() => setActiveBlock("header")}
+          className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}${multiSelection.has("header") && activeBlock !== "header" ? " multi-selected" : ""}`}
+          style={{ ...mergedBlockWrapper("header"), zIndex: 9999, ...(showcaseConfig.lockedBlocks?.includes("header") ? { cursor: "not-allowed" } : {}) }}
+          onClick={(e) => handleBlockClick("header", e)}
         >
-          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("header", "drag", event)}>
+          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("header", "drag", event)} style={{ cursor: showcaseConfig.lockedBlocks?.includes("header") ? "not-allowed" : undefined }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Cabeçalho
           </div>
+          <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("header"); }} title={showcaseConfig.lockedBlocks?.includes("header") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
+            {showcaseConfig.lockedBlocks?.includes("header") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
+          </button>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("header"); }} title="Remover bloco">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
+          {showcaseConfig.lockedBlocks?.includes("header") && <div style={{ position: "absolute", inset: 0, background: "rgba(99,102,241,0.06)", pointerEvents: "none", borderRadius: "inherit", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1 }}><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.15 }}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>}
           
           <div style={{ padding: isMobilePreview ? "20px 24px" : "28px 48px", maxWidth: "1400px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -1096,11 +1290,14 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("title") ? (
-        <section data-reflow-key="title" className={`builder-block${sectionBgClass("title")} ${activeBlock === "title" ? "is-active" : ""}`} style={mergedBlockWrapper("title")} onClick={() => setActiveBlock("title")}>
+        <section data-reflow-key="title" className={`builder-block${sectionBgClass("title")} ${activeBlock === "title" ? "is-active" : ""}${multiSelection.has("title") && activeBlock !== "title" ? " multi-selected" : ""}`} style={mergedBlockWrapper("title")} onClick={(e) => handleBlockClick("title", e)}>
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("title", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Hero / Título
           </div>
+          <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("title"); }} title={showcaseConfig.lockedBlocks?.includes("title") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
+            {showcaseConfig.lockedBlocks?.includes("title") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
+          </button>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("title"); }} title="Remover bloco">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
@@ -1116,11 +1313,14 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("highlights") ? (
-        <section data-reflow-key="highlights" className={`builder-block${sectionBgClass("highlights")} ${activeBlock === "highlights" ? "is-active" : ""}`} style={mergedBlockWrapper("highlights")} onClick={() => setActiveBlock("highlights")}>
+        <section data-reflow-key="highlights" className={`builder-block${sectionBgClass("highlights")} ${activeBlock === "highlights" ? "is-active" : ""}${multiSelection.has("highlights") && activeBlock !== "highlights" ? " multi-selected" : ""}`} style={mergedBlockWrapper("highlights")} onClick={(e) => handleBlockClick("highlights", e)}>
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("highlights", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Destaques
           </div>
+          <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("highlights"); }} title={showcaseConfig.lockedBlocks?.includes("highlights") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
+            {showcaseConfig.lockedBlocks?.includes("highlights") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
+          </button>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("highlights"); }} title="Remover bloco">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
@@ -1167,11 +1367,14 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("properties") ? (
-        <section data-reflow-key="properties" className={`builder-block${sectionBgClass("properties")} ${activeBlock === "properties" ? "is-active" : ""}`} style={mergedBlockWrapper("properties")} onClick={() => setActiveBlock("properties")}>
+        <section data-reflow-key="properties" className={`builder-block${sectionBgClass("properties")} ${activeBlock === "properties" ? "is-active" : ""}${multiSelection.has("properties") && activeBlock !== "properties" ? " multi-selected" : ""}`} style={mergedBlockWrapper("properties")} onClick={(e) => handleBlockClick("properties", e)}>
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("properties", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Lista de Imóveis
           </div>
+          <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("properties"); }} title={showcaseConfig.lockedBlocks?.includes("properties") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
+            {showcaseConfig.lockedBlocks?.includes("properties") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
+          </button>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("properties"); }} title="Remover bloco">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
@@ -1238,7 +1441,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             <section
               key={widget.id}
               data-reflow-key={widgetKey}
-              className={`builder-block ${isActiveWidget ? "is-active" : ""}`}
+              className={`builder-block ${isActiveWidget ? "is-active" : ""} ${widget.id === newWidgetId ? "widget-entering" : ""}`}
               style={{
                 position: "absolute",
                 left: `${widget.x ?? 0}%`,
@@ -1251,16 +1454,26 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                 padding: "18px",
                 ...(widget.backgroundColor ? { backgroundColor: widget.backgroundColor } : {}),
                 ...(widget.color ? { color: widget.color } : {}),
+                ...(widget.locked ? { outline: "2px dashed rgba(99,102,241,0.4)" } : {}),
               }}
               onClick={(e) => { e.stopPropagation(); setActiveBlock(widgetKey); }}
             >
-              <div className="builder-block-handle" onPointerDown={(e) => startWidgetAction(widget.id, "drag", e)}>
+              <div className="builder-block-handle" onPointerDown={(e) => startWidgetAction(widget.id, "drag", e)} style={{ cursor: widget.locked ? "not-allowed" : undefined }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
                 {(widget.title || "Widget").replace(/<[^>]*>/g, "").slice(0, 28)}
               </div>
+              {/* Botão travar widget */}
+              <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockWidget(widget.id); }} title={widget.locked ? "Destravar widget" : "Travar widget"} style={{ right: "58px" }}>
+                {widget.locked ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
+              </button>
+              {/* Botão duplicar widget */}
+              <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); duplicateWidget(widget.id); }} title="Duplicar widget" style={{ right: "80px" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
               <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); removeWidgetById(widget.id); }} title="Remover widget">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
+              {widget.locked && <div style={{ position: "absolute", inset: 0, background: "rgba(99,102,241,0.06)", pointerEvents: "none", borderRadius: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.15 }}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>}
               <div className="highlight-mini-toolbar" onPointerDown={(e) => e.stopPropagation()}>
                 <label className="builder-color-mini">Fundo<input type="color" value={widget.backgroundColor || "#1e293b"} onChange={(e) => updateWidgetById(widget.id, "backgroundColor", e.target.value)} style={{ width: "20px", height: "20px" }} /></label>
                 <label className="builder-color-mini">Texto<input type="color" value={widget.color || "#f8fafc"} onChange={(e) => updateWidgetById(widget.id, "color", e.target.value)} style={{ width: "20px", height: "20px" }} /></label>
@@ -1333,14 +1546,17 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         <section
           id="footer"
           data-reflow-key="footer"
-          className={`builder-block${sectionBgClass("footer")} ${activeBlock === "footer" ? "is-active" : ""}`}
+          className={`builder-block${sectionBgClass("footer")} ${activeBlock === "footer" ? "is-active" : ""}${multiSelection.has("footer") && activeBlock !== "footer" ? " multi-selected" : ""}`}
           style={mergedBlockWrapper("footer")}
-          onClick={() => setActiveBlock("footer")}
+          onClick={(e) => handleBlockClick("footer", e)}
         >
           <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("footer", "drag", event)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Rodapé
           </div>
+          <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("footer"); }} title={showcaseConfig.lockedBlocks?.includes("footer") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
+            {showcaseConfig.lockedBlocks?.includes("footer") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
+          </button>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); hideBlock("footer"); }} title="Remover bloco">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
@@ -1415,6 +1631,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         .showcase-theme-light .builder-block:hover { border-color: rgba(15, 23, 42, 0.3) !important; }
         .builder-block.is-active { border-color: rgba(255, 255, 255, 0.5) !important; z-index: 50; }
         .showcase-theme-light .builder-block.is-active { border-color: rgba(15, 23, 42, 0.5) !important; }
+        .builder-block.multi-selected { border-color: rgba(99,102,241,0.6) !important; }
         .builder-block .builder-block-handle,
         .builder-block .builder-delete-icon,
         .builder-block .builder-resize-handle { opacity: 0; visibility: hidden; transition: all 0.2s ease-in-out; }
@@ -1431,6 +1648,12 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         .editable-inline span[style*="color"], .editable-inline font[color] { -webkit-text-fill-color: currentcolor !important; -webkit-background-clip: initial !important; background: none !important; }
         @keyframes builderModeIn { from { opacity: 0; transform: scale(0.975) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         .builder-canvas-anim { animation: builderModeIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        @keyframes snapPulse { from { opacity: 1; } 50% { opacity: 0.45; } to { opacity: 1; } }
+        .snap-guide-v { position: absolute; top: 0; bottom: 0; width: 2px; background: #4ade80; box-shadow: 0 0 8px 3px rgba(74,222,128,0.55); z-index: 9998; pointer-events: none; animation: snapPulse 0.4s ease-in-out; }
+        .snap-guide-h { position: absolute; left: 0; right: 0; height: 2px; background: #4ade80; box-shadow: 0 0 8px 3px rgba(74,222,128,0.55); z-index: 9998; pointer-events: none; animation: snapPulse 0.4s ease-in-out; }
+        @keyframes canvasDropPulse { 0%,100% { border-color: var(--accent); opacity: 1; } 50% { border-color: rgba(99,102,241,0.35); opacity: 0.7; } }
+        @keyframes widgetDrop { 0% { opacity: 0; transform: scale(0.82) translateY(-14px); } 65% { transform: scale(1.04) translateY(3px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        .widget-entering { animation: widgetDrop 0.52s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
       `}</style>
 
       {textSelection
@@ -1548,6 +1771,32 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
 
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
 
+          {/* Zoom do canvas (desktop apenas) */}
+          {!isMobilePreview && (
+            <div style={{ display: "flex", alignItems: "center", gap: "2px", background: "rgba(255,255,255,0.05)", borderRadius: "8px", padding: "2px 4px", border: "1px solid rgba(255,255,255,0.08)" }}>
+              {iconBtn(canvasZoom <= 0.4, () => setCanvasZoom(z => Math.max(0.4, z - 0.1)), "Diminuir zoom",
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14"/></svg>
+              )}
+              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", minWidth: "32px", textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+                {Math.round(canvasZoom * 100)}%
+              </span>
+              {iconBtn(canvasZoom >= 1.6, () => setCanvasZoom(z => Math.min(1.6, z + 0.1)), "Aumentar zoom",
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              )}
+              {iconBtn(canvasZoom === 1.0, () => setCanvasZoom(1.0), "Resetar zoom",
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+              )}
+            </div>
+          )}
+
+          <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
+
+          {/* Templates */}
+          <button type="button" className="button-secondary" onClick={() => setShowTemplates(true)} title="Aplicar template de aparência">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "5px" }}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Templates
+          </button>
+
           <button type="button" className="button-secondary" onClick={randomizeColors} title="Gerar combinação de cores aleatória" style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             Cores
@@ -1561,6 +1810,17 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           </button>
 
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
+
+          {/* Histórico */}
+          <button type="button" className="button-secondary" onClick={() => setShowHistory(true)} title="Histórico de versões salvas">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "5px" }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Histórico
+          </button>
+
+          {/* Copiar link */}
+          <button type="button" className="button-secondary" onClick={() => { navigator.clipboard.writeText(window.location.origin + "/vitrine/" + tenantSlug); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }} title="Copiar link da vitrine" style={{ color: linkCopied ? "#4ade80" : undefined, transition: "color 0.3s" }}>
+            {linkCopied ? "✓ Link copiado!" : "🔗 Copiar Link"}
+          </button>
 
           <Link className="link-button" to={`/vitrine/${tenantSlug}`} target="_blank" style={{ padding: "8px 14px" }}>
             Ver Página
@@ -1591,21 +1851,30 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             </div>
           ) : (
             <div
+              ref={canvasContainerRef}
               key="desktop"
-              className="showcase-container showcase-builder-canvas builder-canvas-anim"
-              ref={canvasRef}
-              onClick={(e) => { if (e.target === canvasRef.current) setActiveBlock(null); }}
-              style={{
-                position: "relative", overflow: "hidden",
-                width: "calc(100% - 40px)", margin: "20px", borderRadius: "20px",
-                minHeight: `${canvasHeight}px`,
-                backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)",
-                backgroundSize: "24px 24px",
-                border: "1px solid rgba(255,255,255,0.05)",
-                fontFamily: `'${globalFont}', system-ui, sans-serif`,
-              }}
+              style={{ margin: "20px", transformOrigin: "top center" }}
             >
-              {canvasContent}
+              <div
+                style={{ transform: `scale(${canvasZoom})`, transformOrigin: "top center", transition: "transform 0.15s" }}
+              >
+                <div
+                  className="showcase-container showcase-builder-canvas builder-canvas-anim"
+                  ref={canvasRef}
+                  onClick={(e) => { if (e.target === canvasRef.current) setActiveBlock(null); }}
+                  style={{
+                    position: "relative", overflow: "hidden",
+                    width: "100%", borderRadius: "20px",
+                    minHeight: `${canvasHeight}px`,
+                    backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)",
+                    backgroundSize: "24px 24px",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    fontFamily: `'${globalFont}', system-ui, sans-serif`,
+                  }}
+                >
+                  {canvasContent}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1617,26 +1886,30 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
               ) : null}
               {widgetMenuOpen ? (
                 <div className="widget-fab-menu" style={{ padding: "20px", boxShadow: "0 20px 40px rgba(0,0,0,0.5)", width: "300px", animation: "chicEntrance 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards", transformOrigin: "bottom right" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                    <h3 style={{ fontSize: "15px", fontWeight: "700", color: "#fff", margin: 0 }}>Adicionar Widget</h3>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <h3 style={{ fontSize: "15px", fontWeight: "700", color: "#fff", margin: 0 }}>Widgets</h3>
                     <button onClick={() => setWidgetMenuOpen(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px" }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                   </div>
-                  <div style={{ display: "grid", gap: "10px", maxHeight: "60vh", overflowY: "auto", paddingRight: "4px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: "8px", padding: "8px 12px", marginBottom: "14px" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 9l-3 3 3 3M19 9l3 3-3 3M2 12h20"/></svg>
+                    <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: "600" }}>Segure e arraste para o canvas</span>
+                  </div>
+                  <div style={{ display: "grid", gap: "8px", maxHeight: "56vh", overflowY: "auto", paddingRight: "4px" }}>
                     {WIDGET_LIBRARY.map((template) => (
                       <button key={template.type} type="button" onPointerDown={(e) => startWidgetDrag(template, e)}
                         className="button-secondary"
-                        style={{ padding: "14px", borderRadius: "12px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", textAlign: "left", cursor: "grab" }}
+                        style={{ padding: "12px 14px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", textAlign: "left", cursor: "grab" }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", pointerEvents: "none" }}>
-                          <div style={{ background: "rgba(255,255,255,0.1)", padding: "6px", borderRadius: "6px" }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                          </div>
-                          <span style={{ fontWeight: "600", fontSize: "13px" }} dangerouslySetInnerHTML={{ __html: template.title }} />
+                        <div style={{ flexShrink: 0, width: "36px", height: "36px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                         </div>
-                        <div style={{ width: "100%", padding: "10px", background: "rgba(0,0,0,0.3)", borderRadius: "8px", border: "1px dashed rgba(255,255,255,0.1)", pointerEvents: "none" }}>
-                          <div style={{ width: "40%", height: "5px", background: "#fff", borderRadius: "3px", marginBottom: "6px" }} />
+                        <div style={{ flex: 1, minWidth: 0, pointerEvents: "none" }}>
+                          <div style={{ fontWeight: "600", fontSize: "13px", color: "#fff", marginBottom: "2px" }} dangerouslySetInnerHTML={{ __html: template.title }} />
+                          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>arraste para adicionar</div>
+                        </div>
+                        <div style={{ flexShrink: 0, width: "48px", height: "32px", padding: "6px", background: "rgba(0,0,0,0.25)", borderRadius: "6px", border: "1px dashed rgba(255,255,255,0.08)", pointerEvents: "none", overflow: "hidden" }}>
                           {template.preview}
                         </div>
                       </button>
@@ -1683,24 +1956,37 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           activeWidgetData={activeBlock?.startsWith("widget-") ? showcaseConfig.widgets.find(w => w.id === activeBlock.replace("widget-", "")) : null}
           updateActiveWidget={(field, value) => { if (activeBlock?.startsWith("widget-")) updateWidgetById(activeBlock.replace("widget-", ""), field, value); }}
           removeActiveWidget={() => { if (activeBlock?.startsWith("widget-")) removeWidgetById(activeBlock.replace("widget-", "")); }}
+          duplicateActiveWidget={() => { if (activeBlock?.startsWith("widget-")) duplicateWidget(activeBlock.replace("widget-", "")); }}
+          copiedBlockStyle={copiedBlockStyle}
+          onCopyStyle={copyBlockStyle}
+          onPasteStyle={pasteBlockStyle}
         />
       </div>
 
       {/* Drag ghost */}
       {dragState ? (
         <div style={{
-          position: "fixed", left: dragState.x, top: dragState.y, transform: "translate(-50%, -50%)",
-          pointerEvents: "none", zIndex: 99999, background: "var(--bg-gradient-2, #1e293b)",
-          padding: "14px", borderRadius: "12px", border: "1px solid var(--accent)",
-          boxShadow: "0 10px 25px rgba(0,0,0,0.5)", width: "220px",
-          opacity: 0.9,
-          transition: "opacity 0.2s",
+          position: "fixed", left: dragState.x, top: dragState.y,
+          transform: "translate(-50%, -65%) rotate(-2.5deg)",
+          pointerEvents: "none", zIndex: 99999, background: "#0d1829",
+          padding: "16px", borderRadius: "16px",
+          border: "1.5px solid var(--accent)",
+          boxShadow: "0 24px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06), 0 0 24px rgba(99,102,241,0.2)",
+          width: "210px", opacity: 0.96,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-            <span style={{ fontWeight: "600", fontSize: "13px", color: "#fff" }} dangerouslySetInnerHTML={{ __html: dragState.template.title }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+            <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </div>
+            <span style={{ fontWeight: "700", fontSize: "13px", color: "#fff", lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: dragState.template.title }} />
           </div>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Solte para adicionar widget</div>
+          <div style={{ padding: "10px", background: "rgba(255,255,255,0.04)", borderRadius: "10px", border: "1px dashed rgba(255,255,255,0.12)" }}>
+            <div style={{ width: "45%", height: "5px", background: "rgba(255,255,255,0.25)", borderRadius: "3px", marginBottom: "8px" }} />
+            {dragState.template.preview}
+          </div>
+          <div style={{ fontSize: "10px", color: "var(--accent)", marginTop: "10px", fontWeight: "700", textAlign: "center", letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.85 }}>
+            ↓ Solte no canvas
+          </div>
         </div>
       ) : null}
 
@@ -1710,6 +1996,76 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           localStorage.setItem("domus-builder-onboarded", "1");
           setShowOnboarding(false);
         }} />
+      ) : null}
+
+      {/* Modal de Templates */}
+      {showTemplates ? createPortal(
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowTemplates(false)}>
+          <div style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "28px", width: "460px", maxWidth: "90vw", boxShadow: "0 24px 48px rgba(0,0,0,0.6)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+              <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#fff", margin: 0 }}>Escolher Template</h3>
+              <button type="button" onClick={() => setShowTemplates(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "20px", marginTop: 0 }}>Aplica cores e modo de aparência ao editor. Seu conteúdo não será alterado.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              {BUILDER_TEMPLATES.map((tpl) => (
+                <button key={tpl.id} type="button" onClick={() => applyTemplate(tpl)}
+                  style={{ padding: "16px", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", textAlign: "left", transition: "border-color 0.2s, background 0.2s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(99,102,241,0.5)"; e.currentTarget.style.background = "rgba(99,102,241,0.08)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                >
+                  <div style={{ fontSize: "24px", marginBottom: "10px" }}>{tpl.icon}</div>
+                  <div style={{ fontSize: "13px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>{tpl.name}</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>{tpl.desc}</div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <span style={{ width: "20px", height: "20px", borderRadius: "50%", background: tpl.primaryColor, display: "inline-block", border: "1px solid rgba(255,255,255,0.1)" }} />
+                    <span style={{ width: "20px", height: "20px", borderRadius: "50%", background: tpl.secondaryColor, display: "inline-block", border: "1px solid rgba(255,255,255,0.1)" }} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
+
+      {/* Modal de Histórico */}
+      {showHistory ? createPortal(
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowHistory(false)}>
+          <div style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "28px", width: "420px", maxWidth: "90vw", boxShadow: "0 24px 48px rgba(0,0,0,0.6)", maxHeight: "80vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexShrink: 0 }}>
+              <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#fff", margin: 0 }}>Histórico de Versões</h3>
+              <button type="button" onClick={() => setShowHistory(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <button type="button" onClick={saveHistorySnapshotNow}
+              style={{ padding: "10px 16px", borderRadius: "10px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "var(--accent,#818cf8)", fontWeight: "600", fontSize: "13px", cursor: "pointer", marginBottom: "16px", flexShrink: 0 }}
+            >
+              + Salvar versão agora
+            </button>
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+              {historySnapshots.length === 0 ? (
+                <p style={{ color: "var(--text-muted)", fontSize: "13px", textAlign: "center", padding: "24px 0" }}>Nenhuma versão salva ainda. O histórico é preenchido automaticamente ao salvar.</p>
+              ) : historySnapshots.map((snap) => (
+                <div key={snap.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#fff" }}>{snap.label}</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>{snap.timestamp}</div>
+                  </div>
+                  <button type="button" onClick={() => restoreHistorySnapshot(snap)}
+                    style={{ padding: "6px 12px", borderRadius: "7px", background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)", color: "var(--accent,#818cf8)", fontSize: "11px", fontWeight: "600", cursor: "pointer", flexShrink: 0 }}
+                  >
+                    Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

@@ -139,6 +139,7 @@ function normalizeWidget(widget, index) {
     w: Number.isFinite(Number(w.w)) ? Number(w.w) : 50,
     h: Number.isFinite(Number(w.h)) ? Number(w.h) : 200,
     hidden: w.hidden === true,
+    locked: w.locked === true,
   };
 }
 
@@ -208,6 +209,8 @@ export function normalizeShowcaseConfig(raw) {
 
   const hiddenBlocksRaw = Array.isArray(cfg.hiddenBlocks) ? cfg.hiddenBlocks : [];
   const hiddenBlocks = hiddenBlocksRaw.filter((key) => BLOCK_KEYS.includes(key));
+  const lockedBlocksRaw = Array.isArray(cfg.lockedBlocks) ? cfg.lockedBlocks : [];
+  const lockedBlocks = lockedBlocksRaw.filter((key) => BLOCK_KEYS.includes(key));
   const topHeader =
     cfg.topHeader && typeof cfg.topHeader === "object"
       ? {
@@ -236,6 +239,7 @@ export function normalizeShowcaseConfig(raw) {
     widgets,
     topHeader,
     hiddenBlocks,
+    lockedBlocks,
     globalFont: typeof cfg.globalFont === "string" && cfg.globalFont ? cfg.globalFont : "Inter",
   };
 }
