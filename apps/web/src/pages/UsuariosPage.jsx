@@ -3,7 +3,7 @@ import { api } from "../api";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnNovo } from "../components/ActionIcons";
 import { Avatar, Chip, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
 
-const FORM_EMPTY = { nome: "", login: "", senha: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
+const FORM_EMPTY = { nome: "", login: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
 
 export function UsuariosPage({ session }) {
   const tenantSlug = session?.tenant?.slug;
@@ -50,7 +50,7 @@ export function UsuariosPage({ session }) {
 
   function abrirEditar(u) {
     setEditando(u);
-    setForm({ nome: u.nome, login: u.login, senha: "", cargoCodigo: String(u.cargoCodigo), ativo: u.ativo, forcaAlterarSenha: u.forcaAlterarSenha });
+    setForm({ nome: u.nome, login: u.login, cargoCodigo: String(u.cargoCodigo), ativo: u.ativo, forcaAlterarSenha: u.forcaAlterarSenha });
     setError("");
     setView("form");
   }
@@ -60,22 +60,26 @@ export function UsuariosPage({ session }) {
     setLoading(true);
     setError("");
     try {
-      const payload = {
-        nome: form.nome,
-        login: form.login,
-        cargoCodigo: Number(form.cargoCodigo),
-        ativo: form.ativo,
-        forcaAlterarSenha: form.forcaAlterarSenha,
-      };
-      if (form.senha) payload.senha = form.senha;
-
       if (editando) {
+        // Na edição, a senha não é alterável pelo painel — só nome/login/cargo/
+        // status e a flag de forçar troca de senha.
+        const payload = {
+          nome: form.nome,
+          login: form.login,
+          cargoCodigo: Number(form.cargoCodigo),
+          ativo: form.ativo,
+          forcaAlterarSenha: form.forcaAlterarSenha,
+        };
         const updated = await api.updateUsuario(tenantSlug, editando.id, payload);
         setUsuarios((prev) => prev.map((u) => u.id === updated.id ? updated : u));
       } else {
-        if (!form.senha) { setError("Senha é obrigatória para novo usuário."); setLoading(false); return; }
-        payload.senha = form.senha;
-        const created = await api.createUsuario(tenantSlug, payload);
+        // Novo usuário: sem senha; ele define a própria no primeiro acesso.
+        const created = await api.createUsuario(tenantSlug, {
+          nome: form.nome,
+          login: form.login,
+          cargoCodigo: Number(form.cargoCodigo),
+          ativo: form.ativo,
+        });
         setUsuarios((prev) => [...prev, created]);
       }
       setView("list");
@@ -118,13 +122,6 @@ export function UsuariosPage({ session }) {
             onChange={(e) => setForm((p) => ({ ...p, login: e.target.value }))}
             required disabled={loading}
           />
-          <input
-            type="password"
-            placeholder={editando ? "Nova senha (deixe em branco para manter)" : "Senha"}
-            value={form.senha}
-            onChange={(e) => setForm((p) => ({ ...p, senha: e.target.value }))}
-            disabled={loading}
-          />
           <select
             value={form.cargoCodigo}
             onChange={(e) => setForm((p) => ({ ...p, cargoCodigo: e.target.value }))}
@@ -134,16 +131,27 @@ export function UsuariosPage({ session }) {
             {cargos.map((c) => <option key={c.id} value={c.id}>{c.descricao}</option>)}
           </select>
 
-          <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "center" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
               <input type="checkbox" checked={form.ativo} onChange={(e) => setForm((p) => ({ ...p, ativo: e.target.checked }))} disabled={loading} />
               Usuário ativo
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-              <input type="checkbox" checked={form.forcaAlterarSenha} onChange={(e) => setForm((p) => ({ ...p, forcaAlterarSenha: e.target.checked }))} disabled={loading} />
-              Forçar alteração de senha no próximo acesso
-            </label>
+            {/* Forçar troca só faz sentido na edição; novos usuários já definem
+                a senha no primeiro acesso (força troca é sempre true). */}
+            {editando && (
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+                <input type="checkbox" checked={form.forcaAlterarSenha} onChange={(e) => setForm((p) => ({ ...p, forcaAlterarSenha: e.target.checked }))} disabled={loading} />
+                Forçar alteração de senha no próximo acesso
+              </label>
+            )}
           </div>
+
+          {!editando && (
+            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+              O usuário não recebe senha aqui. No primeiro acesso, ele informa o login e
+              define a própria senha na tela seguinte.
+            </p>
+          )}
 
           <div className="actions" style={{ marginTop: "24px" }}>
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>

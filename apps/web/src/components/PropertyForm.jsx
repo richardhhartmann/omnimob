@@ -576,7 +576,7 @@ function SugestaoCard({ rotulo, texto, onAplicar }) {
         </span>
         <button
           type="button"
-          onClick={() => { onAplicar(); setAplicado(true); setTimeout(() => setAplicado(false), 1800); }}
+          onClick={() => { onAplicar(); setAplicado(true); }}
           style={{
             padding: "5px 14px", borderRadius: "7px", cursor: "pointer", flexShrink: 0, width: "auto",
             background: aplicado ? "rgba(16,185,129,0.2)" : "rgba(99,102,241,0.15)",
@@ -1353,23 +1353,26 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               </Field>
               <Field label="Descrição" required error={fieldErrors.description}>
                 <textarea style={{ ...withError("description"), resize: "vertical", minHeight: "100px", lineHeight: "1.6" }} placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..." value={form.description} onChange={(e) => set("description", e.target.value)} rows={4} disabled={disabled} />
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "2px" }}>
-                  <button
-                    type="button"
-                    onClick={handleMelhorarDescricao}
-                    disabled={melhorarLoading || disabled}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
-                      borderRadius: "8px", cursor: melhorarLoading || disabled ? "not-allowed" : "pointer",
-                      background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
-                      color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
-                      opacity: melhorarLoading || disabled ? 0.6 : 1, width: "auto",
-                    }}
-                  >
-                    ✨ {melhorarLoading ? "Melhorando…" : "Melhorar com IA"}
-                  </button>
-                  {melhorarErro && <span style={{ fontSize: "11px", color: "#f87171" }}>{melhorarErro}</span>}
-                </div>
+                {/* "Melhorar com IA" só aparece quando já existe algum texto na descrição. */}
+                {form.description.trim().length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "2px" }}>
+                    <button
+                      type="button"
+                      onClick={handleMelhorarDescricao}
+                      disabled={melhorarLoading || disabled}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
+                        borderRadius: "8px", cursor: melhorarLoading || disabled ? "not-allowed" : "pointer",
+                        background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
+                        color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
+                        opacity: melhorarLoading || disabled ? 0.6 : 1, width: "auto",
+                      }}
+                    >
+                      ✨ {melhorarLoading ? "Melhorando…" : "Melhorar com IA"}
+                    </button>
+                    {melhorarErro && <span style={{ fontSize: "11px", color: "#f87171" }}>{melhorarErro}</span>}
+                  </div>
+                )}
               </Field>
               <Field label="Preço" required error={fieldErrors.price}>
                 <input style={withError("price")} placeholder="R$ 0,00" type="text" inputMode="numeric" value={form.price} onChange={(e) => set("price", formatCurrencyBRL(e.target.value))} disabled={disabled} />
@@ -1626,6 +1629,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "12px" }}>
                     {iaSugestao.titulo && (
                       <SugestaoCard
+                        key={iaSugestao.titulo}
                         rotulo="Título sugerido"
                         texto={iaSugestao.titulo}
                         onAplicar={() => set("title", iaSugestao.titulo)}
@@ -1633,6 +1637,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     )}
                     {iaSugestao.descricao && (
                       <SugestaoCard
+                        key={iaSugestao.descricao}
                         rotulo="Descrição sugerida"
                         texto={iaSugestao.descricao}
                         onAplicar={() => set("description", iaSugestao.descricao)}
@@ -1640,6 +1645,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     )}
                     {iaSugestao.descricaoResumida && (
                       <SugestaoCard
+                        key={iaSugestao.descricaoResumida}
                         rotulo="Resumo (redes / SEO)"
                         texto={iaSugestao.descricaoResumida}
                         onAplicar={() => set("description", iaSugestao.descricaoResumida)}

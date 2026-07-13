@@ -41,7 +41,10 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(normalizeErrorMessage(body));
+    const error = new Error(normalizeErrorMessage(body));
+    error.body = body; // permite ler flags como forcaAlterarSenha
+    error.status = response.status;
+    throw error;
   }
 
   if (response.status === 204) return null;
@@ -51,6 +54,9 @@ async function request(path, options = {}) {
 export const api = {
   login: (payload) =>
     request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+
+  definirSenha: (payload) =>
+    request("/api/auth/definir-senha", { method: "POST", body: JSON.stringify(payload) }),
 
   getMe: (tenantSlug) =>
     request("/api/auth/me", { headers: { "x-tenant-slug": tenantSlug } }),

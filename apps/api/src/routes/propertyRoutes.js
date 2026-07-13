@@ -4,7 +4,6 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
-import { enqueuePropertyPublication } from "../services/socialPublisher.js";
 import { gerarConteudoImovel, isAiEnabled } from "../services/aiService.js";
 import { createPropertySchema, updatePropertySchema } from "../validators/propertyValidators.js";
 
@@ -224,9 +223,8 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
       include: PROPERTY_INCLUDE,
     });
 
-    enqueuePropertyPublication(req.tenant.id, property.id).catch((err) =>
-      console.error("Erro na publicacao do imovel:", err)
-    );
+    // Publicação nas redes acontece SÓ quando o usuário publica de fato
+    // (rota /api/social/publish/*). Não marcamos nada como publicado aqui.
 
     return res.status(201).json(property);
   } catch (err) {
@@ -294,12 +292,6 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
       },
       include: PROPERTY_INCLUDE,
     });
-
-    if (property.status === PropertyStatus.ACTIVE) {
-      enqueuePropertyPublication(req.tenant.id, property.id).catch((err) =>
-        console.error("Erro na republicacao do imovel:", err)
-      );
-    }
 
     return res.json(property);
   } catch (err) {

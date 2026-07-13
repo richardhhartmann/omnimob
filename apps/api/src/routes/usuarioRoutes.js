@@ -26,11 +26,13 @@ usuarioRouter.get("/", async (req, res) => {
 
 usuarioRouter.post("/", async (req, res) => {
   try {
-    const { nome, login, senha, cargoCodigo, forcaAlterarSenha = false } = req.body;
-    if (!nome || !login || !senha || !cargoCodigo) {
-      return res.status(400).json({ error: "Nome, login, senha e cargo são obrigatórios." });
+    const { nome, login, senha, cargoCodigo } = req.body;
+    if (!nome || !login || !cargoCodigo) {
+      return res.status(400).json({ error: "Nome, login e cargo são obrigatórios." });
     }
-    const senhaHash = await bcrypt.hash(senha, 10);
+    // Senha é opcional na criação. Se vier, é apenas uma senha provisória; de
+    // qualquer forma o usuário é obrigado a definir uma no primeiro acesso.
+    const senhaHash = senha ? await bcrypt.hash(String(senha), 10) : "";
     const usuario = await prisma.usuario.create({
       data: {
         tenantId: req.tenant.id,
@@ -38,7 +40,7 @@ usuarioRouter.post("/", async (req, res) => {
         login,
         senha: senhaHash,
         cargoCodigo: Number(cargoCodigo),
-        forcaAlterarSenha: Boolean(forcaAlterarSenha),
+        forcaAlterarSenha: true, // novos usuários sempre trocam a senha no 1º acesso
         ativo: true,
       },
       include: { cargo: true },
@@ -58,11 +60,12 @@ usuarioRouter.put("/:id", async (req, res) => {
     });
     if (!current) return res.status(404).json({ error: "Usuário não encontrado." });
 
-    const { nome, login, senha, cargoCodigo, ativo, forcaAlterarSenha } = req.body;
+    // A senha NÃO pode ser alterada diretamente pelo painel. Para forçar uma
+    // troca, use a flag forcaAlterarSenha (o usuário define a nova no acesso).
+    const { nome, login, cargoCodigo, ativo, forcaAlterarSenha } = req.body;
     const data = {};
     if (nome !== undefined) data.nome = nome;
     if (login !== undefined) data.login = login;
-    if (senha) data.senha = await bcrypt.hash(senha, 10);
     if (cargoCodigo !== undefined) data.cargoCodigo = Number(cargoCodigo);
     if (ativo !== undefined) data.ativo = Boolean(ativo);
     if (forcaAlterarSenha !== undefined) data.forcaAlterarSenha = Boolean(forcaAlterarSenha);
