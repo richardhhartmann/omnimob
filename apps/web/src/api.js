@@ -297,6 +297,14 @@ export const api = {
       body: JSON.stringify({ tipos }),
     }),
 
+  // Melhora/reescreve uma descrição existente (usa dados do imóvel como contexto).
+  melhorarDescricaoIA: (tenantSlug, payload) =>
+    request("/api/ai/imovel/melhorar-descricao", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
   getPublicShowcase: (tenantSlug) => request(`/public/${tenantSlug}/properties`),
 
   getPublicPropertyById: (tenantSlug, propertyId) =>

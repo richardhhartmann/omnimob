@@ -335,7 +335,7 @@ propertyRouter.post("/:id/ai/gerar", requireImoveis, async (req, res) => {
     }
     const property = await prisma.property.findFirst({
       where: { id: req.params.id, tenantId: req.tenant.id },
-      include: { tipoImovel: true },
+      include: { tipoImovel: true, atributos: { include: { atributo: true } } },
     });
     if (!property) {
       return res.status(404).json({ error: "Imovel nao encontrado para este tenant." });
@@ -345,6 +345,7 @@ propertyRouter.post("/:id/ai/gerar", requireImoveis, async (req, res) => {
       ...property,
       price: Number(property.price),
       tipo: property.tipoImovel?.descricao || property.propertyType,
+      atributos: property.atributos.map((a) => a.atributo?.descricao).filter(Boolean),
     };
     const { tipos } = req.body || {};
     const { resultados, erros } = await gerarConteudoImovel(imovel, tipos);

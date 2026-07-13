@@ -122,6 +122,9 @@ function fichaImovel(imovel = {}) {
   add("Área do terreno (m²)", imovel.areaTerreno);
   add("Andamento", imovel.andamento);
   if (imovel.aceitaPermuta) add("Aceita permuta", "sim");
+  if (Array.isArray(imovel.atributos) && imovel.atributos.length) {
+    add("Atributos e diferenciais", imovel.atributos.join(", "));
+  }
   add("Descrição existente", imovel.description);
   return linhas.length ? linhas.join("\n") : "- (poucos dados fornecidos)";
 }

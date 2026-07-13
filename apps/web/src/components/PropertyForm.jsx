@@ -578,7 +578,7 @@ function SugestaoCard({ rotulo, texto, onAplicar }) {
           type="button"
           onClick={() => { onAplicar(); setAplicado(true); setTimeout(() => setAplicado(false), 1800); }}
           style={{
-            padding: "5px 14px", borderRadius: "7px", cursor: "pointer", flexShrink: 0,
+            padding: "5px 14px", borderRadius: "7px", cursor: "pointer", flexShrink: 0, width: "auto",
             background: aplicado ? "rgba(16,185,129,0.2)" : "rgba(99,102,241,0.15)",
             border: `1px solid ${aplicado ? "rgba(16,185,129,0.5)" : "rgba(99,102,241,0.4)"}`,
             color: aplicado ? "#34d399" : "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
@@ -590,6 +590,44 @@ function SugestaoCard({ rotulo, texto, onAplicar }) {
       <p style={{ margin: 0, fontSize: "13px", color: "var(--text)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
         {texto}
       </p>
+    </div>
+  );
+}
+
+// ─── Editor de legenda por rede social (textarea + botão IA) ─────────────────
+
+function CaptionRedeEditor({ valor, onChange, onGerarIA, iaLoading, iaErro }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+      <textarea
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        rows={5}
+        placeholder="Escreva o texto para esta rede…"
+        style={{
+          width: "100%", boxSizing: "border-box", resize: "vertical", lineHeight: 1.6,
+          fontFamily: "inherit", minHeight: "120px", background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", color: "inherit",
+          padding: "12px 14px", fontSize: "13px", outline: "none",
+        }}
+      />
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={onGerarIA}
+          disabled={iaLoading}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
+            borderRadius: "8px", cursor: iaLoading ? "not-allowed" : "pointer",
+            background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
+            color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
+            opacity: iaLoading ? 0.6 : 1, width: "auto",
+          }}
+        >
+          ✨ {iaLoading ? "Gerando…" : "Gerar com IA"}
+        </button>
+        {iaErro && <span style={{ fontSize: "11px", color: "#f87171" }}>{iaErro}</span>}
+      </div>
     </div>
   );
 }
@@ -779,14 +817,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
   // ── Estado do step "Divulgar" ──
   const [savedPropertyId, setSavedPropertyId] = useState(null);
-  const [caption, setCaption] = useState("");
+  // Uma legenda independente por rede social (editável separadamente).
+  const [captions, setCaptions] = useState({ facebook: "", instagram: "", whatsapp: "" });
+  const [redeIaLoading, setRedeIaLoading] = useState({}); // { facebook, instagram, whatsapp }
+  const [redeIaErro, setRedeIaErro] = useState({});
   const [socialStatus, setSocialStatus] = useState(null);
   const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
   const [publishResults, setPublishResults] = useState({});
   const [removeLoading, setRemoveLoading] = useState({ facebook: false, instagram: false });
   const [removeNote, setRemoveNote] = useState({});
-  const [legendaIaLoading, setLegendaIaLoading] = useState(false);
-  const [legendaIaErro, setLegendaIaErro] = useState("");
+  const [melhorarLoading, setMelhorarLoading] = useState(false);
+  const [melhorarErro, setMelhorarErro] = useState("");
   const [, setSearchParams] = useSearchParams();
 
   const session = loadSession();
@@ -839,7 +880,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       `🔗 Ver detalhes: ${vitrineUrl}`,
       whatsapp ? `📲 Contato: ${whatsapp}` : "",
     ].filter((l, i, arr) => !(l === "" && arr[i - 1] === ""));
-    setCaption(lines.join("\n").trim());
+    // Legenda-base a partir da descrição atual do imóvel (que já reflete o texto
+    // da IA quando aplicado, ou o texto manual do usuário). Semeia as três redes;
+    // cada uma pode ser editada ou regenerada por IA de forma independente.
+    const base = lines.join("\n").trim();
+    setCaptions({ facebook: base, instagram: base, whatsapp: base });
+    setRedeIaErro({});
   }, [step, savedPropertyId]);
 
   useEffect(() => {
@@ -923,33 +969,43 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     setImages((prev) => [...prev, ...newItems]);
   }
 
+  // Monta o objeto do imóvel enviado à IA a partir do formulário, incluindo a
+  // finalidade, os detalhes e os ATRIBUTOS marcados (resolvidos para descrição).
+  function dadosImovelParaIA() {
+    const tipoSel = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
+    const atributos = (tipoSel?.atributos || [])
+      .filter((a) => form.atributosIds.includes(a.id))
+      .map((a) => a.descricao);
+    return {
+      propertyType: tipoSel?.descricao || "",
+      finalidade: form.finalidade || "",
+      title: form.title,
+      description: form.description,
+      price: parseCurrencyBRL(String(form.price)) || undefined,
+      city: form.city,
+      neighborhood: form.neighborhood,
+      state: form.state,
+      address: form.address,
+      bedrooms: form.bedrooms,
+      suites: form.suites,
+      parkingSpots: form.parkingSpots,
+      areaPrivativa: form.areaPrivativa,
+      areaConstruida: form.areaConstruida,
+      areaTerreno: form.areaTerreno,
+      squareFootage: form.squareFootage,
+      andamento: form.andamento,
+      aceitaPermuta: form.aceitaPermuta,
+      atributos,
+    };
+  }
+
   // Gera sugestão de título + descrição com a IA, a partir das fotos e dos dados.
   async function handleSugerirIA() {
     setIaErro("");
     setIaLoading(true);
     setIaSugestao(null);
     try {
-      const tipoSel = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
-      const imovel = {
-        propertyType: tipoSel?.descricao || "",
-        finalidade: form.finalidade || "",
-        title: form.title,
-        description: form.description,
-        price: parseCurrencyBRL(String(form.price)) || undefined,
-        city: form.city,
-        neighborhood: form.neighborhood,
-        state: form.state,
-        address: form.address,
-        bedrooms: form.bedrooms,
-        suites: form.suites,
-        parkingSpots: form.parkingSpots,
-        areaPrivativa: form.areaPrivativa,
-        areaConstruida: form.areaConstruida,
-        areaTerreno: form.areaTerreno,
-        squareFootage: form.squareFootage,
-        andamento: form.andamento,
-        aceitaPermuta: form.aceitaPermuta,
-      };
+      const imovel = dadosImovelParaIA();
 
       // Fotos: novas selecionadas (reduzidas no browser) ou, na edição, as já salvas (por URL).
       let imagens = [];
@@ -968,24 +1024,45 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
-  // Gera a legenda do post (estilo Instagram, com emojis e hashtags) via IA,
-  // usando o imóvel já salvo. Substitui a legenda atual pelo texto gerado.
-  async function handleGerarLegendaIA() {
+  // Gera uma legenda específica de UMA rede social (facebook | instagram | whatsapp)
+  // via IA, usando o imóvel já salvo. Substitui apenas a legenda daquela rede.
+  async function handleGerarRedeIA(rede) {
     const propId = savedPropertyId || initialData?.id;
     if (!propId) return;
-    setLegendaIaErro("");
-    setLegendaIaLoading(true);
+    setRedeIaErro((prev) => ({ ...prev, [rede]: "" }));
+    setRedeIaLoading((prev) => ({ ...prev, [rede]: true }));
     try {
-      const { resultados, erros } = await api.gerarConteudoPropertyIA(tenantSlug, propId, ["instagram"]);
-      if (resultados?.instagram) {
-        setCaption(resultados.instagram);
+      const { resultados, erros } = await api.gerarConteudoPropertyIA(tenantSlug, propId, [rede]);
+      if (resultados?.[rede]) {
+        setCaptions((prev) => ({ ...prev, [rede]: resultados[rede] }));
       } else {
-        setLegendaIaErro(erros?.instagram || "A IA não retornou uma legenda.");
+        setRedeIaErro((prev) => ({ ...prev, [rede]: erros?.[rede] || "A IA não retornou um texto." }));
       }
     } catch (err) {
-      setLegendaIaErro(err.message || "Não foi possível gerar a legenda.");
+      setRedeIaErro((prev) => ({ ...prev, [rede]: err.message || "Não foi possível gerar o texto." }));
     } finally {
-      setLegendaIaLoading(false);
+      setRedeIaLoading((prev) => ({ ...prev, [rede]: false }));
+    }
+  }
+
+  // Melhora/reescreve a descrição atual do imóvel com IA (etapa Identificação).
+  async function handleMelhorarDescricao() {
+    if (!form.description || form.description.trim().length < 10) {
+      setMelhorarErro("Escreva uma descrição (ao menos 10 caracteres) para a IA melhorar.");
+      return;
+    }
+    setMelhorarErro("");
+    setMelhorarLoading(true);
+    try {
+      const { resultado } = await api.melhorarDescricaoIA(tenantSlug, {
+        texto: form.description,
+        imovel: dadosImovelParaIA(),
+      });
+      if (resultado) set("description", resultado);
+    } catch (err) {
+      setMelhorarErro(err.message || "Não foi possível melhorar a descrição.");
+    } finally {
+      setMelhorarLoading(false);
     }
   }
 
@@ -1196,7 +1273,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     try {
       const result = await api.publishProperty(tenantSlug, savedPropertyId, {
         platforms: [platform],
-        caption,
+        caption: captions[platform] ?? "",
       });
       setPublishResults((prev) => ({ ...prev, ...result }));
     } catch (err) {
@@ -1226,7 +1303,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
   function handleWhatsApp() {
     const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
-    const text = caption || `🏠 ${form.title}\n🔗 ${vitrineUrl}`;
+    const text = captions.whatsapp || `🏠 ${form.title}\n🔗 ${vitrineUrl}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   }
 
@@ -1276,6 +1353,23 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               </Field>
               <Field label="Descrição" required error={fieldErrors.description}>
                 <textarea style={{ ...withError("description"), resize: "vertical", minHeight: "100px", lineHeight: "1.6" }} placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..." value={form.description} onChange={(e) => set("description", e.target.value)} rows={4} disabled={disabled} />
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "2px" }}>
+                  <button
+                    type="button"
+                    onClick={handleMelhorarDescricao}
+                    disabled={melhorarLoading || disabled}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
+                      borderRadius: "8px", cursor: melhorarLoading || disabled ? "not-allowed" : "pointer",
+                      background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
+                      color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
+                      opacity: melhorarLoading || disabled ? 0.6 : 1, width: "auto",
+                    }}
+                  >
+                    ✨ {melhorarLoading ? "Melhorando…" : "Melhorar com IA"}
+                  </button>
+                  {melhorarErro && <span style={{ fontSize: "11px", color: "#f87171" }}>{melhorarErro}</span>}
+                </div>
               </Field>
               <Field label="Preço" required error={fieldErrors.price}>
                 <input style={withError("price")} placeholder="R$ 0,00" type="text" inputMode="numeric" value={form.price} onChange={(e) => set("price", formatCurrencyBRL(e.target.value))} disabled={disabled} />
@@ -1518,7 +1612,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 22px",
                     borderRadius: "10px", cursor: iaLoading || disabled ? "not-allowed" : "pointer",
                     background: "var(--primary, #6366f1)", border: "none", color: "#fff",
-                    fontSize: "14px", fontWeight: "600", opacity: iaLoading || disabled ? 0.6 : 1,
+                    fontSize: "14px", fontWeight: "600", opacity: iaLoading || disabled ? 0.6 : 1, width: "auto",
                   }}
                 >
                   {iaLoading ? "Gerando..." : iaSugestao ? "Gerar novamente" : "Gerar sugestão"}
@@ -1560,7 +1654,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                           if (iaSugestao.descricao) set("description", iaSugestao.descricao);
                         }}
                         style={{
-                          padding: "8px 18px", borderRadius: "8px", cursor: "pointer",
+                          padding: "8px 18px", borderRadius: "8px", cursor: "pointer", width: "auto",
                           background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)",
                           color: "#34d399", fontSize: "13px", fontWeight: "600",
                         }}
@@ -1595,40 +1689,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               </div>
 
-              {/* Legenda editável */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Legenda do post
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleGerarLegendaIA}
-                    disabled={legendaIaLoading || disabled}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
-                      borderRadius: "8px", cursor: legendaIaLoading || disabled ? "not-allowed" : "pointer",
-                      background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
-                      color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
-                      opacity: legendaIaLoading || disabled ? 0.6 : 1, flexShrink: 0, width: "auto",
-                    }}
-                  >
-                    ✨ {legendaIaLoading ? "Gerando..." : "Gerar com IA"}
-                  </button>
-                </div>
-                <textarea
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  rows={8}
-                  style={{ ...inputStyle, resize: "vertical", lineHeight: "1.6", fontFamily: "inherit", minHeight: "160px" }}
-                  placeholder="Escreva a legenda do post..."
-                />
-                {legendaIaErro
-                  ? <span style={{ fontSize: "11px", color: "#f87171", fontWeight: "500" }}>{legendaIaErro}</span>
-                  : <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>
-                      Edite a legenda antes de publicar. Ela será usada no Facebook e Instagram.
-                    </span>}
-              </div>
+              {/* Legenda por rede: cada rede tem seu próprio texto, editável e com IA. */}
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                Cada rede começa com o texto do imóvel (o da IA, se você aplicou; senão o que você
+                escreveu). Ajuste o texto de cada rede como preferir ou clique em <strong>Gerar com IA</strong>
+                {" "}para uma versão sob medida.
+              </p>
 
               {/* Aviso se não tem permissão de publicar nas redes */}
               {!cargo?.publicarRedes && (
@@ -1641,88 +1707,115 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 {/* Facebook */}
                 {cargo?.publicarRedes && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: "600", fontSize: "13px" }}>Facebook</div>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                        {socialStatus === null ? "Verificando conexão…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações"}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
                       </div>
-                    </div>
-                    {publishResults.facebook?.success ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
-                        <button type="button" onClick={() => handleRemove("facebook")} disabled={removeLoading.facebook}
-                          style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
-                          {removeLoading.facebook ? "…" : "Remover"}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: "600", fontSize: "13px" }}>Facebook</div>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
+                          {socialStatus === null ? "Verificando conexão…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações"}
+                        </div>
+                      </div>
+                      {publishResults.facebook?.success ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                          <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                          <button type="button" onClick={() => handleRemove("facebook")} disabled={removeLoading.facebook}
+                            style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
+                            {removeLoading.facebook ? "…" : "Remover"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handlePublish("facebook")}
+                          disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
+                          style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#1877f2", color: "#fff", border: "none", cursor: socialStatus?.facebook?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.facebook?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
+                        >
+                          {publishLoading.facebook ? "Publicando…" : "Publicar"}
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handlePublish("facebook")}
-                        disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
-                        style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#1877f2", color: "#fff", border: "none", cursor: socialStatus?.facebook?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.facebook?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
-                      >
-                        {publishLoading.facebook ? "Publicando…" : "Publicar"}
-                      </button>
-                    )}
+                      )}
+                    </div>
+                    <CaptionRedeEditor
+                      valor={captions.facebook}
+                      onChange={(v) => setCaptions((p) => ({ ...p, facebook: v }))}
+                      onGerarIA={() => handleGerarRedeIA("facebook")}
+                      iaLoading={redeIaLoading.facebook}
+                      iaErro={redeIaErro.facebook}
+                    />
                   </div>
                 )}
 
                 {/* Instagram */}
                 {cargo?.publicarRedes && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: "600", fontSize: "13px" }}>Instagram</div>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                        {socialStatus === null ? "Verificando conexão…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — vincule ao Facebook em Configurações"}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
                       </div>
-                    </div>
-                    {publishResults.instagram?.success ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
-                        <button type="button" onClick={() => handleRemove("instagram")} disabled={removeLoading.instagram}
-                          style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
-                          {removeLoading.instagram ? "…" : "Remover"}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: "600", fontSize: "13px" }}>Instagram</div>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
+                          {socialStatus === null ? "Verificando conexão…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — vincule ao Facebook em Configurações"}
+                        </div>
+                      </div>
+                      {publishResults.instagram?.success ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                          <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                          <button type="button" onClick={() => handleRemove("instagram")} disabled={removeLoading.instagram}
+                            style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
+                            {removeLoading.instagram ? "…" : "Remover"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handlePublish("instagram")}
+                          disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
+                          style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", color: "#fff", border: "none", cursor: socialStatus?.instagram?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.instagram?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
+                        >
+                          {publishLoading.instagram ? "Publicando…" : "Publicar"}
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handlePublish("instagram")}
-                        disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
-                        style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", color: "#fff", border: "none", cursor: socialStatus?.instagram?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.instagram?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
-                      >
-                        {publishLoading.instagram ? "Publicando…" : "Publicar"}
-                      </button>
-                    )}
+                      )}
+                    </div>
+                    <CaptionRedeEditor
+                      valor={captions.instagram}
+                      onChange={(v) => setCaptions((p) => ({ ...p, instagram: v }))}
+                      onGerarIA={() => handleGerarRedeIA("instagram")}
+                      iaLoading={redeIaLoading.instagram}
+                      iaErro={redeIaErro.instagram}
+                    />
                   </div>
                 )}
 
                 {/* WhatsApp — sempre disponível */}
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#25d366", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.785.476 3.456 1.302 4.914L2 22l5.233-1.274A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: "600", fontSize: "13px" }}>WhatsApp</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                      Abre o WhatsApp com a legenda pronta para compartilhar
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#25d366", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.785.476 3.456 1.302 4.914L2 22l5.233-1.274A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>
                     </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "600", fontSize: "13px" }}>WhatsApp</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
+                        Abre o WhatsApp com este texto pronto para compartilhar
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleWhatsApp}
+                      style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#25d366", color: "#fff", border: "none", cursor: "pointer", flexShrink: 0, width: "auto" }}
+                    >
+                      Compartilhar
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleWhatsApp}
-                    style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#25d366", color: "#fff", border: "none", cursor: "pointer", flexShrink: 0, width: "auto" }}
-                  >
-                    Compartilhar
-                  </button>
+                  <CaptionRedeEditor
+                    valor={captions.whatsapp}
+                    onChange={(v) => setCaptions((p) => ({ ...p, whatsapp: v }))}
+                    onGerarIA={() => handleGerarRedeIA("whatsapp")}
+                    iaLoading={redeIaLoading.whatsapp}
+                    iaErro={redeIaErro.whatsapp}
+                  />
                 </div>
               </div>
 
