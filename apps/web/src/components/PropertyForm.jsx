@@ -594,41 +594,149 @@ function SugestaoCard({ rotulo, texto, onAplicar }) {
   );
 }
 
-// ─── Editor de legenda por rede social (textarea + botão IA) ─────────────────
+// ─── Previews realistas de post por rede social (etapa Divulgar) ─────────────
 
-function CaptionRedeEditor({ valor, onChange, onGerarIA, iaLoading, iaErro }) {
+// Avatar redondo (logo do tenant ou inicial). `ring` desenha o anel degradê do IG.
+function PostAvatar({ url, nome, size = 40, ring }) {
+  const inner = url
+    ? <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#6366f1,#a855f7)", color: "#fff", fontWeight: 700, fontSize: size * 0.42 }}>{(nome || "?").charAt(0).toUpperCase()}</div>;
+  const circle = <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>{inner}</div>;
+  if (!ring) return circle;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
-      <textarea
-        value={valor}
-        onChange={(e) => onChange(e.target.value)}
-        rows={5}
-        placeholder="Escreva o texto para esta rede…"
-        style={{
-          width: "100%", boxSizing: "border-box", resize: "vertical", lineHeight: 1.6,
-          fontFamily: "inherit", minHeight: "120px", background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", color: "inherit",
-          padding: "12px 14px", fontSize: "13px", outline: "none",
-        }}
-      />
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={onGerarIA}
-          disabled={iaLoading}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
-            borderRadius: "8px", cursor: iaLoading ? "not-allowed" : "pointer",
-            background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
-            color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
-            opacity: iaLoading ? 0.6 : 1, width: "auto",
-          }}
-        >
-          ✨ {iaLoading ? "Gerando…" : "Gerar com IA"}
-        </button>
+    <div style={{ padding: "2px", borderRadius: "50%", background: "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)", flexShrink: 0 }}>
+      <div style={{ padding: "2px", borderRadius: "50%", background: "#fff" }}>{circle}</div>
+    </div>
+  );
+}
+
+// Texto do post editável direto no preview (textarea "invisível").
+function PreviewCaption({ value, onChange, color, minHeight = 54 }) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Escreva o texto do post…"
+      style={{
+        width: "100%", boxSizing: "border-box", border: "none", outline: "none", resize: "vertical",
+        background: "transparent", color, fontSize: "13px", lineHeight: 1.5, fontFamily: "inherit",
+        minHeight, padding: 0, margin: 0,
+      }}
+    />
+  );
+}
+
+function IaButtonSmall({ onClick, loading, accent }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "8px",
+        cursor: loading ? "not-allowed" : "pointer", background: `${accent}1f`, border: `1px solid ${accent}66`,
+        color: accent, fontSize: "12px", fontWeight: 600, opacity: loading ? 0.6 : 1, width: "auto",
+      }}
+    >
+      ✨ {loading ? "Gerando…" : "Gerar com IA"}
+    </button>
+  );
+}
+
+// Moldura de um preview: cabeçalho da marca + molde + rodapé (IA + ação).
+function PreviewCard({ brandLabel, brandColor, brandIcon, statusText, iaAccent, onGerarIA, iaLoading, iaErro, acao, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <span style={{ width: "22px", height: "22px", borderRadius: "6px", background: brandColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{brandIcon}</span>
+        <span style={{ fontSize: "13px", fontWeight: 700 }}>{brandLabel}</span>
+        {statusText && <span style={{ marginLeft: "auto", fontSize: "11px", color: "var(--text-muted)", textAlign: "right", lineHeight: 1.3 }}>{statusText}</span>}
+      </div>
+      <div style={{ padding: "14px", background: "rgba(0,0,0,0.15)" }}>{children}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <IaButtonSmall onClick={onGerarIA} loading={iaLoading} accent={iaAccent} />
+          <div style={{ marginLeft: "auto" }}>{acao}</div>
+        </div>
         {iaErro && <span style={{ fontSize: "11px", color: "#f87171" }}>{iaErro}</span>}
       </div>
     </div>
+  );
+}
+
+const FB_ICON = <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>;
+const IG_ICON = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>;
+const WA_ICON = <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.785.476 3.456 1.302 4.914L2 22l5.233-1.274A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>;
+
+// ── Facebook ──
+function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
+  return (
+    <PreviewCard brandLabel="Facebook" brandColor="#1877f2" brandIcon={FB_ICON} iaAccent="#1877f2" {...footer}>
+      <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px" }}>
+          <PostAvatar url={avatarUrl} nome={nome} size={40} />
+          <div style={{ lineHeight: 1.25 }}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#050505" }}>{nome || "Sua imobiliária"}</div>
+            <div style={{ fontSize: "11px", color: "#65676b" }}>Agora · 🌐</div>
+          </div>
+          <span style={{ marginLeft: "auto", color: "#65676b", fontSize: "18px", lineHeight: 1 }}>⋯</span>
+        </div>
+        <div style={{ padding: "0 12px 10px" }}>
+          <PreviewCaption value={caption} onChange={onChange} color="#050505" />
+        </div>
+        {coverUrl && <img src={coverUrl} alt="" style={{ width: "100%", display: "block", maxHeight: "240px", objectFit: "cover" }} />}
+        <div style={{ display: "flex", justifyContent: "space-around", padding: "8px 4px", borderTop: "1px solid #ced0d4", color: "#65676b", fontSize: "12px", fontWeight: 600 }}>
+          <span>👍 Curtir</span><span>💬 Comentar</span><span>↪ Compartilhar</span>
+        </div>
+      </div>
+    </PreviewCard>
+  );
+}
+
+// ── Instagram ──
+function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
+  const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
+  return (
+    <PreviewCard brandLabel="Instagram" brandColor="#dc2743" brandIcon={IG_ICON} iaAccent="#dc2743" {...footer}>
+      <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px" }}>
+          <PostAvatar url={avatarUrl} nome={nome} size={30} ring />
+          <span style={{ fontSize: "13px", fontWeight: 700, color: "#262626" }}>{handle}</span>
+          <span style={{ marginLeft: "auto", color: "#262626", fontSize: "18px", lineHeight: 1 }}>⋯</span>
+        </div>
+        {coverUrl
+          ? <img src={coverUrl} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
+          : <div style={{ width: "100%", aspectRatio: "1", background: "#efefef", display: "flex", alignItems: "center", justifyContent: "center", color: "#b0b0b0", fontSize: "13px" }}>Adicione uma foto</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "8px 12px 4px", fontSize: "20px", color: "#262626" }}>
+          <span>♡</span><span>💬</span><span>✈</span><span style={{ marginLeft: "auto" }}>🔖</span>
+        </div>
+        <div style={{ padding: "2px 12px 12px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 700, color: "#262626", marginRight: "6px" }}>{handle}</span>
+          <PreviewCaption value={caption} onChange={onChange} color="#262626" />
+        </div>
+      </div>
+    </PreviewCard>
+  );
+}
+
+// ── WhatsApp ──
+function WhatsAppPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
+  return (
+    <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandIcon={WA_ICON} iaAccent="#128c7e" {...footer}>
+      <div style={{ borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#075e54", color: "#fff", padding: "8px 12px" }}>
+          <PostAvatar url={avatarUrl} nome={nome} size={30} />
+          <div style={{ fontSize: "13px", fontWeight: 600 }}>{nome || "Sua imobiliária"}</div>
+        </div>
+        <div style={{ background: "#e5ddd5", padding: "14px 10px", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ maxWidth: "88%", background: "#dcf8c6", borderRadius: "10px", padding: "6px", boxShadow: "0 1px 1px rgba(0,0,0,0.12)" }}>
+            {coverUrl && <img src={coverUrl} alt="" style={{ width: "100%", borderRadius: "6px", display: "block", marginBottom: "5px", maxHeight: "190px", objectFit: "cover" }} />}
+            <PreviewCaption value={caption} onChange={onChange} color="#111b21" />
+            <div style={{ textAlign: "right", fontSize: "10px", color: "#667781", marginTop: "2px" }}>12:00 <span style={{ color: "#53bdeb" }}>✓✓</span></div>
+          </div>
+        </div>
+      </div>
+    </PreviewCard>
   );
 }
 
@@ -821,6 +929,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [captions, setCaptions] = useState({ facebook: "", instagram: "", whatsapp: "" });
   const [redeIaLoading, setRedeIaLoading] = useState({}); // { facebook, instagram, whatsapp }
   const [redeIaErro, setRedeIaErro] = useState({});
+  const [coverUrl, setCoverUrl] = useState(null); // capa (Cloudinary) para os previews
   const [socialStatus, setSocialStatus] = useState(null);
   const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
   const [publishResults, setPublishResults] = useState({});
@@ -848,6 +957,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   useEffect(() => {
     if (step !== 4 || !tenantSlug || !savedPropertyId) return;
     api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
+    // Carrega a capa real (1ª imagem no Cloudinary) para os previews dos posts.
+    api.listPropertyImages(tenantSlug, savedPropertyId)
+      .then((imgs) => setCoverUrl(imgs?.[0]?.url || null))
+      .catch(() => setCoverUrl(null));
 
     const price = parseCurrencyBRL(String(form.price));
     const priceStr = Number.isFinite(price) && price > 0
@@ -1314,6 +1427,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     outline: "none", transition: "border-color 0.2s",
   };
   const selectStyle = { ...inputStyle, cursor: "pointer" };
+  // Botões de ação dos previews (publicar / remover).
+  const pubBtnBase = { padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, color: "#fff", border: "none", flexShrink: 0, width: "auto" };
+  const removeBtnStyle = { padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" };
   // Aplica borda vermelha quando o campo tem erro de validação.
   const withError = (field, base = inputStyle) =>
     fieldErrors[field] ? { ...base, border: "1px solid rgba(239,68,68,0.6)" } : base;
@@ -1695,134 +1811,95 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               </div>
 
-              {/* Legenda por rede: cada rede tem seu próprio texto, editável e com IA. */}
+              {/* Pré-visualização por rede: edite o texto direto no molde de cada rede. */}
               <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
-                Cada rede começa com o texto do imóvel (o da IA, se você aplicou; senão o que você
-                escreveu). Ajuste o texto de cada rede como preferir ou clique em <strong>Gerar com IA</strong>
-                {" "}para uma versão sob medida.
+                Veja como o post fica em cada rede e <strong>edite o texto direto no preview</strong>. Cada rede
+                começa com o texto do imóvel (o da IA, se você aplicou); use <strong>Gerar com IA</strong> para
+                uma versão sob medida.
               </p>
 
-              {/* Aviso se não tem permissão de publicar nas redes */}
               {!cargo?.publicarRedes && (
                 <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "13px", color: "#fbbf24" }}>
-                  Você não tem permissão para publicar nas redes sociais. Contate o administrador.
+                  Você não tem permissão para publicar no Facebook/Instagram — mas pode compartilhar via WhatsApp.
                 </div>
               )}
 
-              {/* Botões de publicação */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {/* Facebook */}
+              {/* Grid de previews realistas */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "18px", alignItems: "start" }}>
                 {cargo?.publicarRedes && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: "600", fontSize: "13px" }}>Facebook</div>
-                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                          {socialStatus === null ? "Verificando conexão…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações"}
-                        </div>
-                      </div>
-                      {publishResults.facebook?.success ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                          <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
-                          <button type="button" onClick={() => handleRemove("facebook")} disabled={removeLoading.facebook}
-                            style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
+                  <FacebookPreview
+                    nome={session?.tenant?.name}
+                    avatarUrl={session?.tenant?.logoUrl || null}
+                    coverUrl={coverUrl}
+                    caption={captions.facebook}
+                    onChange={(v) => setCaptions((p) => ({ ...p, facebook: v }))}
+                    onGerarIA={() => handleGerarRedeIA("facebook")}
+                    iaLoading={redeIaLoading.facebook}
+                    iaErro={redeIaErro.facebook}
+                    statusText={socialStatus === null ? "Verificando…" : socialStatus.facebook.connected ? socialStatus.facebook.pageName : "Não conectado"}
+                    acao={publishResults.facebook?.success
+                      ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 600, color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                          <button type="button" onClick={() => handleRemove("facebook")} disabled={removeLoading.facebook} style={removeBtnStyle}>
                             {removeLoading.facebook ? "…" : "Remover"}
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handlePublish("facebook")}
-                          disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
-                          style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#1877f2", color: "#fff", border: "none", cursor: socialStatus?.facebook?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.facebook?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
-                        >
+                      )
+                      : (
+                        <button type="button" onClick={() => handlePublish("facebook")} disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
+                          style={{ ...pubBtnBase, background: "#1877f2", cursor: socialStatus?.facebook?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.facebook?.connected ? 1 : 0.4 }}>
                           {publishLoading.facebook ? "Publicando…" : "Publicar"}
                         </button>
                       )}
-                    </div>
-                    <CaptionRedeEditor
-                      valor={captions.facebook}
-                      onChange={(v) => setCaptions((p) => ({ ...p, facebook: v }))}
-                      onGerarIA={() => handleGerarRedeIA("facebook")}
-                      iaLoading={redeIaLoading.facebook}
-                      iaErro={redeIaErro.facebook}
-                    />
-                  </div>
+                  />
                 )}
 
-                {/* Instagram */}
                 {cargo?.publicarRedes && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: "600", fontSize: "13px" }}>Instagram</div>
-                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                          {socialStatus === null ? "Verificando conexão…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — vincule ao Facebook em Configurações"}
-                        </div>
-                      </div>
-                      {publishResults.instagram?.success ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                          <span style={{ fontSize: "12px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
-                          <button type="button" onClick={() => handleRemove("instagram")} disabled={removeLoading.instagram}
-                            style={{ padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
+                  <InstagramPreview
+                    nome={session?.tenant?.name}
+                    avatarUrl={session?.tenant?.logoUrl || null}
+                    coverUrl={coverUrl}
+                    caption={captions.instagram}
+                    onChange={(v) => setCaptions((p) => ({ ...p, instagram: v }))}
+                    onGerarIA={() => handleGerarRedeIA("instagram")}
+                    iaLoading={redeIaLoading.instagram}
+                    iaErro={redeIaErro.instagram}
+                    statusText={socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta conectada" : "Não conectado"}
+                    acao={publishResults.instagram?.success
+                      ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 600, color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
+                          <button type="button" onClick={() => handleRemove("instagram")} disabled={removeLoading.instagram} style={removeBtnStyle}>
                             {removeLoading.instagram ? "…" : "Remover"}
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handlePublish("instagram")}
-                          disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
-                          style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", color: "#fff", border: "none", cursor: socialStatus?.instagram?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.instagram?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}
-                        >
+                      )
+                      : (
+                        <button type="button" onClick={() => handlePublish("instagram")} disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
+                          style={{ ...pubBtnBase, background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", cursor: socialStatus?.instagram?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.instagram?.connected ? 1 : 0.4 }}>
                           {publishLoading.instagram ? "Publicando…" : "Publicar"}
                         </button>
                       )}
-                    </div>
-                    <CaptionRedeEditor
-                      valor={captions.instagram}
-                      onChange={(v) => setCaptions((p) => ({ ...p, instagram: v }))}
-                      onGerarIA={() => handleGerarRedeIA("instagram")}
-                      iaLoading={redeIaLoading.instagram}
-                      iaErro={redeIaErro.instagram}
-                    />
-                  </div>
+                  />
                 )}
 
-                {/* WhatsApp — sempre disponível */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#25d366", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.785.476 3.456 1.302 4.914L2 22l5.233-1.274A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: "600", fontSize: "13px" }}>WhatsApp</div>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                        Abre o WhatsApp com este texto pronto para compartilhar
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleWhatsApp}
-                      style={{ padding: "7px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#25d366", color: "#fff", border: "none", cursor: "pointer", flexShrink: 0, width: "auto" }}
-                    >
+                <WhatsAppPreview
+                  nome={session?.tenant?.name}
+                  avatarUrl={session?.tenant?.logoUrl || null}
+                  coverUrl={coverUrl}
+                  caption={captions.whatsapp}
+                  onChange={(v) => setCaptions((p) => ({ ...p, whatsapp: v }))}
+                  onGerarIA={() => handleGerarRedeIA("whatsapp")}
+                  iaLoading={redeIaLoading.whatsapp}
+                  iaErro={redeIaErro.whatsapp}
+                  statusText="Sempre disponível"
+                  acao={
+                    <button type="button" onClick={handleWhatsApp} style={{ ...pubBtnBase, background: "#25d366", cursor: "pointer" }}>
                       Compartilhar
                     </button>
-                  </div>
-                  <CaptionRedeEditor
-                    valor={captions.whatsapp}
-                    onChange={(v) => setCaptions((p) => ({ ...p, whatsapp: v }))}
-                    onGerarIA={() => handleGerarRedeIA("whatsapp")}
-                    iaLoading={redeIaLoading.whatsapp}
-                    iaErro={redeIaErro.whatsapp}
-                  />
-                </div>
+                  }
+                />
               </div>
 
               {/* Avisos de remoção (ex.: Instagram não permite exclusão por API) */}
