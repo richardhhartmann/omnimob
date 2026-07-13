@@ -3,12 +3,15 @@ import { z } from "zod";
 
 const { PropertyStatus, AndamentoImovel } = prismaPkg;
 
+// Limite do campo price (Decimal(12,2) no banco): máx. 9.999.999.999,99.
+const PRICE_MAX = 9_999_999_999.99;
+
 export const createPropertySchema = z.object({
   tipoImovelId: z.number().int().positive().optional(),
   atributosIds: z.array(z.number().int().positive()).optional().default([]),
   title: z.string().min(3),
   description: z.string().min(10),
-  price: z.number().positive(),
+  price: z.number().positive().max(PRICE_MAX, { message: "Preço acima do máximo permitido (R$ 9.999.999.999,99)." }),
   cep: z.string().optional(),
   address: z.string().min(5),
   neighborhood: z.string().min(2),

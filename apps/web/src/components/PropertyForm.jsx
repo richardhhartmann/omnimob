@@ -12,7 +12,8 @@ function formatCep(value) {
 }
 
 function formatCurrencyBRL(rawValue) {
-  const digits = rawValue.replace(/\D/g, "");
+  // Limita a 12 dígitos → máximo R$ 9.999.999.999,99 (campo Decimal(12,2) no banco).
+  const digits = rawValue.replace(/\D/g, "").slice(0, 12);
   if (!digits) return "";
   const amount = Number(digits) / 100;
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount);
@@ -224,6 +225,7 @@ function getValidationErrors(form, areaFields = TODAS_AREAS) {
   if (!form.tipoImovelId) fe.tipoImovelId = "Selecione o tipo de imóvel.";
   const p = parseCurrencyBRL(String(form.price));
   if (!Number.isFinite(p) || p <= 0) fe.price = "Informe um preço válido maior que zero.";
+  else if (p > 9999999999.99) fe.price = "Preço acima do máximo permitido (R$ 9.999.999.999,99).";
 
   // Etapa 1 — Localização
   if (!form.address || form.address.trim().length < 5) fe.address = "Informe o endereço completo.";
@@ -652,9 +654,9 @@ function IaButtonSmall({ onClick, loading, accent }) {
   );
 }
 
-// Moldura de um preview: cabeçalho da marca + molde + controles (IA + ação),
-// tudo dentro da mesma área do preview.
-function PreviewCard({ brandLabel, brandColor, brandRadius = "6px", brandIcon, statusText, iaAccent, onGerarIA, iaLoading, iaErro, acao, children }) {
+// Moldura de um preview: cabeçalho da marca + o molde (que já inclui os controles
+// dentro dele, via <PostControls/>).
+function PreviewCard({ brandLabel, brandColor, brandRadius = "6px", brandIcon, statusText, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -662,14 +664,21 @@ function PreviewCard({ brandLabel, brandColor, brandRadius = "6px", brandIcon, s
         <span style={{ fontSize: "13px", fontWeight: 700 }}>{brandLabel}</span>
         {statusText && <span style={{ marginLeft: "auto", fontSize: "11px", color: "var(--text-muted)", textAlign: "right", lineHeight: 1.3 }}>{statusText}</span>}
       </div>
-      <div style={{ padding: "14px", background: "rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", gap: "12px" }}>
-        {children}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          <IaButtonSmall onClick={onGerarIA} loading={iaLoading} accent={iaAccent} />
-          <div style={{ marginLeft: "auto" }}>{acao}</div>
-        </div>
-        {iaErro && <span style={{ fontSize: "11px", color: "#f87171" }}>{iaErro}</span>}
+      <div style={{ padding: "14px", background: "rgba(0,0,0,0.15)" }}>{children}</div>
+    </div>
+  );
+}
+
+// Controles (Gerar com IA + Publicar/Compartilhar) renderizados DENTRO do molde,
+// como um rodapé claro do próprio post.
+function PostControls({ iaAccent, onGerarIA, iaLoading, iaErro, acao }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "10px 12px", background: "#f0f2f5", borderTop: "1px solid #dfe1e5" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        <IaButtonSmall onClick={onGerarIA} loading={iaLoading} accent={iaAccent} />
+        <div style={{ marginLeft: "auto" }}>{acao}</div>
       </div>
+      {iaErro && <span style={{ fontSize: "11px", color: "#c0392b" }}>{iaErro}</span>}
     </div>
   );
 }
@@ -693,9 +702,9 @@ const ICON = {
 };
 
 // ── Facebook ──
-function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
+function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, statusText, ...controls }) {
   return (
-    <PreviewCard brandLabel="Facebook" brandColor="#1877f2" brandIcon={FB_ICON} iaAccent="#1877f2" {...footer}>
+    <PreviewCard brandLabel="Facebook" brandColor="#1877f2" brandIcon={FB_ICON} statusText={statusText}>
       <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={40} />
@@ -716,16 +725,17 @@ function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...foot
           <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.comentar} size={17} /> Comentar</span>
           <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.compartilhar} size={17} /> Compartilhar</span>
         </div>
+        <PostControls iaAccent="#1877f2" {...controls} />
       </div>
     </PreviewCard>
   );
 }
 
 // ── Instagram ──
-function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
+function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, statusText, ...controls }) {
   const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
   return (
-    <PreviewCard brandLabel="Instagram" brandColor="linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" brandIcon={IG_ICON} iaAccent="#dc2743" {...footer}>
+    <PreviewCard brandLabel="Instagram" brandColor="linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" brandIcon={IG_ICON} statusText={statusText}>
       <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={30} ring />
@@ -743,15 +753,16 @@ function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...foo
           <span style={{ fontSize: "13px", fontWeight: 700, color: "#262626", marginRight: "6px" }}>{handle}</span>
           <PreviewCaption value={caption} onChange={onChange} color="#262626" minHeight={72} />
         </div>
+        <PostControls iaAccent="#dc2743" {...controls} />
       </div>
     </PreviewCard>
   );
 }
 
 // ── WhatsApp ──
-function WhatsAppPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
+function WhatsAppPreview({ nome, avatarUrl, coverUrl, caption, onChange, statusText, ...controls }) {
   return (
-    <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandRadius="50%" brandIcon={WA_ICON} iaAccent="#128c7e" {...footer}>
+    <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandRadius="50%" brandIcon={WA_ICON} statusText={statusText}>
       <div style={{ borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#075e54", color: "#fff", padding: "8px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={30} />
@@ -764,6 +775,7 @@ function WhatsAppPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...foot
             <div style={{ textAlign: "right", fontSize: "10px", color: "#667781", marginTop: "2px" }}>12:00 <span style={{ color: "#53bdeb" }}>✓✓</span></div>
           </div>
         </div>
+        <PostControls iaAccent="#128c7e" {...controls} />
       </div>
     </PreviewCard>
   );
