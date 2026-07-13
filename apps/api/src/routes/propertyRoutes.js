@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { enqueuePropertyPublication } from "../services/socialPublisher.js";
+import { gerarConteudoImovel, isAiEnabled } from "../services/aiService.js";
 import { createPropertySchema, updatePropertySchema } from "../validators/propertyValidators.js";
 
 const { PropertyStatus, MetricEventType } = prismaPkg;
@@ -322,6 +323,35 @@ propertyRouter.delete("/:id", requireImoveis, async (req, res) => {
     return res.status(204).send();
   } catch {
     return res.status(500).json({ error: "Erro ao deletar imovel." });
+  }
+});
+
+// ─── IA: gera conteúdo para um imóvel já salvo ────────────────────────────────
+
+propertyRouter.post("/:id/ai/gerar", requireImoveis, async (req, res) => {
+  try {
+    if (!isAiEnabled()) {
+      return res.status(503).json({ error: "IA indisponível: GEMINI_API_KEY não configurada." });
+    }
+    const property = await prisma.property.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+      include: { tipoImovel: true },
+    });
+    if (!property) {
+      return res.status(404).json({ error: "Imovel nao encontrado para este tenant." });
+    }
+
+    const imovel = {
+      ...property,
+      price: Number(property.price),
+      tipo: property.tipoImovel?.descricao || property.propertyType,
+    };
+    const { tipos } = req.body || {};
+    const { resultados, erros } = await gerarConteudoImovel(imovel, tipos);
+    return res.json({ resultados, erros });
+  } catch (err) {
+    console.error("[POST /properties/:id/ai/gerar]", err);
+    return res.status(500).json({ error: "Erro ao gerar conteúdo com IA.", detail: err.message });
   }
 });
 

@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { adminRouter } from "./routes/adminRoutes.js";
+import { aiRouter } from "./routes/aiRoutes.js";
 import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
 import { clienteRouter } from "./routes/clienteRoutes.js";
@@ -13,6 +14,7 @@ import { socialRouter } from "./routes/socialRoutes.js";
 import { socialWebhookRouter } from "./routes/socialWebhookRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
 import { usuarioRouter } from "./routes/usuarioRoutes.js";
+import { getHealth } from "./services/healthService.js";
 
 dotenv.config();
 
@@ -42,7 +44,9 @@ app.use(
 // validação de assinatura (X-Hub-Signature-256) exige o body sem parsing.
 app.use("/api/social/webhook", express.raw({ type: "*/*" }), socialWebhookRouter);
 
-app.use(express.json());
+// Limite maior que o padrão (100kb) para acomodar imagens em base64 enviadas
+// à IA (rota /api/ai/imovel/sugerir). Demais rotas continuam pequenas.
+app.use(express.json({ limit: "12mb" }));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -62,8 +66,9 @@ const generalLimiter = rateLimit({
 
 app.use(generalLimiter);
 
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+app.get("/health", async (_req, res) => {
+  const health = await getHealth();
+  res.status(health.status === "ok" ? 200 : 503).json(health);
 });
 
 app.use("/api/admin", adminRouter);
@@ -75,6 +80,7 @@ app.use("/api/usuarios", usuarioRouter);
 app.use("/api/cargos", cargoRouter);
 app.use("/api/clientes", clienteRouter);
 app.use("/api/social", socialRouter);
+app.use("/api/ai", aiRouter);
 app.use("/public", publicRouter);
 
 app.use((error, _req, res, _next) => {

@@ -24,6 +24,36 @@ function parseCurrencyBRL(rawValue) {
   return Number(digits) / 100;
 }
 
+// Reduz uma foto (File) para no máx. `maxDim`px e devolve como data URL JPEG.
+// Mantém o upload leve ao enviar as fotos para a IA (menos custo/latência).
+function fileParaBase64Reduzido(file, maxDim = 1024, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > height && width > maxDim) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else if (height > maxDim) {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      resolve({ base64: canvas.toDataURL("image/jpeg", quality), mimeType: "image/jpeg" });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Falha ao ler imagem."));
+    };
+    img.src = url;
+  });
+}
+
 // ─── Enriquecimento de endereço por CEP (ViaCEP → Nominatim → Overpass) ────────
 
 // Converte um endereço em latitude/longitude usando o Nominatim (OpenStreetMap).
@@ -534,6 +564,36 @@ function Field({ label, children, hint, required, error }) {
   );
 }
 
+// ─── Card de uma sugestão da IA (com botão Aplicar) ──────────────────────────
+
+function SugestaoCard({ rotulo, texto, onAplicar }) {
+  const [aplicado, setAplicado] = useState(false);
+  return (
+    <div style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", background: "rgba(255,255,255,0.03)", padding: "14px 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "8px" }}>
+        <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)" }}>
+          {rotulo}
+        </span>
+        <button
+          type="button"
+          onClick={() => { onAplicar(); setAplicado(true); setTimeout(() => setAplicado(false), 1800); }}
+          style={{
+            padding: "5px 14px", borderRadius: "7px", cursor: "pointer", flexShrink: 0,
+            background: aplicado ? "rgba(16,185,129,0.2)" : "rgba(99,102,241,0.15)",
+            border: `1px solid ${aplicado ? "rgba(16,185,129,0.5)" : "rgba(99,102,241,0.4)"}`,
+            color: aplicado ? "#34d399" : "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
+          }}
+        >
+          {aplicado ? "✓ Aplicado" : "Aplicar"}
+        </button>
+      </div>
+      <p style={{ margin: 0, fontSize: "13px", color: "var(--text)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+        {texto}
+      </p>
+    </div>
+  );
+}
+
 // ─── Grade de fotos com drag-to-reorder ──────────────────────────────────────
 
 function PhotoGrid({ images, onRemove, onReorder }) {
@@ -712,6 +772,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   // ── Fotos já salvas (modo edição) ──
   const [existingImages, setExistingImages] = useState([]);
 
+  // ── Sugestão de IA (título/descrição a partir das fotos + dados) ──
+  const [iaLoading, setIaLoading] = useState(false);
+  const [iaErro, setIaErro] = useState("");
+  const [iaSugestao, setIaSugestao] = useState(null); // { titulo, descricao, descricaoResumida, usouFotos }
+
   // ── Estado do step "Divulgar" ──
   const [savedPropertyId, setSavedPropertyId] = useState(null);
   const [caption, setCaption] = useState("");
@@ -720,6 +785,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [publishResults, setPublishResults] = useState({});
   const [removeLoading, setRemoveLoading] = useState({ facebook: false, instagram: false });
   const [removeNote, setRemoveNote] = useState({});
+  const [legendaIaLoading, setLegendaIaLoading] = useState(false);
+  const [legendaIaErro, setLegendaIaErro] = useState("");
   const [, setSearchParams] = useSearchParams();
 
   const session = loadSession();
@@ -854,6 +921,72 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       previewUrl: URL.createObjectURL(file),
     }));
     setImages((prev) => [...prev, ...newItems]);
+  }
+
+  // Gera sugestão de título + descrição com a IA, a partir das fotos e dos dados.
+  async function handleSugerirIA() {
+    setIaErro("");
+    setIaLoading(true);
+    setIaSugestao(null);
+    try {
+      const tipoSel = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
+      const imovel = {
+        propertyType: tipoSel?.descricao || "",
+        finalidade: form.finalidade || "",
+        title: form.title,
+        description: form.description,
+        price: parseCurrencyBRL(String(form.price)) || undefined,
+        city: form.city,
+        neighborhood: form.neighborhood,
+        state: form.state,
+        address: form.address,
+        bedrooms: form.bedrooms,
+        suites: form.suites,
+        parkingSpots: form.parkingSpots,
+        areaPrivativa: form.areaPrivativa,
+        areaConstruida: form.areaConstruida,
+        areaTerreno: form.areaTerreno,
+        squareFootage: form.squareFootage,
+        andamento: form.andamento,
+        aceitaPermuta: form.aceitaPermuta,
+      };
+
+      // Fotos: novas selecionadas (reduzidas no browser) ou, na edição, as já salvas (por URL).
+      let imagens = [];
+      if (images.length > 0) {
+        imagens = await Promise.all(images.slice(0, 4).map((im) => fileParaBase64Reduzido(im.file)));
+      } else if (existingImages.length > 0) {
+        imagens = existingImages.slice(0, 4).map((im) => ({ url: im.url }));
+      }
+
+      const sugestao = await api.sugerirImovelIA(tenantSlug, { imovel, imagens });
+      setIaSugestao(sugestao);
+    } catch (err) {
+      setIaErro(err.message || "Não foi possível gerar a sugestão.");
+    } finally {
+      setIaLoading(false);
+    }
+  }
+
+  // Gera a legenda do post (estilo Instagram, com emojis e hashtags) via IA,
+  // usando o imóvel já salvo. Substitui a legenda atual pelo texto gerado.
+  async function handleGerarLegendaIA() {
+    const propId = savedPropertyId || initialData?.id;
+    if (!propId) return;
+    setLegendaIaErro("");
+    setLegendaIaLoading(true);
+    try {
+      const { resultados, erros } = await api.gerarConteudoPropertyIA(tenantSlug, propId, ["instagram"]);
+      if (resultados?.instagram) {
+        setCaption(resultados.instagram);
+      } else {
+        setLegendaIaErro(erros?.instagram || "A IA não retornou uma legenda.");
+      }
+    } catch (err) {
+      setLegendaIaErro(err.message || "Não foi possível gerar a legenda.");
+    } finally {
+      setLegendaIaLoading(false);
+    }
   }
 
   function removeImage(i) {
@@ -1358,6 +1491,91 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   Arraste as fotos para reordenar. A primeira (nº 1) será a capa do anúncio.
                 </p>
               )}
+
+              {/* ── Sugestão com IA ── */}
+              <div style={{
+                marginTop: "8px", borderRadius: "16px", padding: "20px 22px",
+                border: "1px solid rgba(99,102,241,0.25)",
+                background: "linear-gradient(145deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.02) 100%)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "18px" }}>✨</span>
+                  <span style={{ fontSize: "15px", fontWeight: "700" }}>Gerar título e descrição com IA</span>
+                </div>
+                <p style={{ margin: "0 0 16px 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                  A IA analisa as <strong>fotos</strong> junto com a localização e os detalhes já preenchidos e sugere
+                  um título e uma descrição. Revise antes de aplicar.
+                  {images.length + existingImages.length === 0 && (
+                    <span style={{ color: "#f59e0b" }}> Adicione fotos para um resultado melhor.</span>
+                  )}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleSugerirIA}
+                  disabled={iaLoading || disabled}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 22px",
+                    borderRadius: "10px", cursor: iaLoading || disabled ? "not-allowed" : "pointer",
+                    background: "var(--primary, #6366f1)", border: "none", color: "#fff",
+                    fontSize: "14px", fontWeight: "600", opacity: iaLoading || disabled ? 0.6 : 1,
+                  }}
+                >
+                  {iaLoading ? "Gerando..." : iaSugestao ? "Gerar novamente" : "Gerar sugestão"}
+                </button>
+
+                {iaErro && (
+                  <p style={{ margin: "12px 0 0 0", fontSize: "13px", color: "#f87171" }}>{iaErro}</p>
+                )}
+
+                {iaSugestao && (
+                  <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                    {iaSugestao.titulo && (
+                      <SugestaoCard
+                        rotulo="Título sugerido"
+                        texto={iaSugestao.titulo}
+                        onAplicar={() => set("title", iaSugestao.titulo)}
+                      />
+                    )}
+                    {iaSugestao.descricao && (
+                      <SugestaoCard
+                        rotulo="Descrição sugerida"
+                        texto={iaSugestao.descricao}
+                        onAplicar={() => set("description", iaSugestao.descricao)}
+                      />
+                    )}
+                    {iaSugestao.descricaoResumida && (
+                      <SugestaoCard
+                        rotulo="Resumo (redes / SEO)"
+                        texto={iaSugestao.descricaoResumida}
+                        onAplicar={() => set("description", iaSugestao.descricaoResumida)}
+                      />
+                    )}
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (iaSugestao.titulo) set("title", iaSugestao.titulo);
+                          if (iaSugestao.descricao) set("description", iaSugestao.descricao);
+                        }}
+                        style={{
+                          padding: "8px 18px", borderRadius: "8px", cursor: "pointer",
+                          background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)",
+                          color: "#34d399", fontSize: "13px", fontWeight: "600",
+                        }}
+                      >
+                        Aplicar título e descrição
+                      </button>
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                        {iaSugestao.usouFotos > 0
+                          ? `Baseado em ${iaSugestao.usouFotos} foto${iaSugestao.usouFotos !== 1 ? "s" : ""}.`
+                          : "Gerado sem fotos (só com os dados)."}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -1379,9 +1597,25 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
               {/* Legenda editável */}
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Legenda do post
-                </label>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Legenda do post
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGerarLegendaIA}
+                    disabled={legendaIaLoading || disabled}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
+                      borderRadius: "8px", cursor: legendaIaLoading || disabled ? "not-allowed" : "pointer",
+                      background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
+                      color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
+                      opacity: legendaIaLoading || disabled ? 0.6 : 1, flexShrink: 0, width: "auto",
+                    }}
+                  >
+                    ✨ {legendaIaLoading ? "Gerando..." : "Gerar com IA"}
+                  </button>
+                </div>
                 <textarea
                   value={caption}
                   onChange={(e) => setCaption(e.target.value)}
@@ -1389,9 +1623,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   style={{ ...inputStyle, resize: "vertical", lineHeight: "1.6", fontFamily: "inherit", minHeight: "160px" }}
                   placeholder="Escreva a legenda do post..."
                 />
-                <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>
-                  Edite a legenda antes de publicar. Ela será usada no Facebook e Instagram.
-                </span>
+                {legendaIaErro
+                  ? <span style={{ fontSize: "11px", color: "#f87171", fontWeight: "500" }}>{legendaIaErro}</span>
+                  : <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>
+                      Edite a legenda antes de publicar. Ela será usada no Facebook e Instagram.
+                    </span>}
               </div>
 
               {/* Aviso se não tem permissão de publicar nas redes */}

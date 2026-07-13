@@ -8,7 +8,10 @@
     "start": "node src/server.js",
     "build": "echo \"API sem etapa de build\"",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:status": "prisma migrate status",
+    "prisma:baseline": "prisma migrate resolve --applied 0_init",
     "prisma:push": "prisma db push --skip-generate",
     "prisma:seed": "node prisma/seed.js",
     "prisma:seed:dev": "node prisma/seed.js --dev"

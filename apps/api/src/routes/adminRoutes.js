@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { prisma } from "../db.js";
 import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
+import { provisionTenant } from "../services/provisioningService.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
 
@@ -93,46 +94,11 @@ adminRouter.get("/tenants/:id", async (req, res) => {
 
 adminRouter.post("/tenants", async (req, res) => {
   try {
-    const b = req.body || {};
-    if (!b.name || !b.slug) return res.status(400).json({ error: "Nome e slug sao obrigatorios." });
-    if (!/^[a-z0-9-]+$/.test(b.slug)) {
-      return res.status(400).json({ error: "Slug invalido (use minusculas, numeros e hifens)." });
-    }
-    const exists = await prisma.tenant.findUnique({ where: { slug: b.slug } });
-    if (exists) return res.status(409).json({ error: "Ja existe um tenant com esse slug." });
-
-    const tenant = await prisma.tenant.create({
-      data: {
-        name: b.name,
-        slug: b.slug,
-        email: b.email || "",
-        whatsapp: b.whatsapp || "",
-        plano: b.plano || null,
-        statusPagamento: STATUS_VALIDOS.includes(b.statusPagamento) ? b.statusPagamento : "TRIAL",
-        valorMensal: b.valorMensal != null && b.valorMensal !== "" ? Number(b.valorMensal) : null,
-        proximoVencimento: b.proximoVencimento ? new Date(b.proximoVencimento) : null,
-      },
-    });
-
-    // Opcional: cria um usuario administrador inicial para o tenant.
-    let warning = null;
-    if (b.adminLogin && b.adminSenha) {
-      try {
-        const cargo = await prisma.cargo.findFirst({ where: { descricao: "Administrador" } });
-        if (!cargo) {
-          warning = "Tenant criado, mas cargo 'Administrador' nao existe (rode o seed base).";
-        } else {
-          const senhaHash = await bcrypt.hash(b.adminSenha, 10);
-          await prisma.usuario.create({
-            data: { login: b.adminLogin, nome: `Admin ${b.name}`, senha: senhaHash, tenantId: tenant.id, cargoCodigo: cargo.id, ativo: true },
-          });
-        }
-      } catch (e) {
-        warning = `Tenant criado, mas falha ao criar usuario admin: ${e.code === "P2002" ? "login ja existe" : e.message}`;
-      }
-    }
+    const { tenant, warning } = await provisionTenant(req.body || {});
     res.status(201).json({ id: tenant.id, slug: tenant.slug, warning });
   } catch (err) {
+    if (err.code === "SLUG_INVALIDO") return res.status(400).json({ error: err.message });
+    if (err.code === "SLUG_EM_USO") return res.status(409).json({ error: err.message });
     console.error("[POST /admin/tenants]", err);
     res.status(500).json({ error: "Erro ao criar tenant.", detail: err.message });
   }

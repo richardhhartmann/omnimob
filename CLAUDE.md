@@ -43,9 +43,21 @@ domus/
 **Rotas:**
 - `POST /api/auth/login`
 - `/api/tenants/*` — perfil, configuração do tenant
-- `/api/properties/*` — CRUD de imóveis, imagens, métricas
+- `/api/properties/*` — CRUD de imóveis, imagens, métricas (inclui `POST /:id/ai/gerar`)
 - `/api/leads/*` — leads do tenant
-- `/api/public/*` — showcase público (sem auth)
+- `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP
+- `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`
+- `/api/social/*` — publicação e OAuth Meta (+ webhook em `/api/social/webhook`)
+- `/api/ai/*` — geração de conteúdo com IA (Gemini)
+- `/public/*` — showcase público (sem auth)
+- `/health` — health check real (DB + latência + versão do schema)
+
+**Camada de serviços (`src/services/`):** desacoplada, alinhada à arquitetura-alvo.
+- `tenantRegistry.js` — **seam multi-tenant**: resolve onde um tenant vive. Hoje banco único; ponto de troca para schema/banco-por-tenant. Use `getTenantClient()`/`getGlobalPrisma()` em vez de importar `db.js` direto.
+- `aiService.js` — Google Gemini 2.5 Flash (via `fetch`), gera descrições/título/hashtags/posts/ads/e-mail.
+- `provisioningService.js`, `migrationService.js`, `healthService.js`, `notificationService.js` (stub), `socialPublisher.js`.
+
+**Versionamento de banco:** migrado de `db push` → **Prisma Migrate**. Baseline em `prisma/migrations/0_init`. Ver [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) para o passo de baseline e o roadmap completo.
 
 **Middlewares:**
 - `authMiddleware.js` — valida JWT, injeta `req.user`
@@ -58,6 +70,8 @@ DIRECT_URL=postgresql://...supabase...
 PORT=4000
 JWT_SECRET=domus-dev-secret
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+GEMINI_API_KEY=...          # Google AI Studio
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 ---
@@ -231,8 +245,13 @@ Painel lateral sticky (272px, `top: 56px`, `height: calc(100vh - 56px)`).
 
 ## O que NÃO existe ainda (oportunidades futuras)
 
-- Publicação real no Facebook/Instagram/WhatsApp (só placeholder)
-- Painel de usuários/permissões no frontend
-- Recuperação de senha
-- Testes automatizados
-- Deploy CI/CD configurado
+- Publicação real nos canais sociais (`publishToChannel` ainda é stub; OAuth/webhook Meta já existem)
+- UI de IA no frontend (backend `/api/ai/*` pronto)
+- Notification Service com provedores reais (interface pronta, envio é stub)
+- Backup Service e Scheduler
+- Isolamento por schema/banco-por-tenant (seam pronto em `tenantRegistry.js`)
+- Módulos ERP: Contratos, Agenda, Financeiro, Vistorias, Proprietários, Corretores
+- Site institucional; domínio próprio + SEO + blog para as vitrines
+- Recuperação de senha, testes automatizados, deploy CI/CD
+
+> Panorama completo visão × realidade + roadmap: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)

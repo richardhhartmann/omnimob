@@ -280,6 +280,23 @@ export const api = {
       headers: { "x-tenant-slug": tenantSlug },
     }),
 
+  // ─── IA ──────────────────────────────────────────────────────────────────
+  // Sugere título + descrição a partir das fotos + dados do imóvel (multimodal).
+  sugerirImovelIA: (tenantSlug, payload) =>
+    request("/api/ai/imovel/sugerir", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  // Gera conteúdo (legenda, hashtags, etc.) para um imóvel já salvo.
+  gerarConteudoPropertyIA: (tenantSlug, propertyId, tipos) =>
+    request(`/api/properties/${propertyId}/ai/gerar`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ tipos }),
+    }),
+
   getPublicShowcase: (tenantSlug) => request(`/public/${tenantSlug}/properties`),
 
   getPublicPropertyById: (tenantSlug, propertyId) =>
