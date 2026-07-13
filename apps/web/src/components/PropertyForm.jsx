@@ -612,28 +612,48 @@ function PostAvatar({ url, nome, size = 40, ring }) {
   );
 }
 
-// Texto do post editável direto no preview (textarea "invisível" que cresce com
-// o conteúdo, para nunca faltar espaço).
-function PreviewCaption({ value, onChange, color, minHeight = 84 }) {
+// Texto do post editável direto no preview. Mantém uma ALTURA FIXA (colapsado)
+// para os cards ficarem uniformes; se o texto for maior, mostra "Ler mais".
+// Ao focar (editar), expande automaticamente para mostrar tudo.
+function PreviewCaption({ value, onChange, color, collapsedHeight = 82, linkColor = "#65676b" }) {
   const ref = useRef(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflow, setOverflow] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.max(minHeight, el.scrollHeight)}px`;
-  }, [value, minHeight]);
+    if (expanded) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    } else {
+      el.style.height = `${collapsedHeight}px`;
+      setOverflow(el.scrollHeight > collapsedHeight + 4);
+    }
+  }, [value, expanded, collapsedHeight]);
   return (
-    <textarea
-      ref={ref}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder="Escreva o texto do post…"
-      style={{
-        width: "100%", boxSizing: "border-box", border: "none", outline: "none", resize: "none",
-        overflow: "hidden", background: "transparent", color, fontSize: "13px", lineHeight: 1.5,
-        fontFamily: "inherit", minHeight, padding: 0, margin: 0,
-      }}
-    />
+    <div>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setExpanded(true)}
+        placeholder="Escreva o texto do post…"
+        style={{
+          width: "100%", boxSizing: "border-box", border: "none", outline: "none", resize: "none",
+          overflow: "hidden", background: "transparent", color, fontSize: "13px", lineHeight: 1.5,
+          fontFamily: "inherit", height: collapsedHeight, padding: 0, margin: 0,
+        }}
+      />
+      {(overflow || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          style={{ width: "auto", padding: 0, marginTop: "2px", background: "none", border: "none", cursor: "pointer", color: linkColor, fontSize: "12px", fontWeight: 600 }}
+        >
+          {expanded ? "Ler menos" : "Ler mais"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -658,22 +678,22 @@ function IaButtonSmall({ onClick, loading, accent }) {
 // dentro dele, via <PostControls/>).
 function PreviewCard({ brandLabel, brandColor, brandRadius = "6px", brandIcon, statusText, children }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <span style={{ width: "22px", height: "22px", borderRadius: brandRadius, background: brandColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{brandIcon}</span>
         <span style={{ fontSize: "13px", fontWeight: 700 }}>{brandLabel}</span>
         {statusText && <span style={{ marginLeft: "auto", fontSize: "11px", color: "var(--text-muted)", textAlign: "right", lineHeight: 1.3 }}>{statusText}</span>}
       </div>
-      <div style={{ padding: "14px", background: "rgba(0,0,0,0.15)" }}>{children}</div>
+      <div style={{ padding: "14px", background: "rgba(0,0,0,0.15)", flex: 1, display: "flex", flexDirection: "column" }}>{children}</div>
     </div>
   );
 }
 
 // Controles (Gerar com IA + Publicar/Compartilhar) renderizados DENTRO do molde,
-// como um rodapé claro do próprio post.
+// como um rodapé claro do próprio post — sempre colado ao fundo do card.
 function PostControls({ iaAccent, onGerarIA, iaLoading, iaErro, acao }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "10px 12px", background: "#f0f2f5", borderTop: "1px solid #dfe1e5" }}>
+    <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: "8px", padding: "10px 12px", background: "#f0f2f5", borderTop: "1px solid #dfe1e5" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
         <IaButtonSmall onClick={onGerarIA} loading={iaLoading} accent={iaAccent} />
         <div style={{ marginLeft: "auto" }}>{acao}</div>
@@ -705,7 +725,7 @@ const ICON = {
 function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, statusText, ...controls }) {
   return (
     <PreviewCard brandLabel="Facebook" brandColor="#1877f2" brandIcon={FB_ICON} statusText={statusText}>
-      <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+      <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={40} />
           <div style={{ lineHeight: 1.25 }}>
@@ -736,7 +756,7 @@ function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, status
   const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
   return (
     <PreviewCard brandLabel="Instagram" brandColor="linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" brandIcon={IG_ICON} statusText={statusText}>
-      <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+      <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={30} ring />
           <span style={{ fontSize: "13px", fontWeight: 700, color: "#262626" }}>{handle}</span>
@@ -763,15 +783,15 @@ function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, status
 function WhatsAppPreview({ nome, avatarUrl, coverUrl, caption, onChange, statusText, ...controls }) {
   return (
     <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandRadius="50%" brandIcon={WA_ICON} statusText={statusText}>
-      <div style={{ borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+      <div style={{ borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#075e54", color: "#fff", padding: "8px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={30} />
           <div style={{ fontSize: "13px", fontWeight: 600 }}>{nome || "Sua imobiliária"}</div>
         </div>
-        <div style={{ background: "#e5ddd5", padding: "16px 10px", display: "flex", justifyContent: "flex-end", minHeight: "120px" }}>
+        <div style={{ background: "#e5ddd5", padding: "16px 10px", display: "flex", justifyContent: "flex-end", alignItems: "flex-start", flex: 1, minHeight: "120px" }}>
           <div style={{ maxWidth: "90%", background: "#dcf8c6", borderRadius: "10px", padding: "7px", boxShadow: "0 1px 1px rgba(0,0,0,0.12)" }}>
             {coverUrl && <img src={coverUrl} alt="" style={{ width: "100%", borderRadius: "6px", display: "block", marginBottom: "5px", maxHeight: "200px", objectFit: "cover" }} />}
-            <PreviewCaption value={caption} onChange={onChange} color="#111b21" minHeight={72} />
+            <PreviewCaption value={caption} onChange={onChange} color="#111b21" collapsedHeight={70} linkColor="#4a8a34" />
             <div style={{ textAlign: "right", fontSize: "10px", color: "#667781", marginTop: "2px" }}>12:00 <span style={{ color: "#53bdeb" }}>✓✓</span></div>
           </div>
         </div>
@@ -1866,7 +1886,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               )}
 
               {/* Grid de previews realistas */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "18px", alignItems: "start" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "18px", alignItems: "stretch" }}>
                 {cargo?.publicarRedes && (
                   <FacebookPreview
                     nome={session?.tenant?.name}
