@@ -610,17 +610,26 @@ function PostAvatar({ url, nome, size = 40, ring }) {
   );
 }
 
-// Texto do post editável direto no preview (textarea "invisível").
-function PreviewCaption({ value, onChange, color, minHeight = 54 }) {
+// Texto do post editável direto no preview (textarea "invisível" que cresce com
+// o conteúdo, para nunca faltar espaço).
+function PreviewCaption({ value, onChange, color, minHeight = 84 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(minHeight, el.scrollHeight)}px`;
+  }, [value, minHeight]);
   return (
     <textarea
+      ref={ref}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder="Escreva o texto do post…"
       style={{
-        width: "100%", boxSizing: "border-box", border: "none", outline: "none", resize: "vertical",
-        background: "transparent", color, fontSize: "13px", lineHeight: 1.5, fontFamily: "inherit",
-        minHeight, padding: 0, margin: 0,
+        width: "100%", boxSizing: "border-box", border: "none", outline: "none", resize: "none",
+        overflow: "hidden", background: "transparent", color, fontSize: "13px", lineHeight: 1.5,
+        fontFamily: "inherit", minHeight, padding: 0, margin: 0,
       }}
     />
   );
@@ -643,17 +652,18 @@ function IaButtonSmall({ onClick, loading, accent }) {
   );
 }
 
-// Moldura de um preview: cabeçalho da marca + molde + rodapé (IA + ação).
-function PreviewCard({ brandLabel, brandColor, brandIcon, statusText, iaAccent, onGerarIA, iaLoading, iaErro, acao, children }) {
+// Moldura de um preview: cabeçalho da marca + molde + controles (IA + ação),
+// tudo dentro da mesma área do preview.
+function PreviewCard({ brandLabel, brandColor, brandRadius = "6px", brandIcon, statusText, iaAccent, onGerarIA, iaLoading, iaErro, acao, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <span style={{ width: "22px", height: "22px", borderRadius: "6px", background: brandColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{brandIcon}</span>
+        <span style={{ width: "22px", height: "22px", borderRadius: brandRadius, background: brandColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{brandIcon}</span>
         <span style={{ fontSize: "13px", fontWeight: 700 }}>{brandLabel}</span>
         {statusText && <span style={{ marginLeft: "auto", fontSize: "11px", color: "var(--text-muted)", textAlign: "right", lineHeight: 1.3 }}>{statusText}</span>}
       </div>
-      <div style={{ padding: "14px", background: "rgba(0,0,0,0.15)" }}>{children}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ padding: "14px", background: "rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", gap: "12px" }}>
+        {children}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <IaButtonSmall onClick={onGerarIA} loading={iaLoading} accent={iaAccent} />
           <div style={{ marginLeft: "auto" }}>{acao}</div>
@@ -668,6 +678,20 @@ const FB_ICON = <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><pat
 const IG_ICON = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>;
 const WA_ICON = <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.785.476 3.456 1.302 4.914L2 22l5.233-1.274A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>;
 
+// Ícones (traçado) usados dentro dos moldes, no lugar de emojis.
+function Ic({ d, size = 16, fill = "none" }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}>{d}</svg>;
+}
+const ICON = {
+  curtir: <path d="M7 10v11M18 21H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.5l3.2-6.4A2 2 0 0 1 15 4.5V9h4.2a2 2 0 0 1 2 2.3l-1.1 7A2 2 0 0 1 18 21z" />,
+  comentar: <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />,
+  compartilhar: <><line x1="4" y1="12" x2="20" y2="12" /><polyline points="14 6 20 12 14 18" /></>,
+  coracao: <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />,
+  enviar: <><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></>,
+  salvar: <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />,
+  globo: <><circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" /><path d="M12 3a14 14 0 0 1 3.5 9 14 14 0 0 1-3.5 9 14 14 0 0 1-3.5-9A14 14 0 0 1 12 3z" /></>,
+};
+
 // ── Facebook ──
 function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
   return (
@@ -677,16 +701,20 @@ function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...foot
           <PostAvatar url={avatarUrl} nome={nome} size={40} />
           <div style={{ lineHeight: 1.25 }}>
             <div style={{ fontSize: "13px", fontWeight: 700, color: "#050505" }}>{nome || "Sua imobiliária"}</div>
-            <div style={{ fontSize: "11px", color: "#65676b" }}>Agora · 🌐</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "#65676b" }}>
+              Agora · <span style={{ color: "#65676b", display: "inline-flex" }}><Ic d={ICON.globo} size={12} /></span>
+            </div>
           </div>
           <span style={{ marginLeft: "auto", color: "#65676b", fontSize: "18px", lineHeight: 1 }}>⋯</span>
         </div>
         <div style={{ padding: "0 12px 10px" }}>
-          <PreviewCaption value={caption} onChange={onChange} color="#050505" />
+          <PreviewCaption value={caption} onChange={onChange} color="#050505" minHeight={96} />
         </div>
-        {coverUrl && <img src={coverUrl} alt="" style={{ width: "100%", display: "block", maxHeight: "240px", objectFit: "cover" }} />}
-        <div style={{ display: "flex", justifyContent: "space-around", padding: "8px 4px", borderTop: "1px solid #ced0d4", color: "#65676b", fontSize: "12px", fontWeight: 600 }}>
-          <span>👍 Curtir</span><span>💬 Comentar</span><span>↪ Compartilhar</span>
+        {coverUrl && <img src={coverUrl} alt="" style={{ width: "100%", display: "block", maxHeight: "260px", objectFit: "cover" }} />}
+        <div style={{ display: "flex", justifyContent: "space-around", padding: "9px 4px", borderTop: "1px solid #ced0d4", color: "#65676b", fontSize: "13px", fontWeight: 600 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.curtir} size={17} /> Curtir</span>
+          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.comentar} size={17} /> Comentar</span>
+          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.compartilhar} size={17} /> Compartilhar</span>
         </div>
       </div>
     </PreviewCard>
@@ -697,7 +725,7 @@ function FacebookPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...foot
 function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
   const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
   return (
-    <PreviewCard brandLabel="Instagram" brandColor="#dc2743" brandIcon={IG_ICON} iaAccent="#dc2743" {...footer}>
+    <PreviewCard brandLabel="Instagram" brandColor="linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" brandIcon={IG_ICON} iaAccent="#dc2743" {...footer}>
       <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={30} ring />
@@ -707,12 +735,13 @@ function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...foo
         {coverUrl
           ? <img src={coverUrl} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
           : <div style={{ width: "100%", aspectRatio: "1", background: "#efefef", display: "flex", alignItems: "center", justifyContent: "center", color: "#b0b0b0", fontSize: "13px" }}>Adicione uma foto</div>}
-        <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "8px 12px 4px", fontSize: "20px", color: "#262626" }}>
-          <span>♡</span><span>💬</span><span>✈</span><span style={{ marginLeft: "auto" }}>🔖</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "10px 12px 6px", color: "#262626" }}>
+          <Ic d={ICON.coracao} size={23} /><Ic d={ICON.comentar} size={23} /><Ic d={ICON.enviar} size={23} />
+          <span style={{ marginLeft: "auto", display: "inline-flex" }}><Ic d={ICON.salvar} size={23} /></span>
         </div>
         <div style={{ padding: "2px 12px 12px" }}>
           <span style={{ fontSize: "13px", fontWeight: 700, color: "#262626", marginRight: "6px" }}>{handle}</span>
-          <PreviewCaption value={caption} onChange={onChange} color="#262626" />
+          <PreviewCaption value={caption} onChange={onChange} color="#262626" minHeight={72} />
         </div>
       </div>
     </PreviewCard>
@@ -722,16 +751,16 @@ function InstagramPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...foo
 // ── WhatsApp ──
 function WhatsAppPreview({ nome, avatarUrl, coverUrl, caption, onChange, ...footer }) {
   return (
-    <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandIcon={WA_ICON} iaAccent="#128c7e" {...footer}>
+    <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandRadius="50%" brandIcon={WA_ICON} iaAccent="#128c7e" {...footer}>
       <div style={{ borderRadius: "10px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#075e54", color: "#fff", padding: "8px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={30} />
           <div style={{ fontSize: "13px", fontWeight: 600 }}>{nome || "Sua imobiliária"}</div>
         </div>
-        <div style={{ background: "#e5ddd5", padding: "14px 10px", display: "flex", justifyContent: "flex-end" }}>
-          <div style={{ maxWidth: "88%", background: "#dcf8c6", borderRadius: "10px", padding: "6px", boxShadow: "0 1px 1px rgba(0,0,0,0.12)" }}>
-            {coverUrl && <img src={coverUrl} alt="" style={{ width: "100%", borderRadius: "6px", display: "block", marginBottom: "5px", maxHeight: "190px", objectFit: "cover" }} />}
-            <PreviewCaption value={caption} onChange={onChange} color="#111b21" />
+        <div style={{ background: "#e5ddd5", padding: "16px 10px", display: "flex", justifyContent: "flex-end", minHeight: "120px" }}>
+          <div style={{ maxWidth: "90%", background: "#dcf8c6", borderRadius: "10px", padding: "7px", boxShadow: "0 1px 1px rgba(0,0,0,0.12)" }}>
+            {coverUrl && <img src={coverUrl} alt="" style={{ width: "100%", borderRadius: "6px", display: "block", marginBottom: "5px", maxHeight: "200px", objectFit: "cover" }} />}
+            <PreviewCaption value={caption} onChange={onChange} color="#111b21" minHeight={72} />
             <div style={{ textAlign: "right", fontSize: "10px", color: "#667781", marginTop: "2px" }}>12:00 <span style={{ color: "#53bdeb" }}>✓✓</span></div>
           </div>
         </div>
