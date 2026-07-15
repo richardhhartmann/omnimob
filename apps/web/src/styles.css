@@ -1817,3 +1817,349 @@ svg.icon-moon,
 .showcase-theme-light .icon-moon {
   color: #0f172a !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Etapa "Divulgar" — previews com foco no hover
+   O card sob o mouse cresce e ganha borda em degradê animado (cor da rede);
+   os outros encolhem, escurecem e desfocam. Hover na descrição = efeito IA.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes divulgar-ring-flow {
+  0%   { background-position:   0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position:   0% 50%; }
+}
+
+/* A fileira de previews. Ganha respiro pras logos flutuantes e chips de status. */
+.divulgar-grid {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  padding: 16px 16px 30px;
+}
+
+.divulgar-card {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  transition: flex-grow .5s cubic-bezier(.22, 1, .36, 1),
+              filter .45s ease,
+              transform .5s cubic-bezier(.22, 1, .36, 1),
+              opacity .45s ease;
+  will-change: flex-grow, transform, filter;
+}
+
+/* Nada sob o mouse = todos normais. Com UM sob o mouse, os OUTROS recuam:
+   ~metade da altura (centralizados pelo grid), escuros e desfocados. */
+.divulgar-grid:has(.divulgar-card:hover) .divulgar-card:not(:hover) {
+  flex-grow: .7;
+  filter: blur(2.5px) brightness(.5) saturate(.85);
+  transform: scale(.78);
+  opacity: .9;
+}
+
+/* O card sob o mouse cresce e vem à frente. */
+.divulgar-card:hover {
+  flex-grow: 2.5;
+  z-index: 4;
+}
+
+/* Moldura com borda em degradê. Neutra em repouso; animada e colorida no foco. */
+.divulgar-ring {
+  position: relative;
+  height: 100%;
+  padding: 2px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .09);
+  transition: padding .45s ease, box-shadow .45s ease, background-color .45s ease;
+}
+
+.divulgar-card:hover .divulgar-ring {
+  padding: 3px;
+  background: var(--ring-gradient);
+  background-size: 300% 300%;
+  animation: divulgar-ring-flow 4.5s ease infinite;
+  box-shadow: 0 16px 44px -10px var(--ring-glow, rgba(0, 0, 0, .5));
+}
+
+.divulgar-inner {
+  position: relative;
+  height: 100%;
+  border-radius: 17px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Seções que só aparecem no card em foco (descrição, ações, publicar): colapsam
+   por padrão e expandem com animação suave de altura ao passar o mouse no card. */
+.divulgar-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .45s cubic-bezier(.22, 1, .36, 1);
+}
+
+.divulgar-card:hover .divulgar-expand {
+  grid-template-rows: 1fr;
+}
+
+.divulgar-expand > * {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Logo da rede flutuando no canto superior direito. */
+.divulgar-logo {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  z-index: 7;
+  transform: scale(.82);
+  opacity: .85;
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1), opacity .45s ease;
+}
+
+.divulgar-card:hover .divulgar-logo {
+  transform: scale(1.12);
+  opacity: 1;
+}
+
+/* Chip de status (aparece só no card em foco). */
+.divulgar-status {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity .4s ease;
+  pointer-events: none;
+}
+
+.divulgar-card:hover .divulgar-status {
+  opacity: 1;
+}
+
+/* Botão "Publicar/Compartilhar" — ocupa a largura total da base do card. */
+.divulgar-pub {
+  transition: box-shadow .3s ease, filter .2s ease;
+}
+
+.divulgar-pub:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, .45);
+}
+
+/* ── Efeito IA: hover na descrição → contorno degradê rosa/roxo animado ── */
+.divulgar-desc {
+  position: relative;
+  border-radius: 11px;
+  padding: 6px 9px;
+  margin: 2px -9px;
+  transition: background .3s ease;
+}
+
+.divulgar-desc::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 11px;
+  padding: 1.5px;
+  background: linear-gradient(115deg, #a855f7, #ec4899, #8b5cf6, #f472b6, #a855f7);
+  background-size: 300% 300%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity .35s ease;
+  pointer-events: none;
+}
+
+.divulgar-desc:hover,
+.divulgar-desc.is-ai {
+  background: linear-gradient(115deg, rgba(168, 85, 247, .07), rgba(236, 72, 153, .07));
+}
+
+.divulgar-desc:hover::before,
+.divulgar-desc.is-ai::before {
+  opacity: 1;
+  animation: divulgar-ring-flow 3.5s ease infinite;
+}
+
+/* Varinha de IA DENTRO do contorno da descrição (revela no hover). */
+.divulgar-desc-ia {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9px;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  box-shadow: 0 3px 12px rgba(168, 85, 247, .5);
+  opacity: 0;
+  transform: scale(.8) translateY(4px);
+  transition: opacity .3s ease, transform .3s ease;
+  z-index: 2;
+}
+
+.divulgar-desc:hover .divulgar-desc-ia,
+.divulgar-desc.is-ai .divulgar-desc-ia {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.divulgar-desc-ia:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+/* ── Card publicado: overlay verde cobre o card inteiro + checkmark animado ── */
+.divulgar-published {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(160deg, rgba(16, 185, 129, .95), rgba(5, 150, 105, .97));
+  animation: divulgar-pub-in .45s ease;
+}
+
+@keyframes divulgar-pub-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.divulgar-published-check {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: divulgar-check-pop .55s cubic-bezier(.34, 1.56, .64, 1) .08s both;
+}
+
+@keyframes divulgar-check-pop {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.divulgar-published-check path {
+  stroke-dasharray: 32;
+  stroke-dashoffset: 32;
+  animation: divulgar-check-draw .4s ease .4s forwards;
+}
+
+@keyframes divulgar-check-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.divulgar-published-label {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+
+.divulgar-published-remove {
+  margin-top: 2px;
+  padding: 8px 18px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .5);
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  width: auto;
+  cursor: pointer;
+  transition: background .2s ease;
+}
+
+.divulgar-published-remove:hover { background: rgba(255, 255, 255, .25); }
+.divulgar-published-remove:disabled { opacity: .6; cursor: default; }
+
+/* ── Card bloqueado: rede sem integração configurada (cadeado cobre o card) ── */
+.divulgar-locked {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+  color: #fff;
+  background: rgba(15, 23, 42, .68);
+  backdrop-filter: blur(2.5px);
+  -webkit-backdrop-filter: blur(2.5px);
+}
+
+.divulgar-locked-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.divulgar-locked-label {
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 230px;
+  line-height: 1.45;
+}
+
+/* Telas estreitas: empilha e desliga o efeito de foco (não há hover no toque). */
+@media (max-width: 900px) {
+  .divulgar-grid { flex-direction: column; align-items: stretch; padding: 14px 8px 24px; }
+  .divulgar-grid:has(.divulgar-card:hover) .divulgar-card:not(:hover),
+  .divulgar-card:hover {
+    flex-grow: 1;
+    filter: none;
+    transform: none;
+    opacity: 1;
+  }
+  .divulgar-expand { grid-template-rows: 1fr; }
+}
+
+/* Respeita quem prefere menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  .divulgar-card,
+  .divulgar-ring,
+  .divulgar-logo,
+  .divulgar-pub,
+  .divulgar-desc,
+  .divulgar-desc::before {
+    transition: none;
+    animation: none;
+  }
+}
