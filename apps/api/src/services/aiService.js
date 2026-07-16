@@ -321,6 +321,9 @@ const SCHEMA_SUGESTAO = {
     titulo: { type: "string" },
     descricao: { type: "string" },
     descricaoResumida: { type: "string" },
+    tipoImovel: { type: "string" },
+    atributos: { type: "array", items: { type: "string" } },
+    finalidade: { type: "string" },
   },
   required: ["titulo", "descricao", "descricaoResumida"],
 };
@@ -330,11 +333,23 @@ const SCHEMA_SUGESTAO = {
  * Uma única chamada ao Gemini (as imagens são enviadas uma vez) → JSON estruturado.
  * @returns {Promise<{ titulo, descricao, descricaoResumida, usouFotos }>}
  */
-export async function sugerirTituloDescricao(imovel = {}, imagens = []) {
+export async function sugerirTituloDescricao(imovel = {}, imagens = [], tiposDisponiveis = []) {
   const ficha = fichaImovel(imovel);
   const partsImagens = await montarPartsImagens(imagens);
 
   const temFotos = partsImagens.length > 0;
+  const listaTipos = Array.isArray(tiposDisponiveis) ? tiposDisponiveis : [];
+  const tiposTexto = listaTipos.length
+    ? `\n\nTipos e atributos disponíveis (escolha SOMENTE destes):\n` +
+      listaTipos.map((t) => `  • ${t.tipo}${Array.isArray(t.atributos) && t.atributos.length ? ` — atributos: ${t.atributos.join(", ")}` : ""}`).join("\n")
+    : "";
+  const inferBloco =
+    `\nSe — e SOMENTE se — as fotos e os dados permitirem inferir com SEGURANÇA, preencha também (senão deixe vazio: "" ou []):\n` +
+    `- "tipoImovel": o tipo do imóvel${listaTipos.length ? ", escolhido EXATAMENTE da lista abaixo" : ""} (ou "" se incerto)\n` +
+    `- "atributos": array com os atributos/diferenciais que você tem CERTEZA que aparecem nas fotos${listaTipos.length ? ", escolhidos APENAS da lista do tipo escolhido" : ""} (ou [] se incerto)\n` +
+    `- "finalidade": "RESIDENCIAL" ou "COMERCIAL" (ou "" se incerto)\n` +
+    `Nunca invente tipo/atributos fora da lista. Na dúvida, deixe vazio.${tiposTexto}\n`;
+
   const instrucao =
     (temFotos
       ? `Analise as FOTOS e os dados abaixo e crie o anúncio deste imóvel. Baseie-se no que REALMENTE ` +
@@ -345,8 +360,9 @@ export async function sugerirTituloDescricao(imovel = {}, imagens = []) {
     `Responda em JSON com:\n` +
     `- "titulo": título comercial curto e chamativo (máx. 70 caracteres)\n` +
     `- "descricao": descrição completa e persuasiva (2 a 3 parágrafos)\n` +
-    `- "descricaoResumida": resumo de até 280 caracteres\n\n` +
-    `Dados do imóvel:\n${ficha}`;
+    `- "descricaoResumida": resumo de até 280 caracteres\n` +
+    inferBloco +
+    `\nDados do imóvel:\n${ficha}`;
 
   const raw = await callGemini([{ text: instrucao }, ...partsImagens], {
     system: SYSTEM_BASE,
@@ -360,10 +376,77 @@ export async function sugerirTituloDescricao(imovel = {}, imagens = []) {
       titulo: parsed.titulo || "",
       descricao: parsed.descricao || "",
       descricaoResumida: parsed.descricaoResumida || "",
+      tipoImovel: parsed.tipoImovel || "",
+      atributos: Array.isArray(parsed.atributos) ? parsed.atributos : [],
+      finalidade: parsed.finalidade || "",
       usouFotos: partsImagens.length,
     };
   } catch {
     // Fallback defensivo: se não vier JSON válido, entrega o texto como descrição.
-    return { titulo: "", descricao: raw, descricaoResumida: "", usouFotos: partsImagens.length };
+    return { titulo: "", descricao: raw, descricaoResumida: "", tipoImovel: "", atributos: [], finalidade: "", usouFotos: partsImagens.length };
+  }
+}
+
+/**
+ * Infere, a partir do endereço/CEP, quais comodidades da lista MUITO PROVAVELMENTE
+ * existem na região (raio ~2 km). Substitui a antiga consulta a Nominatim/Overpass:
+ * usa o conhecimento do modelo sobre bairros e infraestrutura das cidades brasileiras.
+ * @param {{ cep?, logradouro?, bairro?, cidade?, uf? }} endereco
+ * @param {Array<{ key: string, label: string }>} comodidades  lista canônica (do frontend)
+ * @returns {Promise<{ presentes: string[] }>}
+ */
+export async function inferirComodidadesRegiao(endereco = {}, comodidades = []) {
+  const lista = (Array.isArray(comodidades) ? comodidades : []).filter((c) => c && c.key && c.label);
+  if (lista.length === 0) return { presentes: [] };
+
+  const keys = lista.map((c) => c.key);
+  const enderecoStr = [
+    endereco.logradouro && `Logradouro: ${endereco.logradouro}`,
+    endereco.bairro && `Bairro: ${endereco.bairro}`,
+    endereco.cidade && `Cidade: ${endereco.cidade}`,
+    endereco.uf && `Estado (UF): ${endereco.uf}`,
+    endereco.cep && `CEP: ${endereco.cep}`,
+  ].filter(Boolean).join("\n");
+
+  const opcoes = lista.map((c) => `- ${c.key}: ${c.label}`).join("\n");
+
+  const schema = {
+    type: "object",
+    properties: {
+      presentes: { type: "array", items: { type: "string", enum: keys } },
+    },
+    required: ["presentes"],
+  };
+
+  const prompt =
+    `Considere um imóvel localizado no endereço abaixo. Avalie quais dos tipos de comodidade/serviço ` +
+    `listados MUITO PROVAVELMENTE existem a uma curta distância (raio de aproximadamente 1 km) da região.\n\n` +
+    `Endereço:\n${enderecoStr || "(endereço incompleto)"}\n\n` +
+    `Tipos possíveis (use EXATAMENTE estas chaves):\n${opcoes}\n\n` +
+    `Regras:\n` +
+    `- Baseie-se no perfil real do bairro e da cidade (densidade, grau de urbanização, comércio típico da área).\n` +
+    `- Inclua uma chave em "presentes" apenas quando houver BOA probabilidade de existir por perto. ` +
+    `Na dúvida forte, NÃO inclua — é melhor deixar de marcar do que marcar algo que não existe.\n` +
+    `- Em regiões centrais/urbanas densas a maioria costuma existir; em zonas rurais ou afastadas, poucas.\n` +
+    `- Nunca invente chaves fora da lista.\n\n` +
+    `Responda em JSON: { "presentes": ["chave", ...] }`;
+
+  const raw = await callGemini([{ text: prompt }], {
+    system:
+      "Você é um especialista em geografia urbana e infraestrutura das cidades brasileiras. " +
+      "Responde de forma factual e conservadora, sem inventar, sempre em português do Brasil.",
+    responseSchema: schema,
+    temperature: 0.2,
+  });
+
+  try {
+    const parsed = JSON.parse(raw);
+    const validas = new Set(keys);
+    const presentes = Array.isArray(parsed.presentes)
+      ? [...new Set(parsed.presentes.filter((k) => validas.has(k)))]
+      : [];
+    return { presentes };
+  } catch {
+    return { presentes: [] };
   }
 }

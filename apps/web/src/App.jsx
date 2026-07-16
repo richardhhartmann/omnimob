@@ -43,6 +43,12 @@ export default function App() {
     setAdminToken(adminSession?.token || null);
   }, [adminSession]);
 
+  // Navegação SPA: ao trocar de rota, volta ao topo (salvo quando a URL traz
+  // uma âncora #seção — aí a página de destino cuida de rolar até ela).
+  useEffect(() => {
+    if (!location.hash) window.scrollTo(0, 0);
+  }, [location.pathname, location.hash]);
+
   function handleAdminLogin(next) {
     saveAdminSession(next);
     setAdminSession(next);

@@ -1059,6 +1059,19 @@ button:disabled {
   scrollbar-color: var(--glass-highlight) transparent;
 }
 
+/* Fade sutil ao entrar nas páginas públicas da vitrine (navegação SPA).
+   Exclui o editor (.showcase-editor-full) pra não piscar durante a edição. */
+@keyframes showcase-page-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.showcase-body:not(.showcase-editor-full) {
+  animation: showcase-page-fade 0.3s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .showcase-body:not(.showcase-editor-full) { animation: none; }
+}
+
 /* O fundo/cor do tema claro NÃO se aplica ao container do editor (.showcase-editor-full),
    apenas à vitrine pública e ao canvas de preview — assim o chrome do admin segue escuro. */
 .showcase-theme-light:not(.showcase-editor-full) {
@@ -1139,6 +1152,7 @@ button:disabled {
   left: 0;
   width: 100%;
   z-index: 9999;
+  border-bottom: 1px solid transparent;
   transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -1160,6 +1174,12 @@ button:disabled {
 .luxury-header-wrapper.not-scrolled {
   background: transparent;
   padding: 28px 0;
+}
+
+/* Página de detalhe do imóvel: o header entra no fluxo (não fixed) pra não
+   sobrepor o conteúdo. A stickiness fica por conta do wrapper .showcase-detail-header. */
+.showcase-detail-header .luxury-header-wrapper {
+  position: relative;
 }
 
 .luxury-nav-link {

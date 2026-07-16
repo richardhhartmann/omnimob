@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import { api } from "../api";
 import {
   blockHasBackgroundImage,
@@ -9,10 +9,7 @@ import {
 } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
 import { comodidadesAtivas } from "../utils/comodidades";
-
-const SHOWCASE_FONT_FAMILIES = [
-  "Inter","Playfair+Display","Montserrat","Raleway","Lato","Merriweather","Poppins",
-];
+import { loadShowcaseFonts, setCachedTenant } from "../utils/showcaseFonts";
 
 // Elemento interno (sem min-height) usado para medir a altura REAL de cada bloco.
 const SECTION_INNER_SEL = {
@@ -25,6 +22,7 @@ const STACK_BLOCK_ORDER = ["header", "title", "highlights", "properties", "foote
 
 export function ShowcasePage() {
   const { tenantSlug } = useParams();
+  const location = useLocation();
   const [payload, setPayload] = useState(null);
   const [carouselIndexes, setCarouselIndexes] = useState({});
   const [loading, setLoading] = useState(false);
@@ -43,6 +41,7 @@ export function ShowcasePage() {
     try {
       const data = await api.getPublicShowcase(tenantSlug);
       setPayload(data);
+      setCachedTenant(tenantSlug, data.tenant);
       const indexes = {};
       (data.properties || []).forEach((property) => {
         indexes[property.id] = 0;
@@ -69,12 +68,15 @@ export function ShowcasePage() {
   }, []);
 
   useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = `https://fonts.googleapis.com/css2?family=${SHOWCASE_FONT_FAMILIES.join("&family=")}&display=swap`;
-    document.head.appendChild(link);
-    return () => { try { document.head.removeChild(link); } catch {} };
+    loadShowcaseFonts();
   }, []);
+
+  // Após navegação SPA (e a carga dos dados), rola até a seção do hash (#destaques/#footer).
+  useEffect(() => {
+    if (!payload || !location.hash) return;
+    const el = document.getElementById(location.hash.slice(1));
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth" }));
+  }, [payload, location.hash]);
 
   // O layout salvo (posições absolutas) é medido no editor, em larguras diferentes
   // das do visitante. Aqui medimos o conteúdo real e ajustamos as posições:

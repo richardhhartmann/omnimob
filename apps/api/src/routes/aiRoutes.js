@@ -45,11 +45,11 @@ aiRouter.post("/imovel/sugerir", requirePermissao("gerenciarImoveis"), async (re
     if (!isAiEnabled()) {
       return res.status(503).json({ error: "IA indisponível: GEMINI_API_KEY não configurada." });
     }
-    const { imovel, imagens } = req.body || {};
+    const { imovel, imagens, tiposDisponiveis } = req.body || {};
     if (!imovel || typeof imovel !== "object") {
       return res.status(400).json({ error: "Campo 'imovel' é obrigatório." });
     }
-    const sugestao = await sugerirTituloDescricao(imovel, Array.isArray(imagens) ? imagens : []);
+    const sugestao = await sugerirTituloDescricao(imovel, Array.isArray(imagens) ? imagens : [], Array.isArray(tiposDisponiveis) ? tiposDisponiveis : []);
     return res.json(sugestao);
   } catch (err) {
     console.error("[POST /ai/imovel/sugerir]", err);

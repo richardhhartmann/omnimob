@@ -4,6 +4,7 @@ import { api } from "../api";
 import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
 import { comodidadesAtivas } from "../utils/comodidades";
+import { loadShowcaseFonts, getCachedTenant, setCachedTenant } from "../utils/showcaseFonts";
 
 const IcPin  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
 const IcArea = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6"/><path d="M3 3l6 6"/><path d="M21 15v6h-6"/><path d="M21 21l-6-6"/></svg>;
@@ -21,7 +22,7 @@ function isLancamento(createdAt) {
 export function ShowcasePropertyPage() {
   const { tenantSlug, propertyId } = useParams();
   const [property, setProperty] = useState(null);
-  const [tenant, setTenant] = useState(null);
+  const [tenant, setTenant] = useState(() => getCachedTenant(tenantSlug));
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sendingInterest, setSendingInterest] = useState(false);
@@ -31,12 +32,16 @@ export function ShowcasePropertyPage() {
   const [interestForm, setInterestForm] = useState({ name: "", email: "", phone: "", message: "" });
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
   const thumbsRef = useRef(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxClosing, setLightboxClosing] = useState(false);
 
   useEffect(() => {
     const handler = () => setIsMobileViewport(window.innerWidth < 768);
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  useEffect(() => { loadShowcaseFonts(); }, []);
 
   useEffect(() => {
     if (!tenantSlug || !propertyId) return;
@@ -46,6 +51,7 @@ export function ShowcasePropertyPage() {
       .then((data) => {
         setProperty(data.property);
         setTenant(data.tenant);
+        setCachedTenant(tenantSlug, data.tenant);
         setCarouselIndex(0);
       })
       .catch((err) => setError(err.message))
@@ -91,6 +97,41 @@ export function ShowcasePropertyPage() {
     if (thumb) thumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }
 
+  function openLightbox() { setLightboxClosing(false); setLightboxOpen(true); }
+  function closeLightbox() {
+    setLightboxClosing(true);
+    setTimeout(() => { setLightboxOpen(false); setLightboxClosing(false); }, 280);
+  }
+
+  // Lightbox: trava o scroll do body enquanto aberto.
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [lightboxOpen]);
+
+  // Lightbox: teclado — Esc fecha, setas navegam.
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") closeLightbox();
+      else if (e.key === "ArrowRight") goTo(carouselIndex + 1);
+      else if (e.key === "ArrowLeft") goTo(carouselIndex - 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxOpen, carouselIndex]);
+
+  // Carrossel (modo normal): passa para a próxima foto automaticamente a cada 5s.
+  // Pausa quando o lightbox está aberto (lá a navegação é manual). A barrinha de
+  // progresso do carrossel, keyed por carouselIndex, dura os mesmos 5s.
+  useEffect(() => {
+    if (lightboxOpen || images.length <= 1) return;
+    const t = setTimeout(() => goTo(carouselIndex + 1), 5000);
+    return () => clearTimeout(t);
+  }, [lightboxOpen, carouselIndex, images.length]);
+
   const showcaseConfig = normalizeShowcaseConfig(tenant?.showcaseConfig);
   const isLightMode = showcaseConfig.appearanceMode === "light";
   const globalFont = showcaseConfig.globalFont || "Inter";
@@ -130,10 +171,28 @@ export function ShowcasePropertyPage() {
         .prop-thumb:hover { opacity: 1 !important; }
         .sug-card { transition: transform 0.2s, box-shadow 0.2s; }
         .sug-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important; }
+
+        @keyframes propLbFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes propLbZoom { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        @keyframes propLbProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+        .prop-lightbox { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 6vh 5vw; background: rgba(3,6,16,0.85); -webkit-backdrop-filter: blur(18px) brightness(0.6); backdrop-filter: blur(18px) brightness(0.6); animation: propLbFade 0.3s ease both; cursor: zoom-out; }
+        .prop-lightbox.is-closing { animation: propLbFade 0.26s ease reverse both; }
+        .prop-lightbox-stage { position: relative; max-width: 100%; max-height: 100%; display: flex; animation: propLbZoom 0.42s cubic-bezier(0.22,1,0.36,1) both; }
+        .prop-lightbox.is-closing .prop-lightbox-stage { animation: propLbZoom 0.24s ease reverse both; }
+        .prop-lightbox-img { max-width: 100%; max-height: 88vh; object-fit: contain; border-radius: 14px; box-shadow: 0 40px 90px rgba(0,0,0,0.65); cursor: default; animation: fadeIn 0.3s ease; }
+        .prop-lightbox-close { position: absolute; top: 20px; right: 24px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.1); color: #fff; font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.3s; z-index: 3; }
+        .prop-lightbox-close:hover { background: rgba(255,255,255,0.22); transform: rotate(90deg); }
+        .prop-lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 52px; height: 52px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.1); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.2s; z-index: 3; }
+        .prop-lightbox-nav:hover { background: rgba(255,255,255,0.22); transform: translateY(-50%) scale(1.08); }
+        .prop-lightbox-nav.prev { left: 22px; } .prop-lightbox-nav.next { right: 22px; }
+        .prop-lightbox-counter { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.45); color: #fff; font-size: 13px; font-weight: 600; padding: 5px 14px; border-radius: 999px; z-index: 3; }
+        .prop-carousel-progress { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.22); z-index: 4; }
+        .prop-carousel-progress-fill { height: 100%; background: var(--accent, #818cf8); transform-origin: left; animation: propLbProgress 5s linear; }
+        @media (prefers-reduced-motion: reduce) { .prop-lightbox, .prop-lightbox-stage, .prop-lightbox-img { animation: none; } }
       `}</style>
 
       {/* ── Header ── */}
-      <div style={{ position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(20px)", borderBottom: `1px solid ${isLightMode ? "rgba(15,23,42,0.1)" : "rgba(255,255,255,0.07)"}` }}>
+      <div className="showcase-detail-header" style={{ position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(20px)" }}>
         <ShowcaseHeader
           tenant={tenant}
           tenantSlug={tenantSlug}
@@ -173,8 +232,13 @@ export function ShowcasePropertyPage() {
                   key={carouselIndex}
                   src={images[carouselIndex]?.url}
                   alt={`${property.title} — foto ${carouselIndex + 1}`}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.3s ease" }}
+                  onClick={openLightbox}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.3s ease", cursor: "zoom-in" }}
                 />
+                {/* Timer de auto-avanço (barra de progresso) */}
+                {images.length > 1 && !lightboxOpen && (
+                  <div className="prop-carousel-progress"><div key={carouselIndex} className="prop-carousel-progress-fill" /></div>
+                )}
                 {/* Gradient overlay bottom */}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 45%)", pointerEvents: "none" }} />
 
@@ -308,7 +372,7 @@ export function ShowcasePropertyPage() {
                 </button>
                 {whatsappHref && (
                   <a href={whatsappHref} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "12px", borderRadius: "12px", background: "#25D366", color: "#fff", fontWeight: "700", fontSize: "14px", textDecoration: "none" }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 2C6.477 2 2 6.477 2 12c0 1.89.525 3.655 1.436 5.163L2 22l4.955-1.424A9.955 9.955 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>
                     Chamar no WhatsApp
                   </a>
                 )}
@@ -363,6 +427,25 @@ export function ShowcasePropertyPage() {
           </>
         ) : null}
       </div>
+
+      {/* ── Lightbox (galeria em tela cheia) ── */}
+      {lightboxOpen && (
+        <div className={`prop-lightbox${lightboxClosing ? " is-closing" : ""}`} onClick={closeLightbox} role="dialog" aria-modal="true">
+          <button type="button" className="prop-lightbox-close" onClick={closeLightbox} aria-label="Fechar">✕</button>
+          {images.length > 1 && (
+            <>
+              <button type="button" className="prop-lightbox-nav prev" onClick={(e) => { e.stopPropagation(); goTo(carouselIndex - 1); }} aria-label="Foto anterior">‹</button>
+              <button type="button" className="prop-lightbox-nav next" onClick={(e) => { e.stopPropagation(); goTo(carouselIndex + 1); }} aria-label="Próxima foto">›</button>
+            </>
+          )}
+          <div className="prop-lightbox-stage" onClick={(e) => e.stopPropagation()}>
+            <img key={carouselIndex} src={images[carouselIndex]?.url} alt={`Foto ${carouselIndex + 1}`} className="prop-lightbox-img" />
+          </div>
+          {images.length > 1 && (
+            <span className="prop-lightbox-counter">{carouselIndex + 1} / {images.length}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

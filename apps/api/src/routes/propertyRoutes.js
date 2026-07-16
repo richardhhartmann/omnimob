@@ -4,7 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
-import { gerarConteudoImovel, isAiEnabled } from "../services/aiService.js";
+import { gerarConteudoImovel, inferirComodidadesRegiao, isAiEnabled } from "../services/aiService.js";
 import { createPropertySchema, updatePropertySchema } from "../validators/propertyValidators.js";
 
 const { PropertyStatus, MetricEventType } = prismaPkg;
@@ -345,6 +345,28 @@ propertyRouter.post("/:id/ai/gerar", requireImoveis, async (req, res) => {
   } catch (err) {
     console.error("[POST /properties/:id/ai/gerar]", err);
     return res.status(500).json({ error: "Erro ao gerar conteúdo com IA.", detail: err.message });
+  }
+});
+
+// ─── IA: infere comodidades da região a partir do endereço/CEP ────────────────
+
+propertyRouter.post("/ai/comodidades", requireImoveis, async (req, res) => {
+  try {
+    if (!isAiEnabled()) {
+      return res.status(503).json({ error: "IA indisponível: GEMINI_API_KEY não configurada." });
+    }
+    const { endereco, comodidades } = req.body || {};
+    if (!endereco || typeof endereco !== "object") {
+      return res.status(400).json({ error: "Campo 'endereco' é obrigatório." });
+    }
+    if (!Array.isArray(comodidades) || comodidades.length === 0) {
+      return res.status(400).json({ error: "Campo 'comodidades' é obrigatório." });
+    }
+    const resultado = await inferirComodidadesRegiao(endereco, comodidades);
+    return res.json(resultado);
+  } catch (err) {
+    console.error("[POST /properties/ai/comodidades]", err);
+    return res.status(500).json({ error: "Erro ao inferir comodidades com IA.", detail: err.message });
   }
 });
 

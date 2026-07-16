@@ -5,6 +5,7 @@ import { api } from "../api";
 import { saveSession } from "../session";
 import {
   DEFAULT_LAYOUT,
+  DEFAULT_MOBILE_LAYOUT,
   blockHasBackgroundImage,
   mergeBlockWrapperStyle,
   normalizeShowcaseConfig,
@@ -28,12 +29,120 @@ const PRESET_THEMES = {
   CARVAO:      { primaryColor: "#334155", secondaryColor: "#f59e0b" },
 };
 
+// ─── Templates de página ─────────────────────────────────────────────────────
+// Cada template é um "makeover" completo: modo (dark/light), fonte, cores,
+// posições dos blocos, estilos e o ARRANJO dos widgets. O conteúdo escrito do
+// usuário (títulos, destaques, rodapé) é preservado — muda a estrutura e o visual.
+const mkW = (id, type, title, content, pos, extra = {}) => ({
+  id, type, title, content,
+  ctaLabel: extra.ctaLabel || "", ctaUrl: extra.ctaUrl || "",
+  backgroundColor: extra.backgroundColor || "", color: extra.color || "",
+  x: pos.x ?? 0, y: pos.y, w: pos.w ?? 100, h: pos.h ?? 230, hidden: false,
+});
+const wStats = (y, h = 240) => mkW("tpl-stats", "stats", "Nossos Números", "200+|Imóveis vendidos|15 anos|De experiência|4.9★|Avaliação média", { y, h });
+const wTesti = (pos) => mkW("tpl-testi", "testimonial", "— Maria Silva, Compradora", "\"Encontrei o imóvel dos meus sonhos em menos de uma semana. Atendimento excepcional e sem burocracia!\"", pos);
+const wHours = (pos) => mkW("tpl-hours", "hours", "Horário de Atendimento", "Segunda a Sexta: 09h às 18h<br>Sábados: 09h às 13h<br>Domingos e Feriados: Fechado", pos);
+const wCta = (y, h = 230) => mkW("tpl-cta", "cta", "Pronto para encontrar seu imóvel?", "Fale com nossa equipe e receba as melhores opções para o seu perfil.", { y, h }, { ctaLabel: "Falar no WhatsApp", ctaUrl: "https://wa.me/" });
+const EMPTY_HL = [{ backgroundColor: "", color: "" }, { backgroundColor: "", color: "" }, { backgroundColor: "", color: "" }];
+const tplBlock = (bg) => ({ backgroundColor: bg, color: "", backgroundImage: "", backgroundOverlay: 0, backgroundBrightness: 1 });
+const tplLayout = (titleH, footerY) => ({
+  ...DEFAULT_LAYOUT,
+  title: { ...DEFAULT_LAYOUT.title, h: titleH },
+  footer: { ...DEFAULT_LAYOUT.footer, y: footerY },
+});
+
 const BUILDER_TEMPLATES = [
-  { id: "classico", name: "Clássico", desc: "Moderno e elegante, modo escuro", icon: "🌙", appearanceMode: "dark", primaryColor: "#6366f1", secondaryColor: "#d4af37" },
-  { id: "luminoso", name: "Luminoso", desc: "Limpo e profissional, modo claro", icon: "☀️", appearanceMode: "light", primaryColor: "#2563eb", secondaryColor: "#0ea5e9" },
-  { id: "luxo", name: "Luxo", desc: "Premium com acento dourado", icon: "✦", appearanceMode: "dark", primaryColor: "#7c3aed", secondaryColor: "#d4af37" },
-  { id: "natureza", name: "Natureza", desc: "Tons naturais e terrosos", icon: "🌿", appearanceMode: "dark", primaryColor: "#16a34a", secondaryColor: "#ca8a04" },
+  {
+    id: "classico", name: "Clássico", desc: "Grade equilibrada, escuro sóbrio",
+    primaryColor: "#6366f1", secondaryColor: "#d4af37",
+    config: {
+      appearanceMode: "dark", globalFont: "Inter",
+      layout: tplLayout(260, 2360), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
+      blockStyles: {}, highlightStyles: EMPTY_HL,
+      widgets: [wStats(1470), wTesti({ x: 0, y: 1770, w: 49, h: 240 }), wHours({ x: 51, y: 1770, w: 49, h: 240 }), wCta(2070)],
+    },
+  },
+  {
+    id: "editorial", name: "Editorial", desc: "Título alto e clean, modo claro",
+    primaryColor: "#2563eb", secondaryColor: "#0ea5e9",
+    config: {
+      appearanceMode: "light", globalFont: "Playfair Display",
+      layout: tplLayout(300, 2100), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
+      blockStyles: {}, highlightStyles: EMPTY_HL,
+      widgets: [wCta(1470, 260), wTesti({ x: 0, y: 1790, w: 100, h: 240 })],
+    },
+  },
+  {
+    id: "luxo", name: "Luxo", desc: "Premium, dourado, serifada",
+    primaryColor: "#7c3aed", secondaryColor: "#d4af37",
+    config: {
+      appearanceMode: "dark", globalFont: "Playfair Display",
+      layout: tplLayout(280, 2070), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
+      blockStyles: { title: tplBlock("rgba(124,58,237,0.08)") },
+      highlightStyles: [{ backgroundColor: "rgba(212,175,55,0.08)", color: "" }, { backgroundColor: "rgba(212,175,55,0.08)", color: "" }, { backgroundColor: "rgba(212,175,55,0.08)", color: "" }],
+      widgets: [wTesti({ x: 0, y: 1470, w: 100, h: 240 }), wStats(1790)],
+    },
+  },
+  {
+    id: "minimal", name: "Minimalista", desc: "Muito respiro, claro e neutro",
+    primaryColor: "#334155", secondaryColor: "#64748b",
+    config: {
+      appearanceMode: "light", globalFont: "Montserrat",
+      layout: tplLayout(300, 1860), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
+      blockStyles: {}, highlightStyles: EMPTY_HL,
+      widgets: [wCta(1500, 240)],
+    },
+  },
+  {
+    id: "natureza", name: "Natureza", desc: "Tons verdes e terrosos, escuro",
+    primaryColor: "#16a34a", secondaryColor: "#ca8a04",
+    config: {
+      appearanceMode: "dark", globalFont: "Merriweather",
+      layout: tplLayout(260, 2360), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
+      blockStyles: { highlights: tplBlock("rgba(22,163,74,0.08)") }, highlightStyles: EMPTY_HL,
+      widgets: [wStats(1470), wHours({ x: 0, y: 1770, w: 49, h: 240 }), wTesti({ x: 51, y: 1770, w: 49, h: 240 }), wCta(2070)],
+    },
+  },
+  {
+    id: "vibrante", name: "Vibrante", desc: "Cards coloridos, teal ousado",
+    primaryColor: "#0d9488", secondaryColor: "#06b6d4",
+    config: {
+      appearanceMode: "dark", globalFont: "Raleway",
+      layout: tplLayout(280, 2410), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
+      blockStyles: {},
+      highlightStyles: [{ backgroundColor: "rgba(13,148,136,0.14)", color: "" }, { backgroundColor: "rgba(6,182,212,0.14)", color: "" }, { backgroundColor: "rgba(13,148,136,0.14)", color: "" }],
+      widgets: [wStats(1470, 260), wTesti({ x: 0, y: 1790, w: 100, h: 240 }), wCta(2110, 240)],
+    },
+  },
 ];
+
+// Preview esquemático de um template: mini-página refletindo modo/cores/estrutura.
+function TemplateThumb({ tpl }) {
+  const dark = tpl.config.appearanceMode !== "light";
+  const bg = dark ? "#0f172a" : "#eef2f7";
+  const surface = dark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.06)";
+  const line = dark ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.18)";
+  const nW = (tpl.config.widgets || []).length;
+  const bar = (w, h, c, o = 1) => <div style={{ width: w, height: h, borderRadius: 2, background: c, opacity: o }} />;
+  return (
+    <div style={{ borderRadius: 8, overflow: "hidden", background: bg, border: `1px solid ${line}`, padding: 7, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 3, alignItems: "center" }}>{bar(7, 7, tpl.secondaryColor)}{bar(20, 3, line)}</div>
+        {bar(15, 5, tpl.primaryColor)}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "center", margin: "3px 0" }}>{bar("62%", 4, line)}{bar("44%", 3, line, 0.6)}</div>
+      <div style={{ display: "flex", gap: 3 }}>{[0, 1, 2].map((i) => <div key={i} style={{ flex: 1, height: 7, borderRadius: 3, background: surface }} />)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3 }}>{[0, 1, 2].map((i) => <div key={i} style={{ height: 13, borderRadius: 3, background: `linear-gradient(135deg, ${tpl.primaryColor}66, ${surface})` }} />)}</div>
+      <div style={{ display: "flex", gap: 3 }}>
+        {nW >= 3
+          ? [0, 1, 2].map((i) => <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: surface }} />)
+          : nW === 2
+            ? [0, 1].map((i) => <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: surface }} />)
+            : <div style={{ flex: 1, height: 6, borderRadius: 3, background: tpl.primaryColor, opacity: 0.55 }} />}
+      </div>
+    </div>
+  );
+}
 
 const FONT_OPTIONS = [
   { label: "Padrão (Inter)",                value: "Inter" },
@@ -904,11 +1013,19 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     }));
   }
 
-  // Feature 4: Templates
+  // Feature 4: Templates — aplica o makeover completo (modo, fonte, cores, layout,
+  // estilos e widgets). Preserva o conteúdo escrito (títulos/destaques/rodapé).
   function applyTemplate(template) {
     pushHistory();
-    setForm((prev) => ({ ...prev, primaryColor: template.primaryColor, secondaryColor: template.secondaryColor }));
-    updateShowcaseConfig((prev) => ({ ...prev, appearanceMode: template.appearanceMode }));
+    setForm((prev) => {
+      const cfg = normalizeShowcaseConfig(prev.showcaseConfig);
+      return {
+        ...prev,
+        primaryColor: template.primaryColor,
+        secondaryColor: template.secondaryColor,
+        showcaseConfig: normalizeShowcaseConfig({ ...cfg, ...template.config }),
+      };
+    });
     setShowTemplates(false);
   }
 
@@ -2001,14 +2118,14 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       {/* Modal de Templates */}
       {showTemplates ? createPortal(
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowTemplates(false)}>
-          <div style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "28px", width: "460px", maxWidth: "90vw", boxShadow: "0 24px 48px rgba(0,0,0,0.6)" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "28px", width: "540px", maxWidth: "94vw", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 48px rgba(0,0,0,0.6)" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
               <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#fff", margin: 0 }}>Escolher Template</h3>
               <button type="button" onClick={() => setShowTemplates(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px" }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
             </div>
-            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "20px", marginTop: 0 }}>Aplica cores e modo de aparência ao editor. Seu conteúdo não será alterado.</p>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "20px", marginTop: 0 }}>Aplica um layout completo — estrutura dos blocos, estilos, fonte e cores. Seu texto (títulos, destaques e rodapé) é preservado.</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
               {BUILDER_TEMPLATES.map((tpl) => (
                 <button key={tpl.id} type="button" onClick={() => applyTemplate(tpl)}
@@ -2016,13 +2133,9 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(99,102,241,0.5)"; e.currentTarget.style.background = "rgba(99,102,241,0.08)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
                 >
-                  <div style={{ fontSize: "24px", marginBottom: "10px" }}>{tpl.icon}</div>
-                  <div style={{ fontSize: "13px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>{tpl.name}</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>{tpl.desc}</div>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <span style={{ width: "20px", height: "20px", borderRadius: "50%", background: tpl.primaryColor, display: "inline-block", border: "1px solid rgba(255,255,255,0.1)" }} />
-                    <span style={{ width: "20px", height: "20px", borderRadius: "50%", background: tpl.secondaryColor, display: "inline-block", border: "1px solid rgba(255,255,255,0.1)" }} />
-                  </div>
+                  <div style={{ marginBottom: "10px" }}><TemplateThumb tpl={tpl} /></div>
+                  <div style={{ fontSize: "13px", fontWeight: "700", color: "#fff", marginBottom: "3px" }}>{tpl.name}</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{tpl.desc}</div>
                 </button>
               ))}
             </div>

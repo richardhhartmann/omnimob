@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
-import { COMODIDADES, EMPTY_COMODIDADES, OSM_TO_KEY } from "../utils/comodidades.js";
+import { COMODIDADES, EMPTY_COMODIDADES } from "../utils/comodidades.js";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -12,7 +12,6 @@ function formatCep(value) {
 }
 
 function formatCurrencyBRL(rawValue) {
-  // Limita a 12 dígitos → máximo R$ 9.999.999.999,99 (campo Decimal(12,2) no banco).
   const digits = rawValue.replace(/\D/g, "").slice(0, 12);
   if (!digits) return "";
   const amount = Number(digits) / 100;
@@ -25,8 +24,6 @@ function parseCurrencyBRL(rawValue) {
   return Number(digits) / 100;
 }
 
-// Reduz uma foto (File) para no máx. `maxDim`px e devolve como data URL JPEG.
-// Mantém o upload leve ao enviar as fotos para a IA (menos custo/latência).
 function fileParaBase64Reduzido(file, maxDim = 1024, quality = 0.75) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -53,63 +50,6 @@ function fileParaBase64Reduzido(file, maxDim = 1024, quality = 0.75) {
     };
     img.src = url;
   });
-}
-
-// ─── Enriquecimento de endereço por CEP (ViaCEP → Nominatim → Overpass) ────────
-
-// Converte um endereço em latitude/longitude usando o Nominatim (OpenStreetMap).
-// Tenta primeiro com logradouro; se falhar, tenta só pelo bairro.
-async function geocodeEndereco({ logradouro, bairro, cidade, uf }) {
-  const tentativas = [
-    [logradouro, bairro, cidade, uf, "Brasil"].filter(Boolean).join(", "),
-    [bairro, cidade, uf, "Brasil"].filter(Boolean).join(", "),
-  ].filter((q) => q && q.length > "Brasil".length);
-
-  for (const q of tentativas) {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&limit=1`;
-    const res = await fetch(url, { headers: { "Accept-Language": "pt-BR" } });
-    if (!res.ok) continue;
-    const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) {
-      const lat = parseFloat(data[0].lat);
-      const lon = parseFloat(data[0].lon);
-      if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
-    }
-  }
-  return null;
-}
-
-// Consulta o Overpass API por pontos de interesse num raio de 2 km.
-async function buscarPois(lat, lon) {
-  const query = `[out:json];
-(
-  node(around:2000,${lat},${lon})["amenity"];
-  node(around:2000,${lat},${lon})["shop"];
-  node(around:2000,${lat},${lon})["tourism"];
-  node(around:2000,${lat},${lon})["leisure"];
-);
-out body;`;
-
-  const res = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    body: query,
-  });
-  if (!res.ok) throw new Error("Falha ao consultar pontos de interesse.");
-  const data = await res.json();
-  return Array.isArray(data.elements) ? data.elements : [];
-}
-
-// Analisa os POIs e retorna quais comodidades existem na região (sempre true).
-function detectarComodidades(elements) {
-  const detectadas = {};
-  for (const el of elements) {
-    const tags = el.tags || {};
-    for (const valor of [tags.amenity, tags.shop, tags.tourism, tags.leisure]) {
-      const key = OSM_TO_KEY[valor];
-      if (key) detectadas[key] = true;
-    }
-  }
-  return detectadas;
 }
 
 const EMPTY = {
@@ -142,11 +82,9 @@ const STEPS = [
   { key: "basico", label: "Identificação" },
   { key: "localizacao", label: "Localização" },
   { key: "detalhes", label: "Detalhes" },
-  { key: "fotos", label: "Fotos" },
   { key: "divulgar", label: "Divulgar" },
 ];
 
-// Campos de área, com rótulo amigável. Estrutura única usada para todos os tipos.
 const AREA_FIELDS = {
   areaTerreno: "Área do terreno",
   areaConstruida: "Área construída",
@@ -155,9 +93,6 @@ const AREA_FIELDS = {
 };
 const TODAS_AREAS = ["areaTerreno", "areaConstruida", "areaPrivativa", "areaTotal"];
 
-// Quais áreas exibir por tipo de imóvel (na ordem; a primeira é a principal).
-// Chave = nome do tipo normalizado (minúsculo, sem acento). Tipos fora da lista
-// mostram todas as áreas.
 const TIPO_AREAS = {
   "casa": ["areaTerreno", "areaConstruida"],
   "apartamento": ["areaPrivativa", "areaTotal"],
@@ -181,24 +116,19 @@ const TIPO_AREAS = {
 };
 
 function normalizarTipo(str) {
-  // Minúsculo e sem acentos (remove a faixa de marcas diacríticas combinantes).
   return String(str || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 }
 
-// Metragem para exibir em cards/preview/legenda: 1ª área preenchida, ou squareFootage.
 function metragemExibicao(form) {
   const v = TODAS_AREAS.map((f) => form[f]).find((x) => x !== "" && x != null);
   return (v != null ? v : form.squareFootage) || "";
 }
 
-// Lista de campos de área a exibir para um tipo (por descrição). A primeira é a principal.
 function areasParaTipo(descricao) {
   if (!descricao) return TODAS_AREAS;
   return TIPO_AREAS[normalizarTipo(descricao)] || TODAS_AREAS;
 }
 
-// Em qual etapa cada campo obrigatório aparece, e o rótulo amigável de cada um.
-// Usados para validar o cadastro só ao finalizar e indicar onde falta preencher.
 const FIELD_STEP = {
   title: 0, description: 0, tipoImovelId: 0, price: 0,
   address: 1, neighborhood: 1, city: 1, state: 1,
@@ -213,13 +143,9 @@ const FIELD_LABELS = {
   ...AREA_FIELDS,
 };
 
-// Valida o formulário inteiro de uma vez e retorna um mapa { campo: mensagem }.
-// Vazio = tudo certo. Só é chamada ao finalizar o cadastro (não bloqueia a navegação).
-// areaFields = áreas exibidas para o tipo escolhido (a 1ª é obrigatória).
 function getValidationErrors(form, areaFields = TODAS_AREAS) {
   const fe = {};
 
-  // Etapa 0 — Identificação
   if (!form.title || form.title.trim().length < 3) fe.title = "Informe um título com ao menos 3 caracteres.";
   if (!form.description || form.description.trim().length < 10) fe.description = "A descrição deve ter ao menos 10 caracteres.";
   if (!form.tipoImovelId) fe.tipoImovelId = "Selecione o tipo de imóvel.";
@@ -227,19 +153,16 @@ function getValidationErrors(form, areaFields = TODAS_AREAS) {
   if (!Number.isFinite(p) || p <= 0) fe.price = "Informe um preço válido maior que zero.";
   else if (p > 9999999999.99) fe.price = "Preço acima do máximo permitido (R$ 9.999.999.999,99).";
 
-  // Etapa 1 — Localização
   if (!form.address || form.address.trim().length < 5) fe.address = "Informe o endereço completo.";
   if (!form.neighborhood || form.neighborhood.trim().length < 2) fe.neighborhood = "Informe o bairro.";
   if (!form.city || form.city.trim().length < 2) fe.city = "Informe a cidade.";
   if (!form.state || form.state.trim().length < 2) fe.state = "Informe o estado (UF).";
 
-  // Etapa 2 — Detalhes
   for (const [field, label] of [["bedrooms", "Quartos"], ["parkingSpots", "Vagas"], ["suites", "Suítes"]]) {
-    if (form[field] === "" || form[field] == null) continue; // opcionais: vazio = 0
+    if (form[field] === "" || form[field] == null) continue;
     const n = Number(form[field]);
     if (!Number.isInteger(n) || n < 0) fe[field] = `${label} deve ser um número inteiro ≥ 0.`;
   }
-  // Valida qualquer área preenchida; exige a área principal do tipo escolhido.
   for (const field of TODAS_AREAS) {
     if (form[field] === "" || form[field] == null) continue;
     const n = parseFloat(form[field]);
@@ -253,8 +176,6 @@ function getValidationErrors(form, areaFields = TODAS_AREAS) {
 
   return fe;
 }
-
-// ─── Ícones ───────────────────────────────────────────────────────────────────
 
 function IconHome() {
   return (
@@ -309,8 +230,6 @@ function IconCheck() {
   );
 }
 
-// ─── Indicador de etapas (clicável) ──────────────────────────────────────────
-
 function StepIndicator({ current, onStepClick, lockedSteps = [] }) {
   return (
     <div style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
@@ -359,8 +278,6 @@ function StepIndicator({ current, onStepClick, lockedSteps = [] }) {
     </div>
   );
 }
-
-// ─── Checkboxes de atributos ──────────────────────────────────────────────────
 
 function AtributosSection({ atributos, selecionados, onChange, disabled }) {
   if (!atributos || atributos.length === 0) return null;
@@ -415,15 +332,11 @@ function AtributosSection({ atributos, selecionados, onChange, disabled }) {
   );
 }
 
-// ─── Card de pré-visualização com carrossel ───────────────────────────────────
-
 function PropertyPreviewCard({ form, previewUrls }) {
   const [idx, setIdx] = useState(0);
 
-  // Reset index when urls change
   useEffect(() => { setIdx(0); }, [previewUrls.length]);
 
-  // Auto-avança a cada 3,5s
   useEffect(() => {
     if (previewUrls.length <= 1) return;
     const timer = setInterval(() => setIdx((i) => (i + 1) % previewUrls.length), 3500);
@@ -454,7 +367,6 @@ function PropertyPreviewCard({ form, previewUrls }) {
       </div>
 
       <article style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "20px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {/* Imagem com carrossel */}
         <div style={{ position: "relative", width: "100%", height: "200px", overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
           {currentUrl ? (
             <img
@@ -473,7 +385,6 @@ function PropertyPreviewCard({ form, previewUrls }) {
             </div>
           )}
 
-          {/* Chevrons */}
           {previewUrls.length > 1 && (
             <>
               <button type="button" onClick={prev} style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", width: "28px", height: "28px", borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>‹</button>
@@ -484,7 +395,6 @@ function PropertyPreviewCard({ form, previewUrls }) {
             </>
           )}
 
-          {/* Dots de andamento e permuta */}
           {form.andamento && (
             <span style={{ position: "absolute", top: "10px", left: "10px", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", padding: "3px 8px", borderRadius: "999px" }}>
               {{ PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" }[form.andamento]}
@@ -497,7 +407,6 @@ function PropertyPreviewCard({ form, previewUrls }) {
           )}
         </div>
 
-        {/* Info */}
         <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
           <h3 style={{ fontSize: "16px", fontWeight: "600", color: form.title ? "#fff" : "rgba(255,255,255,0.2)", lineHeight: "1.3", margin: 0 }}>
             {form.title || "Título do imóvel"}
@@ -549,8 +458,6 @@ function PropertyPreviewCard({ form, previewUrls }) {
   );
 }
 
-// ─── Campo com label ──────────────────────────────────────────────────────────
-
 function Field({ label, children, hint, required, error }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -565,8 +472,6 @@ function Field({ label, children, hint, required, error }) {
     </div>
   );
 }
-
-// ─── Card de uma sugestão da IA (com botão Aplicar) ──────────────────────────
 
 function SugestaoCard({ rotulo, texto, onAplicar }) {
   const [aplicado, setAplicado] = useState(false);
@@ -596,9 +501,6 @@ function SugestaoCard({ rotulo, texto, onAplicar }) {
   );
 }
 
-// ─── Previews realistas de post por rede social (etapa Divulgar) ─────────────
-
-// Avatar redondo (logo do tenant ou inicial). `ring` desenha o anel degradê do IG.
 function PostAvatar({ url, nome, size = 40, ring }) {
   const inner = url
     ? <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -612,9 +514,6 @@ function PostAvatar({ url, nome, size = 40, ring }) {
   );
 }
 
-// Texto do post editável direto no preview. Altura FIXA e compacta (colapsado)
-// para os cards ficarem pequenos e uniformes; "Ler mais" expande até um TETO
-// (com rolagem interna), sem estourar o tamanho do card.
 function PreviewCaption({ value, onChange, color, collapsedHeight = 60, linkColor = "#65676b", maxExpanded = 150 }) {
   const ref = useRef(null);
   const [expanded, setExpanded] = useState(false);
@@ -659,8 +558,6 @@ function PreviewCaption({ value, onChange, color, collapsedHeight = 60, linkColo
   );
 }
 
-// Varinha mágica: só <line> com stroke branco (à prova de falha de render).
-// Haste diagonal + brilho grande na ponta + brilho pequeno.
 function WandIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ display: "block", flexShrink: 0 }}>
@@ -673,8 +570,6 @@ function WandIcon() {
   );
 }
 
-// Descrição editável + a varinha de IA DENTRO do próprio contorno (canto inferior
-// direito). Passar o mouse acende o contorno degradê rosa/roxo e revela a varinha.
 function DescriptionBox({ value, onChange, color, collapsedHeight, linkColor, active, onEnter, onLeave, onGerarIA, iaLoading }) {
   return (
     <div className={`divulgar-desc${active ? " is-ai" : ""}`} onMouseEnter={onEnter} onMouseLeave={onLeave}>
@@ -693,7 +588,6 @@ function DescriptionBox({ value, onChange, color, collapsedHeight, linkColor, ac
   );
 }
 
-// Carrossel de fotos do imóvel (Facebook/Instagram): setas, bolinhas e contador.
 function MediaCarousel({ urls, aspectRatio, maxHeight }) {
   const [idx, setIdx] = useState(0);
   useEffect(() => { setIdx(0); }, [urls]);
@@ -728,8 +622,6 @@ function MediaCarousel({ urls, aspectRatio, maxHeight }) {
   );
 }
 
-// Galeria de fotos do WhatsApp: 2 = lado a lado, 3 = 1 grande + 2, 4 = 2x2,
-// 5+ = 2x2 com a 4ª foto escurecida e "+N" (fotos restantes) por cima.
 function WhatsAppMedia({ urls }) {
   const n = urls?.length || 0;
   if (n === 0) return null;
@@ -751,7 +643,6 @@ function WhatsAppMedia({ urls }) {
       </div>
     );
   }
-  // n >= 4 → grid 2x2 (a partir de 5, o 4º espaço vira "+N" sobre a foto escurecida)
   const restantes = n - 3;
   return (
     <div style={{ ...gridBase, gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", aspectRatio: "1" }}>
@@ -768,9 +659,6 @@ function WhatsAppMedia({ urls }) {
   );
 }
 
-// Card de um preview: participa do efeito de foco no hover (.divulgar-card),
-// com borda em degradê animado da rede, a logo flutuando no canto, e overlays de
-// "publicado" (verde) ou "bloqueado" (cadeado, quando a rede não está conectada).
 function PreviewCard({ brandLabel, brandColor, brandRadius = "12px", brandIcon, ringGradient, ringGlow, statusText, published, onRemove, removeLoading, locked, lockLabel, children }) {
   return (
     <div className={`divulgar-card${published ? " is-published" : ""}`} style={{ "--ring-gradient": ringGradient, "--ring-glow": ringGlow }}>
@@ -806,14 +694,10 @@ function PreviewCard({ brandLabel, brandColor, brandRadius = "12px", brandIcon, 
   );
 }
 
-// Envolve seções que só aparecem no card em foco — colapsam/expandem em altura
-// (o CSS .divulgar-expand cuida da animação; o card colapsado mostra só a
-// identidade da rede + a foto).
 function Expand({ children }) {
   return <div className="divulgar-expand"><div>{children}</div></div>;
 }
 
-// Rodapé claro do post: o botão de publicar/compartilhar ocupa a largura toda.
 function PostFooter({ children }) {
   return (
     <div style={{ padding: "10px 12px", background: "#f0f2f5", borderTop: "1px solid #dfe1e5" }}>
@@ -826,7 +710,6 @@ const FB_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><pat
 const IG_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>;
 const WA_ICON = <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>;
 
-// Ícones (traçado) usados dentro dos moldes, no lugar de emojis.
 function Ic({ d, size = 16, fill = "none" }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}>{d}</svg>;
 }
@@ -840,7 +723,6 @@ const ICON = {
   globo: <><circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" /><path d="M12 3a14 14 0 0 1 3.5 9 14 14 0 0 1-3.5 9 14 14 0 0 1-3.5-9A14 14 0 0 1 12 3z" /></>,
 };
 
-// ── Facebook ──
 function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, onRemove, removeLoading, locked, lockLabel, acao }) {
   return (
     <PreviewCard brandLabel="Facebook" brandColor="#1877f2" brandRadius="11px" brandIcon={FB_ICON}
@@ -878,7 +760,6 @@ function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, status
   );
 }
 
-// ── Instagram ──
 function InstagramPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, onRemove, removeLoading, locked, lockLabel, acao }) {
   const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
   return (
@@ -912,7 +793,6 @@ function InstagramPreview({ nome, avatarUrl, coverUrls, caption, onChange, statu
   );
 }
 
-// ── WhatsApp ──
 function WhatsAppPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, acao }) {
   return (
     <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandRadius="50%" brandIcon={WA_ICON}
@@ -940,8 +820,6 @@ function WhatsAppPreview({ nome, avatarUrl, coverUrls, caption, onChange, status
     </PreviewCard>
   );
 }
-
-// ─── Grade de fotos com drag-to-reorder ──────────────────────────────────────
 
 function PhotoGrid({ images, onRemove, onReorder }) {
   const dragFrom = useRef(null);
@@ -977,7 +855,6 @@ function PhotoGrid({ images, onRemove, onReorder }) {
         >
           <img src={img.previewUrl} alt={`foto ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
 
-          {/* Overlay de hover com botão delete */}
           <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0)", transition: "background 0.2s" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.35)"; e.currentTarget.querySelector("button").style.opacity = "1"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0)"; e.currentTarget.querySelector("button").style.opacity = "0"; }}
@@ -995,14 +872,12 @@ function PhotoGrid({ images, onRemove, onReorder }) {
             >×</button>
           </div>
 
-          {/* Badge CAPA */}
           {i === 0 && (
             <span style={{ position: "absolute", bottom: "6px", left: "6px", fontSize: "9px", fontWeight: "700", background: "rgba(0,0,0,0.65)", color: "#fff", padding: "2px 6px", borderRadius: "999px", pointerEvents: "none" }}>
               CAPA
             </span>
           )}
 
-          {/* Número */}
           <span style={{ position: "absolute", top: "6px", left: "6px", fontSize: "9px", fontWeight: "700", background: "rgba(0,0,0,0.5)", color: "rgba(255,255,255,0.8)", padding: "1px 5px", borderRadius: "999px", pointerEvents: "none" }}>
             {i + 1}
           </span>
@@ -1011,8 +886,6 @@ function PhotoGrid({ images, onRemove, onReorder }) {
     </div>
   );
 }
-
-// ─── Menu de gerenciamento ────────────────────────────────────────────────────
 
 export function PropertyManagement({ onSubmitProperty, disabled, initialData }) {
   const [view, setView] = useState(initialData?.id ? "PROPERTY" : "MENU");
@@ -1099,47 +972,79 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
   );
 }
 
-// ─── Formulário principal em etapas ──────────────────────────────────────────
+// Contorno "flare" (gradiente animado) exibido ao redor de um campo preenchido
+// pela IA. Some suavemente (opacity) quando o usuário edita o campo manualmente.
+function AiFlare({ active, radius = "11px", children }) {
+  return (
+    <div style={{ position: "relative", zIndex: 1 }}>
+      <div style={{
+        position: "absolute", inset: "-1px", borderRadius: radius, zIndex: -1, pointerEvents: "none",
+        background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
+        backgroundSize: "200% 200%", animation: "gradient-flare 3s ease infinite",
+        opacity: active ? 1 : 0, transition: "opacity 0.4s ease",
+        padding: "2px", WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+        WebkitMaskComposite: "xor", maskComposite: "exclude",
+      }} />
+      {children}
+    </div>
+  );
+}
+
+// Overlay de "skeleton" com shimmer nas cores do IA-flare. Cobre um campo
+// enquanto a IA gera o conteúdo (auto-preenchimento a partir das fotos),
+// deixando a espera mais imersiva. O pai precisa ter position: relative.
+function IaSkeleton({ active, radius = "10px" }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute", inset: 0, borderRadius: radius, zIndex: 4,
+        pointerEvents: active ? "auto" : "none",
+        opacity: active ? 1 : 0, transition: "opacity 0.3s ease",
+        border: "1px solid rgba(255,255,255,0.05)",
+        backgroundColor: "#20293c",
+        backgroundImage: "linear-gradient(90deg, #20293c 25%, #2c3851 50%, #20293c 75%)",
+        backgroundSize: "200% 100%",
+        animation: active ? "ia-skeleton 1.5s linear infinite" : "none",
+      }}
+    />
+  );
+}
 
 export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) {
   const { confirm, modal: confirmModal } = useConfirm();
   const [form, setForm] = useState(EMPTY);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
-  // Erros por campo (mapa { campo: mensagem }), preenchido só ao finalizar o cadastro.
   const [fieldErrors, setFieldErrors] = useState({});
   const [cepLoading, setCepLoading] = useState(false);
   const [comodidadesLoading, setComodidadesLoading] = useState(false);
   const [comodidadesMsg, setComodidadesMsg] = useState("");
-  // images: Array<{ id: string, file: File, previewUrl: string }>
   const [images, setImages] = useState([]);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
+  const lastCepRef = useRef("");
+  const autoIaLockRef = useRef(false);
   const [tipos, setTipos] = useState([]);
   const isEditing = Boolean(initialData?.id);
 
-  // ── Fotos já salvas (modo edição) ──
   const [existingImages, setExistingImages] = useState([]);
 
-  // ── Sugestão de IA (título/descrição a partir das fotos + dados) ──
-  const [iaLoading, setIaLoading] = useState(false);
-  const [iaErro, setIaErro] = useState("");
-  const [iaSugestao, setIaSugestao] = useState(null); // { titulo, descricao, descricaoResumida, usouFotos }
-
-  // ── Estado do step "Divulgar" ──
   const [savedPropertyId, setSavedPropertyId] = useState(null);
-  // Uma legenda independente por rede social (editável separadamente).
   const [captions, setCaptions] = useState({ facebook: "", instagram: "", whatsapp: "" });
-  const [descHover, setDescHover] = useState(null); // rede cuja descrição está sob o mouse → efeito IA
-  const [redeIaLoading, setRedeIaLoading] = useState({}); // { facebook, instagram, whatsapp }
+  const [descHover, setDescHover] = useState(null);
+  const [redeIaLoading, setRedeIaLoading] = useState({});
   const [redeIaErro, setRedeIaErro] = useState({});
-  const [coverUrls, setCoverUrls] = useState([]); // fotos (Cloudinary) p/ carrossel/grid dos previews
+  const [coverUrls, setCoverUrls] = useState([]);
   const [socialStatus, setSocialStatus] = useState(null);
   const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
   const [publishResults, setPublishResults] = useState({});
   const [removeLoading, setRemoveLoading] = useState({ facebook: false, instagram: false });
   const [removeNote, setRemoveNote] = useState({});
-  const [melhorarLoading, setMelhorarLoading] = useState(false);
-  const [melhorarErro, setMelhorarErro] = useState("");
-  const [, setSearchParams] = useSearchParams();
+  const [gerandoCampo, setGerandoCampo] = useState(null);
+  const [campoIaErro, setCampoIaErro] = useState("");
+  const [focusedField, setFocusedField] = useState(null);
+  const [aiFields, setAiFields] = useState({ title: false, description: false, tipoImovelId: false, atributos: false, finalidade: false, comodidades: false });
 
   const session = loadSession();
   const tenantSlug = session?.tenant?.slug;
@@ -1150,16 +1055,13 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     api.getTiposImovel(tenantSlug).then(setTipos).catch(() => {});
   }, [tenantSlug]);
 
-  // Limpa URLs ao desmontar
   useEffect(() => {
     return () => { images.forEach((img) => URL.revokeObjectURL(img.previewUrl)); };
   }, []);
 
-  // Carrega status social e gera legenda ao entrar no step Divulgar
   useEffect(() => {
-    if (step !== 4 || !tenantSlug || !savedPropertyId) return;
+    if (step !== 3 || !tenantSlug || !savedPropertyId) return;
     api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
-    // Carrega a capa real (1ª imagem no Cloudinary) para os previews dos posts.
     api.listPropertyImages(tenantSlug, savedPropertyId)
       .then((imgs) => setCoverUrls((imgs || []).map((i) => i.url).filter(Boolean)))
       .catch(() => setCoverUrls([]));
@@ -1195,9 +1097,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       `🔗 Ver detalhes: ${vitrineUrl}`,
       whatsapp ? `📲 Contato: ${whatsapp}` : "",
     ].filter((l, i, arr) => !(l === "" && arr[i - 1] === ""));
-    // Legenda-base a partir da descrição atual do imóvel (que já reflete o texto
-    // da IA quando aplicado, ou o texto manual do usuário). Semeia as três redes;
-    // cada uma pode ser editada ou regenerada por IA de forma independente.
     const base = lines.join("\n").trim();
     setCaptions({ facebook: base, instagram: base, whatsapp: base });
     setRedeIaErro({});
@@ -1249,14 +1148,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }, [initialData]);
 
   const tipoSelecionado = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
-  // Usa areaFields do banco quando disponível; fallback para o mapa estático.
+  // A IA gera a partir das fotos, então os botões só aparecem com ao menos uma foto.
+  const temFotos = images.length > 0 || existingImages.length > 0;
   const areaFields = (() => {
     const fromDB = tipoSelecionado?.areaFields;
     if (Array.isArray(fromDB) && fromDB.length > 0) return fromDB;
     return areasParaTipo(tipoSelecionado?.descricao);
   })();
 
-  // URLs para o preview: novas selecionadas, ou imagens já salvas no servidor (na ordem atual)
   const existingUrls = existingImages.map((img) => img.url);
   const previewUrls = images.length > 0 ? images.map((img) => img.previewUrl) : existingUrls;
 
@@ -1265,7 +1164,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     clearFieldError(field);
   }
 
-  // Remove o destaque de erro de um campo assim que o usuário começa a corrigi-lo.
   function clearFieldError(field) {
     setFieldErrors((prev) => {
       if (!prev[field]) return prev;
@@ -1284,8 +1182,62 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     setImages((prev) => [...prev, ...newItems]);
   }
 
-  // Monta o objeto do imóvel enviado à IA a partir do formulário, incluindo a
-  // finalidade, os detalhes e os ATRIBUTOS marcados (resolvidos para descrição).
+  // ── Arrastar fotos para dentro da página ───────────────────────────────────
+  // Aceita arquivos soltos em qualquer lugar do formulário; ignora no passo
+  // Divulgar (imóvel já salvo) e as reordenações internas de foto (que não
+  // carregam arquivos, e sim "text/plain").
+  const dropDisabled = disabled || step === 3;
+
+  function dragHasFiles(e) {
+    const types = e.dataTransfer?.types;
+    return Boolean(types) && Array.from(types).includes("Files");
+  }
+
+  function handleFormDragEnter(e) {
+    if (dropDisabled || !dragHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragActive(true);
+  }
+  function handleFormDragOver(e) {
+    if (dropDisabled || !dragHasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+  function handleFormDragLeave(e) {
+    if (dropDisabled || !dragHasFiles(e)) return;
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0;
+      setDragActive(false);
+    }
+  }
+  function handleFormDrop(e) {
+    if (dropDisabled || !dragHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    addImages(files);
+    if (step !== 0) setStep(0); // fotos ficam no passo Identificação
+  }
+
+  // Enquanto o formulário está montado, impede o navegador de "abrir" a imagem
+  // caso ela seja solta fora da zona de drop (isso destruiria o formulário).
+  useEffect(() => {
+    const prevent = (e) => {
+      const types = e.dataTransfer?.types;
+      if (types && Array.from(types).includes("Files")) e.preventDefault();
+    };
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, []);
+
   function dadosImovelParaIA() {
     const tipoSel = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
     const atributos = (tipoSel?.atributos || [])
@@ -1314,33 +1266,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     };
   }
 
-  // Gera sugestão de título + descrição com a IA, a partir das fotos e dos dados.
-  async function handleSugerirIA() {
-    setIaErro("");
-    setIaLoading(true);
-    setIaSugestao(null);
-    try {
-      const imovel = dadosImovelParaIA();
-
-      // Fotos: novas selecionadas (reduzidas no browser) ou, na edição, as já salvas (por URL).
-      let imagens = [];
-      if (images.length > 0) {
-        imagens = await Promise.all(images.slice(0, 4).map((im) => fileParaBase64Reduzido(im.file)));
-      } else if (existingImages.length > 0) {
-        imagens = existingImages.slice(0, 4).map((im) => ({ url: im.url }));
-      }
-
-      const sugestao = await api.sugerirImovelIA(tenantSlug, { imovel, imagens });
-      setIaSugestao(sugestao);
-    } catch (err) {
-      setIaErro(err.message || "Não foi possível gerar a sugestão.");
-    } finally {
-      setIaLoading(false);
-    }
-  }
-
-  // Gera uma legenda específica de UMA rede social (facebook | instagram | whatsapp)
-  // via IA, usando o imóvel já salvo. Substitui apenas a legenda daquela rede.
   async function handleGerarRedeIA(rede) {
     const propId = savedPropertyId || initialData?.id;
     if (!propId) return;
@@ -1360,33 +1285,94 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
-  // Melhora/reescreve a descrição atual do imóvel com IA (etapa Identificação).
-  async function handleMelhorarDescricao() {
-    if (!form.description || form.description.trim().length < 10) {
-      setMelhorarErro("Escreva uma descrição (ao menos 10 caracteres) para a IA melhorar.");
-      return;
-    }
-    setMelhorarErro("");
-    setMelhorarLoading(true);
-    try {
-      const { resultado } = await api.melhorarDescricaoIA(tenantSlug, {
-        texto: form.description,
-        imovel: dadosImovelParaIA(),
-      });
-      if (resultado) set("description", resultado);
-    } catch (err) {
-      setMelhorarErro(err.message || "Não foi possível melhorar a descrição.");
-    } finally {
-      setMelhorarLoading(false);
-    }
-  }
-
   function removeImage(i) {
     setImages((prev) => {
       URL.revokeObjectURL(prev[i].previewUrl);
       return prev.filter((_, idx) => idx !== i);
     });
   }
+
+  function handleChangeField(field, value) {
+    set(field, value);
+    if (aiFields[field]) {
+      setAiFields((prev) => ({ ...prev, [field]: false }));
+    }
+  }
+
+  async function handleGerarCampoIA(campo) {
+    setCampoIaErro("");
+    setGerandoCampo(campo);
+    try {
+      const imovel = dadosImovelParaIA();
+      let imagens = [];
+      if (images.length > 0) {
+        imagens = await Promise.all(images.slice(0, 4).map((im) => fileParaBase64Reduzido(im.file)));
+      } else if (existingImages.length > 0) {
+        imagens = existingImages.slice(0, 4).map((im) => ({ url: im.url }));
+      }
+      const tiposDisponiveis = tipos.map((t) => ({ tipo: t.descricao, atributos: (t.atributos || []).map((a) => a.descricao) }));
+
+      const sugestao = await api.sugerirImovelIA(tenantSlug, { imovel, imagens, tiposDisponiveis });
+
+      // campo "auto" (disparado ao lançar as fotos) preenche título E descrição.
+      if ((campo === "title" || campo === "auto") && sugestao.titulo) {
+        set("title", sugestao.titulo);
+        setAiFields((prev) => ({ ...prev, title: true }));
+      }
+      if ((campo === "description" || campo === "auto") && sugestao.descricao) {
+        set("description", sugestao.descricao);
+        setAiFields((prev) => ({ ...prev, description: true }));
+      }
+
+      if (sugestao.finalidade) {
+        const fin = sugestao.finalidade.toUpperCase();
+        if (fin === "RESIDENCIAL" || fin === "COMERCIAL") {
+          set("finalidade", fin);
+          setAiFields((prev) => ({ ...prev, finalidade: true }));
+        }
+      }
+
+      if (sugestao.tipoImovel) {
+        const tipoInferido = normalizarTipo(sugestao.tipoImovel);
+        const tipoEncontrado = tipos.find((t) => normalizarTipo(t.descricao) === tipoInferido);
+        if (tipoEncontrado) {
+          set("tipoImovelId", String(tipoEncontrado.id));
+          setAiFields((prev) => ({ ...prev, tipoImovelId: true }));
+
+          if (sugestao.atributos && Array.isArray(sugestao.atributos)) {
+            const atributosDoTipo = tipoEncontrado.atributos || [];
+            const attrsInferidos = sugestao.atributos.map(normalizarTipo);
+            const idsMarcados = atributosDoTipo
+              .filter((a) => attrsInferidos.includes(normalizarTipo(a.descricao)))
+              .map((a) => a.id);
+
+            if (idsMarcados.length > 0) {
+              setForm((prev) => {
+                const novosIds = new Set([...prev.atributosIds, ...idsMarcados]);
+                return { ...prev, atributosIds: Array.from(novosIds) };
+              });
+              setAiFields((prev) => ({ ...prev, atributos: true }));
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setCampoIaErro(err.message || "Não foi possível gerar com IA.");
+    } finally {
+      setGerandoCampo(null);
+    }
+  }
+
+  // Ao lançar as fotos (arrastar ou selecionar), preenche tudo com IA
+  // automaticamente — sem precisar clicar no botão da varinha. Roda só quando
+  // ainda não há título/descrição, para não sobrescrever o que o usuário digitou.
+  useEffect(() => {
+    if (images.length === 0 || autoIaLockRef.current || gerandoCampo) return;
+    if (form.title.trim() || form.description.trim()) return;
+    autoIaLockRef.current = true;
+    handleGerarCampoIA("auto").finally(() => { autoIaLockRef.current = false; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [images]);
 
   function reorderImages(from, to) {
     setImages((prev) => {
@@ -1419,11 +1405,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
-  // Navegação livre entre as etapas — sem validação. Só o step "Divulgar"
-  // (4) fica travado até o imóvel ser salvo. A validação acontece ao finalizar.
   function handleStepClick(target) {
     if (target === step) return;
-    if (target === 4 && !savedPropertyId) return; // travado até salvar
+    if (target === 3 && !savedPropertyId) return;
     setError("");
     setStep(target);
   }
@@ -1440,8 +1424,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }
 
   async function handleSubmit() {
-    // Valida tudo só agora, ao finalizar. Se houver pendências, destaca os
-    // campos, monta um resumo do que falta e leva o usuário até a 1ª etapa incompleta.
     const fe = getValidationErrors(form, areaFields);
     const fields = Object.keys(fe);
     if (fields.length > 0) {
@@ -1461,10 +1443,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       return;
     }
 
-    // Exige ao menos uma foto do imóvel (nova ou já salva) para publicar.
     if (images.length === 0 && existingImages.length === 0) {
       setError("Adicione ao menos uma foto do imóvel para publicar.");
-      setStep(3);
+      setStep(0);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -1472,14 +1453,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     setFieldErrors({});
     setError("");
     const normalizedPrice = parseCurrencyBRL(String(form.price));
-    // squareFootage (metragem usada nos cards/preview) é derivado da 1ª área
-    // preenchida do tipo; se nenhuma, mantém a antiga (edição) ou 0.
     const areaPrincipal = areaFields
       .map((f) => parseFloat(form[f]))
       .find((v) => Number.isFinite(v) && v > 0);
     const squareFootage = areaPrincipal ?? (parseFloat(form.squareFootage) || 0);
-    // Salva só as áreas relevantes ao tipo escolhido; descarta valores digitados
-    // para campos que não pertencem ao tipo (ex.: área preenchida antes do tipo).
     const areaPayload = Object.fromEntries(
       TODAS_AREAS.map((f) => [f, areaFields.includes(f) && form[f] !== "" ? parseFloat(form[f]) : null])
     );
@@ -1508,20 +1485,18 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     });
 
     if (!isEditing && saved?.id) {
-      // Sucesso: libera as prévias, limpa as fotos e segue para a etapa Divulgar.
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
       setImages([]);
       setSavedPropertyId(saved.id);
       setPublishResults({});
-      setStep(4);
+      setStep(3);
     }
-    // Em caso de falha (saved == null), mantém o formulário preenchido para o
-    // usuário corrigir e tentar de novo; o erro é exibido pelo componente pai.
   }
 
   async function handleCepBlur() {
     const cleanCep = String(form.cep || "").replace(/\D/g, "");
     if (cleanCep.length !== 8) return;
+    if (cleanCep === lastCepRef.current) return; // mesmo CEP já analisado — evita reprocessar
     setCepLoading(true);
     setError("");
     try {
@@ -1529,6 +1504,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       if (!response.ok) throw new Error("Falha ao consultar CEP.");
       const data = await response.json();
       if (data.erro) throw new Error("CEP não encontrado.");
+      lastCepRef.current = cleanCep;
       const street = [data.logradouro, data.complemento].filter(Boolean).join(" - ");
       setForm((prev) => ({
         ...prev,
@@ -1538,8 +1514,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
         city: data.localidade || prev.city,
         state: data.uf || prev.state,
       }));
-      // Enriquece em segundo plano: geocodifica e detecta comodidades da região.
       enriquecerComodidades({
+        cep: formatCep(cleanCep),
         logradouro: data.logradouro,
         bairro: data.bairro,
         cidade: data.localidade,
@@ -1552,29 +1528,30 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
-  // Geocodifica o endereço, busca POIs próximos e marca as comodidades
-  // encontradas. Nunca desmarca o que já estava marcado.
-  async function enriquecerComodidades({ logradouro, bairro, cidade, uf }) {
-    if (!cidade || !uf) return;
+  // Usa a IA (Gemini) para inferir, a partir do CEP/endereço, quais comodidades
+  // provavelmente existem na região — preenchendo as checkboxes automaticamente.
+  async function enriquecerComodidades({ cep, logradouro, bairro, cidade, uf }) {
+    if (!cidade || !uf || !tenantSlug) return;
     setComodidadesLoading(true);
     setComodidadesMsg("");
+    setAiFields((prev) => ({ ...prev, comodidades: false }));
     try {
-      const coords = await geocodeEndereco({ logradouro, bairro, cidade, uf });
-      if (!coords) {
-        setComodidadesMsg("Não foi possível localizar as coordenadas deste endereço.");
-        return;
-      }
-      const pois = await buscarPois(coords.lat, coords.lon);
-      const detectadas = detectarComodidades(pois);
-      const qtd = Object.keys(detectadas).length;
+      const { presentes } = await api.inferirComodidadesIA(tenantSlug, {
+        endereco: { cep, logradouro, bairro, cidade, uf },
+        comodidades: COMODIDADES.map((c) => ({ key: c.key, label: c.label })),
+      });
+      const marcadas = Array.isArray(presentes) ? presentes : [];
+      const detectadas = marcadas.reduce((acc, key) => ({ ...acc, [key]: true }), {});
       setForm((prev) => ({
         ...prev,
-        comodidades: { ...prev.comodidades, ...detectadas },
+        comodidades: { ...EMPTY_COMODIDADES, ...detectadas },
       }));
+      const qtd = marcadas.length;
+      if (qtd > 0) setAiFields((prev) => ({ ...prev, comodidades: true }));
       setComodidadesMsg(
         qtd > 0
-          ? `${qtd} tipo(s) de comodidade detectado(s) num raio de 2 km.`
-          : "Nenhuma comodidade detectada nas proximidades."
+          ? `${qtd} comodidade(s) sugerida(s) pela IA para esta região.`
+          : "A IA não identificou comodidades típicas nesta região."
       );
     } catch {
       setComodidadesMsg("Não foi possível analisar as comodidades da região.");
@@ -1588,6 +1565,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       ...prev,
       comodidades: { ...prev.comodidades, [key]: !prev.comodidades?.[key] },
     }));
+    setAiFields((prev) => ({ ...prev, comodidades: false })); // ajuste manual desliga o flare
   }
 
   async function handlePublish(platform) {
@@ -1637,16 +1615,57 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     outline: "none", transition: "border-color 0.2s",
   };
   const selectStyle = { ...inputStyle, cursor: "pointer" };
-  // Botões de ação dos previews (publicar / remover).
   const pubBtnBase = { padding: "11px 16px", borderRadius: "9px", fontSize: "13px", fontWeight: 600, color: "#fff", border: "none", width: "100%", textAlign: "center", cursor: "pointer" };
   const removeBtnStyle = { padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" };
-  // Aplica borda vermelha quando o campo tem erro de validação.
   const withError = (field, base = inputStyle) =>
     fieldErrors[field] ? { ...base, border: "1px solid rgba(239,68,68,0.6)" } : base;
 
   return (
-    <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+    <section
+      className="glass-panel"
+      style={{ animation: "fadeIn 0.3s ease-in-out", position: "relative" }}
+      onDragEnter={handleFormDragEnter}
+      onDragOver={handleFormDragOver}
+      onDragLeave={handleFormDragLeave}
+      onDrop={handleFormDrop}
+    >
       {confirmModal}
+
+      {dragActive && (
+        <div
+          style={{
+            position: "absolute", inset: 0, zIndex: 60, pointerEvents: "none",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: "18px", borderRadius: "inherit", textAlign: "center",
+            background: "rgba(10,12,24,0.84)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+            border: "2px dashed rgba(99,102,241,0.75)",
+            animation: "fadeIn 0.15s ease",
+          }}
+        >
+          <style>{`
+            @keyframes domus-drop-pulse {
+              0%, 100% { transform: translateY(0) scale(1); }
+              50% { transform: translateY(-7px) scale(1.06); }
+            }
+          `}</style>
+          <div style={{
+            width: "76px", height: "76px", borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.45)", color: "#a5b4fc",
+            animation: "domus-drop-pulse 1.2s ease-in-out infinite",
+          }}>
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: "19px", fontWeight: 700, color: "#fff" }}>Solte as fotos aqui</div>
+            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.65)", marginTop: "5px" }}>
+              Elas serão adicionadas ao cadastro do imóvel
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h2 style={{ margin: 0, marginBottom: "4px" }}>{isEditing ? "Editar Imóvel" : "Novo Imóvel"}</h2>
@@ -1659,65 +1678,225 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
         </button>
       </div>
 
-      <StepIndicator current={step} onStepClick={handleStepClick} lockedSteps={savedPropertyId ? [] : [4]} />
+      <StepIndicator current={step} onStepClick={handleStepClick} lockedSteps={savedPropertyId ? [] : [3]} />
 
       {error ? <div className="error" style={{ marginBottom: "16px" }}>{error}</div> : null}
 
       <div style={{ display: "flex", gap: "40px", alignItems: "flex-start" }}>
 
-        {/* ── Painel do formulário ─── */}
-        <div style={step === 4
+        <div style={step === 3
           ? { width: "100%", display: "flex", flexDirection: "column", gap: "20px" }
           : { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "20px" }
         }>
 
-          {/* Etapa 0 — Identificação */}
           {step === 0 && (
             <>
+              {isEditing && existingImages.length > 0 && (
+                <div>
+                  <span style={{ display: "block", marginBottom: "10px", fontSize: "13px", fontWeight: "600", color: "var(--text-muted)" }}>
+                    Fotos salvas ({existingImages.length}) — arraste para reordenar, ✕ para remover
+                  </span>
+                  <PhotoGrid
+                    images={existingImages.map((img) => ({ ...img, previewUrl: img.url }))}
+                    onRemove={handleRemoveExisting}
+                    onReorder={handleReorderExisting}
+                  />
+                </div>
+              )}
+
+              {isEditing && existingImages.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
+                    Adicionar novas fotos
+                  </span>
+                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
+                </div>
+              )}
+
+              <div style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
+                <div style={{ color: "rgba(255,255,255,0.2)", marginBottom: "14px" }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                </div>
+                <p style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: "600" }}>
+                  {images.length > 0 ? "Adicionar mais fotos" : "Adicionar fotos"}
+                </p>
+                <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "var(--text-muted)" }}>
+                  {images.length > 0
+                    ? `${images.length} foto(s) selecionada(s) — arraste para reordenar, ✕ para remover`
+                    : "Selecione ou arraste uma ou mais fotos para esta página. JPG, PNG, WEBP."
+                  }
+                </p>
+                <input
+                  type="file" accept="image/*" multiple id="foto-upload"
+                  onChange={(e) => { addImages(Array.from(e.target.files || [])); e.target.value = ""; }}
+                  disabled={disabled} style={{ display: "none" }}
+                />
+                <label htmlFor="foto-upload" style={{
+                  display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 24px",
+                  borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer",
+                  background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
+                  color: "rgba(99,102,241,1)", fontSize: "14px", fontWeight: "600",
+                  opacity: disabled ? 0.55 : 1,
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  Selecionar fotos
+                </label>
+              </div>
+
+              <PhotoGrid images={images} onRemove={removeImage} onReorder={reorderImages} />
+
+              {images.length > 1 && (
+                <p className="hint" style={{ marginTop: "-8px" }}>
+                  Arraste as fotos para reordenar. A primeira será a capa do anúncio.
+                </p>
+              )}
+
+              <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "32px 0 16px 0" }} />
+
+              <style>{`
+                @keyframes gradient-flare {
+                  0% { background-position: 0% 50%; }
+                  50% { background-position: 100% 50%; }
+                  100% { background-position: 0% 50%; }
+                }
+                @keyframes wand-pulse {
+                  0%, 100% { opacity: 1; }
+                  50% { opacity: 0.35; }
+                }
+                @keyframes ia-skeleton {
+                  0% { background-position: 200% 0; }
+                  100% { background-position: -200% 0; }
+                }
+              `}</style>
+
+              {campoIaErro && (
+                <div style={{ fontSize: "12px", color: "#f87171", marginBottom: "12px" }}>
+                  {campoIaErro}
+                </div>
+              )}
+
               <Field label="Título do imóvel" required error={fieldErrors.title}>
-                <input style={withError("title")} placeholder="Ex: Apartamento 3 quartos no Setor Bueno" value={form.title} onChange={(e) => set("title", e.target.value)} disabled={disabled} />
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <div style={{
+                    position: "absolute", inset: "-1px", borderRadius: "11px", zIndex: -1,
+                    background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
+                    backgroundSize: "200% 200%", animation: "gradient-flare 3s ease infinite",
+                    opacity: aiFields.title ? 1 : 0, transition: "opacity 0.4s ease",
+                    padding: "2px", WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                    WebkitMaskComposite: "xor", maskComposite: "exclude"
+                  }} />
+                  <input
+                    style={{ ...withError("title"), paddingRight: "44px", position: "relative", zIndex: 2 }}
+                    placeholder="Ex: Apartamento 3 quartos no Setor Bueno"
+                    value={form.title}
+                    onChange={(e) => handleChangeField("title", e.target.value)}
+                    disabled={disabled}
+                    onFocus={() => setFocusedField("title")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleGerarCampoIA("title")}
+                    disabled={(gerandoCampo === "title" || gerandoCampo === "auto") || disabled}
+                    title="Gerar título com IA"
+                    style={{
+                      position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)",
+                      background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)",
+                      border: "none", borderRadius: "8px", width: "28px", height: "28px",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: (gerandoCampo === "title" || gerandoCampo === "auto") || disabled ? "wait" : "pointer",
+                      padding: 0, opacity: focusedField === "title" && temFotos ? 1 : 0,
+                      pointerEvents: focusedField === "title" && temFotos ? "auto" : "none",
+                      transition: "opacity 0.3s ease", zIndex: 3,
+                      boxShadow: "0 2px 6px rgba(220, 39, 67, 0.4)"
+                    }}
+                  >
+                    <span style={{ display: "flex", animation: (gerandoCampo === "title" || gerandoCampo === "auto") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
+                  </button>
+                  <IaSkeleton active={gerandoCampo === "auto"} radius="10px" />
+                </div>
               </Field>
+
               <Field label="Descrição" required error={fieldErrors.description}>
-                <textarea style={{ ...withError("description"), resize: "vertical", minHeight: "100px", lineHeight: "1.6" }} placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..." value={form.description} onChange={(e) => set("description", e.target.value)} rows={4} disabled={disabled} />
-                {/* "Melhorar com IA" só aparece quando já existe algum texto na descrição. */}
-                {form.description.trim().length > 0 && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "2px" }}>
-                    <button
-                      type="button"
-                      onClick={handleMelhorarDescricao}
-                      disabled={melhorarLoading || disabled}
-                      style={{
-                        display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 14px",
-                        borderRadius: "8px", cursor: melhorarLoading || disabled ? "not-allowed" : "pointer",
-                        background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)",
-                        color: "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
-                        opacity: melhorarLoading || disabled ? 0.6 : 1, width: "auto",
-                      }}
-                    >
-                      ✨ {melhorarLoading ? "Melhorando…" : "Melhorar com IA"}
-                    </button>
-                    {melhorarErro && <span style={{ fontSize: "11px", color: "#f87171" }}>{melhorarErro}</span>}
-                  </div>
-                )}
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <div style={{
+                    position: "absolute", inset: "-1px", borderRadius: "11px", zIndex: -1,
+                    background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
+                    backgroundSize: "200% 200%", animation: "gradient-flare 3s ease infinite",
+                    opacity: aiFields.description ? 1 : 0, transition: "opacity 0.4s ease",
+                    padding: "2px", WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                    WebkitMaskComposite: "xor", maskComposite: "exclude"
+                  }} />
+                  <textarea
+                    style={{ ...withError("description"), resize: "vertical", minHeight: "100px", lineHeight: "1.6", paddingRight: "44px", position: "relative", zIndex: 2 }}
+                    placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..."
+                    value={form.description}
+                    onChange={(e) => handleChangeField("description", e.target.value)}
+                    rows={4}
+                    disabled={disabled}
+                    onFocus={() => setFocusedField("description")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleGerarCampoIA("description")}
+                    disabled={(gerandoCampo === "description" || gerandoCampo === "auto") || disabled}
+                    title="Gerar descrição com IA"
+                    style={{
+                      position: "absolute", right: "8px", top: "12px",
+                      background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)",
+                      border: "none", borderRadius: "8px", width: "28px", height: "28px",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: (gerandoCampo === "description" || gerandoCampo === "auto") || disabled ? "wait" : "pointer",
+                      padding: 0, opacity: focusedField === "description" && temFotos ? 1 : 0,
+                      pointerEvents: focusedField === "description" && temFotos ? "auto" : "none",
+                      transition: "opacity 0.3s ease", zIndex: 3,
+                      boxShadow: "0 2px 6px rgba(220, 39, 67, 0.4)"
+                    }}
+                  >
+                    <span style={{ display: "flex", animation: (gerandoCampo === "description" || gerandoCampo === "auto") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
+                  </button>
+                  <IaSkeleton active={gerandoCampo === "auto"} radius="10px" />
+                </div>
               </Field>
+
               <Field label="Preço" required error={fieldErrors.price}>
                 <input style={withError("price")} placeholder="R$ 0,00" type="text" inputMode="numeric" value={form.price} onChange={(e) => set("price", formatCurrencyBRL(e.target.value))} disabled={disabled} />
               </Field>
+
               <Field label="Tipo de imóvel" required error={fieldErrors.tipoImovelId}>
-                <select style={withError("tipoImovelId", selectStyle)} value={form.tipoImovelId} onChange={(e) => { setForm((prev) => ({ ...prev, tipoImovelId: e.target.value, atributosIds: [] })); clearFieldError("tipoImovelId"); }} disabled={disabled}>
-                  <option value="" disabled hidden>Selecione uma categoria...</option>
-                  {tipos.map((t) => <option key={t.id} value={t.id}>{t.descricao}</option>)}
-                </select>
+                <AiFlare active={aiFields.tipoImovelId}>
+                  <select style={{ ...withError("tipoImovelId", selectStyle), position: "relative", zIndex: 2 }} value={form.tipoImovelId} onChange={(e) => { setForm((prev) => ({ ...prev, tipoImovelId: e.target.value, atributosIds: [] })); clearFieldError("tipoImovelId"); setAiFields((p) => ({ ...p, tipoImovelId: false, atributos: false })); }} disabled={disabled}>
+                    <option value="" disabled hidden>Selecione uma categoria...</option>
+                    {tipos.map((t) => <option key={t.id} value={t.id}>{t.descricao}</option>)}
+                  </select>
+                  <IaSkeleton active={gerandoCampo === "auto"} radius="10px" />
+                </AiFlare>
               </Field>
-              {tipoSelecionado && tipoSelecionado.atributos?.length > 0 && (
-                <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
-                  <AtributosSection atributos={tipoSelecionado.atributos} selecionados={form.atributosIds} onChange={(ids) => set("atributosIds", ids)} disabled={disabled} />
+
+              {tipoSelecionado && tipoSelecionado.atributos?.length > 0 ? (
+                <AiFlare active={aiFields.atributos} radius="13px">
+                  <div style={{ position: "relative", zIndex: 2, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
+                    <AtributosSection atributos={tipoSelecionado.atributos} selecionados={form.atributosIds} onChange={(ids) => { set("atributosIds", ids); setAiFields((p) => ({ ...p, atributos: false })); }} disabled={disabled} />
+                    <IaSkeleton active={gerandoCampo === "auto"} radius="12px" />
+                  </div>
+                </AiFlare>
+              ) : gerandoCampo === "auto" ? (
+                <div style={{ position: "relative", minHeight: "92px" }}>
+                  <IaSkeleton active radius="12px" />
                 </div>
-              )}
+              ) : null}
             </>
           )}
 
-          {/* Etapa 1 — Localização */}
           {step === 1 && (
             <>
               <Field label="CEP" hint="Preencha o CEP para auto-completar o endereço.">
@@ -1741,20 +1920,20 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 <input style={{ ...withError("state"), maxWidth: "100px", textTransform: "uppercase" }} placeholder="GO" maxLength={2} value={form.state} onChange={(e) => set("state", e.target.value.toUpperCase())} disabled={disabled} />
               </Field>
 
-              {/* Comodidades da região — detectadas automaticamente pelo CEP */}
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
+              <AiFlare active={aiFields.comodidades} radius="12px">
+              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px", position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "4px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-muted)" }}>
                     Comodidades da região
                   </span>
                   {comodidadesLoading ? (
-                    <span style={{ fontSize: "12px", color: "rgba(99,102,241,1)" }}>Analisando proximidades…</span>
+                    <span style={{ fontSize: "12px", color: "rgba(99,102,241,1)" }}>Analisando a região com IA…</span>
                   ) : comodidadesMsg ? (
                     <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{comodidadesMsg}</span>
                   ) : null}
                 </div>
                 <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", opacity: 0.7, marginBottom: "12px" }}>
-                  Preenchido automaticamente a partir do CEP. Você pode ajustar manualmente.
+                  Sugerido por IA a partir do CEP. Você pode ajustar manualmente.
                 </span>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "8px" }}>
                   {COMODIDADES.map((c) => {
@@ -1778,18 +1957,20 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   })}
                 </div>
               </div>
+              </AiFlare>
             </>
           )}
 
-          {/* Etapa 2 — Detalhes */}
           {step === 2 && (
             <>
               <Field label="Finalidade">
-                <select style={selectStyle} value={form.finalidade} onChange={(e) => set("finalidade", e.target.value)} disabled={disabled}>
-                  <option value="">Não informado</option>
-                  <option value="RESIDENCIAL">Residencial</option>
-                  <option value="COMERCIAL">Comercial</option>
-                </select>
+                <AiFlare active={aiFields.finalidade}>
+                  <select style={{ ...selectStyle, position: "relative", zIndex: 2 }} value={form.finalidade} onChange={(e) => { set("finalidade", e.target.value); setAiFields((p) => ({ ...p, finalidade: false })); }} disabled={disabled}>
+                    <option value="">Não informado</option>
+                    <option value="RESIDENCIAL">Residencial</option>
+                    <option value="COMERCIAL">Comercial</option>
+                  </select>
+                </AiFlare>
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
                 <Field label="Quartos" error={fieldErrors.bedrooms}><input style={withError("bedrooms")} type="number" min="0" placeholder="0" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} disabled={disabled} /></Field>
@@ -1797,7 +1978,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 <Field label="Vagas de garagem" error={fieldErrors.parkingSpots}><input style={withError("parkingSpots")} type="number" min="0" placeholder="0" value={form.parkingSpots} onChange={(e) => set("parkingSpots", e.target.value)} disabled={disabled} /></Field>
               </div>
 
-              {/* Áreas — exibidas conforme o tipo de imóvel selecionado (a 1ª é a principal) */}
               {!tipoSelecionado && (
                 <div style={{ padding: "10px 14px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "12px", color: "#fbbf24" }}>
                   Selecione o tipo de imóvel na etapa "Identificação" para ver os campos de área corretos.
@@ -1842,173 +2022,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             </>
           )}
 
-          {/* Etapa 3 — Fotos */}
           {step === 3 && (
             <>
-              {/* Fotos já salvas (modo edição) */}
-              {isEditing && existingImages.length > 0 && (
-                <div>
-                  <span style={{ display: "block", marginBottom: "10px", fontSize: "13px", fontWeight: "600", color: "var(--text-muted)" }}>
-                    Fotos salvas ({existingImages.length}) — arraste para reordenar, ✕ para remover
-                  </span>
-                  <PhotoGrid
-                    images={existingImages.map((img) => ({ ...img, previewUrl: img.url }))}
-                    onRemove={handleRemoveExisting}
-                    onReorder={handleReorderExisting}
-                  />
-                </div>
-              )}
-
-              {/* Separador quando há fotos existentes e novas */}
-              {isEditing && existingImages.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
-                    Adicionar novas fotos
-                  </span>
-                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
-                </div>
-              )}
-
-              {/* Área de upload */}
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
-                <div style={{ color: "rgba(255,255,255,0.2)", marginBottom: "14px" }}>
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
-                  </svg>
-                </div>
-                <p style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: "600" }}>
-                  {images.length > 0 ? "Adicionar mais fotos" : "Adicionar fotos"}
-                </p>
-                <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "var(--text-muted)" }}>
-                  {images.length > 0
-                    ? `${images.length} foto(s) selecionada(s) — arraste para reordenar, ✕ para remover`
-                    : "Selecione uma ou mais fotos. JPG, PNG, WEBP. Arraste para reordenar."
-                  }
-                </p>
-                <input
-                  type="file" accept="image/*" multiple id="foto-upload"
-                  onChange={(e) => { addImages(Array.from(e.target.files || [])); e.target.value = ""; }}
-                  disabled={disabled} style={{ display: "none" }}
-                />
-                <label htmlFor="foto-upload" style={{
-                  display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 24px",
-                  borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer",
-                  background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
-                  color: "rgba(99,102,241,1)", fontSize: "14px", fontWeight: "600",
-                  opacity: disabled ? 0.55 : 1,
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                  Selecionar fotos
-                </label>
-              </div>
-
-              {/* Grade de novas fotos com drag-to-reorder */}
-              <PhotoGrid images={images} onRemove={removeImage} onReorder={reorderImages} />
-
-              {images.length > 1 && (
-                <p className="hint" style={{ marginTop: "-8px" }}>
-                  Arraste as fotos para reordenar. A primeira (nº 1) será a capa do anúncio.
-                </p>
-              )}
-
-              {/* ── Sugestão com IA ── */}
-              <div style={{
-                marginTop: "8px", borderRadius: "16px", padding: "20px 22px",
-                border: "1px solid rgba(99,102,241,0.25)",
-                background: "linear-gradient(145deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.02) 100%)",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                  <span style={{ fontSize: "18px" }}>✨</span>
-                  <span style={{ fontSize: "15px", fontWeight: "700" }}>Gerar título e descrição com IA</span>
-                </div>
-                <p style={{ margin: "0 0 16px 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
-                  A IA analisa as <strong>fotos</strong> junto com a localização e os detalhes já preenchidos e sugere
-                  um título e uma descrição. Revise antes de aplicar.
-                  {images.length + existingImages.length === 0 && (
-                    <span style={{ color: "#f59e0b" }}> Adicione fotos para um resultado melhor.</span>
-                  )}
-                </p>
-
-                <button
-                  type="button"
-                  onClick={handleSugerirIA}
-                  disabled={iaLoading || disabled}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 22px",
-                    borderRadius: "10px", cursor: iaLoading || disabled ? "not-allowed" : "pointer",
-                    background: "var(--primary, #6366f1)", border: "none", color: "#fff",
-                    fontSize: "14px", fontWeight: "600", opacity: iaLoading || disabled ? 0.6 : 1, width: "auto",
-                  }}
-                >
-                  {iaLoading ? "Gerando..." : iaSugestao ? "Gerar novamente" : "Gerar sugestão"}
-                </button>
-
-                {iaErro && (
-                  <p style={{ margin: "12px 0 0 0", fontSize: "13px", color: "#f87171" }}>{iaErro}</p>
-                )}
-
-                {iaSugestao && (
-                  <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                    {iaSugestao.titulo && (
-                      <SugestaoCard
-                        key={iaSugestao.titulo}
-                        rotulo="Título sugerido"
-                        texto={iaSugestao.titulo}
-                        onAplicar={() => set("title", iaSugestao.titulo)}
-                      />
-                    )}
-                    {iaSugestao.descricao && (
-                      <SugestaoCard
-                        key={iaSugestao.descricao}
-                        rotulo="Descrição sugerida"
-                        texto={iaSugestao.descricao}
-                        onAplicar={() => set("description", iaSugestao.descricao)}
-                      />
-                    )}
-                    {iaSugestao.descricaoResumida && (
-                      <SugestaoCard
-                        key={iaSugestao.descricaoResumida}
-                        rotulo="Resumo (redes / SEO)"
-                        texto={iaSugestao.descricaoResumida}
-                        onAplicar={() => set("description", iaSugestao.descricaoResumida)}
-                      />
-                    )}
-
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (iaSugestao.titulo) set("title", iaSugestao.titulo);
-                          if (iaSugestao.descricao) set("description", iaSugestao.descricao);
-                        }}
-                        style={{
-                          padding: "8px 18px", borderRadius: "8px", cursor: "pointer", width: "auto",
-                          background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)",
-                          color: "#34d399", fontSize: "13px", fontWeight: "600",
-                        }}
-                      >
-                        Aplicar título e descrição
-                      </button>
-                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                        {iaSugestao.usouFotos > 0
-                          ? `Baseado em ${iaSugestao.usouFotos} foto${iaSugestao.usouFotos !== 1 ? "s" : ""}.`
-                          : "Gerado sem fotos (só com os dados)."}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Etapa 4 — Divulgar */}
-          {step === 4 && (
-            <>
-              {/* Banner de sucesso */}
               <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px", borderRadius: "14px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }}>
                 <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "rgba(16,185,129,0.2)", color: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
@@ -2021,10 +2036,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               </div>
 
-              {/* Pré-visualização por rede: edite o texto direto no molde de cada rede. */}
               <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
                 Veja como o post fica em cada rede e <strong>edite o texto direto no preview</strong>. Cada rede
-                começa com o texto do imóvel (o da IA, se você aplicou); use <strong>Gerar com IA</strong> para
+                começa com o texto do imóvel; use <strong>Gerar com IA</strong> para
                 uma versão sob medida.
               </p>
 
@@ -2034,7 +2048,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               )}
 
-              {/* Grid de previews realistas */}
               <div className="divulgar-grid">
                 {cargo?.publicarRedes && (
                   <FacebookPreview
@@ -2077,7 +2090,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     onGerarIA={() => handleGerarRedeIA("instagram")}
                     iaLoading={redeIaLoading.instagram}
                     iaErro={redeIaErro.instagram}
-                    statusText={socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta conectada" : "Não conectado"}
+                    statusText={socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta conectado" : "Não conectado"}
                     published={publishResults.instagram?.success}
                     onRemove={() => handleRemove("instagram")}
                     removeLoading={removeLoading.instagram}
@@ -2113,7 +2126,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 />
               </div>
 
-              {/* Avisos de remoção (ex.: Instagram não permite exclusão por API) */}
               {(removeNote.facebook || removeNote.instagram) && (
                 <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "13px", color: "#fbbf24", display: "flex", flexDirection: "column", gap: "4px" }}>
                   {removeNote.facebook && <span>{removeNote.facebook}</span>}
@@ -2121,7 +2133,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               )}
 
-              {/* Ações finais */}
               <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 <button
                   type="button"
@@ -2143,8 +2154,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             </>
           )}
 
-          {/* Navegação (steps 0–3) */}
-          {step < 4 && (
+          {step < 3 && (
             <div style={{ display: "flex", gap: "12px", marginTop: "8px", flexWrap: "wrap" }}>
               {step > 0 && (
                 <button type="button" className="button-secondary" onClick={handleBack} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -2152,7 +2162,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   Voltar
                 </button>
               )}
-              {step < 3 ? (
+              {step < 2 ? (
                 <button type="button" onClick={handleNext} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   Continuar
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
@@ -2166,8 +2176,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
           )}
         </div>
 
-        {/* ── Painel de preview (apenas steps 0–3) ─── */}
-        {step < 4 && (
+        {step < 3 && (
           <div style={{ width: "300px", flexShrink: 0 }}>
             <PropertyPreviewCard form={form} previewUrls={previewUrls} />
           </div>

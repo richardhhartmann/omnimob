@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { blockHasBackgroundImage } from "../../utils/showcaseConfig";
 
 export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewport, whatsappHref }) {
@@ -30,7 +31,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
     return (
       <div className={getHeaderClass()}>
         <div style={{ padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "70px" }}>
-          <a href={`/vitrine/${tenantSlug}`} style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none" }}>
+          <Link to={`/vitrine/${tenantSlug}`} style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none" }}>
             <div className="brand-logo-exclusive" style={{ width: isScrolled ? "36px" : "44px", height: isScrolled ? "36px" : "44px", background: tenant?.logoUrl ? "transparent" : `linear-gradient(135deg, ${tenant?.secondaryColor || primary}, ${primary})`, boxShadow: tenant?.logoUrl ? "none" : undefined, transition: "all 0.4s ease" }}>
               {logoEl}
             </div>
@@ -39,7 +40,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
                 {tenantName}
               </h1>
             </div>
-          </a>
+          </Link>
           {whatsappHref ? (
             <a href={whatsappHref} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, background: primary, color: "#fff", padding: "10px 16px", borderRadius: "100px", fontWeight: "600", fontSize: "13px", textDecoration: "none", boxShadow: `0 4px 12px ${primary}55` }}>
               Contato
@@ -53,7 +54,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
   return (
     <div className={getHeaderClass()}>
       <div style={{ padding: "0 48px", maxWidth: "1400px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <a href={`/vitrine/${tenantSlug}`} style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "16px" }}>
+        <Link to={`/vitrine/${tenantSlug}`} style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "16px" }}>
           <div className="brand-logo-exclusive" style={{ width: isScrolled ? "46px" : "60px", height: isScrolled ? "46px" : "60px", background: tenant?.logoUrl ? "transparent" : `linear-gradient(135deg, ${tenant?.secondaryColor || primary}, ${primary})`, boxShadow: tenant?.logoUrl ? "none" : undefined, transition: "all 0.4s ease" }}>
             {logoEl}
           </div>
@@ -63,13 +64,13 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
               {tenant?.slogan || [tenant?.creci ? `CRECI ${tenant.creci}` : null, tenant?.cidade || null].filter(Boolean).join(" · ") || "Alto Padrão"}
             </p>
           </div>
-        </a>
-        
+        </Link>
+
         <nav style={{ display: "flex", alignItems: "center", gap: "36px" }}>
-          <a href={`/vitrine/${tenantSlug}#destaques`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Imóveis</a>
-          <a href={`/vitrine/${tenantSlug}#destaques`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Destaques</a>
-          <a href={`/vitrine/${tenantSlug}#footer`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Sobre nós</a>
-          <a href={`/login?tenant=${tenantSlug}`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", opacity: 0.7, transition: "all 0.3s ease" }}>Acesso</a>
+          <Link to={`/vitrine/${tenantSlug}#destaques`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Imóveis</Link>
+          <Link to={`/vitrine/${tenantSlug}#destaques`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Destaques</Link>
+          <Link to={`/vitrine/${tenantSlug}#footer`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Sobre nós</Link>
+          <Link to={`/login?tenant=${tenantSlug}`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", opacity: 0.7, transition: "all 0.3s ease" }}>Acesso</Link>
         </nav>
 
         <div style={{ minWidth: "180px", display: "flex", justifyContent: "flex-end" }}>
