@@ -16,7 +16,9 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
   const [socialStatus, setSocialStatus] = useState(null);
   const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
   const [publishResults, setPublishResults] = useState({});
-  const [removeLoading, setRemoveLoading] = useState({ facebook: false, instagram: false });
+  const [publications, setPublications] = useState(() => (property.publications || []).filter(p => p.status === "PUBLISHED"));
+  const [expanded, setExpanded] = useState({ facebook: false, instagram: false });
+  const [removingId, setRemovingId] = useState(null);
   const [removeNote, setRemoveNote] = useState({});
 
   useEffect(() => {
@@ -49,49 +51,50 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
     ].filter((l, i, arr) => !(l === "" && arr[i - 1] === ""));
     setCaption(lines.join("\n").trim());
 
-    // Pre-populate results from existing successful publications
-    setPublishResults(resultsFromPublications(property.publications));
-
     api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
 
     // Reconcilia com as redes: se o post foi apagado manualmente, o status some.
     api.reconcileProperty(tenantSlug, property.id)
-      .then((data) => setPublishResults(resultsFromPublications(data.publications)))
+      .then((data) => setPublications((data.publications || []).filter(p => p.status === "PUBLISHED")))
       .catch(() => {});
   }, [property.id]);
 
-  // Deriva o estado dos botões a partir das publicações PUBLISHED de cada canal.
-  function resultsFromPublications(pubs) {
-    const results = {};
-    if (pubs?.some(p => p.channel === "FACEBOOK" && p.status === "PUBLISHED")) results.facebook = { success: true };
-    if (pubs?.some(p => p.channel === "INSTAGRAM" && p.status === "PUBLISHED")) results.instagram = { success: true };
-    return results;
+  async function refreshPublications() {
+    try {
+      const list = await api.listPublications(tenantSlug, property.id);
+      setPublications((Array.isArray(list) ? list : []).filter(p => p.status === "PUBLISHED"));
+    } catch { /* mantém estado atual */ }
   }
 
-  async function handleRemove(platform) {
-    const nome = platform === "facebook" ? "Facebook" : "Instagram";
-    if (!await confirm(`Remover este imóvel do ${nome}?`, "Remover")) return;
-    setRemoveLoading(prev => ({ ...prev, [platform]: true }));
+  // Remove UM post específico (por id).
+  async function handleRemovePost(pub) {
+    const nome = pub.channel === "FACEBOOK" ? "Facebook" : "Instagram";
+    if (!await confirm(`Remover este post do ${nome}?`, "Remover")) return;
+    const platform = pub.channel.toLowerCase();
+    setRemovingId(pub.id);
     setRemoveNote(prev => ({ ...prev, [platform]: "" }));
     try {
-      const channel = platform === "facebook" ? "FACEBOOK" : "INSTAGRAM";
-      const result = await api.removePublication(tenantSlug, property.id, channel);
-      setPublishResults(prev => { const next = { ...prev }; delete next[platform]; return next; });
+      const result = await api.removePublicationById(tenantSlug, pub.id);
       if (result?.note) setRemoveNote(prev => ({ ...prev, [platform]: result.note }));
+      await refreshPublications();
       onSuccess?.();
     } catch (err) {
       setRemoveNote(prev => ({ ...prev, [platform]: err.message }));
     } finally {
-      setRemoveLoading(prev => ({ ...prev, [platform]: false }));
+      setRemovingId(null);
     }
   }
 
   async function handlePublish(platform) {
     setPublishLoading(prev => ({ ...prev, [platform]: true }));
+    setPublishResults(prev => { const next = { ...prev }; delete next[platform]; return next; });
     try {
       const result = await api.publishProperty(tenantSlug, property.id, { platforms: [platform], caption });
-      setPublishResults(prev => ({ ...prev, ...result }));
-      if (result[platform]?.success) onSuccess?.();
+      const r = result?.[platform];
+      if (r) setPublishResults(prev => ({ ...prev, [platform]: r }));
+      if (r?.note) setRemoveNote(prev => ({ ...prev, [platform]: r.note }));
+      await refreshPublications();
+      if (r?.success) onSuccess?.();
     } catch (err) {
       setPublishResults(prev => ({ ...prev, [platform]: { success: false, error: err.message } }));
     } finally {
@@ -113,11 +116,78 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
     lineHeight: "1.6", fontFamily: "inherit",
   };
 
-  const removeBtnStyle = {
-    padding: "6px 12px", borderRadius: "7px", fontSize: "12px", fontWeight: "600",
-    background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)",
-    cursor: "pointer", flexShrink: 0, width: "auto",
+  const FB_SVG = <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>;
+  const IG_SVG = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>;
+
+  const chanCfg = {
+    facebook: {
+      channel: "FACEBOOK", label: "Facebook", brand: "#1877f2", pubBg: "#1877f2", icon: FB_SVG,
+      connected: socialStatus?.facebook?.connected,
+      statusText: socialStatus === null ? "Verificando…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações",
+    },
+    instagram: {
+      channel: "INSTAGRAM", label: "Instagram",
+      brand: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)",
+      pubBg: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", icon: IG_SVG,
+      connected: socialStatus?.instagram?.connected,
+      statusText: socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — configure em Configurações",
+    },
   };
+
+  // Linha de rede social: quando há posts, vira expansível para gerenciar cada
+  // post individualmente (o mesmo imóvel pode ter vários posts na mesma rede).
+  function renderChannel(platform) {
+    const cfg = chanCfg[platform];
+    const posts = publications.filter(p => p.channel === cfg.channel);
+    const isOpen = expanded[platform];
+    const loading = publishLoading[platform];
+    return (
+      <div style={{ borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px" }}>
+          <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: cfg.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{cfg.icon}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: "600", fontSize: "13px" }}>{cfg.label}</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>{cfg.statusText}</div>
+          </div>
+          {posts.length === 0 ? (
+            <button type="button" onClick={() => handlePublish(platform)} disabled={!cfg.connected || loading}
+              style={{ padding: "6px 14px", borderRadius: "7px", fontSize: "12px", fontWeight: "600", background: cfg.pubBg, color: "#fff", border: "none", cursor: cfg.connected ? "pointer" : "not-allowed", opacity: cfg.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}>
+              {loading ? "…" : "Publicar"}
+            </button>
+          ) : (
+            <button type="button" onClick={() => setExpanded(prev => ({ ...prev, [platform]: !prev[platform] }))}
+              style={{ display: "flex", alignItems: "center", gap: "7px", padding: "6px 10px", borderRadius: "7px", fontSize: "11px", fontWeight: "600", background: "rgba(16,185,129,0.12)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
+              ✓ {posts.length} publicado{posts.length > 1 ? "s" : ""}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          )}
+        </div>
+        {posts.length > 0 && isOpen && (
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "8px 14px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            {posts.map(pub => {
+              const data = pub.createdAt ? new Date(pub.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+              const removing = removingId === pub.id;
+              return (
+                <div key={pub.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0, fontSize: "11px", color: "var(--text-muted)" }}>{data ? `Publicado em ${data}` : "Publicado"}</div>
+                  <button type="button" onClick={() => handleRemovePost(pub)} disabled={removing} title="Remover" aria-label="Remover"
+                    style={{ width: "28px", height: "28px", borderRadius: "7px", flexShrink: 0, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: removing ? "default" : "pointer", opacity: removing ? 0.6 : 1 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+                  </button>
+                </div>
+              );
+            })}
+            <button type="button" onClick={() => handlePublish(platform)} disabled={!cfg.connected || loading}
+              style={{ marginTop: "2px", padding: "7px 12px", borderRadius: "7px", fontSize: "12px", fontWeight: "600", background: "rgba(255,255,255,0.05)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.14)", cursor: cfg.connected ? "pointer" : "not-allowed", opacity: cfg.connected ? 1 : 0.5, width: "auto", alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "6px" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              {loading ? "Publicando…" : "Publicar novamente"}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return createPortal(
     <>
@@ -163,64 +233,10 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
         {/* Platform cards */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {/* Facebook */}
-          {cargo?.publicarRedes && (
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: "600", fontSize: "13px" }}>Facebook</div>
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                  {socialStatus === null ? "Verificando…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações"}
-                </div>
-              </div>
-              {publishResults.facebook?.success ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                  <span style={{ fontSize: "11px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
-                  <button type="button" onClick={() => handleRemove("facebook")} disabled={removeLoading.facebook}
-                    style={removeBtnStyle}>
-                    {removeLoading.facebook ? "…" : "Remover"}
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => handlePublish("facebook")}
-                  disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
-                  style={{ padding: "6px 14px", borderRadius: "7px", fontSize: "12px", fontWeight: "600", background: "#1877f2", color: "#fff", border: "none", cursor: socialStatus?.facebook?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.facebook?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}>
-                  {publishLoading.facebook ? "…" : "Publicar"}
-                </button>
-              )}
-            </div>
-          )}
+          {cargo?.publicarRedes && renderChannel("facebook")}
 
           {/* Instagram */}
-          {cargo?.publicarRedes && (
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: "600", fontSize: "13px" }}>Instagram</div>
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
-                  {socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — configure em Configurações"}
-                </div>
-              </div>
-              {publishResults.instagram?.success ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                  <span style={{ fontSize: "11px", fontWeight: "600", color: "#10b981", whiteSpace: "nowrap" }}>✓ Publicado</span>
-                  <button type="button" onClick={() => handleRemove("instagram")} disabled={removeLoading.instagram}
-                    style={removeBtnStyle}>
-                    {removeLoading.instagram ? "…" : "Remover"}
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => handlePublish("instagram")}
-                  disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
-                  style={{ padding: "6px 14px", borderRadius: "7px", fontSize: "12px", fontWeight: "600", background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", color: "#fff", border: "none", cursor: socialStatus?.instagram?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.instagram?.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}>
-                  {publishLoading.instagram ? "…" : "Publicar"}
-                </button>
-              )}
-            </div>
-          )}
+          {cargo?.publicarRedes && renderChannel("instagram")}
 
           {/* WhatsApp */}
           <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -237,6 +253,14 @@ function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
             </button>
           </div>
         </div>
+
+        {/* Erros de publicação */}
+        {(publishResults.facebook?.error || publishResults.instagram?.error) && (
+          <div style={{ marginTop: "12px", padding: "10px 14px", borderRadius: "10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: "12px", color: "#f87171", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {publishResults.facebook?.error && <span>Facebook: {publishResults.facebook.error}</span>}
+            {publishResults.instagram?.error && <span>Instagram: {publishResults.instagram.error}</span>}
+          </div>
+        )}
 
         {/* Avisos de remoção (ex.: Instagram não permite exclusão por API) */}
         {(removeNote.facebook || removeNote.instagram) && (

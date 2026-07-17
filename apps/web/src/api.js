@@ -274,6 +274,25 @@ export const api = {
       headers: { "x-tenant-slug": tenantSlug },
     }),
 
+  // Remove UM post específico (por id) — usado quando o imóvel tem vários posts na mesma rede.
+  removePublicationById: (tenantSlug, publicationId) =>
+    request(`/api/social/publish/publication/${publicationId}`, {
+      method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  // Lista todas as publicações (posts) de um imóvel, em todas as redes.
+  listPublications: (tenantSlug, propertyId) =>
+    request(`/api/properties/${propertyId}/publications`, {
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  // Métricas reais (curtidas/comentários/compartilhamentos) de um post na rede.
+  getPublicationInsights: (tenantSlug, publicationId) =>
+    request(`/api/social/publish/publication/${publicationId}/insights`, {
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
   reconcileProperty: (tenantSlug, propertyId) =>
     request(`/api/social/reconcile/${propertyId}`, {
       method: "POST",

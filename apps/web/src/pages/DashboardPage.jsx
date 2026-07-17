@@ -252,7 +252,7 @@ export function ImovelListPage({ session }) {
   }
 
   function handleStartEdit(property) {
-    navigate("/imoveis/novo", { state: { editingProperty: property } });
+    navigate("/imoveis/editar", { state: { editingProperty: property } });
   }
 
   return (
@@ -273,7 +273,7 @@ export function ImovelListPage({ session }) {
 // ─── Formulário de imóvel (criar / editar) ────────────────────────────────────
 
 export function ImovelFormPage({ session }) {
-  const { state } = useLocation();
+  const { state, pathname } = useLocation();
   const navigate = useNavigate();
   const ctx = useOutletContext();
   const showToast = ctx?.showToast;
@@ -281,6 +281,14 @@ export function ImovelFormPage({ session }) {
   const editingProperty = state?.editingProperty || null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // /imoveis/editar exige um imóvel no state. Sem ele (ex.: refresh da página),
+  // volta para a lista em vez de mostrar o menu de "novo imóvel".
+  useEffect(() => {
+    if (pathname === "/imoveis/editar" && !editingProperty) {
+      navigate("/imoveis", { replace: true });
+    }
+  }, [pathname, editingProperty, navigate]);
 
   async function handleSubmit(payload) {
     if (!tenantSlug) return null;

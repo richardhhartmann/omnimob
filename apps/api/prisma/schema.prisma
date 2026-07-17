@@ -300,6 +300,7 @@ model PropertyPublication {
   channel       PublicationChannel
   status        PublicationStatus  @default(PENDING)
   externalRef   String?
+  caption       String?
   errorMessage  String?
   lastAttemptAt DateTime?
   createdAt     DateTime           @default(now())
@@ -308,7 +309,10 @@ model PropertyPublication {
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  @@unique([propertyId, channel])
+  // Um imóvel pode ter VÁRIOS posts na mesma rede (ex.: manter o anúncio
+  // original e publicar um novo após uma edição). Cada post é uma linha, com
+  // seu próprio externalRef, removível individualmente.
+  @@index([propertyId, channel])
   @@index([tenantId, status])
 }
 

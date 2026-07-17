@@ -1884,6 +1884,51 @@ svg.icon-moon,
   z-index: 4;
 }
 
+/* ── Transição entre passos do formulário (avançar/voltar) ──────────────────── */
+.step-pane--forward { animation: step-in-right .4s cubic-bezier(.22, 1, .36, 1) both; }
+.step-pane--back    { animation: step-in-left  .4s cubic-bezier(.22, 1, .36, 1) both; }
+.step-pane--fade    { animation: step-in-fade  .45s ease both; }
+
+@keyframes step-in-right {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes step-in-left {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes step-in-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Passo Divulgar: 1 card "se dividindo" em 3 (entrada) e fundindo em 1 (saída).
+   As classes são removidas após a animação para não travar o hover dos cards. ─ */
+.divulgar-grid.is-splitting > * {
+  animation: divulgar-split-in .58s cubic-bezier(.22, 1, .36, 1) both;
+}
+.divulgar-grid.is-splitting > *:nth-child(1) { --split-x: 64%;  animation-delay: .04s; }
+.divulgar-grid.is-splitting > *:nth-child(2) { --split-x: 0%;   animation-delay: .13s; }
+.divulgar-grid.is-splitting > *:nth-child(3) { --split-x: -64%; animation-delay: .04s; }
+
+@keyframes divulgar-split-in {
+  0%   { opacity: 0; transform: translateX(var(--split-x, 0)) scale(.48); filter: blur(8px); }
+  55%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+}
+
+.divulgar-grid.is-merging > * {
+  animation: divulgar-merge-out .44s cubic-bezier(.55, 0, .67, 0) both;
+}
+.divulgar-grid.is-merging > *:nth-child(1) { --split-x: 64%; }
+.divulgar-grid.is-merging > *:nth-child(2) { --split-x: 0%; }
+.divulgar-grid.is-merging > *:nth-child(3) { --split-x: -64%; }
+
+@keyframes divulgar-merge-out {
+  0%   { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: translateX(var(--split-x, 0)) scale(.48); filter: blur(8px); }
+}
+
 /* Moldura com borda em degradê. Neutra em repouso; animada e colorida no foco. */
 .divulgar-ring {
   position: relative;
@@ -1990,6 +2035,26 @@ svg.icon-moon,
   transition: background .3s ease;
 }
 
+/* Barra de rolagem do texto dos previews: fina e translúcida, combinando com o
+   fundo claro dos cards (antes usava a barra escura padrão do sistema). */
+.divulgar-caption {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, .28) transparent;
+}
+.divulgar-caption::-webkit-scrollbar {
+  width: 6px;
+}
+.divulgar-caption::-webkit-scrollbar-track {
+  background: transparent;
+}
+.divulgar-caption::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, .22);
+  border-radius: 999px;
+}
+.divulgar-caption::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, .35);
+}
+
 .divulgar-desc::before {
   content: "";
   position: absolute;
@@ -2066,6 +2131,60 @@ svg.icon-moon,
   color: #fff;
   background: linear-gradient(160deg, rgba(16, 185, 129, .95), rgba(5, 150, 105, .97));
   animation: divulgar-pub-in .45s ease;
+  transition: opacity .4s ease;
+}
+
+/* Só aparece no modo reduzido: ao focar (hover) o card, some gradualmente para
+   revelar o preview + o botão de publicar; volta ao tirar o hover. */
+.divulgar-card:hover .divulgar-published {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Saída de um post da lista "Publicações ativas" (remover): implode e some. */
+@keyframes divulgar-post-out {
+  0%   { opacity: 1; transform: scale(1); }
+  25%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(.35); filter: blur(3px); }
+}
+
+/* ── Card publicando: véu desfocado que "pisca" no modo reduzido ─────────────
+   Some no hover (igual ao "Publicado!"), para não atrapalhar. */
+.divulgar-publishing {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  background: rgba(12, 15, 28, .45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: opacity .35s ease;
+}
+
+.divulgar-publishing-spin {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, .3);
+  border-top-color: #fff;
+  animation: divulgar-spin .8s linear infinite;
+}
+
+@keyframes divulgar-spin {
+  to { transform: rotate(360deg); }
+}
+
+.divulgar-card:hover .divulgar-publishing {
+  opacity: 0;
+  pointer-events: none;
 }
 
 @keyframes divulgar-pub-in {

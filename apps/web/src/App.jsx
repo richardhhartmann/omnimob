@@ -156,6 +156,11 @@ export default function App() {
             ? <ImovelFormPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        <Route path="/imoveis/editar" element={
+          cargo?.gerenciarImoveis
+            ? <ImovelFormPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
         <Route path="/leads" element={
           cargo?.gerenciarLeads
             ? <LeadsPage session={session} />

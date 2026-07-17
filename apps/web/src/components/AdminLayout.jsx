@@ -199,7 +199,9 @@ export function AdminLayout({ session, onLogout }) {
   const isUsuarios      = p === "/usuarios";
   const isCargos        = p === "/cargos";
   const isConfiguracoes = p === "/configuracoes";
-  const isShowcaseEditor = p.endsWith("/editar");
+  // Apenas o editor da vitrine (/vitrine/:slug/editar) — não confundir com
+  // /imoveis/editar, que é o formulário de imóvel.
+  const isShowcaseEditor = p.startsWith("/vitrine/") && p.endsWith("/editar");
 
   // ── Badge de novos leads ──────────────────────────────────────────────────────
   const [leadsBadge, setLeadsBadge] = useState(0);

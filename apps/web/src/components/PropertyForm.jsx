@@ -85,6 +85,10 @@ const STEPS = [
   { key: "divulgar", label: "Divulgar" },
 ];
 
+// Máximo de fotos por imóvel. 20 cobre os limites dos canais de divulgação:
+// Instagram (carrossel: até 20), Facebook (carrossel: 10) e WhatsApp (~30).
+const MAX_FOTOS = 20;
+
 const AREA_FIELDS = {
   areaTerreno: "Área do terreno",
   areaConstruida: "Área construída",
@@ -535,6 +539,7 @@ function PreviewCaption({ value, onChange, color, collapsedHeight = 60, linkColo
     <div>
       <textarea
         ref={ref}
+        className="divulgar-caption"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setExpanded(true)}
@@ -543,6 +548,11 @@ function PreviewCaption({ value, onChange, color, collapsedHeight = 60, linkColo
           width: "100%", boxSizing: "border-box", border: "none", outline: "none", resize: "none",
           overflow: "hidden", background: "transparent", color, fontSize: "13px", lineHeight: 1.5,
           fontFamily: "inherit", height: collapsedHeight, padding: 0, margin: 0,
+          // Suaviza o corte do texto no topo/base quando há mais conteúdo que cabe.
+          ...((overflow || expanded) ? {
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)",
+            maskImage: "linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)",
+          } : {}),
         }}
       />
       {(overflow || expanded) && (
@@ -659,18 +669,29 @@ function WhatsAppMedia({ urls }) {
   );
 }
 
-function PreviewCard({ brandLabel, brandColor, brandRadius = "12px", brandIcon, ringGradient, ringGlow, statusText, published, onRemove, removeLoading, locked, lockLabel, children }) {
+function PreviewCard({ brandLabel, brandColor, brandRadius = "12px", brandIcon, ringGradient, ringGlow, statusText, published, publishedCount = 0, publishing, onRemove, removeLoading, locked, lockLabel, children }) {
   return (
     <div className={`divulgar-card${published ? " is-published" : ""}`} style={{ "--ring-gradient": ringGradient, "--ring-glow": ringGlow }}>
       <div className="divulgar-ring">
         <div className="divulgar-inner">
           {children}
-          {published && (
+          {publishing && (
+            <div className="divulgar-publishing">
+              <div className="divulgar-publishing-spin" />
+              <div>Publicando…</div>
+            </div>
+          )}
+          {published && !publishing && (
             <div className="divulgar-published">
               <div className="divulgar-published-check">
                 <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </div>
               <div className="divulgar-published-label">Publicado!</div>
+              {publishedCount > 1 && (
+                <div style={{ fontSize: "12px", fontWeight: 600, opacity: 0.9, marginTop: "-4px" }}>
+                  {publishedCount} posts ativos
+                </div>
+              )}
               {onRemove && (
                 <button type="button" className="divulgar-published-remove" onClick={onRemove} disabled={removeLoading}>
                   {removeLoading ? "Removendo…" : "Remover publicação"}
@@ -678,7 +699,7 @@ function PreviewCard({ brandLabel, brandColor, brandRadius = "12px", brandIcon, 
               )}
             </div>
           )}
-          {!published && locked && (
+          {!published && !publishing && locked && (
             <div className="divulgar-locked">
               <div className="divulgar-locked-icon">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
@@ -723,11 +744,11 @@ const ICON = {
   globo: <><circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" /><path d="M12 3a14 14 0 0 1 3.5 9 14 14 0 0 1-3.5 9 14 14 0 0 1-3.5-9A14 14 0 0 1 12 3z" /></>,
 };
 
-function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, onRemove, removeLoading, locked, lockLabel, acao }) {
+function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, publishedCount, publishing, onRemove, removeLoading, locked, lockLabel, acao }) {
   return (
     <PreviewCard brandLabel="Facebook" brandColor="#1877f2" brandRadius="11px" brandIcon={FB_ICON}
       ringGradient="linear-gradient(115deg,#1877f2,#4293ff,#0a58ca,#3b82f6,#1877f2)" ringGlow="rgba(24,119,242,0.45)" statusText={statusText}
-      published={published} onRemove={onRemove} removeLoading={removeLoading} locked={locked} lockLabel={lockLabel}>
+      published={published} publishedCount={publishedCount} publishing={publishing} onRemove={onRemove} removeLoading={removeLoading} locked={locked} lockLabel={lockLabel}>
       <div style={{ background: "#fff", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={40} />
@@ -760,12 +781,12 @@ function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, status
   );
 }
 
-function InstagramPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, onRemove, removeLoading, locked, lockLabel, acao }) {
+function InstagramPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, publishedCount, publishing, onRemove, removeLoading, locked, lockLabel, acao }) {
   const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
   return (
     <PreviewCard brandLabel="Instagram" brandColor="linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" brandRadius="11px" brandIcon={IG_ICON}
       ringGradient="linear-gradient(115deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888,#f09433)" ringGlow="rgba(220,39,67,0.42)" statusText={statusText}
-      published={published} onRemove={onRemove} removeLoading={removeLoading} locked={locked} lockLabel={lockLabel}>
+      published={published} publishedCount={publishedCount} publishing={publishing} onRemove={onRemove} removeLoading={removeLoading} locked={locked} lockLabel={lockLabel}>
       <div style={{ background: "#fff", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px" }}>
           <PostAvatar url={avatarUrl} nome={nome} size={30} ring />
@@ -802,7 +823,7 @@ function WhatsAppPreview({ nome, avatarUrl, coverUrls, caption, onChange, status
           <PostAvatar url={avatarUrl} nome={nome} size={30} />
           <div style={{ fontSize: "13px", fontWeight: 600 }}>{nome || "Sua imobiliária"}</div>
         </div>
-        <div style={{ background: "#e5ddd5", padding: "16px 10px", display: "flex", justifyContent: "flex-end", alignItems: "flex-start", flex: 1, minHeight: "120px" }}>
+        <div style={{ background: "#e5ddd5 url('https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fb9qk3w41sqf1l0ccujfh.png') center / cover", padding: "16px 10px", display: "flex", justifyContent: "flex-end", alignItems: "flex-start", flex: 1, minHeight: "120px" }}>
           <div style={{ maxWidth: "90%", background: "#dcf8c6", borderRadius: "10px", padding: "7px", boxShadow: "0 1px 1px rgba(0,0,0,0.12)" }}>
             <WhatsAppMedia urls={coverUrls} />
             <Expand>
@@ -821,7 +842,7 @@ function WhatsAppPreview({ nome, avatarUrl, coverUrls, caption, onChange, status
   );
 }
 
-function PhotoGrid({ images, onRemove, onReorder }) {
+function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disabled }) {
   const dragFrom = useRef(null);
   const [dragOver, setDragOver] = useState(null);
 
@@ -883,6 +904,36 @@ function PhotoGrid({ images, onRemove, onReorder }) {
           </span>
         </div>
       ))}
+
+      {showAddCard && (
+        <label
+          htmlFor={disabled ? undefined : addInputId}
+          title="Adicionar mais fotos"
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: "8px", aspectRatio: "1", borderRadius: "10px",
+            border: "2px dashed rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.02)",
+            color: "rgba(255,255,255,0.4)", cursor: disabled ? "not-allowed" : "pointer",
+            transition: "border-color 0.15s, color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            if (disabled) return;
+            e.currentTarget.style.borderColor = "rgba(99,102,241,0.6)";
+            e.currentTarget.style.color = "rgba(129,140,248,1)";
+            e.currentTarget.style.background = "rgba(99,102,241,0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.16)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.4)";
+            e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+          }}
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span style={{ fontSize: "11px", fontWeight: 600 }}>Adicionar</span>
+        </label>
+      )}
     </div>
   );
 }
@@ -972,11 +1023,153 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
   );
 }
 
+// Selo "Informação gerada por IA" — texto pequeno posicionado acima do campo,
+// à direita. Usa o mesmo gradiente e animação do IA-flare (agora aplicado ao
+// texto via background-clip). Some junto com o flare quando o campo é editado.
+function AiFlareBadge({ active }) {
+  return (
+    <span
+      aria-hidden={!active}
+      style={{
+        position: "absolute", bottom: "calc(100% + 3px)", right: "2px", zIndex: 5,
+        fontSize: "10px", fontWeight: 700, letterSpacing: "0.03em",
+        pointerEvents: "none", whiteSpace: "nowrap",
+        opacity: active ? 1 : 0, transition: "opacity 0.4s ease",
+        background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
+        backgroundSize: "200% 200%", animation: "gradient-flare 3s ease infinite",
+        WebkitBackgroundClip: "text", backgroundClip: "text",
+        WebkitTextFillColor: "transparent", color: "transparent",
+      }}
+    >
+      Informação gerada por IA
+    </span>
+  );
+}
+
+// Modal de decisão ao republicar quando já existe post na rede: manter o
+// original + publicar novo (dois posts) OU apagar o original e substituir.
+function RepublishModal({ platform, onKeep, onReplace, onCancel }) {
+  if (!platform) return null;
+  const nome = platform === "facebook" ? "Facebook" : "Instagram";
+  const optBase = {
+    display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-start",
+    padding: "12px 16px", borderRadius: "10px", cursor: "pointer", width: "100%",
+    textAlign: "left", fontSize: "14px", fontWeight: 600,
+  };
+  return (
+    <>
+      <div onClick={onCancel} style={{
+        position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+      }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 9001, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+        <div style={{
+          width: "100%", maxWidth: "460px", background: "rgba(18,22,36,0.98)",
+          border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px", padding: "26px 26px 22px",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+        }}>
+          <div style={{ fontSize: "16px", fontWeight: 700, marginBottom: "8px" }}>Republicar no {nome}</div>
+          <p style={{ margin: "0 0 20px", fontSize: "13px", lineHeight: 1.6, color: "#cbd5e1" }}>
+            Já existe um anúncio deste imóvel no {nome}. O que fazer com o post atual?
+            {platform === "instagram" && (
+              <><br /><span style={{ color: "#fbbf24" }}>
+                No Instagram, "substituir" apenas para de rastrear o post antigo — a Meta não permite apagá-lo por API. A exclusão precisa ser feita manualmente no app.
+              </span></>
+            )}
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <button type="button" onClick={onKeep} style={{ ...optBase, background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)", color: "#c7d2fe" }}>
+              Manter o original + publicar novo
+              <small style={{ fontSize: "12px", fontWeight: 400, opacity: 0.8 }}>Fica com dois posts no {nome}.</small>
+            </button>
+            <button type="button" onClick={onReplace} style={{ ...optBase, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#fca5a5" }}>
+              Apagar o original e substituir
+              <small style={{ fontSize: "12px", fontWeight: 400, opacity: 0.8 }}>Remove o post atual e publica o novo no lugar.</small>
+            </button>
+            <button type="button" onClick={onCancel} style={{
+              padding: "9px 16px", borderRadius: "9px", border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.05)", color: "#94a3b8", fontSize: "13px", fontWeight: 500,
+              cursor: "pointer", width: "auto", alignSelf: "flex-end", marginTop: "2px",
+            }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Simulação do post publicado no estilo da rede (Facebook/Instagram), renderizada
+// inline (dropdown) abaixo da linha. Usa a legenda REAL salva no publish e as
+// métricas REAIS (curtidas/comentários/compartilhamentos) vindas da Graph API.
+function PostSimCard({ pub, coverUrls, caption, insights, nome, avatarUrl }) {
+  const isIg = pub.channel === "INSTAGRAM";
+  const likes = insights?.likes ?? 0;
+  const comments = insights?.comments ?? 0;
+  const shares = insights?.shares; // número (FB) ou null (IG)
+  const nfmt = (n) => Number(n || 0).toLocaleString("pt-BR");
+  const dataCurta = pub.createdAt
+    ? new Date(pub.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })
+    : "Agora";
+  const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
+
+  return (
+    <div style={{ background: "#fff", borderRadius: "10px", overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.18)" }}>
+      {isIg ? (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px" }}>
+            <PostAvatar url={avatarUrl} nome={nome} size={32} ring />
+            <div style={{ flex: 1, fontSize: "13px", fontWeight: 600, color: "#050505" }}>{handle}</div>
+            <span style={{ color: "#050505", fontSize: "18px", lineHeight: 1 }}>⋯</span>
+          </div>
+          <MediaCarousel urls={coverUrls} aspectRatio="1" />
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "10px 12px 6px", color: "#050505", fontSize: "14px", fontWeight: 600 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.coracao} size={24} />{likes > 0 && nfmt(likes)}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.comentar} size={24} />{comments > 0 && nfmt(comments)}</span>
+            <span style={{ display: "flex" }}><Ic d={ICON.enviar} size={24} /></span>
+            <span style={{ marginLeft: "auto", display: "flex" }}><Ic d={ICON.salvar} size={24} /></span>
+          </div>
+          {caption && (
+            <div style={{ padding: "4px 12px 0", fontSize: "14px", color: "#050505", lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 700, marginRight: "6px" }}>{handle}</span>
+              <span style={{ whiteSpace: "pre-wrap" }}>{caption}</span>
+            </div>
+          )}
+          <div style={{ padding: "6px 12px 14px", fontSize: "11px", color: "#8e8e8e", textTransform: "uppercase", letterSpacing: "0.02em" }}>{dataCurta}</div>
+        </>
+      ) : (
+        <>
+          <div style={{ padding: "12px 14px 8px", display: "flex", alignItems: "center", gap: "10px" }}>
+            <PostAvatar url={avatarUrl} nome={nome} size={40} />
+            <div style={{ flex: 1, lineHeight: 1.3 }}>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#050505" }}>{nome || "Sua imobiliária"}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#65676b" }}>
+                {dataCurta} · <span style={{ display: "inline-flex" }}><Ic d={ICON.globo} size={12} /></span>
+              </div>
+            </div>
+            <span style={{ color: "#65676b", fontSize: "20px", lineHeight: 1 }}>⋯</span>
+          </div>
+          {caption && <div style={{ padding: "0 14px 10px", fontSize: "14px", lineHeight: 1.5, color: "#050505", whiteSpace: "pre-wrap" }}>{caption}</div>}
+          <MediaCarousel urls={coverUrls} maxHeight="400px" />
+          <div style={{ borderTop: "1px solid #ced0d4", margin: "10px 12px 0" }} />
+          <div style={{ display: "flex", justifyContent: "space-around", padding: "8px 4px 12px", color: "#65676b", fontSize: "14px", fontWeight: 600 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.curtir} size={18} /> {likes > 0 ? nfmt(likes) : "Curtir"}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.comentar} size={18} /> {comments > 0 ? nfmt(comments) : "Comentar"}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Ic d={ICON.compartilhar} size={18} /> {(shares != null && shares > 0) ? nfmt(shares) : "Compartilhar"}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Contorno "flare" (gradiente animado) exibido ao redor de um campo preenchido
 // pela IA. Some suavemente (opacity) quando o usuário edita o campo manualmente.
 function AiFlare({ active, radius = "11px", children }) {
   return (
     <div style={{ position: "relative", zIndex: 1 }}>
+      <AiFlareBadge active={active} />
       <div style={{
         position: "absolute", inset: "-1px", borderRadius: radius, zIndex: -1, pointerEvents: "none",
         background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
@@ -1015,6 +1208,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const { confirm, modal: confirmModal } = useConfirm();
   const [form, setForm] = useState(EMPTY);
   const [step, setStep] = useState(0);
+  const [displayStep, setDisplayStep] = useState(0);   // passo realmente renderizado (defasa durante a saída animada)
+  const [stepAnim, setStepAnim] = useState("fade");    // forward | back | fade — animação de entrada do conteúdo
+  const [divulgarAnim, setDivulgarAnim] = useState(null); // null | splitting | merging — split/merge dos 3 cards
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [cepLoading, setCepLoading] = useState(false);
@@ -1039,7 +1235,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [socialStatus, setSocialStatus] = useState(null);
   const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
   const [publishResults, setPublishResults] = useState({});
-  const [removeLoading, setRemoveLoading] = useState({ facebook: false, instagram: false });
+  const [publications, setPublications] = useState([]); // posts ativos por rede (0..N por canal)
+  const [removingId, setRemovingId] = useState(null);   // id do post sendo removido
+  const [republishAsk, setRepublishAsk] = useState(null); // "facebook" | "instagram" — modal manter/substituir
+  const [expandedPostId, setExpandedPostId] = useState(null); // publicação expandida (dropdown)
+  const [postInsights, setPostInsights] = useState({});       // { [pubId]: { loading, likes, comments, shares, available } }
   const [removeNote, setRemoveNote] = useState({});
   const [gerandoCampo, setGerandoCampo] = useState(null);
   const [campoIaErro, setCampoIaErro] = useState("");
@@ -1062,6 +1262,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   useEffect(() => {
     if (step !== 3 || !tenantSlug || !savedPropertyId) return;
     api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
+    api.listPublications(tenantSlug, savedPropertyId)
+      .then((list) => setPublications((Array.isArray(list) ? list : []).filter((p) => p.status === "PUBLISHED")))
+      .catch(() => {});
     api.listPropertyImages(tenantSlug, savedPropertyId)
       .then((imgs) => setCoverUrls((imgs || []).map((i) => i.url).filter(Boolean)))
       .catch(() => setCoverUrls([]));
@@ -1102,6 +1305,35 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     setRedeIaErro({});
   }, [step, savedPropertyId]);
 
+  // Orquestra a animação entre passos. `displayStep` é o passo de fato renderizado;
+  // ele só troca depois da animação de saída (para o efeito de "fundir os 3 cards").
+  useEffect(() => {
+    if (step === displayStep) return;
+    const forward = step > displayStep;
+
+    // Saindo do Divulgar (passo 3): funde os 3 cards em 1 antes de trocar de passo.
+    if (displayStep === 3 && step !== 3) {
+      setDivulgarAnim("merging");
+      const t = setTimeout(() => {
+        setDivulgarAnim(null);
+        setStepAnim(forward ? "forward" : "back");
+        setDisplayStep(step);
+      }, 430);
+      return () => clearTimeout(t);
+    }
+
+    // Troca o conteúdo agora, com a animação de entrada adequada.
+    setDisplayStep(step);
+    if (step === 3) {
+      // Entrando no Divulgar: 1 card se divide em 3 (limpa a classe após animar).
+      setStepAnim("fade");
+      setDivulgarAnim("splitting");
+      const t = setTimeout(() => setDivulgarAnim(null), 720);
+      return () => clearTimeout(t);
+    }
+    setStepAnim(forward ? "forward" : "back");
+  }, [step, displayStep]);
+
   useEffect(() => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
     setImages([]);
@@ -1111,9 +1343,20 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     if (!initialData) {
       setForm(EMPTY);
       setExistingImages([]);
+      setSavedPropertyId(null);
+      setPublishResults({});
+      setPublications([]);
       setStep(0);
       return;
     }
+    // Em edição o imóvel já existe: destrava a aba Divulgar de imediato
+    // (savedPropertyId) e hidrata a lista de publicações a partir do que já veio
+    // no imóvel, para os posts ativos aparecerem na aba Divulgar de cara.
+    setSavedPropertyId(initialData.id);
+    setPublishResults({});
+    setPublications(
+      (initialData.publications || []).filter((p) => p.status === "PUBLISHED")
+    );
     setExistingImages(
       [...(initialData.images || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     );
@@ -1174,12 +1417,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }
 
   function addImages(files) {
-    const newItems = files.map((file) => ({
-      id: `${Date.now()}-${Math.random()}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
-    setImages((prev) => [...prev, ...newItems]);
+    setImages((prev) => {
+      const jaUsadas = existingImages.length + prev.length;
+      const espaco = Math.max(0, MAX_FOTOS - jaUsadas);
+      if (espaco <= 0) return prev;
+      const newItems = files.slice(0, espaco).map((file) => ({
+        id: `${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      }));
+      return [...prev, ...newItems];
+    });
   }
 
   // ── Arrastar fotos para dentro da página ───────────────────────────────────
@@ -1568,15 +1816,32 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     setAiFields((prev) => ({ ...prev, comodidades: false })); // ajuste manual desliga o flare
   }
 
-  async function handlePublish(platform) {
+  async function refreshPublications() {
     if (!tenantSlug || !savedPropertyId) return;
+    try {
+      const list = await api.listPublications(tenantSlug, savedPropertyId);
+      setPublications((Array.isArray(list) ? list : []).filter((p) => p.status === "PUBLISHED"));
+    } catch { /* mantém o estado atual em caso de falha de rede */ }
+  }
+
+  // Publica no canal. `replace` = apaga os posts anteriores desta rede depois de
+  // publicar o novo (escolha "substituir"); sem ele, o post novo soma aos que já existem.
+  async function handlePublish(platform, replace = false) {
+    if (!tenantSlug || !savedPropertyId) return;
+    setRepublishAsk(null);
     setPublishLoading((prev) => ({ ...prev, [platform]: true }));
+    setPublishResults((prev) => { const next = { ...prev }; delete next[platform]; return next; });
+    setRemoveNote((prev) => ({ ...prev, [platform]: "" }));
     try {
       const result = await api.publishProperty(tenantSlug, savedPropertyId, {
         platforms: [platform],
         caption: captions[platform] ?? "",
+        replace,
       });
-      setPublishResults((prev) => ({ ...prev, ...result }));
+      const r = result?.[platform];
+      if (r) setPublishResults((prev) => ({ ...prev, [platform]: r }));
+      if (r?.note) setRemoveNote((prev) => ({ ...prev, [platform]: r.note }));
+      await refreshPublications();
     } catch (err) {
       setPublishResults((prev) => ({ ...prev, [platform]: { success: false, error: err.message } }));
     } finally {
@@ -1584,21 +1849,47 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
-  async function handleRemove(platform) {
-    if (!tenantSlug || !savedPropertyId) return;
-    const nome = platform === "facebook" ? "Facebook" : "Instagram";
-    if (!await confirm(`Remover este imóvel do ${nome}?`, "Remover")) return;
-    setRemoveLoading((prev) => ({ ...prev, [platform]: true }));
-    setRemoveNote((prev) => ({ ...prev, [platform]: "" }));
+  // Clique no botão "Publicar/Publicar novamente": se já existe post nesta rede,
+  // pergunta manter+novo ou substituir; senão publica direto.
+  function onPublishClick(platform) {
+    const channel = platform === "facebook" ? "FACEBOOK" : "INSTAGRAM";
+    const jaTem = publications.some((p) => p.channel === channel);
+    if (jaTem) setRepublishAsk(platform);
+    else handlePublish(platform, false);
+  }
+
+  // Abre/fecha o dropdown de um post e busca as métricas reais (uma vez).
+  function togglePost(pub) {
+    const willOpen = expandedPostId !== pub.id;
+    setExpandedPostId(willOpen ? pub.id : null);
+    if (willOpen && !postInsights[pub.id]) {
+      setPostInsights((prev) => ({ ...prev, [pub.id]: { loading: true } }));
+      api.getPublicationInsights(tenantSlug, pub.id)
+        .then((data) => setPostInsights((prev) => ({ ...prev, [pub.id]: { loading: false, ...data } })))
+        .catch(() => setPostInsights((prev) => ({ ...prev, [pub.id]: { loading: false, likes: 0, comments: 0, shares: null, available: false } })));
+    }
+  }
+
+  // Remove UM post específico (por id).
+  async function handleRemovePost(pub) {
+    if (!tenantSlug) return;
+    const nome = pub.channel === "FACEBOOK" ? "Facebook" : pub.channel === "INSTAGRAM" ? "Instagram" : "WhatsApp";
+    if (!await confirm(`Remover este post do ${nome}?`, "Remover")) return;
+    const platformKey = pub.channel.toLowerCase();
+    setRemovingId(pub.id);
+    setRemoveNote((prev) => ({ ...prev, [platformKey]: "" }));
     try {
-      const channel = platform === "facebook" ? "FACEBOOK" : "INSTAGRAM";
-      const result = await api.removePublication(tenantSlug, savedPropertyId, channel);
-      setPublishResults((prev) => { const next = { ...prev }; delete next[platform]; return next; });
-      if (result?.note) setRemoveNote((prev) => ({ ...prev, [platform]: result.note }));
+      // Deixa a animação de saída (0.4s) concluir antes do refresh desmontar a linha.
+      const [result] = await Promise.all([
+        api.removePublicationById(tenantSlug, pub.id),
+        new Promise((r) => setTimeout(r, 400)),
+      ]);
+      if (result?.note) setRemoveNote((prev) => ({ ...prev, [platformKey]: result.note }));
+      await refreshPublications();
     } catch (err) {
-      setRemoveNote((prev) => ({ ...prev, [platform]: err.message }));
+      setRemoveNote((prev) => ({ ...prev, [platformKey]: err.message }));
     } finally {
-      setRemoveLoading((prev) => ({ ...prev, [platform]: false }));
+      setRemovingId(null);
     }
   }
 
@@ -1620,6 +1911,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const withError = (field, base = inputStyle) =>
     fieldErrors[field] ? { ...base, border: "1px solid rgba(239,68,68,0.6)" } : base;
 
+  // Posts ativos por rede (podem ser vários).
+  const fbPosts = publications.filter((p) => p.channel === "FACEBOOK");
+  const igPosts = publications.filter((p) => p.channel === "INSTAGRAM");
+
   return (
     <section
       className="glass-panel"
@@ -1630,6 +1925,13 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       onDrop={handleFormDrop}
     >
       {confirmModal}
+
+      <RepublishModal
+        platform={republishAsk}
+        onKeep={() => handlePublish(republishAsk, false)}
+        onReplace={() => handlePublish(republishAsk, true)}
+        onCancel={() => setRepublishAsk(null)}
+      />
 
       {dragActive && (
         <div
@@ -1684,12 +1986,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
       <div style={{ display: "flex", gap: "40px", alignItems: "flex-start" }}>
 
-        <div style={step === 3
-          ? { width: "100%", display: "flex", flexDirection: "column", gap: "20px" }
-          : { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "20px" }
-        }>
+        <div
+          key={displayStep}
+          className={`step-pane step-pane--${stepAnim}`}
+          style={displayStep === 3
+            ? { width: "100%", display: "flex", flexDirection: "column", gap: "20px" }
+            : { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "20px" }
+          }
+        >
 
-          {step === 0 && (
+          {displayStep === 0 && (
             <>
               {isEditing && existingImages.length > 0 && (
                 <div>
@@ -1700,11 +2006,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     images={existingImages.map((img) => ({ ...img, previewUrl: img.url }))}
                     onRemove={handleRemoveExisting}
                     onReorder={handleReorderExisting}
+                    addInputId="foto-upload"
+                    showAddCard={images.length === 0 && (existingImages.length + images.length) < MAX_FOTOS}
+                    disabled={disabled}
                   />
                 </div>
               )}
 
-              {isEditing && existingImages.length > 0 && (
+              {isEditing && existingImages.length > 0 && images.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
                   <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
@@ -1714,42 +2023,60 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               )}
 
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
-                <div style={{ color: "rgba(255,255,255,0.2)", marginBottom: "14px" }}>
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
-                  </svg>
-                </div>
-                <p style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: "600" }}>
-                  {images.length > 0 ? "Adicionar mais fotos" : "Adicionar fotos"}
-                </p>
-                <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "var(--text-muted)" }}>
-                  {images.length > 0
-                    ? `${images.length} foto(s) selecionada(s) — arraste para reordenar, ✕ para remover`
-                    : "Selecione ou arraste uma ou mais fotos para esta página. JPG, PNG, WEBP."
-                  }
-                </p>
-                <input
-                  type="file" accept="image/*" multiple id="foto-upload"
-                  onChange={(e) => { addImages(Array.from(e.target.files || [])); e.target.value = ""; }}
-                  disabled={disabled} style={{ display: "none" }}
-                />
-                <label htmlFor="foto-upload" style={{
-                  display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 24px",
-                  borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer",
-                  background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
-                  color: "rgba(99,102,241,1)", fontSize: "14px", fontWeight: "600",
-                  opacity: disabled ? 0.55 : 1,
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                  Selecionar fotos
-                </label>
-              </div>
+              {/* Input sempre montado: usado tanto pela zona pontilhada quanto
+                  pelo card "+" que aparece no fim da grade de fotos. */}
+              <input
+                type="file" accept="image/*" multiple id="foto-upload"
+                onChange={(e) => { addImages(Array.from(e.target.files || [])); e.target.value = ""; }}
+                disabled={disabled} style={{ display: "none" }}
+              />
 
-              <PhotoGrid images={images} onRemove={removeImage} onReorder={reorderImages} />
+              {/* Zona pontilhada de upload só quando não há NENHUMA foto (nem
+                  salva, nem nova). Havendo qualquer foto, o card "+" no fim da
+                  grade passa a ser o ponto de adição. */}
+              {images.length === 0 && existingImages.length === 0 && (
+                <div style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
+                  <div style={{ color: "rgba(255,255,255,0.2)", marginBottom: "14px" }}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </div>
+                  <p style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: "600" }}>
+                    Adicionar fotos
+                  </p>
+                  <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "var(--text-muted)" }}>
+                    Selecione ou arraste uma ou mais fotos para esta página. JPG, PNG, WEBP.
+                  </p>
+                  <label htmlFor="foto-upload" style={{
+                    display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 24px",
+                    borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer",
+                    background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
+                    color: "rgba(99,102,241,1)", fontSize: "14px", fontWeight: "600",
+                    opacity: disabled ? 0.55 : 1,
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    Selecionar fotos
+                  </label>
+                </div>
+              )}
+
+              <PhotoGrid
+                images={images}
+                onRemove={removeImage}
+                onReorder={reorderImages}
+                addInputId="foto-upload"
+                showAddCard={images.length > 0 && (existingImages.length + images.length) < MAX_FOTOS}
+                disabled={disabled}
+              />
+
+              {(existingImages.length + images.length) >= MAX_FOTOS && (
+                <p className="hint" style={{ marginTop: "-8px", color: "var(--text-muted)" }}>
+                  Limite de {MAX_FOTOS} fotos atingido.
+                </p>
+              )}
 
               {images.length > 1 && (
                 <p className="hint" style={{ marginTop: "-8px" }}>
@@ -1783,6 +2110,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
               <Field label="Título do imóvel" required error={fieldErrors.title}>
                 <div style={{ position: "relative", zIndex: 1 }}>
+                  <AiFlareBadge active={aiFields.title} />
                   <div style={{
                     position: "absolute", inset: "-1px", borderRadius: "11px", zIndex: -1,
                     background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
@@ -1826,6 +2154,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
               <Field label="Descrição" required error={fieldErrors.description}>
                 <div style={{ position: "relative", zIndex: 1 }}>
+                  <AiFlareBadge active={aiFields.description} />
                   <div style={{
                     position: "absolute", inset: "-1px", borderRadius: "11px", zIndex: -1,
                     background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
@@ -1897,7 +2226,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             </>
           )}
 
-          {step === 1 && (
+          {displayStep === 1 && (
             <>
               <Field label="CEP" hint="Preencha o CEP para auto-completar o endereço.">
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -1961,7 +2290,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             </>
           )}
 
-          {step === 2 && (
+          {displayStep === 2 && (
             <>
               <Field label="Finalidade">
                 <AiFlare active={aiFields.finalidade}>
@@ -2022,16 +2351,20 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             </>
           )}
 
-          {step === 3 && (
+          {displayStep === 3 && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px", borderRadius: "14px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }}>
                 <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "rgba(16,185,129,0.2)", color: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                 </div>
                 <div>
-                  <div style={{ fontWeight: "600", fontSize: "14px" }}>Imóvel salvo com sucesso!</div>
+                  <div style={{ fontWeight: "600", fontSize: "14px" }}>
+                    {isEditing ? "Divulgação do imóvel" : "Imóvel salvo com sucesso!"}
+                  </div>
                   <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-                    Agora você pode divulgá-lo nas redes sociais.
+                    {isEditing
+                      ? "Gerencie as publicações deste imóvel nas redes sociais."
+                      : "Agora você pode divulgá-lo nas redes sociais."}
                   </div>
                 </div>
               </div>
@@ -2048,7 +2381,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               )}
 
-              <div className="divulgar-grid">
+              <div className={`divulgar-grid${divulgarAnim === "splitting" ? " is-splitting" : divulgarAnim === "merging" ? " is-merging" : ""}`}>
                 {cargo?.publicarRedes && (
                   <FacebookPreview
                     nome={session?.tenant?.name}
@@ -2063,15 +2396,15 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     iaLoading={redeIaLoading.facebook}
                     iaErro={redeIaErro.facebook}
                     statusText={socialStatus === null ? "Verificando…" : socialStatus.facebook.connected ? socialStatus.facebook.pageName : "Não conectado"}
-                    published={publishResults.facebook?.success}
-                    onRemove={() => handleRemove("facebook")}
-                    removeLoading={removeLoading.facebook}
+                    published={fbPosts.length > 0}
+                    publishedCount={fbPosts.length}
+                    publishing={publishLoading.facebook}
                     locked={socialStatus !== null && !socialStatus.facebook.connected}
                     lockLabel="Conecte sua Página do Facebook em Configurações para publicar aqui."
                     acao={
-                      <button type="button" className="divulgar-pub" onClick={() => handlePublish("facebook")} disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
+                      <button type="button" className="divulgar-pub" onClick={() => onPublishClick("facebook")} disabled={!socialStatus?.facebook?.connected || publishLoading.facebook}
                         style={{ ...pubBtnBase, background: "#1877f2", cursor: socialStatus?.facebook?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.facebook?.connected ? 1 : 0.4 }}>
-                        {publishLoading.facebook ? "Publicando…" : "Publicar"}
+                        {publishLoading.facebook ? "Publicando…" : fbPosts.length > 0 ? "Publicar novamente" : "Publicar"}
                       </button>
                     }
                   />
@@ -2091,15 +2424,15 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     iaLoading={redeIaLoading.instagram}
                     iaErro={redeIaErro.instagram}
                     statusText={socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta conectado" : "Não conectado"}
-                    published={publishResults.instagram?.success}
-                    onRemove={() => handleRemove("instagram")}
-                    removeLoading={removeLoading.instagram}
+                    published={igPosts.length > 0}
+                    publishedCount={igPosts.length}
+                    publishing={publishLoading.instagram}
                     locked={socialStatus !== null && !socialStatus.instagram.connected}
                     lockLabel="Conecte sua conta do Instagram em Configurações para publicar aqui."
                     acao={
-                      <button type="button" className="divulgar-pub" onClick={() => handlePublish("instagram")} disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
+                      <button type="button" className="divulgar-pub" onClick={() => onPublishClick("instagram")} disabled={!socialStatus?.instagram?.connected || publishLoading.instagram}
                         style={{ ...pubBtnBase, background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", cursor: socialStatus?.instagram?.connected ? "pointer" : "not-allowed", opacity: socialStatus?.instagram?.connected ? 1 : 0.4 }}>
-                        {publishLoading.instagram ? "Publicando…" : "Publicar"}
+                        {publishLoading.instagram ? "Publicando…" : igPosts.length > 0 ? "Publicar novamente" : "Publicar"}
                       </button>
                     }
                   />
@@ -2126,6 +2459,13 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 />
               </div>
 
+              {(publishResults.facebook?.error || publishResults.instagram?.error) && (
+                <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: "13px", color: "#f87171", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {publishResults.facebook?.error && <span>Facebook: {publishResults.facebook.error}</span>}
+                  {publishResults.instagram?.error && <span>Instagram: {publishResults.instagram.error}</span>}
+                </div>
+              )}
+
               {(removeNote.facebook || removeNote.instagram) && (
                 <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "13px", color: "#fbbf24", display: "flex", flexDirection: "column", gap: "4px" }}>
                   {removeNote.facebook && <span>{removeNote.facebook}</span>}
@@ -2133,10 +2473,95 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               )}
 
+              {publications.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)" }}>
+                    Publicações ativas ({publications.length})
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {publications.map((pub) => {
+                      const isFb = pub.channel === "FACEBOOK";
+                      const isIg = pub.channel === "INSTAGRAM";
+                      const label = isFb ? "Facebook" : isIg ? "Instagram" : "WhatsApp";
+                      const brandBg = isFb ? "#1877f2" : isIg ? "linear-gradient(135deg,#f09433,#dc2743,#bc1888)" : "#25d366";
+                      const brandIcon = isFb ? FB_ICON : isIg ? IG_ICON : WA_ICON;
+                      const removing = removingId === pub.id;
+                      const isOpen = expandedPostId === pub.id;
+                      const data = pub.createdAt
+                        ? new Date(pub.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                        : "";
+                      const captionReal = pub.caption ?? captions[pub.channel.toLowerCase()] ?? "";
+                      return (
+                        <div key={pub.id} style={{
+                          borderRadius: "10px", border: `1px solid ${isOpen ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)"}`,
+                          background: "rgba(255,255,255,0.03)", overflow: "hidden",
+                          transition: "border-color 0.15s",
+                          animation: removing ? "divulgar-post-out 0.4s ease forwards" : undefined,
+                        }}>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => togglePost(pub)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); togglePost(pub); } }}
+                            title="Ver como ficou o post"
+                            style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", cursor: "pointer" }}
+                          >
+                            <span style={{ width: "34px", height: "34px", borderRadius: "9px", background: brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
+                              <span style={{ display: "flex", transform: "scale(0.72)" }}>{brandIcon}</span>
+                            </span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0, flex: 1 }}>
+                              <span style={{ fontSize: "13px", fontWeight: 600 }}>{label}</span>
+                              {data && <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Publicado em {data}</span>}
+                            </div>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-muted)", flexShrink: 0, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.25s ease" }}>
+                              <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleRemovePost(pub); }}
+                              disabled={removing}
+                              title="Remover publicação"
+                              aria-label="Remover publicação"
+                              style={{
+                                width: "34px", height: "34px", borderRadius: "9px", flexShrink: 0, padding: 0,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)",
+                                cursor: removing ? "default" : "pointer", opacity: removing ? 0.6 : 1, transition: "background 0.15s, color 0.15s",
+                              }}
+                              onMouseEnter={(e) => { if (removing) return; e.currentTarget.style.background = "rgba(239,68,68,0.22)"; e.currentTarget.style.color = "#fca5a5"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.12)"; e.currentTarget.style.color = "#f87171"; }}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              </svg>
+                            </button>
+                          </div>
+                          {/* Dropdown: abre/fecha animando a altura (grid-template-rows 0fr→1fr) */}
+                          <div style={{ display: "grid", gridTemplateRows: isOpen ? "1fr" : "0fr", transition: "grid-template-rows 0.32s ease" }}>
+                            <div style={{ minHeight: 0, overflow: "hidden" }}>
+                              <div style={{ padding: "0 10px 10px" }}>
+                                <PostSimCard
+                                  pub={pub}
+                                  coverUrls={coverUrls}
+                                  caption={captionReal}
+                                  insights={postInsights[pub.id]}
+                                  nome={session?.tenant?.name}
+                                  avatarUrl={session?.tenant?.logoUrl || null}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 <button
                   type="button"
-                  onClick={() => { setSavedPropertyId(null); setForm(EMPTY); setStep(0); setPublishResults({}); }}
+                  onClick={() => { setSavedPropertyId(null); setForm(EMPTY); setStep(0); setPublishResults({}); setPublications([]); }}
                   style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 20px", borderRadius: "10px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "rgba(99,102,241,1)", fontSize: "13px", fontWeight: "600", cursor: "pointer", width: "auto" }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -2154,15 +2579,15 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             </>
           )}
 
-          {step < 3 && (
+          {displayStep < 3 && (
             <div style={{ display: "flex", gap: "12px", marginTop: "8px", flexWrap: "wrap" }}>
-              {step > 0 && (
+              {displayStep > 0 && (
                 <button type="button" className="button-secondary" onClick={handleBack} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   Voltar
                 </button>
               )}
-              {step < 2 ? (
+              {displayStep < 2 ? (
                 <button type="button" onClick={handleNext} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   Continuar
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
@@ -2176,7 +2601,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
           )}
         </div>
 
-        {step < 3 && (
+        {displayStep < 3 && (
           <div style={{ width: "300px", flexShrink: 0 }}>
             <PropertyPreviewCard form={form} previewUrls={previewUrls} />
           </div>
