@@ -20,6 +20,8 @@ export const createPropertySchema = z.object({
   bedrooms: z.number().int().min(0),
   parkingSpots: z.number().int().min(0),
   suites: z.number().int().min(0),
+  salas: z.number().int().min(0).optional(),
+  banheiros: z.number().int().min(0).optional(),
   squareFootage: z.number().positive(),
   finalidade: z.enum(["RESIDENCIAL", "COMERCIAL"]).nullable().optional(),
   areaTerreno: z.number().nonnegative().nullable().optional(),
@@ -67,4 +69,5 @@ export const updateTenantConfiguracaoSchema = z.object({
   slogan: z.string().optional(),
   primaryColor: z.string().optional(),
   secondaryColor: z.string().optional(),
+  autoGerarIA: z.boolean().optional(),
 });

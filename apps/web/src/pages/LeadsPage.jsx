@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useConfirm } from "../components/ConfirmModal";
+import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -228,6 +229,7 @@ export function LeadsPage({ session }) {
       {error ? <div className="error" style={{ marginBottom: "16px" }}>{error}</div> : null}
 
       {/* Métricas */}
+      {loading ? <SkeletonStats count={4} /> : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "16px", marginBottom: "24px" }}>
         <StatCard label="Total de leads" value={stats.total} accent="#6366f1" icon={
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -238,6 +240,7 @@ export function LeadsPage({ session }) {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
         } />
       </div>
+      )}
 
       {/* Barra de filtros */}
       <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
@@ -302,7 +305,7 @@ export function LeadsPage({ session }) {
         </div>
       </div>
 
-      {loading ? <p style={{ color: "var(--text-muted)", marginBottom: "16px" }}>Carregando leads...</p> : null}
+      {loading ? <SkeletonListRows count={5} /> : null}
 
       {/* Estados vazios */}
       {!loading && allLeads.length === 0 ? (

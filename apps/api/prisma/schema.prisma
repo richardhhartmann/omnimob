@@ -79,7 +79,8 @@ model Tenant {
   facebookPageName    String?
   instagramBusinessId String?
   ativo               Boolean  @default(true)
-  plano               String?
+  plano               String?         // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
+  autoGerarIA         Boolean  @default(true)  // auto-preenche imóvel por IA ao lançar foto
   statusPagamento     StatusPagamento @default(TRIAL)
   proximoVencimento   DateTime?
   valorMensal         Decimal?        @db.Decimal(10, 2)
@@ -265,6 +266,8 @@ model Property {
   bedrooms      Int            @default(0)
   parkingSpots  Int            @default(0)
   suites        Int            @default(0)
+  salas         Int            @default(0)   // nº de salas/ambientes (imóveis comerciais)
+  banheiros     Int            @default(0)   // nº de banheiros (imóveis comerciais)
   squareFootage Float          @default(0)
   finalidade    String?        // RESIDENCIAL | COMERCIAL
   areaTerreno   Float?         @map("area_terreno")
@@ -335,6 +338,7 @@ model PropertyImage {
   url        String
   publicId   String?
   position   Int      @default(0)
+  is360      Boolean  @default(false)
   createdAt  DateTime @default(now())
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)

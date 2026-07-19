@@ -52,6 +52,8 @@ function montarSessao(usuario) {
       showcaseHeadline: usuario.tenant.showcaseHeadline,
       showcaseSubheadline: usuario.tenant.showcaseSubheadline,
       showcaseConfig: usuario.tenant.showcaseConfig,
+      plano: (usuario.tenant.plano || "BASICO").toUpperCase(),
+      autoGerarIA: usuario.tenant.autoGerarIA,
     },
   };
 }

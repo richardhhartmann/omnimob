@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnNovo } from "../components/ActionIcons";
 import { Avatar, Chip, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
+import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
+import { formatCep, formatCpf, formatPhone, formatRg, onlyDigits } from "../utils/masks";
 
 const FORM_EMPTY = {
   nome: "", cpf: "", rg: "", nascimento: "", email: "", telefone: "", whatsapp: "",
@@ -31,14 +33,20 @@ export function ClientesPage({ session }) {
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(FORM_EMPTY);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | inactive
+  const [cepLoading, setCepLoading] = useState(false);
   const searchTimer = useRef(null);
+  const lastCepRef = useRef("");
 
   function carregarClientes(searchTerm = "") {
     if (!tenantSlug) return;
-    api.listClientes(tenantSlug, { search: searchTerm }).then(setClientes).catch(() => {});
+    api.listClientes(tenantSlug, { search: searchTerm })
+      .then(setClientes)
+      .catch(() => {})
+      .finally(() => setInitialLoading(false));
   }
 
   useEffect(() => {
@@ -62,10 +70,10 @@ export function ClientesPage({ session }) {
   function abrirEditar(c) {
     setEditando(c);
     setForm({
-      nome: c.nome || "", cpf: c.cpf || "", rg: c.rg || "",
+      nome: c.nome || "", cpf: formatCpf(c.cpf || ""), rg: formatRg(c.rg || ""),
       nascimento: c.nascimento ? c.nascimento.slice(0, 10) : "",
-      email: c.email || "", telefone: c.telefone || "", whatsapp: c.whatsapp || "",
-      cep: c.cep || "", endereco: c.endereco || "", bairro: c.bairro || "",
+      email: c.email || "", telefone: formatPhone(c.telefone || ""), whatsapp: formatPhone(c.whatsapp || ""),
+      cep: formatCep(c.cep || ""), endereco: c.endereco || "", bairro: c.bairro || "",
       cidade: c.cidade || "", estado: c.estado || "", observacoes: c.observacoes || "",
       ativo: c.ativo,
     });
@@ -111,6 +119,34 @@ export function ClientesPage({ session }) {
 
   function setField(k, v) { setForm((p) => ({ ...p, [k]: v })); }
 
+  // Autopreenche UF, logradouro, bairro e cidade a partir do CEP (mesma API do
+  // cadastro de imóveis — ViaCEP).
+  async function handleCepBlur() {
+    const cleanCep = onlyDigits(form.cep);
+    if (cleanCep.length !== 8 || cleanCep === lastCepRef.current) return;
+    setCepLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      if (!response.ok) throw new Error("Falha ao consultar CEP.");
+      const data = await response.json();
+      if (data.erro) throw new Error("CEP não encontrado.");
+      lastCepRef.current = cleanCep;
+      setForm((prev) => ({
+        ...prev,
+        cep: formatCep(cleanCep),
+        endereco: data.logradouro || prev.endereco,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        estado: data.uf || prev.estado,
+      }));
+    } catch (err) {
+      setError(err.message || "Não foi possível buscar o CEP.");
+    } finally {
+      setCepLoading(false);
+    }
+  }
+
   const stats = useMemo(() => {
     const mesAtual = new Date().getMonth();
     return {
@@ -137,8 +173,8 @@ export function ClientesPage({ session }) {
           </div>
           <input placeholder="Nome completo *" value={form.nome} onChange={(e) => setField("nome", e.target.value)} required disabled={loading} />
           <div className="grid grid-2">
-            <input placeholder="CPF" value={form.cpf} onChange={(e) => setField("cpf", e.target.value)} disabled={loading} />
-            <input placeholder="RG" value={form.rg} onChange={(e) => setField("rg", e.target.value)} disabled={loading} />
+            <input placeholder="CPF" inputMode="numeric" value={form.cpf} onChange={(e) => setField("cpf", formatCpf(e.target.value))} disabled={loading} />
+            <input placeholder="RG" value={form.rg} onChange={(e) => setField("rg", formatRg(e.target.value))} disabled={loading} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             <label style={{ fontSize: "12px", opacity: 0.55 }}>Data de Nascimento</label>
@@ -150,15 +186,25 @@ export function ClientesPage({ session }) {
           </div>
           <input type="email" placeholder="E-mail" value={form.email} onChange={(e) => setField("email", e.target.value)} disabled={loading} />
           <div className="grid grid-2">
-            <input placeholder="Telefone" value={form.telefone} onChange={(e) => setField("telefone", e.target.value)} disabled={loading} />
-            <input placeholder="WhatsApp" value={form.whatsapp} onChange={(e) => setField("whatsapp", e.target.value)} disabled={loading} />
+            <input placeholder="Telefone" inputMode="tel" value={form.telefone} onChange={(e) => setField("telefone", formatPhone(e.target.value))} disabled={loading} />
+            <input placeholder="WhatsApp" inputMode="tel" value={form.whatsapp} onChange={(e) => setField("whatsapp", formatPhone(e.target.value))} disabled={loading} />
           </div>
 
           <div style={{ marginTop: "8px", marginBottom: "4px", fontSize: "11px", fontWeight: "600", opacity: 0.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Endereço
           </div>
           <div className="grid grid-2">
-            <input placeholder="CEP" value={form.cep} onChange={(e) => setField("cep", e.target.value)} disabled={loading} />
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <input
+                placeholder="CEP"
+                inputMode="numeric"
+                value={form.cep}
+                onChange={(e) => setField("cep", formatCep(e.target.value))}
+                onBlur={handleCepBlur}
+                disabled={loading || cepLoading}
+              />
+              {cepLoading && <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Buscando endereço…</span>}
+            </div>
             <input placeholder="Estado (UF)" value={form.estado} onChange={(e) => setField("estado", e.target.value.toUpperCase())} maxLength={2} disabled={loading} />
           </div>
           <input placeholder="Endereço (rua e número)" value={form.endereco} onChange={(e) => setField("endereco", e.target.value)} disabled={loading} />
@@ -199,20 +245,22 @@ export function ClientesPage({ session }) {
 
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Clientes</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: "4px 0 0" }}>Sua base de clientes e contatos.</p>
-        </div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+        <header>
+          <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Clientes</h1>
+          <p style={{ color: "var(--text-muted)", margin: 0 }}>Sua base de clientes e contatos.</p>
+        </header>
         <BtnNovo onClick={abrirCriar} label="Novo Cliente" />
       </div>
 
+      {initialLoading ? <SkeletonStats count={4} /> : (
       <StatGrid>
         <StatCard label="Total" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
         <StatCard label="Ativos" value={stats.ativos} accent="#10b981" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>} />
         <StatCard label="Inativos" value={stats.inativos} accent="#94a3b8" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>} />
         <StatCard label="Aniversários no mês" value={stats.aniversariantes} accent="#f59e0b" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8" /><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1" /><path d="M2 21h20" /><path d="M7 8v3M12 8v3M17 8v3M7 4h.01M12 4h.01M17 4h.01" /></svg>} />
       </StatGrid>
+      )}
 
       <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
         <SearchInput value={search} onChange={handleSearchChange} placeholder="Buscar por nome, CPF, e-mail ou telefone…" />
@@ -223,7 +271,9 @@ export function ClientesPage({ session }) {
         ]} />
       </div>
 
-      {visiveis.length === 0 ? (
+      {initialLoading ? (
+        <SkeletonListRows count={5} />
+      ) : visiveis.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>
             {search || statusFilter !== "all" ? "Nenhum cliente encontrado com estes filtros." : "Nenhum cliente cadastrado."}

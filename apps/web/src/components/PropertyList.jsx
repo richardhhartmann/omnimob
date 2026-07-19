@@ -1,280 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { DivulgarModal } from "./DivulgarModal";
 import { useConfirm } from "./ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
-
-// ─── Modal de publicação retroativa ──────────────────────────────────────────
-
-function PublishModal({ property, tenantSlug, onClose, onSuccess }) {
-  const { confirm, modal: confirmModal } = useConfirm();
-  const session = loadSession();
-  const cargo = session?.usuario?.cargo;
-
-  const [caption, setCaption] = useState("");
-  const [socialStatus, setSocialStatus] = useState(null);
-  const [publishLoading, setPublishLoading] = useState({ facebook: false, instagram: false });
-  const [publishResults, setPublishResults] = useState({});
-  const [publications, setPublications] = useState(() => (property.publications || []).filter(p => p.status === "PUBLISHED"));
-  const [expanded, setExpanded] = useState({ facebook: false, instagram: false });
-  const [removingId, setRemovingId] = useState(null);
-  const [removeNote, setRemoveNote] = useState({});
-
-  useEffect(() => {
-    const price = Number(property.price);
-    const priceStr = price > 0
-      ? `R$ ${price.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-      : "";
-    const location = [property.neighborhood, property.city, property.state].filter(Boolean).join(", ");
-    const stats = [
-      property.bedrooms ? `${property.bedrooms} quarto${property.bedrooms !== 1 ? "s" : ""}` : "",
-      property.squareFootage ? `${property.squareFootage} m²` : "",
-      property.parkingSpots ? `${property.parkingSpots} vaga${property.parkingSpots !== 1 ? "s" : ""}` : "",
-    ].filter(Boolean).join(" · ");
-    const atribs = property.atributos?.map(a => a.atributo?.descricao).filter(Boolean) || [];
-    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${property.id}`;
-    const whatsapp = session?.tenant?.whatsapp || "";
-
-    const lines = [
-      `🏠 ${property.title}`,
-      location ? `📍 ${location}` : "",
-      priceStr ? `💰 ${priceStr}` : "",
-      stats ? `📐 ${stats}` : "",
-      atribs.length > 0 ? `✅ ${atribs.join(" · ")}` : "",
-      property.aceitaPermuta ? "🔄 Aceita permuta" : "",
-      "",
-      property.description || "",
-      "",
-      `🔗 Ver detalhes: ${vitrineUrl}`,
-      whatsapp ? `📲 Contato: ${whatsapp}` : "",
-    ].filter((l, i, arr) => !(l === "" && arr[i - 1] === ""));
-    setCaption(lines.join("\n").trim());
-
-    api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
-
-    // Reconcilia com as redes: se o post foi apagado manualmente, o status some.
-    api.reconcileProperty(tenantSlug, property.id)
-      .then((data) => setPublications((data.publications || []).filter(p => p.status === "PUBLISHED")))
-      .catch(() => {});
-  }, [property.id]);
-
-  async function refreshPublications() {
-    try {
-      const list = await api.listPublications(tenantSlug, property.id);
-      setPublications((Array.isArray(list) ? list : []).filter(p => p.status === "PUBLISHED"));
-    } catch { /* mantém estado atual */ }
-  }
-
-  // Remove UM post específico (por id).
-  async function handleRemovePost(pub) {
-    const nome = pub.channel === "FACEBOOK" ? "Facebook" : "Instagram";
-    if (!await confirm(`Remover este post do ${nome}?`, "Remover")) return;
-    const platform = pub.channel.toLowerCase();
-    setRemovingId(pub.id);
-    setRemoveNote(prev => ({ ...prev, [platform]: "" }));
-    try {
-      const result = await api.removePublicationById(tenantSlug, pub.id);
-      if (result?.note) setRemoveNote(prev => ({ ...prev, [platform]: result.note }));
-      await refreshPublications();
-      onSuccess?.();
-    } catch (err) {
-      setRemoveNote(prev => ({ ...prev, [platform]: err.message }));
-    } finally {
-      setRemovingId(null);
-    }
-  }
-
-  async function handlePublish(platform) {
-    setPublishLoading(prev => ({ ...prev, [platform]: true }));
-    setPublishResults(prev => { const next = { ...prev }; delete next[platform]; return next; });
-    try {
-      const result = await api.publishProperty(tenantSlug, property.id, { platforms: [platform], caption });
-      const r = result?.[platform];
-      if (r) setPublishResults(prev => ({ ...prev, [platform]: r }));
-      if (r?.note) setRemoveNote(prev => ({ ...prev, [platform]: r.note }));
-      await refreshPublications();
-      if (r?.success) onSuccess?.();
-    } catch (err) {
-      setPublishResults(prev => ({ ...prev, [platform]: { success: false, error: err.message } }));
-    } finally {
-      setPublishLoading(prev => ({ ...prev, [platform]: false }));
-    }
-  }
-
-  function handleWhatsApp() {
-    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${property.id}`;
-    const text = caption || `🏠 ${property.title}\n🔗 ${vitrineUrl}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
-  }
-
-  const inputStyle = {
-    width: "100%", boxSizing: "border-box",
-    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: "10px", color: "inherit", padding: "12px 14px", fontSize: "13px",
-    outline: "none", transition: "border-color 0.2s", resize: "vertical",
-    lineHeight: "1.6", fontFamily: "inherit",
-  };
-
-  const FB_SVG = <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>;
-  const IG_SVG = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>;
-
-  const chanCfg = {
-    facebook: {
-      channel: "FACEBOOK", label: "Facebook", brand: "#1877f2", pubBg: "#1877f2", icon: FB_SVG,
-      connected: socialStatus?.facebook?.connected,
-      statusText: socialStatus === null ? "Verificando…" : socialStatus.facebook.connected ? `Página: ${socialStatus.facebook.pageName}` : "Não conectado — configure em Configurações",
-    },
-    instagram: {
-      channel: "INSTAGRAM", label: "Instagram",
-      brand: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)",
-      pubBg: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)", icon: IG_SVG,
-      connected: socialStatus?.instagram?.connected,
-      statusText: socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta Business conectada" : "Não conectado — configure em Configurações",
-    },
-  };
-
-  // Linha de rede social: quando há posts, vira expansível para gerenciar cada
-  // post individualmente (o mesmo imóvel pode ter vários posts na mesma rede).
-  function renderChannel(platform) {
-    const cfg = chanCfg[platform];
-    const posts = publications.filter(p => p.channel === cfg.channel);
-    const isOpen = expanded[platform];
-    const loading = publishLoading[platform];
-    return (
-      <div style={{ borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px" }}>
-          <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: cfg.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{cfg.icon}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: "600", fontSize: "13px" }}>{cfg.label}</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>{cfg.statusText}</div>
-          </div>
-          {posts.length === 0 ? (
-            <button type="button" onClick={() => handlePublish(platform)} disabled={!cfg.connected || loading}
-              style={{ padding: "6px 14px", borderRadius: "7px", fontSize: "12px", fontWeight: "600", background: cfg.pubBg, color: "#fff", border: "none", cursor: cfg.connected ? "pointer" : "not-allowed", opacity: cfg.connected ? 1 : 0.4, flexShrink: 0, width: "auto" }}>
-              {loading ? "…" : "Publicar"}
-            </button>
-          ) : (
-            <button type="button" onClick={() => setExpanded(prev => ({ ...prev, [platform]: !prev[platform] }))}
-              style={{ display: "flex", alignItems: "center", gap: "7px", padding: "6px 10px", borderRadius: "7px", fontSize: "11px", fontWeight: "600", background: "rgba(16,185,129,0.12)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" }}>
-              ✓ {posts.length} publicado{posts.length > 1 ? "s" : ""}
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><polyline points="6 9 12 15 18 9" /></svg>
-            </button>
-          )}
-        </div>
-        {posts.length > 0 && isOpen && (
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "8px 14px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-            {posts.map(pub => {
-              const data = pub.createdAt ? new Date(pub.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-              const removing = removingId === pub.id;
-              return (
-                <div key={pub.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0, fontSize: "11px", color: "var(--text-muted)" }}>{data ? `Publicado em ${data}` : "Publicado"}</div>
-                  <button type="button" onClick={() => handleRemovePost(pub)} disabled={removing} title="Remover" aria-label="Remover"
-                    style={{ width: "28px", height: "28px", borderRadius: "7px", flexShrink: 0, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: removing ? "default" : "pointer", opacity: removing ? 0.6 : 1 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
-                  </button>
-                </div>
-              );
-            })}
-            <button type="button" onClick={() => handlePublish(platform)} disabled={!cfg.connected || loading}
-              style={{ marginTop: "2px", padding: "7px 12px", borderRadius: "7px", fontSize: "12px", fontWeight: "600", background: "rgba(255,255,255,0.05)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.14)", cursor: cfg.connected ? "pointer" : "not-allowed", opacity: cfg.connected ? 1 : 0.5, width: "auto", alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "6px" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-              {loading ? "Publicando…" : "Publicar novamente"}
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return createPortal(
-    <>
-      {confirmModal}
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", animation: "fadeIn 0.15s ease-out" }}
-      onClick={onClose}
-    >
-      <div
-        style={{ background: "rgba(18,18,30,0.99)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "20px", padding: "28px", width: "100%", maxWidth: "500px", maxHeight: "90vh", overflowY: "auto" }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
-          <div>
-            <div style={{ fontSize: "16px", fontWeight: "700" }}>Divulgar Imóvel</div>
-            <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "360px" }}>{property.title}</div>
-          </div>
-          <button
-            onClick={onClose}
-            style={{ width: "32px", height: "32px", padding: 0, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", cursor: "pointer", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-
-        {/* Caption */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
-          <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Legenda do post
-          </label>
-          <textarea value={caption} onChange={e => setCaption(e.target.value)} rows={6} style={{ ...inputStyle, minHeight: "120px" }} placeholder="Escreva a legenda..." />
-          <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>Edite antes de publicar. Usada no Facebook e Instagram.</span>
-        </div>
-
-        {/* Permission warning */}
-        {!cargo?.publicarRedes && (
-          <div style={{ padding: "10px 14px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "13px", color: "#fbbf24", marginBottom: "12px" }}>
-            Você não tem permissão para publicar nas redes sociais.
-          </div>
-        )}
-
-        {/* Platform cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {/* Facebook */}
-          {cargo?.publicarRedes && renderChannel("facebook")}
-
-          {/* Instagram */}
-          {cargo?.publicarRedes && renderChannel("instagram")}
-
-          {/* WhatsApp */}
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#25d366", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: "600", fontSize: "13px" }}>WhatsApp</div>
-              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>Abre o WhatsApp com a legenda pronta</div>
-            </div>
-            <button type="button" onClick={handleWhatsApp}
-              style={{ padding: "6px 14px", borderRadius: "7px", fontSize: "12px", fontWeight: "600", background: "#25d366", color: "#fff", border: "none", cursor: "pointer", flexShrink: 0, width: "auto" }}>
-              Compartilhar
-            </button>
-          </div>
-        </div>
-
-        {/* Erros de publicação */}
-        {(publishResults.facebook?.error || publishResults.instagram?.error) && (
-          <div style={{ marginTop: "12px", padding: "10px 14px", borderRadius: "10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: "12px", color: "#f87171", display: "flex", flexDirection: "column", gap: "4px" }}>
-            {publishResults.facebook?.error && <span>Facebook: {publishResults.facebook.error}</span>}
-            {publishResults.instagram?.error && <span>Instagram: {publishResults.instagram.error}</span>}
-          </div>
-        )}
-
-        {/* Avisos de remoção (ex.: Instagram não permite exclusão por API) */}
-        {(removeNote.facebook || removeNote.instagram) && (
-          <div style={{ marginTop: "12px", padding: "10px 14px", borderRadius: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: "12px", color: "#fbbf24", display: "flex", flexDirection: "column", gap: "4px" }}>
-            {removeNote.facebook && <span>{removeNote.facebook}</span>}
-            {removeNote.instagram && <span>{removeNote.instagram}</span>}
-          </div>
-        )}
-      </div>
-    </div>
-    </>,
-    document.body
-  );
-}
+import { planoLiberaRedes } from "../utils/planos.js";
+import { SkeletonCards } from "./Skeleton";
 
 // ─── Badges de publicação social ─────────────────────────────────────────────
 
@@ -380,11 +111,16 @@ function PropertyCarousel({ images = [] }) {
 
 // ─── Lista de imóveis ─────────────────────────────────────────────────────────
 
-export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit, onPublishSuccess, disabled }) {
+export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit, onPublishSuccess, disabled, loading = false }) {
   const { confirm, modal: confirmModal } = useConfirm();
   const navigate = useNavigate();
   const session = loadSession();
   const tenantSlug = session?.tenant?.slug;
+  const cargo = session?.usuario?.cargo;
+  const canViewReports = Boolean(cargo?.verRelatorios); // abre o Painel de Performance
+  const canPublish = Boolean(cargo?.publicarRedes) && planoLiberaRedes(session?.tenant?.plano); // divulgar exige plano Profissional+
+
+  const openInsights = (id) => { if (canViewReports) navigate(`/imoveis/${id}`); };
 
   async function handleDelete(id) {
     if (!await confirm("Excluir este imóvel permanentemente?", "Excluir")) return;
@@ -547,7 +283,9 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
         </div>
       </div>
 
-      {filteredProperties.length === 0 ? (
+      {loading ? (
+        <SkeletonCards count={6} />
+      ) : filteredProperties.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "64px 24px" }}>
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "16px" }}>
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -560,16 +298,16 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
       ) : null}
 
       {/* ── Grade ─── */}
-      {viewMode === "grid" && filteredProperties.length > 0 && (
+      {!loading && viewMode === "grid" && filteredProperties.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "24px" }}>
           {filteredProperties.map((property) => {
             const statusStyle = getStatusColor(property.status);
             return (
               <article
                 key={property.id}
-                onClick={() => navigate(`/imoveis/${property.id}`)}
+                onClick={() => openInsights(property.id)}
                 className="glass-panel"
-                style={{ padding: "0", display: "flex", flexDirection: "column", overflow: "hidden", cursor: "pointer", transition: "transform 0.3s ease, box-shadow 0.3s ease", border: "1px solid rgba(255, 255, 255, 0.15)", background: "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}
+                style={{ padding: "0", display: "flex", flexDirection: "column", overflow: "hidden", cursor: canViewReports ? "pointer" : "default", transition: "transform 0.3s ease, box-shadow 0.3s ease", border: "1px solid rgba(255, 255, 255, 0.15)", background: "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}
                 onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 24px rgba(0,0,0,0.2)"; e.currentTarget.style.border = "1px solid rgba(255,255,255,0.25)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.border = "1px solid rgba(255, 255, 255, 0.15)"; }}
               >
@@ -627,9 +365,11 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px 8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                   <SocialBadges publications={property.publications} />
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ ...btnShare }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar nas redes sociais">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                    </button>
+                    {canPublish && (
+                      <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ ...btnShare }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar nas redes sociais">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                      </button>
+                    )}
                     <button onClick={(e) => { e.stopPropagation(); onEdit(property); }} disabled={disabled} style={{ ...btnShare }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Editar">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
@@ -648,7 +388,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
       )}
 
       {/* ── Lista ─── */}
-      {viewMode === "list" && filteredProperties.length > 0 && (
+      {!loading && viewMode === "list" && filteredProperties.length > 0 && (
         <div className="glass-panel" style={{ padding: "0", overflow: "hidden" }}>
           <div style={{ display: "grid", gap: "1px", background: "rgba(255,255,255,0.05)" }}>
             {filteredProperties.map((property, index) => {
@@ -659,8 +399,8 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
               return (
                 <div
                   key={property.id}
-                  onClick={() => navigate(`/imoveis/${property.id}`)}
-                  style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: "20px", alignItems: "center", padding: "14px 24px", cursor: "pointer", background: rowBg, transition: "background 0.2s" }}
+                  onClick={() => openInsights(property.id)}
+                  style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: "20px", alignItems: "center", padding: "14px 24px", cursor: canViewReports ? "pointer" : "default", background: rowBg, transition: "background 0.2s" }}
                   onMouseEnter={(e) => e.currentTarget.style.background = rowHover}
                   onMouseLeave={(e) => e.currentTarget.style.background = rowBg}
                 >
@@ -685,9 +425,11 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                   <SocialBadges publications={property.publications} />
 
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                    </button>
+                    {canPublish && (
+                      <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                      </button>
+                    )}
                     <button onClick={(e) => { e.stopPropagation(); onEdit(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Editar">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
@@ -704,7 +446,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
 
       {/* ── Modal de publicação ─── */}
       {publishingProperty && tenantSlug && (
-        <PublishModal
+        <DivulgarModal
           property={publishingProperty}
           tenantSlug={tenantSlug}
           onClose={() => setPublishingProperty(null)}

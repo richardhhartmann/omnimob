@@ -161,6 +161,13 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  setPropertyImage360: (tenantSlug, propertyId, imageId, is360) =>
+    request(`/api/properties/${propertyId}/images/${imageId}`, {
+      method: "PATCH",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ is360 }),
+    }),
+
   deletePropertyImage: (tenantSlug, propertyId, imageId) =>
     request(`/api/properties/${propertyId}/images/${imageId}`, {
       method: "DELETE",

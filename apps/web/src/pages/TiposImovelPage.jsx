@@ -200,7 +200,7 @@ export function TiposImovelPage({ session }) {
 
   if (view === "tipoForm") {
     return (
-      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {confirmModal}
         <h2 style={{ marginBottom: "24px" }}>{editandoTipo ? "Editar Tipo de Imóvel" : "Novo Tipo de Imóvel"}</h2>
         {error ? <div className="error">{error}</div> : null}
@@ -245,7 +245,7 @@ export function TiposImovelPage({ session }) {
     )].sort();
 
     return (
-      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {confirmModal}
         <h2 style={{ marginBottom: "4px" }}>{editandoAtributo ? "Editar Atributo" : "Novo Atributo"}</h2>
         <p style={{ fontSize: "13px", opacity: 0.5, marginBottom: "24px" }}>Tipo: {tipoAtivo?.descricao}</p>
@@ -290,7 +290,7 @@ export function TiposImovelPage({ session }) {
     const grupos = [...new Set((tipoAtivo.atributos || []).map((a) => a.grupo || "Geral"))];
 
     return (
-      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {confirmModal}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
           <BtnVoltar onClick={() => setView("list")} label="Tipos" />
@@ -340,7 +340,7 @@ export function TiposImovelPage({ session }) {
   // ─── Lista de Tipos ───────────────────────────────────────────────────────
 
   return (
-    <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+    <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
         <h2 style={{ margin: 0 }}>Tipos de Imóvel e Atributos</h2>

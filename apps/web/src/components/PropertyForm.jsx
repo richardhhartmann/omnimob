@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
 import { COMODIDADES, EMPTY_COMODIDADES } from "../utils/comodidades.js";
+import { planoLiberaIA, planoLiberaRedes, planoLiberaTour360 } from "../utils/planos.js";
+import { Panorama360 } from "./Panorama360.jsx";
+import { overlay360 } from "../utils/cloudinaryOverlay.js";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -66,6 +69,8 @@ const EMPTY = {
   bedrooms: "",
   parkingSpots: "",
   suites: "",
+  salas: "",
+  banheiros: "",
   squareFootage: "",
   finalidade: "RESIDENCIAL",
   areaTerreno: "",
@@ -136,14 +141,14 @@ function areasParaTipo(descricao) {
 const FIELD_STEP = {
   title: 0, description: 0, tipoImovelId: 0, price: 0,
   address: 1, neighborhood: 1, city: 1, state: 1,
-  bedrooms: 2, parkingSpots: 2, suites: 2,
+  bedrooms: 2, parkingSpots: 2, suites: 2, salas: 2, banheiros: 2,
   areaTerreno: 2, areaConstruida: 2, areaPrivativa: 2, areaTotal: 2,
 };
 
 const FIELD_LABELS = {
   title: "Título", description: "Descrição", tipoImovelId: "Tipo de imóvel", price: "Preço",
   address: "Endereço", neighborhood: "Bairro", city: "Cidade", state: "Estado (UF)",
-  bedrooms: "Quartos", parkingSpots: "Vagas", suites: "Suítes",
+  bedrooms: "Quartos", parkingSpots: "Vagas", suites: "Suítes", salas: "Salas", banheiros: "Banheiros",
   ...AREA_FIELDS,
 };
 
@@ -162,7 +167,7 @@ function getValidationErrors(form, areaFields = TODAS_AREAS) {
   if (!form.city || form.city.trim().length < 2) fe.city = "Informe a cidade.";
   if (!form.state || form.state.trim().length < 2) fe.state = "Informe o estado (UF).";
 
-  for (const [field, label] of [["bedrooms", "Quartos"], ["parkingSpots", "Vagas"], ["suites", "Suítes"]]) {
+  for (const [field, label] of [["bedrooms", "Quartos"], ["parkingSpots", "Vagas"], ["suites", "Suítes"], ["salas", "Salas"], ["banheiros", "Banheiros"]]) {
     if (form[field] === "" || form[field] == null) continue;
     const n = Number(form[field]);
     if (!Number.isInteger(n) || n < 0) fe[field] = `${label} deve ser um número inteiro ≥ 0.`;
@@ -234,16 +239,16 @@ function IconCheck() {
   );
 }
 
-function StepIndicator({ current, onStepClick, lockedSteps = [] }) {
+function StepIndicator({ current, onStepClick, lockedSteps = [], steps = STEPS }) {
   return (
     <div style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
-      {STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i < current;
         const active = i === current;
         const locked = lockedSteps.includes(i);
         const clickable = i !== current && !locked;
         return (
-          <div key={step.key} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "none" }}>
+          <div key={step.key} style={{ display: "flex", alignItems: "center", flex: i < steps.length - 1 ? 1 : "none" }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
               <div
                 onClick={() => clickable && onStepClick(i)}
@@ -273,7 +278,7 @@ function StepIndicator({ current, onStepClick, lockedSteps = [] }) {
                 {step.label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div style={{ flex: 1, height: "2px", marginBottom: "18px", marginLeft: "8px", marginRight: "8px", background: done ? "var(--primary, #6366f1)" : "rgba(255,255,255,0.08)", borderRadius: "2px", transition: "background 0.4s ease" }} />
             )}
           </div>
@@ -336,22 +341,25 @@ function AtributosSection({ atributos, selecionados, onChange, disabled }) {
   );
 }
 
-function PropertyPreviewCard({ form, previewUrls }) {
+function PropertyPreviewCard({ form, previewItems, cardRef }) {
   const [idx, setIdx] = useState(0);
+  const previewUrls = previewItems.map((it) => it.url);
+  const current360 = Boolean(previewItems[idx]?.is360); // foto atual é panorâmica 360°?
 
   useEffect(() => { setIdx(0); }, [previewUrls.length]);
 
   useEffect(() => {
-    if (previewUrls.length <= 1) return;
+    // Não auto-avança quando o usuário está explorando uma foto 360°.
+    if (previewUrls.length <= 1 || current360) return;
     const timer = setInterval(() => setIdx((i) => (i + 1) % previewUrls.length), 3500);
     return () => clearInterval(timer);
-  }, [previewUrls.length]);
+  }, [previewUrls.length, current360]);
 
   const price = parseCurrencyBRL(String(form.price));
   const hasPrice = Number.isFinite(price) && price > 0;
   const hasLocation = form.neighborhood || form.city || form.state;
   const areaExibicao = metragemExibicao(form);
-  const hasStats = areaExibicao || form.bedrooms || form.parkingSpots;
+  const hasStats = areaExibicao || form.bedrooms || form.suites || form.salas || form.banheiros || form.parkingSpots;
   const statusLabel = { ACTIVE: "Ativo", INACTIVE: "Inativo", DRAFT: "Rascunho" }[form.status] || "Rascunho";
   const statusColor = { ACTIVE: "#10b981", INACTIVE: "#ef4444", DRAFT: "#f59e0b" }[form.status] || "#f59e0b";
   const currentUrl = previewUrls[idx] || null;
@@ -370,9 +378,11 @@ function PropertyPreviewCard({ form, previewUrls }) {
         </span>
       </div>
 
-      <article style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "20px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <article ref={cardRef} style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "20px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <div style={{ position: "relative", width: "100%", height: "200px", overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
-          {currentUrl ? (
+          {currentUrl && current360 ? (
+            <Panorama360 key={`pano-${currentUrl}`} src={currentUrl} height={200} />
+          ) : currentUrl ? (
             <img
               key={currentUrl}
               src={currentUrl}
@@ -436,11 +446,22 @@ function PropertyPreviewCard({ form, previewUrls }) {
                   <IconArea /> {areaExibicao} m²
                 </span>
               )}
-              {form.bedrooms && (
-                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
-                  <IconBed /> {form.bedrooms} qto{form.bedrooms !== "1" ? "s" : ""}
-                  {form.suites ? ` · ${form.suites} suíte${form.suites !== "1" ? "s" : ""}` : ""}
-                </span>
+              {form.finalidade === "COMERCIAL" ? (
+                (form.salas || form.banheiros) && (
+                  <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
+                    <IconBed />
+                    {form.salas ? `${form.salas} sala${form.salas !== "1" ? "s" : ""}` : ""}
+                    {form.salas && form.banheiros ? " · " : ""}
+                    {form.banheiros ? `${form.banheiros} banheiro${form.banheiros !== "1" ? "s" : ""}` : ""}
+                  </span>
+                )
+              ) : (
+                form.bedrooms && (
+                  <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
+                    <IconBed /> {form.bedrooms} qto{form.bedrooms !== "1" ? "s" : ""}
+                    {form.suites ? ` · ${form.suites} suíte${form.suites !== "1" ? "s" : ""}` : ""}
+                  </span>
+                )
               )}
               {form.parkingSpots && (
                 <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
@@ -584,16 +605,18 @@ function DescriptionBox({ value, onChange, color, collapsedHeight, linkColor, ac
   return (
     <div className={`divulgar-desc${active ? " is-ai" : ""}`} onMouseEnter={onEnter} onMouseLeave={onLeave}>
       <PreviewCaption value={value} onChange={onChange} color={color} collapsedHeight={collapsedHeight} linkColor={linkColor} />
-      <button
-        type="button"
-        onClick={onGerarIA}
-        disabled={iaLoading}
-        title="Gerar com IA"
-        aria-label="Gerar com IA"
-        className="divulgar-desc-ia"
-      >
-        <WandIcon />
-      </button>
+      {onGerarIA && (
+        <button
+          type="button"
+          onClick={onGerarIA}
+          disabled={iaLoading}
+          title="Gerar com IA"
+          aria-label="Gerar com IA"
+          className="divulgar-desc-ia"
+        >
+          <WandIcon />
+        </button>
+      )}
     </div>
   );
 }
@@ -727,9 +750,9 @@ function PostFooter({ children }) {
   );
 }
 
-const FB_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>;
-const IG_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>;
-const WA_ICON = <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>;
+export const FB_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>;
+export const IG_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>;
+export const WA_ICON = <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>;
 
 function Ic({ d, size = 16, fill = "none" }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}>{d}</svg>;
@@ -744,7 +767,7 @@ const ICON = {
   globo: <><circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" /><path d="M12 3a14 14 0 0 1 3.5 9 14 14 0 0 1-3.5 9 14 14 0 0 1-3.5-9A14 14 0 0 1 12 3z" /></>,
 };
 
-function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, publishedCount, publishing, onRemove, removeLoading, locked, lockLabel, acao }) {
+export function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, publishedCount, publishing, onRemove, removeLoading, locked, lockLabel, acao }) {
   return (
     <PreviewCard brandLabel="Facebook" brandColor="#1877f2" brandRadius="11px" brandIcon={FB_ICON}
       ringGradient="linear-gradient(115deg,#1877f2,#4293ff,#0a58ca,#3b82f6,#1877f2)" ringGlow="rgba(24,119,242,0.45)" statusText={statusText}
@@ -781,7 +804,7 @@ function FacebookPreview({ nome, avatarUrl, coverUrls, caption, onChange, status
   );
 }
 
-function InstagramPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, publishedCount, publishing, onRemove, removeLoading, locked, lockLabel, acao }) {
+export function InstagramPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, published, publishedCount, publishing, onRemove, removeLoading, locked, lockLabel, acao }) {
   const handle = (nome || "imobiliaria").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9._]/g, "");
   return (
     <PreviewCard brandLabel="Instagram" brandColor="linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" brandRadius="11px" brandIcon={IG_ICON}
@@ -814,7 +837,7 @@ function InstagramPreview({ nome, avatarUrl, coverUrls, caption, onChange, statu
   );
 }
 
-function WhatsAppPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, acao }) {
+export function WhatsAppPreview({ nome, avatarUrl, coverUrls, caption, onChange, statusText, descActive, onDescEnter, onDescLeave, onGerarIA, iaLoading, iaErro, acao }) {
   return (
     <PreviewCard brandLabel="WhatsApp" brandColor="#25d366" brandRadius="50%" brandIcon={WA_ICON}
       ringGradient="linear-gradient(115deg,#25d366,#128c7e,#34e07a,#25d366)" ringGlow="rgba(37,211,102,0.42)" statusText={statusText}>
@@ -842,9 +865,13 @@ function WhatsAppPreview({ nome, avatarUrl, coverUrls, caption, onChange, status
   );
 }
 
-function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disabled }) {
+// Proporção considerada "equiretangular" (panorâmica 360°): ~2:1.
+const ehEquirect = (r) => typeof r === "number" && r >= 1.9 && r <= 2.1;
+
+function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disabled, allow360, onToggle360 }) {
   const dragFrom = useRef(null);
   const [dragOver, setDragOver] = useState(null);
+  const [ratios, setRatios] = useState({}); // proporção (w/h) medida por foto → só mostra 360° em ~2:1
 
   if (!images.length) return null;
 
@@ -874,7 +901,15 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
             aspectRatio: "1",
           }}
         >
-          <img src={img.previewUrl} alt={`foto ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
+          <img
+            src={img.previewUrl}
+            alt={`foto ${i + 1}`}
+            onLoad={(e) => {
+              const el = e.currentTarget;
+              if (el.naturalHeight) setRatios((p) => (p[img.id] ? p : { ...p, [img.id]: el.naturalWidth / el.naturalHeight }));
+            }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
+          />
 
           <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0)", transition: "background 0.2s" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.35)"; e.currentTarget.querySelector("button").style.opacity = "1"; }}
@@ -902,6 +937,25 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
           <span style={{ position: "absolute", top: "6px", left: "6px", fontSize: "9px", fontWeight: "700", background: "rgba(0,0,0,0.5)", color: "rgba(255,255,255,0.8)", padding: "1px 5px", borderRadius: "999px", pointerEvents: "none" }}>
             {i + 1}
           </span>
+
+          {allow360 && (img.is360 || ehEquirect(ratios[img.id])) && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onToggle360(i); }}
+              title={img.is360 ? "Remover marcação 360°" : "Marcar como foto panorâmica 360°"}
+              style={{
+                position: "absolute", bottom: "6px", right: "6px", zIndex: 3, width: "auto",
+                display: "flex", alignItems: "center", gap: "3px", padding: "3px 8px",
+                borderRadius: "999px", cursor: "pointer", border: "none",
+                fontSize: "9px", fontWeight: 700, letterSpacing: "0.03em",
+                background: img.is360 ? "rgba(99,102,241,0.95)" : "rgba(0,0,0,0.6)",
+                color: img.is360 ? "#fff" : "rgba(255,255,255,0.85)",
+                boxShadow: img.is360 ? "0 2px 8px rgba(99,102,241,0.5)" : "none",
+              }}
+            >
+              360°
+            </button>
+          )}
         </div>
       ))}
 
@@ -977,24 +1031,25 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
               <button
                 key={card.title}
                 onClick={card.onClick}
+                className="pg-follow"
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                   padding: "48px 32px", borderRadius: "24px", cursor: "pointer",
-                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s, box-shadow 0.3s",
                   border: "1px solid rgba(255,255,255,0.15)",
-                  background: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
+                  background: "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
                   backdropFilter: "blur(12px)", color: "inherit", gap: "24px",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = "translateY(-6px)";
                   e.currentTarget.style.border = "1px solid rgba(255,255,255,0.3)";
-                  e.currentTarget.style.background = "linear-gradient(145deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%)";
+                  e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 100%)";
                   e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.15)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "translateY(0)";
                   e.currentTarget.style.border = "1px solid rgba(255,255,255,0.15)";
-                  e.currentTarget.style.background = "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)";
+                  e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)";
                   e.currentTarget.style.boxShadow = "none";
                 }}
               >
@@ -1032,23 +1087,36 @@ function AiFlareBadge({ active }) {
       aria-hidden={!active}
       style={{
         position: "absolute", bottom: "calc(100% + 3px)", right: "2px", zIndex: 5,
-        fontSize: "10px", fontWeight: 700, letterSpacing: "0.03em",
+        display: "inline-flex", alignItems: "center", gap: "4px",
         pointerEvents: "none", whiteSpace: "nowrap",
         opacity: active ? 1 : 0, transition: "opacity 0.4s ease",
-        background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
-        backgroundSize: "200% 200%", animation: "gradient-flare 3s ease infinite",
-        WebkitBackgroundClip: "text", backgroundClip: "text",
-        WebkitTextFillColor: "transparent", color: "transparent",
       }}
     >
-      Informação gerada por IA
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ display: "block", flexShrink: 0 }}>
+        <line x1="5" y1="19" x2="13" y2="11" stroke="#dc2743" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="17" y1="3.5" x2="17" y2="10" stroke="#dc2743" strokeWidth="2" strokeLinecap="round" />
+        <line x1="13.5" y1="6.75" x2="20.5" y2="6.75" stroke="#dc2743" strokeWidth="2" strokeLinecap="round" />
+        <line x1="6" y1="3" x2="6" y2="7" stroke="#dc2743" strokeWidth="1.5" strokeLinecap="round" />
+        <line x1="4" y1="5" x2="8" y2="5" stroke="#dc2743" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+      <span
+        style={{
+          fontSize: "10px", fontWeight: 700, letterSpacing: "0.03em",
+          background: "linear-gradient(115deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)",
+          backgroundSize: "200% 200%", animation: "gradient-flare 3s ease infinite",
+          WebkitBackgroundClip: "text", backgroundClip: "text",
+          WebkitTextFillColor: "transparent", color: "transparent",
+        }}
+      >
+        Informação gerada por IA
+      </span>
     </span>
   );
 }
 
 // Modal de decisão ao republicar quando já existe post na rede: manter o
 // original + publicar novo (dois posts) OU apagar o original e substituir.
-function RepublishModal({ platform, onKeep, onReplace, onCancel }) {
+export function RepublishModal({ platform, onKeep, onReplace, onCancel }) {
   if (!platform) return null;
   const nome = platform === "facebook" ? "Facebook" : "Instagram";
   const optBase = {
@@ -1103,7 +1171,7 @@ function RepublishModal({ platform, onKeep, onReplace, onCancel }) {
 // Simulação do post publicado no estilo da rede (Facebook/Instagram), renderizada
 // inline (dropdown) abaixo da linha. Usa a legenda REAL salva no publish e as
 // métricas REAIS (curtidas/comentários/compartilhamentos) vindas da Graph API.
-function PostSimCard({ pub, coverUrls, caption, insights, nome, avatarUrl }) {
+export function PostSimCard({ pub, coverUrls, caption, insights, nome, avatarUrl }) {
   const isIg = pub.channel === "INSTAGRAM";
   const likes = insights?.likes ?? 0;
   const comments = insights?.comments ?? 0;
@@ -1193,12 +1261,16 @@ function IaSkeleton({ active, radius = "10px" }) {
       style={{
         position: "absolute", inset: 0, borderRadius: radius, zIndex: 4,
         pointerEvents: active ? "auto" : "none",
-        opacity: active ? 1 : 0, transition: "opacity 0.3s ease",
+        // Fade-out mais longo e suave: ao terminar, o skeleton se dissolve e revela
+        // gradualmente o texto por baixo (dissolve/crossfade), em vez de sumir seco.
+        opacity: active ? 1 : 0, transition: "opacity 0.7s cubic-bezier(.4, 0, .2, 1)",
         border: "1px solid rgba(255,255,255,0.05)",
         backgroundColor: "#20293c",
         backgroundImage: "linear-gradient(90deg, #20293c 25%, #2c3851 50%, #20293c 75%)",
         backgroundSize: "200% 100%",
-        animation: active ? "ia-skeleton 1.5s linear infinite" : "none",
+        // Shimmer segue rodando mesmo durante o fade-out (invisível ao chegar em
+        // opacity 0), para o dissolve não "congelar" no meio.
+        animation: "ia-skeleton 1.5s linear infinite",
       }}
     />
   );
@@ -1210,9 +1282,14 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [step, setStep] = useState(0);
   const [displayStep, setDisplayStep] = useState(0);   // passo realmente renderizado (defasa durante a saída animada)
   const [stepAnim, setStepAnim] = useState("fade");    // forward | back | fade — animação de entrada do conteúdo
-  const [divulgarAnim, setDivulgarAnim] = useState(null); // null | splitting | merging — split/merge dos 3 cards
+  const [divulgarMorph, setDivulgarMorph] = useState(null); // { type: "split"|"merge", key } — anima os 3 cards do Divulgar
+  const divulgarGridRef = useRef(null);
+  const previewCardRef = useRef(null);  // card de pré-visualização (origem da animação)
+  const seedRectRef = useRef(null);     // rect do preview capturado ao entrar no Divulgar
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const [flashFields, setFlashFields] = useState({}); // campos obrigatórios piscando em vermelho ao tentar avançar
+  const flashTimerRef = useRef(null);
   const [cepLoading, setCepLoading] = useState(false);
   const [comodidadesLoading, setComodidadesLoading] = useState(false);
   const [comodidadesMsg, setComodidadesMsg] = useState("");
@@ -1221,6 +1298,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const dragDepth = useRef(0);
   const lastCepRef = useRef("");
   const autoIaLockRef = useRef(false);
+  const auto360Ref = useRef(new Set()); // ids de fotos já avaliadas para auto-marcar 360°
   const [tipos, setTipos] = useState([]);
   const isEditing = Boolean(initialData?.id);
 
@@ -1243,12 +1321,24 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const [removeNote, setRemoveNote] = useState({});
   const [gerandoCampo, setGerandoCampo] = useState(null);
   const [campoIaErro, setCampoIaErro] = useState("");
+  const [semIA, setSemIA] = useState(false); // usuário optou por seguir sem o preenchimento automático
+  const [aviso360, setAviso360] = useState(""); // aviso quando uma foto marcada como 360° não é 2:1
+  const [temPanoramica, setTemPanoramica] = useState(false); // há alguma foto ~2:1 (equiretangular)?
   const [focusedField, setFocusedField] = useState(null);
   const [aiFields, setAiFields] = useState({ title: false, description: false, tipoImovelId: false, atributos: false, finalidade: false, comodidades: false });
 
   const session = loadSession();
   const tenantSlug = session?.tenant?.slug;
   const cargo = session?.usuario?.cargo;
+  const plano = session?.tenant?.plano;
+  // Divulgar exige permissão do cargo E plano (Profissional+). IA exige plano Premium.
+  const canPublish = Boolean(cargo?.publicarRedes) && planoLiberaRedes(plano);
+  const canUseIA = planoLiberaIA(plano);
+  const canUse360 = planoLiberaTour360(plano); // marcar fotos panorâmicas (Profissional+)
+  const autoIA = canUseIA && (session?.tenant?.autoGerarIA ?? true); // auto-preencher ao lançar foto
+  const visibleSteps = canPublish ? STEPS : STEPS.slice(0, 3);
+  const navigate = useNavigate();
+  const [, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -1266,7 +1356,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       .then((list) => setPublications((Array.isArray(list) ? list : []).filter((p) => p.status === "PUBLISHED")))
       .catch(() => {});
     api.listPropertyImages(tenantSlug, savedPropertyId)
-      .then((imgs) => setCoverUrls((imgs || []).map((i) => i.url).filter(Boolean)))
+      .then((imgs) => setCoverUrls((imgs || []).map((i) => (i.is360 ? overlay360(i.url) : i.url)).filter(Boolean)))
       .catch(() => setCoverUrls([]));
 
     const price = parseCurrencyBRL(String(form.price));
@@ -1275,8 +1365,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       : "";
     const location = [form.neighborhood, form.city, form.state].filter(Boolean).join(", ");
     const areaLegenda = metragemExibicao(form);
+    const isComercial = form.finalidade === "COMERCIAL";
     const stats = [
-      form.bedrooms ? `${form.bedrooms} quarto${form.bedrooms !== "1" ? "s" : ""}` : "",
+      isComercial
+        ? (form.salas ? `${form.salas} sala${form.salas !== "1" ? "s" : ""}` : "")
+        : (form.bedrooms ? `${form.bedrooms} quarto${form.bedrooms !== "1" ? "s" : ""}` : ""),
+      isComercial && form.banheiros ? `${form.banheiros} banheiro${form.banheiros !== "1" ? "s" : ""}` : "",
       areaLegenda ? `${areaLegenda} m²` : "",
       form.parkingSpots ? `${form.parkingSpots} vaga${form.parkingSpots !== "1" ? "s" : ""}` : "",
     ].filter(Boolean).join(" · ");
@@ -1306,39 +1400,150 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }, [step, savedPropertyId]);
 
   // Orquestra a animação entre passos. `displayStep` é o passo de fato renderizado;
-  // ele só troca depois da animação de saída (para o efeito de "fundir os 3 cards").
+  // ao SAIR do Divulgar ele só troca depois do "merge" dos 3 cards.
   useEffect(() => {
     if (step === displayStep) return;
     const forward = step > displayStep;
 
-    // Saindo do Divulgar (passo 3): funde os 3 cards em 1 antes de trocar de passo.
+    // Saindo do Divulgar (passo 3): os 3 cards se fundem no centro e deslizam para
+    // fora antes de trocar de passo.
     if (displayStep === 3 && step !== 3) {
-      setDivulgarAnim("merging");
+      setDivulgarMorph({ type: "merge", key: Date.now() });
       const t = setTimeout(() => {
-        setDivulgarAnim(null);
         setStepAnim(forward ? "forward" : "back");
         setDisplayStep(step);
-      }, 430);
+      }, 820);
       return () => clearTimeout(t);
+    }
+
+    // Entrando no Divulgar: captura o rect do card de preview AGORA (ainda montado)
+    // para a animação partir do tamanho/posição dele.
+    if (step === 3) {
+      seedRectRef.current = previewCardRef.current
+        ? previewCardRef.current.getBoundingClientRect()
+        : null;
     }
 
     // Troca o conteúdo agora, com a animação de entrada adequada.
     setDisplayStep(step);
     if (step === 3) {
-      // Entrando no Divulgar: 1 card se divide em 3 (limpa a classe após animar).
-      setStepAnim("fade");
-      setDivulgarAnim("splitting");
-      const t = setTimeout(() => setDivulgarAnim(null), 720);
-      return () => clearTimeout(t);
+      // Sem fade no painel para o card-semente já aparecer 100% visível (a
+      // animação fica por conta do FLIP dos cards).
+      setStepAnim("none");
+      setDivulgarMorph({ type: "split", key: Date.now() });
+    } else {
+      setStepAnim(forward ? "forward" : "back");
     }
-    setStepAnim(forward ? "forward" : "back");
   }, [step, displayStep]);
+
+  // Anima os 3 cards do Divulgar via FLIP medido: eles partem empilhados (como um
+  // card só), deslizam até o centro exato da grade e se abrem para as posições
+  // reais (split); no merge, o caminho inverso. Os estilos inline são limpos ao
+  // final para não travar o hover dos cards.
+  useLayoutEffect(() => {
+    if (!divulgarMorph || displayStep !== 3) return;
+    const grid = divulgarGridRef.current;
+    if (!grid) return;
+    const cards = Array.from(grid.children).filter((el) => el.nodeType === 1);
+    if (cards.length === 0) return;
+
+    const gr = grid.getBoundingClientRect();
+    const cx = gr.left + gr.width / 2;
+    const cy = gr.top + gr.height / 2;
+    const lead = Math.floor(cards.length / 2); // card que aparece na "pilha"
+
+    // Estado inicial/final da "pilha": parte do tamanho e posição do card de preview
+    // (a `<article>` de vidro). Sem o rect, cai num fallback à direita do centro.
+    // Os deltas são medidos das posições NATURAIS (transform é relativo a elas).
+    const seed = seedRectRef.current;
+    const seedCX = seed ? seed.left + seed.width / 2 : cx + gr.width * 0.28;
+    const seedCY = seed ? seed.top + seed.height / 2 : cy;
+
+    const info = cards.map((card) => {
+      const r = card.getBoundingClientRect();
+      const ncx = r.left + r.width / 2;
+      const ncy = r.top + r.height / 2;
+      return { card, cw: r.width, nLeft: r.left, nTop: r.top, nW: r.width, nH: r.height, toCenterX: cx - ncx, toCenterY: cy - ncy, seedX: seedCX - ncx, seedY: seedCY - ncy };
+    });
+
+    const cardW = info[lead]?.cw || gr.width / Math.max(1, cards.length);
+    const seedScale = seed ? Math.max(0.45, Math.min(1.5, seed.width / cardW)) : 0.55;
+
+    let cleaned = false;
+    const restore = () => {
+      if (cleaned) return;
+      cleaned = true;
+      for (const { card } of info) {
+        card.style.transition = "";
+        card.style.transform = "";
+        card.style.opacity = "";
+        card.style.zIndex = "";
+        card.style.willChange = "";
+        card.style.filter = "";
+      }
+    };
+    const timers = [];
+    const shrink = 0.55; // encolhimento no centro
+
+    if (divulgarMorph.type === "split") {
+      // t0: cards no lugar/tamanho da semente (preview), borrados; só o lead visível.
+      info.forEach((it, i) => {
+        it.card.style.willChange = "transform, opacity, filter";
+        it.card.style.transition = "none";
+        it.card.style.transform = `translate(${it.seedX}px, ${it.seedY}px) scale(${seedScale})`;
+        it.card.style.opacity = i === lead ? "1" : "0";
+        it.card.style.filter = "blur(7px)";
+        it.card.style.zIndex = i === lead ? "3" : "1";
+      });
+      void grid.offsetHeight; // reflow para fixar o t0
+      // Fase A: desliza ao centro encolhendo, ainda borrado.
+      requestAnimationFrame(() => {
+        info.forEach(({ card, toCenterX, toCenterY }) => {
+          card.style.transition = "transform 0.5s cubic-bezier(.4,0,.2,1)";
+          card.style.transform = `translate(${toCenterX}px, ${toCenterY}px) scale(${seedScale * shrink})`;
+        });
+      });
+      // Fase B: abre em três, desborrando ao chegar no lugar.
+      timers.push(setTimeout(() => {
+        info.forEach(({ card }, i) => {
+          card.style.transition = `transform 0.6s cubic-bezier(.22,1,.36,1) ${i * 0.09}s, opacity 0.45s ease ${i * 0.09}s, filter 0.5s ease ${i * 0.09}s`;
+          card.style.transform = "translate(0, 0) scale(1)";
+          card.style.opacity = "1";
+          card.style.filter = "blur(0px)";
+        });
+      }, 500));
+      timers.push(setTimeout(restore, 500 + 820));
+    } else {
+      // MERGE — junta os três no centro e sai borrando de volta ao lugar do preview.
+      info.forEach(({ card, toCenterX, toCenterY }, i) => {
+        card.style.willChange = "transform, opacity, filter";
+        card.style.transition = `transform 0.44s cubic-bezier(.4,0,.6,1), opacity 0.34s ease ${i === lead ? "0.14s" : "0s"}, filter 0.4s ease`;
+        card.style.transform = `translate(${toCenterX}px, ${toCenterY}px) scale(${seedScale})`;
+        card.style.opacity = i === lead ? "1" : "0";
+        card.style.filter = "blur(3px)";
+        card.style.zIndex = i === lead ? "3" : "1";
+      });
+      // Fase A invertida: a pilha volta borrando para o lugar do preview e some.
+      timers.push(setTimeout(() => {
+        info.forEach(({ card, seedX, seedY }) => {
+          card.style.transition = "transform 0.42s cubic-bezier(.4,0,1,1), opacity 0.3s ease, filter 0.4s ease";
+          card.style.transform = `translate(${seedX}px, ${seedY}px) scale(${seedScale})`;
+          card.style.opacity = "0";
+          card.style.filter = "blur(8px)";
+        });
+      }, 430));
+    }
+
+    return () => { timers.forEach(clearTimeout); restore(); };
+  }, [divulgarMorph, displayStep]);
 
   useEffect(() => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
     setImages([]);
 
     setFieldErrors({});
+    setSemIA(false);
+    setAviso360("");
 
     if (!initialData) {
       setForm(EMPTY);
@@ -1366,7 +1571,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       atributosIds,
       title: initialData.title || "",
       description: initialData.description || "",
-      price: formatCurrencyBRL(String(initialData.price ?? "")),
+      // initialData.price vem em REAIS; formatCurrencyBRL espera CENTAVOS (×100).
+      price: initialData.price != null ? formatCurrencyBRL(String(Math.round(Number(initialData.price) * 100))) : "",
       cep: formatCep(initialData.cep || ""),
       address: initialData.address || "",
       neighborhood: initialData.neighborhood || "",
@@ -1375,6 +1581,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       bedrooms: initialData.bedrooms != null ? String(initialData.bedrooms) : "",
       parkingSpots: initialData.parkingSpots != null ? String(initialData.parkingSpots) : "",
       suites: initialData.suites != null ? String(initialData.suites) : "",
+      salas: initialData.salas != null ? String(initialData.salas) : "",
+      banheiros: initialData.banheiros != null ? String(initialData.banheiros) : "",
       squareFootage: initialData.squareFootage != null ? String(initialData.squareFootage) : "",
       finalidade: initialData.finalidade || "",
       areaTerreno: initialData.areaTerreno != null ? String(initialData.areaTerreno) : "",
@@ -1399,8 +1607,42 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     return areasParaTipo(tipoSelecionado?.descricao);
   })();
 
+  // No CADASTRO (não-edição) o avanço entre passos é travado: só se pode ir para
+  // frente com os campos obrigatórios do passo atual preenchidos. Em edição a
+  // navegação segue livre (pode pular entre os passos).
+  const validationErrors = getValidationErrors(form, areaFields);
+  const stepComplete = (stepIndex) =>
+    !Object.keys(validationErrors).some((f) => FIELD_STEP[f] === stepIndex);
+
+  // Passos travados no mapa de etapas: Divulgar (3) até salvar; e, no cadastro,
+  // qualquer passo à frente de um passo ainda incompleto.
+  const lockedSteps = (() => {
+    const locked = savedPropertyId ? [] : [3];
+    if (!isEditing) {
+      for (let i = 0; i < visibleSteps.length; i++) {
+        const bloqueado = Array.from({ length: i }).some((_, s) => !stepComplete(s));
+        if (bloqueado && !locked.includes(i)) locked.push(i);
+      }
+    }
+    return locked;
+  })();
+
+  // Com a auto-IA ligada, o passo Identificação exige a foto primeiro: os campos
+  // de texto/seleção ficam travados até haver ao menos uma foto, para a IA
+  // preencher tudo a partir dela sem conflitar com o que o usuário digitou.
+  // "Continuar sem IA" (semIA) desliga esse gate e o auto-preenchimento.
+  const bloquearSemFoto = !isEditing && autoIA && !semIA && !temFotos;
+
+  // Um campo é reescrito pela auto-IA (e portanto mostra o skeleton) só se ainda for
+  // da IA (intacto) ou estiver vazio — espelha o `podeEscrever` de handleGerarCampoIA.
+  const regeraCampo = (field, vazio) => aiFields[field] || vazio;
+
   const existingUrls = existingImages.map((img) => img.url);
   const previewUrls = images.length > 0 ? images.map((img) => img.previewUrl) : existingUrls;
+  // Itens do preview com o flag 360 (novas fotos ou salvas) para o viewer panorâmico.
+  const previewItems = images.length > 0
+    ? images.map((img) => ({ url: img.previewUrl, is360: Boolean(img.is360) }))
+    : existingImages.map((img) => ({ url: img.url, is360: Boolean(img.is360) }));
 
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -1503,6 +1745,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       address: form.address,
       bedrooms: form.bedrooms,
       suites: form.suites,
+      salas: form.salas,
+      banheiros: form.banheiros,
       parkingSpots: form.parkingSpots,
       areaPrivativa: form.areaPrivativa,
       areaConstruida: form.areaConstruida,
@@ -1562,17 +1806,22 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
       const sugestao = await api.sugerirImovelIA(tenantSlug, { imovel, imagens, tiposDisponiveis });
 
-      // campo "auto" (disparado ao lançar as fotos) preenche título E descrição.
-      if ((campo === "title" || campo === "auto") && sugestao.titulo) {
+      // No modo "auto" (lançar fotos), só sobrescreve o que AINDA é da IA (ou está
+      // vazio) — o que o usuário editou à mão é preservado. Clique manual na varinha
+      // (campo específico) sempre escreve.
+      const auto = campo === "auto";
+      const podeEscrever = (field, vazio) => !auto || aiFields[field] || vazio;
+
+      if ((campo === "title" || campo === "auto") && sugestao.titulo && podeEscrever("title", !form.title.trim())) {
         set("title", sugestao.titulo);
         setAiFields((prev) => ({ ...prev, title: true }));
       }
-      if ((campo === "description" || campo === "auto") && sugestao.descricao) {
+      if ((campo === "description" || campo === "auto") && sugestao.descricao && podeEscrever("description", !form.description.trim())) {
         set("description", sugestao.descricao);
         setAiFields((prev) => ({ ...prev, description: true }));
       }
 
-      if (sugestao.finalidade) {
+      if (sugestao.finalidade && podeEscrever("finalidade", !form.finalidade)) {
         const fin = sugestao.finalidade.toUpperCase();
         if (fin === "RESIDENCIAL" || fin === "COMERCIAL") {
           set("finalidade", fin);
@@ -1580,14 +1829,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
         }
       }
 
-      if (sugestao.tipoImovel) {
+      // Tipo/atributos só são reescritos quando o tipo ainda é da IA (ou vazio),
+      // para não bagunçar uma seleção manual do usuário.
+      if (sugestao.tipoImovel && podeEscrever("tipoImovelId", !form.tipoImovelId)) {
         const tipoInferido = normalizarTipo(sugestao.tipoImovel);
         const tipoEncontrado = tipos.find((t) => normalizarTipo(t.descricao) === tipoInferido);
         if (tipoEncontrado) {
           set("tipoImovelId", String(tipoEncontrado.id));
           setAiFields((prev) => ({ ...prev, tipoImovelId: true }));
 
-          if (sugestao.atributos && Array.isArray(sugestao.atributos)) {
+          if (sugestao.atributos && Array.isArray(sugestao.atributos) && podeEscrever("atributos", form.atributosIds.length === 0)) {
             const atributosDoTipo = tipoEncontrado.atributos || [];
             const attrsInferidos = sugestao.atributos.map(normalizarTipo);
             const idsMarcados = atributosDoTipo
@@ -1611,16 +1862,98 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     }
   }
 
-  // Ao lançar as fotos (arrastar ou selecionar), preenche tudo com IA
-  // automaticamente — sem precisar clicar no botão da varinha. Roda só quando
-  // ainda não há título/descrição, para não sobrescrever o que o usuário digitou.
+  // Ao lançar fotos (arrastar ou selecionar), preenche tudo com IA automaticamente.
+  // Roda na 1ª geração (form vazio) e TAMBÉM ao adicionar mais fotos — desde que o
+  // conteúdo ainda seja da IA (usuário não mexeu); nesse caso reescreve usando as
+  // novas fotos como contexto. Se o usuário editou, aqueles campos são preservados
+  // (a preservação por campo é feita dentro de handleGerarCampoIA).
+  // Depende de images.length para não disparar quando só o flag 360° de uma foto muda.
   useEffect(() => {
+    if (!autoIA || semIA) return; // toggle/plano sem IA, ou usuário optou por seguir sem IA
     if (images.length === 0 || autoIaLockRef.current || gerandoCampo) return;
-    if (form.title.trim() || form.description.trim()) return;
+    const vazio = !form.title.trim() && !form.description.trim();
+    const conteudoDaIA = aiFields.title || aiFields.description || aiFields.tipoImovelId || aiFields.finalidade || aiFields.atributos;
+    if (!vazio && !conteudoDaIA) return; // usuário editou tudo → não reescreve
     autoIaLockRef.current = true;
     handleGerarCampoIA("auto").finally(() => { autoIaLockRef.current = false; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [images]);
+  }, [images.length]);
+
+  // Detecta se alguma foto atual é panorâmica (~2:1) — usado só para exibir o
+  // hint do selo 360° quando o usuário realmente subir uma equiretangular.
+  useEffect(() => {
+    if (!canUse360) { setTemPanoramica(false); return; }
+    const srcs = [...images.map((im) => im.previewUrl), ...existingImages.map((im) => im.url)];
+    if (srcs.length === 0) { setTemPanoramica(false); return; }
+    let cancelled = false;
+    let pending = srcs.length;
+    let achou = false;
+    srcs.forEach((src) => {
+      const el = new Image();
+      el.onload = el.onerror = () => {
+        if (cancelled) return;
+        if (el.naturalHeight && ehEquirect(el.naturalWidth / el.naturalHeight)) achou = true;
+        if (--pending === 0) setTemPanoramica(achou);
+      };
+      el.src = src;
+    });
+    return () => { cancelled = true; };
+  }, [images, existingImages, canUse360]);
+
+  // Auto-marca como 360° toda foto NOVA reconhecida como equiretangular (~2:1): quem
+  // sobe uma panorâmica quase sempre quer exibi-la em 360°. Avalia cada foto só uma
+  // vez — se o usuário desmarcar depois, não volta a marcar.
+  useEffect(() => {
+    if (!canUse360) return;
+    images.forEach((img) => {
+      if (auto360Ref.current.has(img.id)) return;
+      auto360Ref.current.add(img.id);
+      const el = new Image();
+      el.onload = () => {
+        if (el.naturalHeight && ehEquirect(el.naturalWidth / el.naturalHeight)) {
+          setImages((prev) => prev.map((x) => (x.id === img.id && !x.is360 ? { ...x, is360: true } : x)));
+        }
+      };
+      el.src = img.previewUrl;
+    });
+  }, [images, canUse360]);
+
+  // Panorâmicas equiretangulares são 2:1. Se a foto marcada como 360° fugir muito
+  // disso, avisa (não bloqueia — o usuário pode ter uma pano levemente fora).
+  function checarProporcao360(src) {
+    const el = new Image();
+    el.onload = () => {
+      const r = el.naturalHeight ? el.naturalWidth / el.naturalHeight : 0;
+      setAviso360(
+        r < 1.9 || r > 2.1
+          ? `A foto marcada como 360° tem proporção ${r.toFixed(2)}:1. Panorâmicas equiretangulares precisam ser 2:1 — fora disso o tour aparece esticado/distorcido.`
+          : ""
+      );
+    };
+    el.onerror = () => setAviso360("");
+    el.src = src;
+  }
+
+  function toggleImage360(i) {
+    const virando360 = !images[i]?.is360;
+    setImages((prev) => prev.map((img, idx) => (idx === i ? { ...img, is360: !img.is360 } : img)));
+    if (virando360) checarProporcao360(images[i].previewUrl);
+    else setAviso360("");
+  }
+
+  async function toggleExisting360(i) {
+    const img = existingImages[i];
+    if (!img) return;
+    const novo = !img.is360;
+    setExistingImages((prev) => prev.map((x, idx) => (idx === i ? { ...x, is360: novo } : x)));
+    if (novo) checarProporcao360(img.url);
+    else setAviso360("");
+    try {
+      await api.setPropertyImage360(tenantSlug, initialData.id, img.id, novo);
+    } catch {
+      setExistingImages((prev) => prev.map((x, idx) => (idx === i ? { ...x, is360: !novo } : x)));
+    }
+  }
 
   function reorderImages(from, to) {
     setImages((prev) => {
@@ -1655,12 +1988,34 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
   function handleStepClick(target) {
     if (target === step) return;
-    if (target === 3 && !savedPropertyId) return;
+    if (target === 3 && (!savedPropertyId || !canPublish)) return;
+    // Cadastro: não deixa pular para frente sem completar os passos anteriores.
+    if (!isEditing && target > step) {
+      for (let s = 0; s < target; s++) if (!stepComplete(s)) return;
+    }
     setError("");
     setStep(target);
   }
 
+  // Faz os campos obrigatórios faltantes piscarem em vermelho por ~2s (sem avançar).
+  function flashMissing(fields) {
+    if (!fields.length) return;
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    setFlashFields({}); // zera antes para reiniciar a animação mesmo em cliques repetidos
+    requestAnimationFrame(() => {
+      setFlashFields(Object.fromEntries(fields.map((f) => [f, true])));
+    });
+    flashTimerRef.current = setTimeout(() => setFlashFields({}), 2000);
+  }
+
   function handleNext() {
+    // Cadastro: se faltam obrigatórios, não avança — pisca os campos faltantes.
+    if (!isEditing && !stepComplete(step)) {
+      const missing = Object.keys(validationErrors).filter((f) => FIELD_STEP[f] === step);
+      setFieldErrors((prev) => ({ ...prev, ...Object.fromEntries(missing.map((f) => [f, validationErrors[f]])) }));
+      flashMissing(missing);
+      return;
+    }
     setError("");
     setStep((s) => s + 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1687,6 +2042,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       setError(`Faltam campos obrigatórios para publicar: ${parts.join(" · ")}. Revise as etapas destacadas.`);
 
       setStep(orderedSteps[0]);
+      flashMissing(fields.filter((f) => FIELD_STEP[f] === orderedSteps[0]));
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -1719,9 +2075,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       neighborhood: form.neighborhood,
       city: form.city,
       state: form.state,
-      bedrooms: Number(form.bedrooms),
+      bedrooms: form.finalidade === "COMERCIAL" ? 0 : Number(form.bedrooms),
+      suites: form.finalidade === "COMERCIAL" ? 0 : Number(form.suites),
+      salas: form.finalidade === "COMERCIAL" ? Number(form.salas) : 0,
+      banheiros: form.finalidade === "COMERCIAL" ? Number(form.banheiros) : 0,
       parkingSpots: Number(form.parkingSpots),
-      suites: Number(form.suites),
       squareFootage,
       finalidade: form.finalidade || null,
       ...areaPayload,
@@ -1730,14 +2088,21 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       status: form.status,
       comodidades: form.comodidades,
       imageFiles: images.map((img) => img.file),
+      imageIs360: images.map((img) => Boolean(img.is360)),
     });
 
     if (!isEditing && saved?.id) {
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
       setImages([]);
-      setSavedPropertyId(saved.id);
-      setPublishResults({});
-      setStep(3);
+      if (canPublish) {
+        // Segue para a etapa Divulgar.
+        setSavedPropertyId(saved.id);
+        setPublishResults({});
+        setStep(3);
+      } else {
+        // Sem permissão de publicar: cadastro finaliza aqui, volta ao portfólio.
+        navigate("/imoveis");
+      }
     }
   }
 
@@ -1779,6 +2144,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   // Usa a IA (Gemini) para inferir, a partir do CEP/endereço, quais comodidades
   // provavelmente existem na região — preenchendo as checkboxes automaticamente.
   async function enriquecerComodidades({ cep, logradouro, bairro, cidade, uf }) {
+    if (!canUseIA) return; // recurso de IA (Premium)
     if (!cidade || !uf || !tenantSlug) return;
     setComodidadesLoading(true);
     setComodidadesMsg("");
@@ -1908,8 +2274,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const selectStyle = { ...inputStyle, cursor: "pointer" };
   const pubBtnBase = { padding: "11px 16px", borderRadius: "9px", fontSize: "13px", fontWeight: 600, color: "#fff", border: "none", width: "100%", textAlign: "center", cursor: "pointer" };
   const removeBtnStyle = { padding: "7px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", flexShrink: 0, width: "auto" };
-  const withError = (field, base = inputStyle) =>
-    fieldErrors[field] ? { ...base, border: "1px solid rgba(239,68,68,0.6)" } : base;
+  const withError = (field, base = inputStyle) => {
+    let s = fieldErrors[field] ? { ...base, border: "1px solid rgba(239,68,68,0.6)" } : base;
+    if (flashFields[field]) s = { ...s, animation: "field-flash-red 0.5s ease-in-out 0s 4" };
+    return s;
+  };
 
   // Posts ativos por rede (podem ser vários).
   const fbPosts = publications.filter((p) => p.channel === "FACEBOOK");
@@ -1980,7 +2349,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
         </button>
       </div>
 
-      <StepIndicator current={step} onStepClick={handleStepClick} lockedSteps={savedPropertyId ? [] : [3]} />
+      <StepIndicator current={step} onStepClick={handleStepClick} steps={visibleSteps} lockedSteps={lockedSteps} />
 
       {error ? <div className="error" style={{ marginBottom: "16px" }}>{error}</div> : null}
 
@@ -2009,6 +2378,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     addInputId="foto-upload"
                     showAddCard={images.length === 0 && (existingImages.length + images.length) < MAX_FOTOS}
                     disabled={disabled}
+                    allow360={canUse360}
+                    onToggle360={toggleExisting360}
                   />
                 </div>
               )}
@@ -2043,10 +2414,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     </svg>
                   </div>
                   <p style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: "600" }}>
-                    Adicionar fotos
+                    {bloquearSemFoto ? "Fotos do imóvel" : "Adicionar fotos"}
                   </p>
                   <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "var(--text-muted)" }}>
-                    Selecione ou arraste uma ou mais fotos para esta página. JPG, PNG, WEBP.
+                    {bloquearSemFoto
+                      ? "Envie ao menos uma foto do imóvel — a IA vai preencher título, descrição e os detalhes automaticamente a partir delas."
+                      : "Selecione ou arraste uma ou mais fotos para esta página."}
                   </p>
                   <label htmlFor="foto-upload" style={{
                     display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 24px",
@@ -2070,6 +2443,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 addInputId="foto-upload"
                 showAddCard={images.length > 0 && (existingImages.length + images.length) < MAX_FOTOS}
                 disabled={disabled}
+                allow360={canUse360}
+                onToggle360={toggleImage360}
               />
 
               {(existingImages.length + images.length) >= MAX_FOTOS && (
@@ -2084,7 +2459,36 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </p>
               )}
 
-              <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "32px 0 16px 0" }} />
+              {canUse360 && temPanoramica && (
+                <p className="hint" style={{ marginTop: "-8px" }}>
+                  Foto panorâmica detectada — já marcamos como <strong style={{ color: "#a5b4fc" }}>360°</strong> para o tour virtual. Clique no selo no canto da foto se quiser desativar.
+                </p>
+              )}
+
+              {aviso360 && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "12px 16px", borderRadius: "12px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", fontSize: "13px", color: "#fbbf24" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "1px" }}>
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  {aviso360}
+                </div>
+              )}
+
+              {bloquearSemFoto && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", marginTop: "8px" }}>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => setSemIA(true)}
+                    style={{ width: "auto", fontSize: "13px", padding: "9px 20px" }}
+                  >
+                    Continuar sem IA
+                  </button>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.75, textAlign: "center" }}>
+                    Preencha os campos manualmente. A ferramenta de IA continua disponível em cada campo.
+                  </span>
+                </div>
+              )}
 
               <style>{`
                 @keyframes gradient-flare {
@@ -2100,6 +2504,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   0% { background-position: 200% 0; }
                   100% { background-position: -200% 0; }
                 }
+                @keyframes domus-reveal {
+                  from { opacity: 0; transform: translateY(18px); }
+                  to { opacity: 1; transform: translateY(0); }
+                }
               `}</style>
 
               {campoIaErro && (
@@ -2107,6 +2515,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   {campoIaErro}
                 </div>
               )}
+
+              {/* Fluxo com IA: os campos só aparecem depois da 1ª foto e entram
+                  com uma animação de reveal. Sem IA, aparecem normalmente. */}
+              {!bloquearSemFoto && (
+              <div
+                style={{
+                  display: "flex", flexDirection: "column", gap: "20px",
+                  animation: (autoIA && !isEditing) ? "domus-reveal 0.55s cubic-bezier(.22,1,.36,1) both" : undefined,
+                }}
+              >
+              <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "32px 0 16px 0" }} />
 
               <Field label="Título do imóvel" required error={fieldErrors.title}>
                 <div style={{ position: "relative", zIndex: 1 }}>
@@ -2128,6 +2547,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     onFocus={() => setFocusedField("title")}
                     onBlur={() => setFocusedField(null)}
                   />
+                  {canUseIA && (
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
@@ -2148,7 +2568,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   >
                     <span style={{ display: "flex", animation: (gerandoCampo === "title" || gerandoCampo === "auto") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
                   </button>
-                  <IaSkeleton active={gerandoCampo === "auto"} radius="10px" />
+                  )}
+                  <IaSkeleton active={(gerandoCampo === "auto" && regeraCampo("title", !form.title.trim())) || gerandoCampo === "title"} radius="10px" />
                 </div>
               </Field>
 
@@ -2164,6 +2585,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     WebkitMaskComposite: "xor", maskComposite: "exclude"
                   }} />
                   <textarea
+                    className="input-scroll"
                     style={{ ...withError("description"), resize: "vertical", minHeight: "100px", lineHeight: "1.6", paddingRight: "44px", position: "relative", zIndex: 2 }}
                     placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..."
                     value={form.description}
@@ -2173,6 +2595,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     onFocus={() => setFocusedField("description")}
                     onBlur={() => setFocusedField(null)}
                   />
+                  {canUseIA && (
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
@@ -2193,7 +2616,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   >
                     <span style={{ display: "flex", animation: (gerandoCampo === "description" || gerandoCampo === "auto") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
                   </button>
-                  <IaSkeleton active={gerandoCampo === "auto"} radius="10px" />
+                  )}
+                  <IaSkeleton active={(gerandoCampo === "auto" && regeraCampo("description", !form.description.trim())) || gerandoCampo === "description"} radius="10px" />
                 </div>
               </Field>
 
@@ -2207,7 +2631,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     <option value="" disabled hidden>Selecione uma categoria...</option>
                     {tipos.map((t) => <option key={t.id} value={t.id}>{t.descricao}</option>)}
                   </select>
-                  <IaSkeleton active={gerandoCampo === "auto"} radius="10px" />
+                  <IaSkeleton active={gerandoCampo === "auto" && regeraCampo("tipoImovelId", !form.tipoImovelId)} radius="10px" />
                 </AiFlare>
               </Field>
 
@@ -2215,14 +2639,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 <AiFlare active={aiFields.atributos} radius="13px">
                   <div style={{ position: "relative", zIndex: 2, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
                     <AtributosSection atributos={tipoSelecionado.atributos} selecionados={form.atributosIds} onChange={(ids) => { set("atributosIds", ids); setAiFields((p) => ({ ...p, atributos: false })); }} disabled={disabled} />
-                    <IaSkeleton active={gerandoCampo === "auto"} radius="12px" />
+                    <IaSkeleton active={gerandoCampo === "auto" && regeraCampo("atributos", form.atributosIds.length === 0)} radius="12px" />
                   </div>
                 </AiFlare>
-              ) : gerandoCampo === "auto" ? (
+              ) : (gerandoCampo === "auto" && regeraCampo("tipoImovelId", !form.tipoImovelId)) ? (
                 <div style={{ position: "relative", minHeight: "92px" }}>
                   <IaSkeleton active radius="12px" />
                 </div>
               ) : null}
+              </div>
+              )}
             </>
           )}
 
@@ -2302,8 +2728,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </AiFlare>
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
-                <Field label="Quartos" error={fieldErrors.bedrooms}><input style={withError("bedrooms")} type="number" min="0" placeholder="0" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} disabled={disabled} /></Field>
-                <Field label="Suítes" error={fieldErrors.suites}><input style={withError("suites")} type="number" min="0" placeholder="0" value={form.suites} onChange={(e) => set("suites", e.target.value)} disabled={disabled} /></Field>
+                {form.finalidade === "COMERCIAL" ? (
+                  <>
+                    <Field label="Salas" error={fieldErrors.salas}><input style={withError("salas")} type="number" min="0" placeholder="0" value={form.salas} onChange={(e) => set("salas", e.target.value)} disabled={disabled} /></Field>
+                    <Field label="Banheiros" error={fieldErrors.banheiros}><input style={withError("banheiros")} type="number" min="0" placeholder="0" value={form.banheiros} onChange={(e) => set("banheiros", e.target.value)} disabled={disabled} /></Field>
+                  </>
+                ) : (
+                  <>
+                    <Field label="Quartos" error={fieldErrors.bedrooms}><input style={withError("bedrooms")} type="number" min="0" placeholder="0" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} disabled={disabled} /></Field>
+                    <Field label="Suítes" error={fieldErrors.suites}><input style={withError("suites")} type="number" min="0" placeholder="0" value={form.suites} onChange={(e) => set("suites", e.target.value)} disabled={disabled} /></Field>
+                  </>
+                )}
                 <Field label="Vagas de garagem" error={fieldErrors.parkingSpots}><input style={withError("parkingSpots")} type="number" min="0" placeholder="0" value={form.parkingSpots} onChange={(e) => set("parkingSpots", e.target.value)} disabled={disabled} /></Field>
               </div>
 
@@ -2381,7 +2816,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               )}
 
-              <div className={`divulgar-grid${divulgarAnim === "splitting" ? " is-splitting" : divulgarAnim === "merging" ? " is-merging" : ""}`}>
+              <div className="divulgar-grid" ref={divulgarGridRef}>
                 {cargo?.publicarRedes && (
                   <FacebookPreview
                     nome={session?.tenant?.name}
@@ -2392,7 +2827,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     descActive={descHover === "facebook"}
                     onDescEnter={() => setDescHover("facebook")}
                     onDescLeave={() => setDescHover(null)}
-                    onGerarIA={() => handleGerarRedeIA("facebook")}
+                    onGerarIA={canUseIA ? () => handleGerarRedeIA("facebook") : undefined}
                     iaLoading={redeIaLoading.facebook}
                     iaErro={redeIaErro.facebook}
                     statusText={socialStatus === null ? "Verificando…" : socialStatus.facebook.connected ? socialStatus.facebook.pageName : "Não conectado"}
@@ -2420,7 +2855,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     descActive={descHover === "instagram"}
                     onDescEnter={() => setDescHover("instagram")}
                     onDescLeave={() => setDescHover(null)}
-                    onGerarIA={() => handleGerarRedeIA("instagram")}
+                    onGerarIA={canUseIA ? () => handleGerarRedeIA("instagram") : undefined}
                     iaLoading={redeIaLoading.instagram}
                     iaErro={redeIaErro.instagram}
                     statusText={socialStatus === null ? "Verificando…" : socialStatus.instagram.connected ? "Conta conectado" : "Não conectado"}
@@ -2447,7 +2882,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   descActive={descHover === "whatsapp"}
                   onDescEnter={() => setDescHover("whatsapp")}
                   onDescLeave={() => setDescHover(null)}
-                  onGerarIA={() => handleGerarRedeIA("whatsapp")}
+                  onGerarIA={canUseIA ? () => handleGerarRedeIA("whatsapp") : undefined}
                   iaLoading={redeIaLoading.whatsapp}
                   iaErro={redeIaErro.whatsapp}
                   statusText="Sempre disponível"
@@ -2561,7 +2996,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 <button
                   type="button"
-                  onClick={() => { setSavedPropertyId(null); setForm(EMPTY); setStep(0); setPublishResults({}); setPublications([]); }}
+                  onClick={() => { setSavedPropertyId(null); setForm(EMPTY); setStep(0); setPublishResults({}); setPublications([]); setSemIA(false); }}
                   style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 20px", borderRadius: "10px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "rgba(99,102,241,1)", fontSize: "13px", fontWeight: "600", cursor: "pointer", width: "auto" }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -2570,7 +3005,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 <button
                   type="button"
                   className="button-secondary"
-                  onClick={() => setSearchParams({ tab: "list" })}
+                  onClick={() => navigate("/imoveis")}
                   style={{ fontSize: "13px", padding: "9px 20px", width: "auto" }}
                 >
                   Ver portfólio
@@ -2594,16 +3029,21 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </button>
               ) : (
                 <button type="button" onClick={handleSubmit} disabled={disabled}>
-                  {isEditing ? "Salvar alterações" : "Publicar imóvel"}
+                  {isEditing ? "Salvar alterações" : canPublish ? "Publicar imóvel" : "Cadastrar imóvel"}
                 </button>
               )}
             </div>
           )}
         </div>
 
-        {displayStep < 3 && (
-          <div style={{ width: "300px", flexShrink: 0 }}>
-            <PropertyPreviewCard form={form} previewUrls={previewUrls} />
+        {displayStep < 3 && !bloquearSemFoto && (
+          <div
+            style={{
+              width: "300px", flexShrink: 0,
+              animation: (autoIA && !isEditing) ? "domus-reveal 0.55s cubic-bezier(.22,1,.36,1) both" : undefined,
+            }}
+          >
+            <PropertyPreviewCard form={form} previewItems={previewItems} cardRef={previewCardRef} />
           </div>
         )}
       </div>

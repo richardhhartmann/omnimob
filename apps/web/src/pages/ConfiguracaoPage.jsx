@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
+import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -182,13 +183,63 @@ const EMPTY = {
   whatsapp: "", telefone: "", email: "",
   cep: "", endereco: "", cidade: "", estado: "",
   logoUrl: "", primaryColor: "#6366f1", secondaryColor: "#d4af37",
+  autoGerarIA: true,
 };
+
+// ─── Abas ─────────────────────────────────────────────────────────────────────
+
+const TABS = [
+  {
+    key: "perfil", label: "Perfil", cor: "#6366f1",
+    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>,
+  },
+  {
+    key: "aparencia", label: "Aparência", cor: "#8b5cf6",
+    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="10.5" r="2.5" /><circle cx="8.5" cy="7.5" r="2.5" /><circle cx="6.5" cy="12.5" r="2.5" /><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" /></svg>,
+  },
+  {
+    key: "redes", label: "Redes Sociais", cor: "#1877f2",
+    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>,
+  },
+  {
+    key: "plano", label: "Plano e recursos", cor: "#d4af37",
+    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>,
+  },
+];
+
+function TabLink({ active, label, icone, cor, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        position: "relative", width: "100%", display: "flex", alignItems: "center", gap: "12px",
+        padding: "11px 14px", borderRadius: "12px", border: "none", cursor: "pointer",
+        background: active ? "rgba(255,255,255,0.06)" : "transparent",
+        color: active ? "var(--text)" : "var(--text-muted)",
+        fontSize: "13px", fontWeight: 600, textAlign: "left", transition: "background 0.2s, color 0.2s",
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+    >
+      {active && <span style={{ position: "absolute", left: 0, top: "22%", height: "56%", width: "3px", background: cor, borderRadius: "0 4px 4px 0" }} />}
+      <span style={{ width: "30px", height: "30px", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: active ? cor : `${cor}22`, color: active ? "#fff" : cor, transition: "background 0.2s, color 0.2s" }}>
+        {icone}
+      </span>
+      <span style={{ flex: 1, minWidth: 0, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {label}
+      </span>
+    </button>
+  );
+}
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function ConfiguracaoPage({ session, onSessionUpdate }) {
   const tenantSlug = session?.tenant?.slug;
+  const [tab, setTab] = useState("perfil");
   const [form, setForm] = useState(EMPTY);
+  const [plano, setPlano] = useState(session?.tenant?.plano || "BASICO");
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState("idle");
   const [cepLoading, setCepLoading] = useState(false);
@@ -209,6 +260,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   useEffect(() => {
     const social = searchParams.get("social");
     if (!social) return;
+    setTab("redes"); // volta do OAuth já mostrando a aba de Redes Sociais
     const page = searchParams.get("page");
     const msg = searchParams.get("msg");
     const hasIg = searchParams.get("instagram") === "ok";
@@ -277,7 +329,9 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           logoUrl: t.logoUrl || "",
           primaryColor: t.primaryColor || "#6366f1",
           secondaryColor: t.secondaryColor || "#d4af37",
+          autoGerarIA: t.autoGerarIA ?? true,
         });
+        setPlano(t.plano || "BASICO");
         loadedRef.current = true;
       })
       .catch(() => {})
@@ -300,7 +354,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
         if (onSessionUpdate && session?.tenant) {
           onSessionUpdate({
             ...session,
-            tenant: { ...session.tenant, name: form.name, slogan: form.slogan, logoUrl: form.logoUrl },
+            tenant: { ...session.tenant, name: form.name, slogan: form.slogan, logoUrl: form.logoUrl, autoGerarIA: form.autoGerarIA },
           });
         }
         debounceRef.current = setTimeout(() => setSaveStatus("idle"), 3000);
@@ -403,12 +457,22 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
         <div style={{ minHeight: "24px" }}>{saveIndicator}</div>
       </div>
 
-      {/* ── Layout principal ─── */}
-      <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
+      {/* ── Layout com abas ─── */}
+      <div style={{ display: "flex", gap: "24px", alignItems: "flex-start", flexWrap: "wrap" }}>
 
-        {/* ── Formulário ─── */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* ── Menu lateral de abas ─── */}
+        <aside style={{ width: "240px", flexShrink: 0, position: "sticky", top: "80px" }}>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {TABS.map((t) => (
+              <TabLink key={t.key} active={tab === t.key} label={t.label} icone={t.icone} cor={t.cor} onClick={() => setTab(t.key)} />
+            ))}
+          </div>
+        </aside>
 
+        {/* ── Conteúdo da aba ativa ─── */}
+        <div key={tab} style={{ flex: 1, minWidth: "300px", display: "flex", flexDirection: "column", gap: "16px", animation: "fadeIn 0.3s ease-out" }}>
+
+          {tab === "perfil" && (<>
           {/* Dados da Empresa */}
           <Secao cor="#6366f1" titulo="Dados da Empresa" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -483,7 +547,11 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               </Campo>
             </div>
           </Secao>
+          </>)}
 
+          {tab === "aparencia" && (
+          <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: "300px", display: "flex", flexDirection: "column", gap: "16px" }}>
           {/* Identidade Visual */}
           <Secao cor="#8b5cf6" titulo="Identidade Visual" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -543,7 +611,14 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               </span>
             </div>
           </Secao>
+            </div>
+            <div style={{ width: "280px", flexShrink: 0 }}>
+              <BrandPreview form={form} />
+            </div>
+          </div>
+          )}
 
+          {tab === "redes" && (<>
           {/* Redes Sociais */}
           <Secao cor="#1877f2" titulo="Redes Sociais" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -627,12 +702,81 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               <strong>Pré-requisito:</strong> a conta do Instagram deve ser do tipo Business ou Creator, vinculada à Página do Facebook. A autenticação usa o Meta Graph API v19.0 com permissões <code>pages_manage_posts</code> e <code>instagram_content_publish</code>.
             </p>
           </Secao>
+          </>)}
 
-        </div>
+          {tab === "plano" && (<>
+          {/* Plano e recursos */}
+          <Secao cor="#d4af37" titulo="Plano e recursos" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          }>
+            {(() => {
+              const atual = planoInfo(plano);
+              return (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>Seu plano atual:</span>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: atual.cor, background: `${atual.cor}22`, border: `1px solid ${atual.cor}55`, padding: "4px 12px", borderRadius: "999px" }}>
+                      {atual.nome}
+                    </span>
+                  </div>
 
-        {/* ── Preview lateral ─── */}
-        <div style={{ width: "280px", flexShrink: 0 }}>
-          <BrandPreview form={form} />
+                  {/* Tabela comparativa */}
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", minWidth: "420px" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", padding: "8px 10px", color: "var(--text-muted)", fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>Recurso</th>
+                          {PLANOS.map((p) => (
+                            <th key={p.key} style={{ textAlign: "center", padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                              <span style={{ color: p.key === atual.key ? p.cor : "var(--text)", fontWeight: 700 }}>{p.nome}</span>
+                              {p.key === atual.key && <span style={{ display: "block", fontSize: "9px", color: p.cor, textTransform: "uppercase", letterSpacing: "0.05em" }}>atual</span>}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {RECURSOS_PLANOS.map((r) => (
+                          <tr key={r.label}>
+                            <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)", color: "var(--text)" }}>{r.label}</td>
+                            {PLANOS.map((p) => (
+                              <td key={p.key} style={{ textAlign: "center", padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                                {r.plans.includes(p.key)
+                                  ? <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
+                                  : <span style={{ color: "rgba(255,255,255,0.2)" }}>—</span>}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Toggle: auto-gerar IA (só faz sentido no Premium) */}
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", cursor: atual.ia ? "pointer" : "not-allowed", opacity: atual.ia ? 1 : 0.55 }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.autoGerarIA)}
+                      onChange={(e) => set("autoGerarIA", e.target.checked)}
+                      disabled={!atual.ia}
+                      style={{ marginTop: "2px" }}
+                    />
+                    <span style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                      <span style={{ fontSize: "13px", fontWeight: 600 }}>Preencher imóvel por IA automaticamente</span>
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                        Ao lançar a primeira foto no cadastro, a IA já preenche título, descrição, tipo e demais campos.
+                        {!atual.ia && <> Disponível no plano <strong style={{ color: "#d4af37" }}>Premium</strong>.</>}
+                        {atual.ia && !form.autoGerarIA && <> Desativado — nada é preenchido sozinho, mas o botão "Gerar com IA" continua disponível.</>}
+                      </span>
+                    </span>
+                  </label>
+                </>
+              );
+            })()}
+          </Secao>
+          </>)}
+
         </div>
 
       </div>

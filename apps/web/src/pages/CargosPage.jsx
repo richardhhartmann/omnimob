@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { Avatar, SearchInput, StatCard, StatGrid } from "../components/adminUi";
+import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { useConfirm } from "../components/ConfirmModal";
 
 const PERMISSOES = [
@@ -15,6 +16,10 @@ const PERMISSOES = [
   { key: "verRelatorios",     label: "Ver Relatórios" },
   { key: "publicarRedes",     label: "Publicar em Redes" },
 ];
+
+// Permissões que o usuário NÃO pode remover do próprio cargo (senão se tranca
+// para fora do painel / da gestão de cargos).
+const LOCKED_NO_PROPRIO_CARGO = ["acessarPainel", "gerenciarCargos"];
 
 function emptyForm() {
   const f = { descricao: "" };
@@ -30,13 +35,14 @@ export function CargosPage({ session, onSessionUpdate }) {
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!tenantSlug) return;
-    api.listCargos(tenantSlug).then(setCargos).catch(() => {});
+    api.listCargos(tenantSlug).then(setCargos).catch(() => {}).finally(() => setInitialLoading(false));
   }, [tenantSlug]);
 
   const stats = useMemo(() => ({
@@ -79,7 +85,7 @@ export function CargosPage({ session, onSessionUpdate }) {
   // Auto-save ao tickar um checkbox (só quando editando)
   async function handlePermissaoChange(key, value) {
     const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
-    if (key === "acessarPainel" && ehProprioCargoDoUsuario) return; // bloqueado
+    if (LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario) return; // bloqueado
 
     const newForm = { ...form, [key]: value };
     setForm(newForm);
@@ -149,7 +155,7 @@ export function CargosPage({ session, onSessionUpdate }) {
               {editando ? "Salvar nome" : "Criar Cargo"}
             </button>
             <button type="button" className="button-secondary" onClick={() => setView("list")} disabled={loading} style={{ width: "auto", padding: "10px 16px", flexShrink: 0 }}>
-              Voltar
+              Cancelar
             </button>
           </div>
 
@@ -164,7 +170,7 @@ export function CargosPage({ session, onSessionUpdate }) {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px" }}>
               {PERMISSOES.map(({ key, label }) => {
-                const locked = key === "acessarPainel" && ehProprioCargoDoUsuario;
+                const locked = LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario;
                 const checked = locked ? true : Boolean(form[key]);
                 const isAutoSaving = editando !== null;
 
@@ -207,25 +213,29 @@ export function CargosPage({ session, onSessionUpdate }) {
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Cargos e Permissões</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: "4px 0 0" }}>Defina o que cada cargo pode fazer no painel.</p>
-        </div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+        <header>
+          <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Cargos e Permissões</h1>
+          <p style={{ color: "var(--text-muted)", margin: 0 }}>Defina o que cada cargo pode fazer no painel.</p>
+        </header>
         <BtnNovo onClick={abrirCriar} label="Novo Cargo" />
       </div>
 
+      {initialLoading ? <SkeletonStats count={3} /> : (
       <StatGrid>
         <StatCard label="Cargos" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>} />
         <StatCard label="Usuários vinculados" value={stats.usuarios} accent="#10b981" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
         <StatCard label="Sem permissões" value={stats.semPermissao} accent="#f59e0b" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>} />
       </StatGrid>
+      )}
 
       <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
         <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cargo…" />
       </div>
 
-      {visiveis.length === 0 ? (
+      {initialLoading ? (
+        <SkeletonListRows count={4} />
+      ) : visiveis.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>
             {search ? "Nenhum cargo encontrado." : "Nenhum cargo cadastrado."}

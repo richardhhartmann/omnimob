@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import { planoPermiteTour360 } from "../middlewares/planoMiddleware.js";
 import { gerarConteudoImovel, inferirComodidadesRegiao, isAiEnabled } from "../services/aiService.js";
 import { createPropertySchema, updatePropertySchema } from "../validators/propertyValidators.js";
 
@@ -509,7 +510,7 @@ propertyRouter.get("/:id/images", async (req, res) => {
 
 propertyRouter.post("/:id/images", async (req, res) => {
   try {
-    const { url, publicId } = req.body || {};
+    const { url, publicId, is360 } = req.body || {};
     if (!url || typeof url !== "string") {
       return res.status(400).json({ error: "Campo url e obrigatorio para imagem." });
     }
@@ -527,6 +528,9 @@ propertyRouter.post("/:id/images", async (req, res) => {
       orderBy: { position: "desc" },
     });
 
+    // Tour 360° é recurso do Profissional+; para outros planos o flag é ignorado.
+    const marcar360 = is360 === true && planoPermiteTour360(req.tenant.plano);
+
     const image = await prisma.propertyImage.create({
       data: {
         tenantId: req.tenant.id,
@@ -534,6 +538,7 @@ propertyRouter.post("/:id/images", async (req, res) => {
         url,
         publicId: typeof publicId === "string" ? publicId : null,
         position: (last?.position || 0) + 1,
+        is360: marcar360,
       },
     });
 
@@ -558,6 +563,32 @@ propertyRouter.put("/:id/images/reorder", async (req, res) => {
     return res.json({ ok: true });
   } catch {
     return res.status(500).json({ error: "Erro ao reordenar imagens." });
+  }
+});
+
+// Marca/desmarca uma imagem existente como panorâmica 360° (Profissional+).
+propertyRouter.patch("/:id/images/:imageId", async (req, res) => {
+  try {
+    const { is360 } = req.body || {};
+    if (typeof is360 !== "boolean") {
+      return res.status(400).json({ error: "Campo is360 (boolean) e obrigatorio." });
+    }
+    if (is360 && !planoPermiteTour360(req.tenant.plano)) {
+      return res.status(403).json({ error: "Tour 360° disponível a partir do plano Profissional." });
+    }
+    const image = await prisma.propertyImage.findFirst({
+      where: { id: req.params.imageId, propertyId: req.params.id, tenantId: req.tenant.id },
+    });
+    if (!image) {
+      return res.status(404).json({ error: "Imagem nao encontrada para este imovel." });
+    }
+    const updated = await prisma.propertyImage.update({
+      where: { id: image.id },
+      data: { is360 },
+    });
+    return res.json(updated);
+  } catch {
+    return res.status(500).json({ error: "Erro ao atualizar imagem." });
   }
 });
 

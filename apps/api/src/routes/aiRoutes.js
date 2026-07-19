@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
+import { requirePlanoIA } from "../middlewares/planoMiddleware.js";
 import {
   gerarConteudoImovel,
   melhorarDescricao,
@@ -18,6 +19,9 @@ aiRouter.use(requireAuth, requireTenant);
 aiRouter.get("/tipos", (_req, res) => {
   res.json({ enabled: isAiEnabled(), tipos: tiposDisponiveis() });
 });
+
+// Daqui para baixo, todo recurso de IA exige plano Premium.
+aiRouter.use(requirePlanoIA);
 
 // Gera conteúdo a partir dos dados de um imóvel (salvo OU rascunho no formulário).
 // body: { imovel: {...campos}, tipos?: string[] }

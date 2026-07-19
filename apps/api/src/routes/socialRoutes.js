@@ -3,6 +3,8 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import { requirePlanoRedes } from "../middlewares/planoMiddleware.js";
+import { overlay360 } from "../utils/cloudinaryOverlay.js";
 
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
@@ -343,6 +345,7 @@ socialRouter.post(
   "/publish/:propertyId",
   requireAuth,
   requireTenant,
+  requirePlanoRedes,
   requirePermissao("publicarRedes"),
   async (req, res) => {
     const { propertyId } = req.params;
@@ -354,7 +357,8 @@ socialRouter.post(
     });
     if (!property) return res.status(404).json({ error: "Imóvel não encontrado." });
 
-    const imageUrls = property.images.map((img) => img.url);
+    // Fotos 360° recebem a faixa "IMAGEM 360°" gravada (via Cloudinary) antes de publicar.
+    const imageUrls = property.images.map((img) => (img.is360 ? overlay360(img.url) : img.url));
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenant.id },

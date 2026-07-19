@@ -1,16 +1,24 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import { uploadToCloudinary } from "../utils/uploadToCloudinary";
+import { comodidadesAtivas } from "../utils/comodidades";
+import { Panorama360 } from "../components/Panorama360";
 
 const STATUS_LABEL = { ACTIVE: "Ativo", INACTIVE: "Inativo", DRAFT: "Rascunho" };
 const STATUS_COLOR = { ACTIVE: "#10b981", INACTIVE: "#ef4444", DRAFT: "#f59e0b" };
 const ANDAMENTO_LABEL = { PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" };
+const FINALIDADE_LABEL = { RESIDENCIAL: "Residencial", COMERCIAL: "Comercial" };
 
 function formatPrice(value) {
   const n = Number(value);
   if (!n) return "—";
   return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function fmtArea(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²`;
 }
 
 // ─── Ícones ───────────────────────────────────────────────────────────────────
@@ -55,6 +63,22 @@ function IconBed() {
   );
 }
 
+function IconBath() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 12V5a2 2 0 0 1 2-2 2 2 0 0 1 2 2M4 12h17a1 1 0 0 1 1 1v2a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3z" /><line x1="6" y1="19" x2="6" y2="22" /><line x1="18" y1="19" x2="18" y2="22" />
+    </svg>
+  );
+}
+
+function IconDoor() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 21h18M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17" /><circle cx="15" cy="12" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 function IconCar() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -81,20 +105,69 @@ function IconPin() {
   );
 }
 
-function IconUpload() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  );
-}
+// ─── Carrossel de fotos (somente leitura) ──────────────────────────────────────
+// A edição das fotos é feita exclusivamente pela rota /imoveis/editar.
 
-function IconLink() {
+function PhotoCarousel({ images }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => { if (idx > images.length - 1) setIdx(Math.max(0, images.length - 1)); }, [images.length]); // eslint-disable-line
+  const total = images.length;
+  const current = images[idx];
+  const go = (d) => (e) => { e.stopPropagation(); setIdx((i) => (i + d + total) % total); };
+
+  const arrow = (side) => ({
+    position: "absolute", top: "50%", [side]: "10px", transform: "translateY(-50%)",
+    width: "34px", height: "34px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.25)",
+    background: "rgba(0,0,0,0.5)", color: "#fff", cursor: "pointer", padding: 0, fontSize: "20px", lineHeight: 1,
+    display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(3px)",
+  });
+
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-    </svg>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0d1018" }}>
+      <div style={{ position: "relative", flex: 1, minHeight: "300px", overflow: "hidden" }}>
+        {current && current.is360 ? (
+          <Panorama360 key={`pano-${current.id || current.url}`} src={current.url} height="100%" />
+        ) : current ? (
+          <img src={current.url} alt={`foto ${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        ) : (
+          <div style={{ width: "100%", height: "100%", minHeight: "300px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)" }}>
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+            </svg>
+            <span style={{ fontSize: "13px" }}>Sem fotos</span>
+          </div>
+        )}
+
+        {total > 1 && (
+          <>
+            <button type="button" onClick={go(-1)} aria-label="Anterior" style={arrow("left")}>‹</button>
+            <button type="button" onClick={go(1)} aria-label="Próxima" style={arrow("right")}>›</button>
+            <span style={{ position: "absolute", top: "12px", left: "12px", background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px" }}>
+              {idx + 1} / {total}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Miniaturas (navegação) */}
+      {total > 1 && (
+        <div style={{ display: "flex", gap: "6px", padding: "10px", overflowX: "auto", background: "rgba(0,0,0,0.25)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          {images.map((img, i) => (
+            <button
+              key={img.id || i}
+              type="button"
+              onClick={() => setIdx(i)}
+              style={{ position: "relative", width: "52px", height: "52px", flexShrink: 0, borderRadius: "8px", overflow: "hidden", padding: 0, cursor: "pointer", border: i === idx ? "2px solid #6366f1" : "2px solid rgba(255,255,255,0.12)", background: "none" }}
+            >
+              <img src={img.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              {img.is360 && (
+                <span style={{ position: "absolute", bottom: "2px", right: "2px", fontSize: "7px", fontWeight: 800, color: "#fff", background: "rgba(99,102,241,0.95)", padding: "1px 4px", borderRadius: "999px", lineHeight: 1.3 }}>360°</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -139,6 +212,17 @@ function StatChip({ icon, label }) {
   );
 }
 
+// ─── Seção genérica ───────────────────────────────────────────────────────────
+
+function Section({ title, children }) {
+  return (
+    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "24px" }}>
+      <h3 style={{ margin: "0 0 16px 0", fontSize: "15px", fontWeight: "600" }}>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function PropertyInsightsPage({ session }) {
@@ -149,17 +233,13 @@ export function PropertyInsightsPage({ session }) {
   const [property, setProperty] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [images, setImages] = useState([]);
-  const [manualImageUrl, setManualImageUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [uploadLoading, setUploadLoading] = useState(false);
   const [error, setError] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [showUrlForm, setShowUrlForm] = useState(false);
 
   const leadRate = metrics?.summary?.leadConversionRate ?? 0;
   const saleRate = metrics?.summary?.saleConversionRate ?? 0;
-
 
   async function loadAll(from, to) {
     if (!tenantSlug || !propertyId) return;
@@ -181,57 +261,32 @@ export function PropertyInsightsPage({ session }) {
     }
   }
 
-  useEffect(() => { loadAll(dateFrom, dateTo); }, [tenantSlug, propertyId]);
+  useEffect(() => { loadAll(dateFrom, dateTo); }, [tenantSlug, propertyId]); // eslint-disable-line
 
-  async function handleFileUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadLoading(true);
-    setError("");
-    try {
-      const uploaded = await uploadToCloudinary(file);
-      await api.addPropertyImage(tenantSlug, propertyId, uploaded);
-      await loadAll(dateFrom, dateTo);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploadLoading(false);
-      e.target.value = "";
-    }
-  }
-
-  async function handleManualImageAdd(e) {
-    e.preventDefault();
-    if (!manualImageUrl.trim()) return;
-    setUploadLoading(true);
-    setError("");
-    try {
-      await api.addPropertyImage(tenantSlug, propertyId, { url: manualImageUrl.trim() });
-      setManualImageUrl("");
-      setShowUrlForm(false);
-      await loadAll(dateFrom, dateTo);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploadLoading(false);
-    }
-  }
-
-  async function handleDeleteImage(imageId) {
-    setUploadLoading(true);
-    setError("");
-    try {
-      await api.deletePropertyImage(tenantSlug, propertyId, imageId);
-      await loadAll(dateFrom, dateTo);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploadLoading(false);
-    }
-  }
-
-  const coverUrl = images[0]?.url;
   const status = property?.status || "DRAFT";
+  const isComercial = property?.finalidade === "COMERCIAL";
+  const atributos = (property?.atributos || []).map((a) => a.atributo?.descricao).filter(Boolean);
+  const comodidades = comodidadesAtivas(property?.comodidades);
+
+  // Linhas do bloco "Detalhes do Ativo" (só as que têm valor)
+  const detalhes = property ? [
+    ["Finalidade", FINALIDADE_LABEL[property.finalidade] || "—"],
+    ["Tipo", property.propertyType || property.tipoImovel?.descricao || "—"],
+    property.andamento ? ["Andamento", ANDAMENTO_LABEL[property.andamento]] : null,
+    ["Aceita permuta", property.aceitaPermuta ? "Sim" : "Não"],
+    ["Área útil", fmtArea(property.squareFootage) || "—"],
+    fmtArea(property.areaTerreno) ? ["Área do terreno", fmtArea(property.areaTerreno)] : null,
+    fmtArea(property.areaConstruida) ? ["Área construída", fmtArea(property.areaConstruida)] : null,
+    fmtArea(property.areaPrivativa) ? ["Área privativa", fmtArea(property.areaPrivativa)] : null,
+    fmtArea(property.areaTotal) ? ["Área total", fmtArea(property.areaTotal)] : null,
+    isComercial ? ["Salas", property.salas ?? 0] : ["Quartos", property.bedrooms ?? 0],
+    isComercial ? ["Banheiros", property.banheiros ?? 0] : ["Suítes", property.suites ?? 0],
+    ["Vagas", property.parkingSpots ?? 0],
+    ["CEP", property.cep || "—"],
+    ["Endereço", property.address || "—"],
+    ["Bairro", property.neighborhood || "—"],
+    ["Cidade / UF", `${property.city || "—"} / ${property.state || "—"}`],
+  ].filter(Boolean) : [];
 
   return (
     <div style={{ maxWidth: "1000px", display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -241,7 +296,7 @@ export function PropertyInsightsPage({ session }) {
         <div>
           <button
             type="button"
-            onClick={() => navigate("/?tab=list")}
+            onClick={() => navigate("/imoveis")}
             style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: "var(--text-muted)", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "12px" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
@@ -260,37 +315,30 @@ export function PropertyInsightsPage({ session }) {
 
       {error ? <div className="error">{error}</div> : null}
 
-      {/* ── Card do imóvel ─────────────────────────────────────────────────── */}
+      {/* ── Card do imóvel: carrossel + resumo ───────────────────────────────── */}
       <div style={{
         background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: "20px", overflow: "hidden", display: "flex", gap: "0",
+        borderRadius: "20px", overflow: "hidden", display: "flex", flexWrap: "wrap",
       }}>
-        {/* Foto */}
-        <div style={{ width: "220px", flexShrink: 0, background: "rgba(255,255,255,0.04)", position: "relative" }}>
-          {coverUrl ? (
-            <img src={coverUrl} alt="capa" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-          ) : (
-            <div style={{ width: "100%", height: "100%", minHeight: "160px", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.12)" }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </div>
-          )}
-          {images.length > 1 && (
-            <span style={{ position: "absolute", bottom: "10px", right: "10px", background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: "10px", fontWeight: "700", padding: "3px 8px", borderRadius: "999px" }}>
-              +{images.length - 1} fotos
-            </span>
-          )}
+        {/* Carrossel */}
+        <div style={{ flex: "1 1 400px", minWidth: "300px", minHeight: "360px", display: "flex" }}>
+          <div style={{ width: "100%" }}>
+            <PhotoCarousel images={images} />
+          </div>
         </div>
 
-        {/* Info */}
-        <div style={{ padding: "24px 28px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "16px" }}>
+        {/* Resumo */}
+        <div style={{ flex: "1 1 320px", minWidth: "280px", padding: "24px 28px", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "16px" }}>
           <div>
             <div style={{ display: "flex", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.06em", color: STATUS_COLOR[status], background: `${STATUS_COLOR[status]}18`, padding: "3px 10px", borderRadius: "999px" }}>
                 {STATUS_LABEL[status]}
               </span>
+              {property?.finalidade && (
+                <span style={{ fontSize: "10px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", color: "#a5b4fc", background: "rgba(99,102,241,0.15)", padding: "3px 10px", borderRadius: "999px" }}>
+                  {FINALIDADE_LABEL[property.finalidade]}
+                </span>
+              )}
               {property?.andamento && (
                 <span style={{ fontSize: "10px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", background: "rgba(255,255,255,0.07)", padding: "3px 10px", borderRadius: "999px" }}>
                   {ANDAMENTO_LABEL[property.andamento]}
@@ -317,6 +365,12 @@ export function PropertyInsightsPage({ session }) {
             <p style={{ margin: 0, fontSize: "22px", fontWeight: "700", letterSpacing: "-0.5px", color: "#fff" }}>
               {formatPrice(property?.price)}
             </p>
+
+            {property?.description && (
+              <p style={{ margin: "14px 0 0", fontSize: "13px", lineHeight: 1.6, color: "var(--text-muted)", whiteSpace: "pre-wrap" }}>
+                {property.description}
+              </p>
+            )}
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -325,9 +379,16 @@ export function PropertyInsightsPage({ session }) {
                 {property.propertyType}
               </span>
             )}
-            <StatChip icon={<IconArea />} label={property?.squareFootage ? `${property.squareFootage} m²` : null} />
-            <StatChip icon={<IconBed />} label={property?.bedrooms != null ? `${property.bedrooms} quartos${property.suites ? ` · ${property.suites} suítes` : ""}` : null} />
-            <StatChip icon={<IconCar />} label={property?.parkingSpots != null ? `${property.parkingSpots} vagas` : null} />
+            <StatChip icon={<IconArea />} label={fmtArea(property?.squareFootage)} />
+            {isComercial ? (
+              <>
+                <StatChip icon={<IconDoor />} label={property?.salas ? `${property.salas} sala${property.salas !== 1 ? "s" : ""}` : null} />
+                <StatChip icon={<IconBath />} label={property?.banheiros ? `${property.banheiros} banheiro${property.banheiros !== 1 ? "s" : ""}` : null} />
+              </>
+            ) : (
+              <StatChip icon={<IconBed />} label={property?.bedrooms != null ? `${property.bedrooms} quarto${property.bedrooms !== 1 ? "s" : ""}${property.suites ? ` · ${property.suites} suíte${property.suites !== 1 ? "s" : ""}` : ""}` : null} />
+            )}
+            <StatChip icon={<IconCar />} label={property?.parkingSpots ? `${property.parkingSpots} vaga${property.parkingSpots !== 1 ? "s" : ""}` : null} />
           </div>
         </div>
       </div>
@@ -364,55 +425,50 @@ export function PropertyInsightsPage({ session }) {
 
       {/* ── Métricas ──────────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "12px" }}>
-        <MetricCard
-          icon={<IconEye />} label="Acessos" color="#3b82f6"
-          value={metrics?.property?.viewCount ?? 0}
-          subtitle="Total acumulado"
-        />
-        <MetricCard
-          icon={<IconUser />} label="Leads" color="#8b5cf6"
-          value={metrics?.property?.leadCount ?? 0}
-          subtitle="Total acumulado"
-        />
-        <MetricCard
-          icon={<IconKey />} label="Vendas" color="#10b981"
-          value={metrics?.property?.saleCount ?? 0}
-          subtitle="Total acumulado"
-        />
-        <MetricCard
-          icon={<IconPercent />} label="Conv. Acesso→Lead" color="#f59e0b"
-          value={`${leadRate}%`}
-          subtitle="Leads por acesso"
-        />
-        <MetricCard
-          icon={<IconPercent />} label="Conv. Lead→Venda" color="#059669"
-          value={`${saleRate}%`}
-          subtitle="Vendas por lead"
-        />
+        <MetricCard icon={<IconEye />} label="Acessos" color="#3b82f6" value={metrics?.property?.viewCount ?? 0} subtitle="Total acumulado" />
+        <MetricCard icon={<IconUser />} label="Leads" color="#8b5cf6" value={metrics?.property?.leadCount ?? 0} subtitle="Total acumulado" />
+        <MetricCard icon={<IconKey />} label="Vendas" color="#10b981" value={metrics?.property?.saleCount ?? 0} subtitle="Total acumulado" />
+        <MetricCard icon={<IconPercent />} label="Conv. Acesso→Lead" color="#f59e0b" value={`${leadRate}%`} subtitle="Leads por acesso" />
+        <MetricCard icon={<IconPercent />} label="Conv. Lead→Venda" color="#059669" value={`${saleRate}%`} subtitle="Vendas por lead" />
       </div>
 
       {/* ── Detalhes do ativo ─────────────────────────────────────────────── */}
-      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "24px" }}>
-        <h3 style={{ margin: "0 0 16px 0", fontSize: "15px", fontWeight: "600" }}>Detalhes do Ativo</h3>
+      <Section title="Detalhes do Ativo">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 32px" }}>
-          {[
-            ["Tipo", property?.propertyType || "—"],
-            ["Área", property?.squareFootage != null ? `${property.squareFootage} m²` : "—"],
-            ["Quartos", property?.bedrooms ?? "—"],
-            ["Suítes", property?.suites ?? "—"],
-            ["Vagas", property?.parkingSpots ?? "—"],
-            ["CEP", property?.cep || "—"],
-            ["Endereço", property?.address || "—"],
-            ["Bairro", property?.neighborhood || "—"],
-            ["Cidade / UF", property ? `${property.city} / ${property.state}` : "—"],
-          ].map(([label, val]) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", paddingBottom: "10px", borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: "0" }}>
+          {detalhes.map(([label, val]) => (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", paddingBottom: "10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
               <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "500", flexShrink: 0 }}>{label}</span>
               <span style={{ fontSize: "13px", textAlign: "right", fontWeight: "500" }}>{val}</span>
             </div>
           ))}
         </div>
-      </div>
+      </Section>
+
+      {/* ── Atributos do imóvel ───────────────────────────────────────────── */}
+      {atributos.length > 0 && (
+        <Section title="Atributos">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {atributos.map((a) => (
+              <span key={a} style={{ fontSize: "13px", color: "#c7d2fe", background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)", padding: "6px 12px", borderRadius: "999px" }}>
+                {a}
+              </span>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* ── Comodidades da região ─────────────────────────────────────────── */}
+      {comodidades.length > 0 && (
+        <Section title="Comodidades da região">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {comodidades.map((c) => (
+              <span key={c.key} style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "13px", color: "var(--text)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", padding: "6px 12px", borderRadius: "10px" }}>
+                <span style={{ fontSize: "15px" }}>{c.icon}</span> {c.label}
+              </span>
+            ))}
+          </div>
+        </Section>
+      )}
 
     </div>
   );

@@ -156,6 +156,28 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
 }
 
+/* Checkbox e radio NÃO devem herdar o input full-width (width:100% + padding),
+   senão ficam gigantes ocupando a linha/modal toda. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  background: transparent;
+  accent-color: var(--accent, #6366f1);
+  cursor: pointer;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:focus,
+input[type="radio"]:focus {
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--text-muted);
@@ -176,7 +198,8 @@ button, .link-button {
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  /* `scale` com timing próprio e suave: a pressão entra e sai gradualmente. */
+  transition: all 0.2s ease, scale 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   text-decoration: none;
   display: inline-flex;
   justify-content: center;
@@ -189,11 +212,36 @@ button:hover, .link-button:hover {
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
+/* Leve pressão ao segurar o botão. Usa a propriedade `scale` (independente do
+   `transform`), então compõe com botões que já têm transform inline sem quebrá-los. */
+button:active:not(:disabled), .link-button:active {
+  scale: 0.96;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+/* Pisca o contorno de um campo obrigatório faltante (ao tentar avançar sem preencher). */
+@keyframes field-flash-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.5); }
+}
+
+/* Skeleton loading (placeholders com shimmer enquanto os dados não chegam). */
+.skeleton-block {
+  background-color: rgba(255, 255, 255, 0.05);
+  background-image: linear-gradient(90deg, rgba(255,255,255,0) 20%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0) 80%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .button-secondary {
@@ -1902,31 +1950,15 @@ svg.icon-moon,
   to   { opacity: 1; }
 }
 
-/* ── Passo Divulgar: 1 card "se dividindo" em 3 (entrada) e fundindo em 1 (saída).
-   As classes são removidas após a animação para não travar o hover dos cards. ─ */
-.divulgar-grid.is-splitting > * {
-  animation: divulgar-split-in .58s cubic-bezier(.22, 1, .36, 1) both;
-}
-.divulgar-grid.is-splitting > *:nth-child(1) { --split-x: 64%;  animation-delay: .04s; }
-.divulgar-grid.is-splitting > *:nth-child(2) { --split-x: 0%;   animation-delay: .13s; }
-.divulgar-grid.is-splitting > *:nth-child(3) { --split-x: -64%; animation-delay: .04s; }
+/* Passo Divulgar: a animação de "1 card → 3 cards" (e o inverso) é feita via FLIP
+   medido em JS (PropertyForm), para os cards partirem/convergirem no centro exato. */
 
-@keyframes divulgar-split-in {
-  0%   { opacity: 0; transform: translateX(var(--split-x, 0)) scale(.48); filter: blur(8px); }
-  55%  { opacity: 1; filter: blur(0); }
-  100% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
-}
-
-.divulgar-grid.is-merging > * {
-  animation: divulgar-merge-out .44s cubic-bezier(.55, 0, .67, 0) both;
-}
-.divulgar-grid.is-merging > *:nth-child(1) { --split-x: 64%; }
-.divulgar-grid.is-merging > *:nth-child(2) { --split-x: 0%; }
-.divulgar-grid.is-merging > *:nth-child(3) { --split-x: -64%; }
-
-@keyframes divulgar-merge-out {
-  0%   { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translateX(var(--split-x, 0)) scale(.48); filter: blur(8px); }
+/* "Lavagem" cinza no meio do caminho: some no início e no fim, cobre no meio,
+   escondendo a troca do conteúdo do card durante a viagem. */
+@keyframes divulgar-gray-wash {
+  0%   { opacity: 0; }
+  50%  { opacity: 0.82; }
+  100% { opacity: 0; }
 }
 
 /* Moldura com borda em degradê. Neutra em repouso; animada e colorida no foco. */
@@ -2053,6 +2085,27 @@ svg.icon-moon,
 }
 .divulgar-caption::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, .35);
+}
+
+/* Barra de rolagem fina/personalizada para os campos de texto do painel (tema
+   escuro) — mesmo espírito do .divulgar-caption dos cards das redes. */
+.input-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .22) transparent;
+}
+.input-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.input-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.input-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .18);
+  border-radius: 999px;
+}
+.input-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, .3);
 }
 
 .divulgar-desc::before {

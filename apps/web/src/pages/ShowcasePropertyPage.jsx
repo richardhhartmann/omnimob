@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
+import { Panorama360 } from "../components/Panorama360";
 import { comodidadesAtivas } from "../utils/comodidades";
 import { loadShowcaseFonts, getCachedTenant, setCachedTenant } from "../utils/showcaseFonts";
 
@@ -89,6 +90,7 @@ export function ShowcasePropertyPage() {
   }
 
   const images = property?.images?.length ? property.images : [{ url: "/property-placeholder.svg" }];
+  const current360 = Boolean(images[carouselIndex]?.is360); // foto atual é panorâmica 360°?
 
   function goTo(i) {
     const next = (i + images.length) % images.length;
@@ -127,10 +129,11 @@ export function ShowcasePropertyPage() {
   // Pausa quando o lightbox está aberto (lá a navegação é manual). A barrinha de
   // progresso do carrossel, keyed por carouselIndex, dura os mesmos 5s.
   useEffect(() => {
-    if (lightboxOpen || images.length <= 1) return;
+    // Não auto-avança enquanto o usuário explora uma foto 360°.
+    if (lightboxOpen || images.length <= 1 || current360) return;
     const t = setTimeout(() => goTo(carouselIndex + 1), 5000);
     return () => clearTimeout(t);
-  }, [lightboxOpen, carouselIndex, images.length]);
+  }, [lightboxOpen, carouselIndex, images.length, current360]);
 
   const showcaseConfig = normalizeShowcaseConfig(tenant?.showcaseConfig);
   const isLightMode = showcaseConfig.appearanceMode === "light";
@@ -228,15 +231,19 @@ export function ShowcasePropertyPage() {
             <div style={{ marginBottom: "32px" }}>
               {/* Main image */}
               <div style={{ position: "relative", width: "100%", height: "520px", borderRadius: "20px", overflow: "hidden", background: "rgba(0,0,0,0.3)" }}>
-                <img
-                  key={carouselIndex}
-                  src={images[carouselIndex]?.url}
-                  alt={`${property.title} — foto ${carouselIndex + 1}`}
-                  onClick={openLightbox}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.3s ease", cursor: "zoom-in" }}
-                />
-                {/* Timer de auto-avanço (barra de progresso) */}
-                {images.length > 1 && !lightboxOpen && (
+                {current360 ? (
+                  <Panorama360 key={`pano-${carouselIndex}`} src={images[carouselIndex]?.url} height={520} />
+                ) : (
+                  <img
+                    key={carouselIndex}
+                    src={images[carouselIndex]?.url}
+                    alt={`${property.title} — foto ${carouselIndex + 1}`}
+                    onClick={openLightbox}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.3s ease", cursor: "zoom-in" }}
+                  />
+                )}
+                {/* Timer de auto-avanço (barra de progresso) — some no modo 360 */}
+                {images.length > 1 && !lightboxOpen && !current360 && (
                   <div className="prop-carousel-progress"><div key={carouselIndex} className="prop-carousel-progress-fill" /></div>
                 )}
                 {/* Gradient overlay bottom */}
@@ -276,8 +283,11 @@ export function ShowcasePropertyPage() {
               {images.length > 1 && (
                 <div ref={thumbsRef} style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "12px 0", scrollbarWidth: "none" }}>
                   {images.map((img, i) => (
-                    <button key={i} type="button" className="prop-thumb" onClick={() => goTo(i)} style={{ flexShrink: 0, width: "88px", height: "64px", borderRadius: "10px", overflow: "hidden", border: `2px solid ${i === carouselIndex ? primaryColor : "transparent"}`, padding: 0, cursor: "pointer", opacity: i === carouselIndex ? 1 : 0.55 }}>
+                    <button key={i} type="button" className="prop-thumb" onClick={() => goTo(i)} style={{ position: "relative", flexShrink: 0, width: "88px", height: "64px", borderRadius: "10px", overflow: "hidden", border: `2px solid ${i === carouselIndex ? primaryColor : "transparent"}`, padding: 0, cursor: "pointer", opacity: i === carouselIndex ? 1 : 0.55 }}>
                       <img src={img.url} alt={`Foto ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      {img.is360 && (
+                        <span style={{ position: "absolute", bottom: "4px", right: "4px", fontSize: "8px", fontWeight: 800, letterSpacing: "0.03em", color: "#fff", background: "rgba(99,102,241,0.95)", padding: "1px 5px", borderRadius: "999px", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }}>360°</span>
+                      )}
                     </button>
                   ))}
                 </div>

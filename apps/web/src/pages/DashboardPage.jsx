@@ -145,6 +145,7 @@ function HomePage({ session }) {
           <button
             key={card.title}
             onClick={card.onClick}
+            className="pg-follow"
             style={{
               display: "flex",
               flexDirection: "column",
@@ -155,20 +156,20 @@ function HomePage({ session }) {
               cursor: "pointer",
               textAlign: "left",
               border: "1px solid rgba(255,255,255,0.1)",
-              background: "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
+              background: "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
               color: "inherit",
-              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+              transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s, box-shadow 0.25s",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = "translateY(-4px)";
               e.currentTarget.style.border = `1px solid ${card.accent}55`;
-              e.currentTarget.style.background = `linear-gradient(145deg, ${card.accent}14 0%, rgba(255,255,255,0.02) 100%)`;
+              e.currentTarget.style.background = `linear-gradient(var(--pg-angle, 145deg), ${card.accent}22 0%, rgba(255,255,255,0.02) 100%)`;
               e.currentTarget.style.boxShadow = `0 12px 32px rgba(0,0,0,0.2)`;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.border = "1px solid rgba(255,255,255,0.1)";
-              e.currentTarget.style.background = "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)";
+              e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)";
               e.currentTarget.style.boxShadow = "none";
             }}
           >
@@ -265,6 +266,7 @@ export function ImovelListPage({ session }) {
         onEdit={handleStartEdit}
         onPublishSuccess={loadProperties}
         disabled={!tenantSlug || loading}
+        loading={loading && properties.length === 0}
       />
     </>
   );
@@ -295,7 +297,7 @@ export function ImovelFormPage({ session }) {
     setLoading(true);
     setError("");
     try {
-      const { imageFiles = [], ...propertyPayload } = payload;
+      const { imageFiles = [], imageIs360 = [], ...propertyPayload } = payload;
       let targetPropertyId = null;
 
       if (editingProperty?.id) {
@@ -310,9 +312,9 @@ export function ImovelFormPage({ session }) {
       }
 
       if (targetPropertyId && imageFiles.length > 0) {
-        for (const file of imageFiles) {
-          const uploaded = await uploadToCloudinary(file);
-          await api.addPropertyImage(tenantSlug, targetPropertyId, uploaded);
+        for (let i = 0; i < imageFiles.length; i++) {
+          const uploaded = await uploadToCloudinary(imageFiles[i]);
+          await api.addPropertyImage(tenantSlug, targetPropertyId, { ...uploaded, is360: Boolean(imageIs360[i]) });
         }
       }
 

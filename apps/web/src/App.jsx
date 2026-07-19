@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, setApiToken, setAdminToken } from "./api";
+import { initPointerGradient } from "./utils/pointerGradient";
 import { DashboardPage, ImovelListPage, ImovelFormPage } from "./pages/DashboardPage";
 import { LeadsPage } from "./pages/LeadsPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -38,6 +39,9 @@ export default function App() {
   useEffect(() => {
     setApiToken(session?.token || null);
   }, [session]);
+
+  // Realce/gradiente dos botões seguindo o ponteiro (estilo Windows).
+  useEffect(() => initPointerGradient(), []);
 
   useEffect(() => {
     setAdminToken(adminSession?.token || null);
@@ -197,7 +201,7 @@ export default function App() {
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/imoveis/:propertyId" element={
-          cargo?.gerenciarImoveis
+          cargo?.gerenciarImoveis && cargo?.verRelatorios
             ? <PropertyInsightsPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />

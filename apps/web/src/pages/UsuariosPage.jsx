@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnNovo } from "../components/ActionIcons";
 import { Avatar, Chip, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
+import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 
 const FORM_EMPTY = { nome: "", login: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
 
@@ -13,6 +14,7 @@ export function UsuariosPage({ session }) {
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(FORM_EMPTY);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | inactive
@@ -22,7 +24,7 @@ export function UsuariosPage({ session }) {
     Promise.all([
       api.listUsuarios(tenantSlug),
       api.listCargos(tenantSlug),
-    ]).then(([u, c]) => { setUsuarios(u); setCargos(c); }).catch(() => {});
+    ]).then(([u, c]) => { setUsuarios(u); setCargos(c); }).catch(() => {}).finally(() => setInitialLoading(false));
   }, [tenantSlug]);
 
   const stats = useMemo(() => ({
@@ -168,20 +170,22 @@ export function UsuariosPage({ session }) {
 
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Usuários</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: "4px 0 0" }}>Quem tem acesso ao painel e com qual cargo.</p>
-        </div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+        <header>
+          <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Usuários</h1>
+          <p style={{ color: "var(--text-muted)", margin: 0 }}>Quem tem acesso ao painel e com qual cargo.</p>
+        </header>
         <BtnNovo onClick={abrirCriar} label="Novo Usuário" />
       </div>
 
+      {initialLoading ? <SkeletonStats count={4} /> : (
       <StatGrid>
         <StatCard label="Total" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
         <StatCard label="Ativos" value={stats.ativos} accent="#10b981" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>} />
         <StatCard label="Inativos" value={stats.inativos} accent="#94a3b8" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>} />
         <StatCard label="Cargos em uso" value={stats.cargos} accent="#a78bfa" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>} />
       </StatGrid>
+      )}
 
       <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
         <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome, login ou cargo…" />
@@ -192,7 +196,9 @@ export function UsuariosPage({ session }) {
         ]} />
       </div>
 
-      {visiveis.length === 0 ? (
+      {initialLoading ? (
+        <SkeletonListRows count={5} />
+      ) : visiveis.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>
             {search || statusFilter !== "all" ? "Nenhum usuário encontrado com estes filtros." : "Nenhum usuário cadastrado."}
