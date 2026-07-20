@@ -13,7 +13,7 @@ export const PLANOS = [
     ia: false,
     redes: false,
     tour360: false,
-    descricao: "Gestão completa de imóveis, leads, clientes e vitrine.",
+    descricao: "Para corretores autônomos e imobiliárias que estão começando a marcar presença digital.",
     cor: "#94a3b8",
   },
   {
@@ -23,7 +23,7 @@ export const PLANOS = [
     ia: false,
     redes: true,
     tour360: true,
-    descricao: "Tudo do Básico + divulgação nas redes sociais e tour virtual 360°.",
+    descricao: "Para imobiliárias em crescimento que querem divulgar nas redes e encantar clientes com tours 360°.",
     cor: "#6366f1",
   },
   {
@@ -33,17 +33,25 @@ export const PLANOS = [
     ia: true,
     redes: true,
     tour360: true,
-    descricao: "Tudo do Profissional + geração de conteúdo por IA.",
+    descricao: "Voltado para imobiliárias de alto padrão que buscam produtividade máxima com inteligência artificial.",
     cor: "#d4af37",
   },
 ];
 
 // Recursos por linha (para a tabela comparativa). `plans` = quais planos incluem.
+const TODOS = ["BASICO", "PROFISSIONAL", "PREMIUM"];
 export const RECURSOS_PLANOS = [
-  { label: "Imóveis, leads, clientes e vitrine", plans: ["BASICO", "PROFISSIONAL", "PREMIUM"] },
-  { label: "Relatórios de desempenho", plans: ["BASICO", "PROFISSIONAL", "PREMIUM"] },
-  { label: "Divulgação em redes sociais", plans: ["PROFISSIONAL", "PREMIUM"] },
-  { label: "Tour virtual 360°", plans: ["PROFISSIONAL", "PREMIUM"] },
+  { label: "Cadastro de imóveis com fotos", plans: "BASICO" },
+  { label: "Vitrine pública personalizável", plans: "BASICO" },
+  { label: "Editor visual de arrastar e soltar", plans: "BASICO" },
+  { label: "Captura e gestão de leads", plans: "BASICO" },
+  { label: "Cadastro e gestão de clientes", plans: "BASICO" },
+  { label: "Usuários, cargos e permissões", plans: "BASICO" },
+  { label: "Relatórios e métricas de desempenho", plans: "BASICO" },
+  { label: "Tudo do Plano Básico", plans: ["PROFISSIONAL"] },
+  { label: "Divulgação em redes sociais", plans: ["PROFISSIONAL"] },
+  { label: "Tour virtual 360°", plans: ["PROFISSIONAL"] },
+  { label: "Tudo do Plano Profissional", plans: ["PREMIUM"] },
   { label: "Geração de conteúdo por IA", plans: ["PREMIUM"] },
 ];
 

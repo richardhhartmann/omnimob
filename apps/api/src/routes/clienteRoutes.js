@@ -18,6 +18,16 @@ function parseNascimento(value) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Normaliza o opt-in de divulgação: ao ativar, carimba a data do consentimento;
+// ao desativar, limpa. `jaTinha` evita reescrever a data num update que só
+// reconfirma um opt-in que já existia.
+function aplicarOptInDivulgacao(data, aceita, jaTinha = false) {
+  const ativo = Boolean(aceita);
+  data.aceitaDivulgacao = ativo;
+  if (ativo && !jaTinha) data.divulgacaoOptInAt = new Date();
+  if (!ativo) data.divulgacaoOptInAt = null;
+}
+
 clienteRouter.get("/", async (req, res) => {
   try {
     const { search = "", ativo } = req.query;
@@ -63,6 +73,7 @@ clienteRouter.post("/", async (req, res) => {
     for (const c of CAMPOS_TEXTO) data[c] = req.body[c] || null;
     data.nome = nome;
     data.nascimento = parseNascimento(req.body.nascimento);
+    aplicarOptInDivulgacao(data, req.body.aceitaDivulgacao);
     const cliente = await prisma.cliente.create({ data });
     return res.status(201).json(cliente);
   } catch (err) {
@@ -81,6 +92,9 @@ clienteRouter.put("/:id", async (req, res) => {
     for (const c of CAMPOS_TEXTO) if (req.body[c] !== undefined) data[c] = req.body[c] || null;
     if (req.body.nascimento !== undefined) data.nascimento = parseNascimento(req.body.nascimento);
     if (req.body.ativo !== undefined) data.ativo = Boolean(req.body.ativo);
+    if (req.body.aceitaDivulgacao !== undefined) {
+      aplicarOptInDivulgacao(data, req.body.aceitaDivulgacao, current.aceitaDivulgacao);
+    }
     const cliente = await prisma.cliente.update({ where: { id: req.params.id }, data });
     return res.json(cliente);
   } catch (err) {

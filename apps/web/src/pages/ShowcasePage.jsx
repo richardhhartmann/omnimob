@@ -357,6 +357,7 @@ export function ShowcasePage() {
                         key={mainImage}
                         src={mainImage}
                         alt={p.title}
+                        style={{ animation: "imgFade 0.3s ease" }}
                       />
                       {lancamento && (
                         <span className="featured-badge" style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)", color: "#fff", border: "none" }}>

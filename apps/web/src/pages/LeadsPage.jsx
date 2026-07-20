@@ -244,6 +244,7 @@ export function LeadsPage({ session }) {
 
       {/* Barra de filtros */}
       <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        {/*
         {allLeads.length > 0 && (
           <button
             type="button"
@@ -264,6 +265,7 @@ export function LeadsPage({ session }) {
             Exportar CSV
           </button>
         )}
+          */}
         <div style={{ position: "relative", flex: 1, minWidth: "220px" }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <input
@@ -390,7 +392,7 @@ export function LeadsPage({ session }) {
                 {/* Ações */}
                 <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                   {lead.phone ? (
-                    <button type="button" onClick={() => openWhatsApp(lead)} title="Responder no WhatsApp"
+                    <button type="button" className="btn-whatsapp" onClick={() => openWhatsApp(lead)} title="Responder no WhatsApp"
                       style={actionStyle("#25d366")}>
                       <IconWhats />
                     </button>
@@ -403,7 +405,7 @@ export function LeadsPage({ session }) {
                         : <IconCopy />}
                     </button>
                   ) : null}
-                  <button type="button" onClick={() => handleDelete(lead.id)} disabled={deletingId === lead.id} title="Remover lead"
+                  <button type="button" className="btn-danger" onClick={() => handleDelete(lead.id)} disabled={deletingId === lead.id} title="Remover lead"
                     style={actionStyle("#f87171")}>
                     <IconTrash />
                   </button>

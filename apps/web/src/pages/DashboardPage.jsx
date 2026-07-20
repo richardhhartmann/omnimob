@@ -15,6 +15,7 @@ import { api } from "../api";
 import { PropertyManagement } from "../components/PropertyForm";
 import { PropertyList } from "../components/PropertyList";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
+import { spawnRipple } from "../utils/rippleDrop";
 
 // ─── Landing page ─────────────────────────────────────────────────────────────
 
@@ -163,7 +164,7 @@ function HomePage({ session }) {
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = "translateY(-4px)";
               e.currentTarget.style.border = `1px solid ${card.accent}55`;
-              e.currentTarget.style.background = `linear-gradient(var(--pg-angle, 145deg), ${card.accent}22 0%, rgba(255,255,255,0.02) 100%)`;
+              e.currentTarget.style.background = `radial-gradient(circle at var(--px, 50%) var(--py, 50%), ${card.accent}33 0%, transparent 90%), linear-gradient(var(--pg-angle, 145deg), ${card.accent}18 0%, rgba(255,255,255,0.02) 100%)`;
               e.currentTarget.style.boxShadow = `0 12px 32px rgba(0,0,0,0.2)`;
             }}
             onMouseLeave={(e) => {
@@ -171,6 +172,13 @@ function HomePage({ session }) {
               e.currentTarget.style.border = "1px solid rgba(255,255,255,0.1)";
               e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)";
               e.currentTarget.style.boxShadow = "none";
+            }}
+            onMouseDown={(e) => {
+              spawnRipple(e, card.accent);
+              e.currentTarget.style.transform = "translateY(-1px) scale(0.975)";
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = "translateY(-4px)";
             }}
           >
             <div style={{

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { PLANOS, RECURSOS_PLANOS } from "../utils/planos";
 
 const ACCENT = "#6366f1";
 const ACCENT2 = "#818cf8";
@@ -19,11 +20,25 @@ const STEPS = [
   { n: "3", title: "Atraia e converta", desc: "Compartilhe sua vitrine, receba leads e acompanhe os resultados em tempo real." },
 ];
 
-const PLANS = [
-  { name: "Essencial", price: "R$ 99", per: "/mês", desc: "Para quem está começando.", features: ["Até 50 imóveis", "Vitrine personalizável", "Captura de leads", "1 usuário"], highlight: false },
-  { name: "Profissional", price: "R$ 199", per: "/mês", desc: "Para imobiliárias em crescimento.", features: ["Imóveis ilimitados", "Publicação em redes sociais", "Usuários e permissões", "Métricas e relatórios"], highlight: true },
-  { name: "Enterprise", price: "Sob consulta", per: "", desc: "Para grandes operações.", features: ["Tudo do Profissional", "Suporte dedicado", "Domínio próprio", "Onboarding assistido"], highlight: false },
-];
+// Planos e recursos vêm de utils/planos.js (mesma fonte de verdade usada no
+// painel). Preço é informação de marketing e não existe em planos.js, então fica
+// mapeado aqui — ajuste à vontade. As features de cada card são os recursos que
+// aquele plano inclui, derivados de RECURSOS_PLANOS.
+const PRECOS = {
+  BASICO: { price: "R$ 99", per: "/mês" },
+  PROFISSIONAL: { price: "R$ 199", per: "/mês" },
+  PREMIUM: { price: "Sob consulta", per: "" },
+};
+
+const PLANS = PLANOS.map((p) => ({
+  key: p.key,
+  name: p.nome,
+  desc: p.descricao,
+  price: PRECOS[p.key]?.price ?? "",
+  per: PRECOS[p.key]?.per ?? "",
+  features: RECURSOS_PLANOS.filter((r) => r.plans.includes(p.key)).map((r) => r.label),
+  highlight: p.key === "PROFISSIONAL",
+}));
 
 export function DomusLandingPage() {
   const navLink = { color: "rgba(255,255,255,0.75)", textDecoration: "none", fontSize: "14px", fontWeight: 500 };

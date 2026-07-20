@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { loadSession } from "../session.js";
 import { planoLiberaIA } from "../utils/planos.js";
 import { overlay360 } from "../utils/cloudinaryOverlay.js";
+import { shareWhatsapp } from "../utils/shareWhatsapp.js";
 import { useConfirm } from "./ConfirmModal";
 import {
   FacebookPreview, InstagramPreview, WhatsAppPreview, PostSimCard, RepublishModal,
@@ -172,7 +173,7 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
   function handleWhatsApp() {
     const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${property.id}`;
     const text = captions.whatsapp || `🏠 ${property.title}\n🔗 ${vitrineUrl}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    shareWhatsapp({ text, imageUrls: coverUrls, title: property.title });
   }
 
   const fbPosts = publications.filter((p) => p.channel === "FACEBOOK");
@@ -200,7 +201,6 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
             <div>
               <div style={{ fontSize: "18px", fontWeight: "700" }}>Divulgar Imóvel</div>
-              <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "520px" }}>{property.title}</div>
             </div>
             <button onClick={onClose} aria-label="Fechar"
               style={{ width: "32px", height: "32px", padding: 0, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", cursor: "pointer", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -288,7 +288,7 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
               iaErro={redeIaErro.whatsapp}
               statusText="Sempre disponível"
               acao={
-                <button type="button" className="divulgar-pub" onClick={handleWhatsApp} style={{ ...pubBtnBase, background: "#25d366", cursor: "pointer" }}>
+                <button type="button" className="divulgar-pub btn-whatsapp" onClick={handleWhatsApp} style={{ ...pubBtnBase, background: "#25d366", cursor: "pointer" }}>
                   Compartilhar
                 </button>
               }
@@ -354,6 +354,7 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
                         </svg>
                         <button
                           type="button"
+                          className="btn-danger"
                           onClick={(e) => { e.stopPropagation(); handleRemovePost(pub); }}
                           disabled={removing}
                           title="Remover publicação"

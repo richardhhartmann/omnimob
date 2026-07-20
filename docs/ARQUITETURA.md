@@ -125,6 +125,9 @@ npm run prisma:migrate:deploy     # em produção
 
 - **Backup Service** e **Scheduler** (filas, tarefas agendadas, retenção).
 - **Notification Service**: plugar provedores reais (e-mail, WhatsApp Business, push).
+- **WhatsApp Business (Cloud API)** — contatos elegíveis (opt-in), broadcast por
+  template ao publicar/compartilhar imóvel e chatbot próprio da imobiliária
+  (Premium). Plano detalhado na seção [WhatsApp Business](#whatsapp-business-cloud-api--roadmap).
 - **Publicação real** nos canais (hoje `publishToChannel` é stub).
 - **Módulos ERP** faltantes: Contratos, Agenda, Financeiro, Vistorias,
   Proprietários, Corretores, Documentos, Chamados.
@@ -133,3 +136,78 @@ npm run prisma:migrate:deploy     # em produção
 - **Migração de isolamento** (schema/banco-por-tenant) quando a escala pedir —
   trocar a implementação do `tenantRegistry`.
 - **IA assistente** (pesquisa, atendimento, contratos, análise de documentos).
+
+---
+
+## WhatsApp Business (Cloud API) — roadmap
+
+Evolução do compartilhamento atual (deep-link `wa.me`/Web Share, que só abre o
+WhatsApp do próprio usuário) para **envio programático** via **WhatsApp Business
+Platform (Cloud API)** da Meta. Cobre três ideias: **contatos elegíveis**,
+**broadcast por template** e **chatbot próprio** da imobiliária.
+
+### Restrições que moldam o desenho
+
+- **Não** dá para enviar automaticamente pelo `wa.me`; só a **Cloud API** envia.
+- Exige **número dedicado** à API, **WABA** + Meta Business verificado.
+- Mensagem iniciada pela empresa exige **template aprovado** + **opt-in** do
+  contato. Enviar sem opt-in derruba o número (qualidade/ban).
+- **Custo por conversa/mensagem** (templates de marketing são pagos).
+- Resposta livre (sem template) só na **janela de 24h** após o cliente escrever.
+- **Status/Stories não têm API oficial** → auto-post no Status está **fora**.
+
+### Fases
+
+**Fase 0 — Registrar compartilhamentos** (barata, sem Meta)
+- Modelo `PropertyShare` (tenantId, propertyId, usuarioId?, canal, createdAt).
+- O `handleWhatsApp` (PropertyForm/DivulgarModal) grava o evento ao compartilhar.
+- Habilita métricas ("imóveis mais compartilhados") e integrações futuras.
+
+**Fase 1 — Contatos elegíveis** ✅ *em implementação* (sem Meta ainda)
+- Reaproveita `Cliente` (já tem `whatsapp` e `ativo`). Novos campos:
+  `aceitaDivulgacao Boolean @default(false)` e `divulgacaoOptInAt DateTime?`.
+- UI dentro de [`ClientesPage.jsx`](../apps/web/src/pages/ClientesPage.jsx):
+  toggle "Recebe divulgações", chip indicador na lista, aba de filtro e stat.
+- É só a **base da lista** (quem opta por receber). O envio real vem na Fase 3.
+
+**Fase 2 — Infra Cloud API** (por tenant)
+- Onboarding da WABA e credenciais por tenant (`phoneNumberId`, `wabaId`,
+  `accessToken` cifrado, `verifyToken`), num modelo `WhatsappAccount`.
+- Templates aprovados na Meta; envio encapsulado no `notificationService`
+  (canal `whatsapp`, hoje stub) reusando o seam já existente.
+- Gate por plano (Profissional+/Premium, via `planoLibera*`).
+
+**Fase 3 — Broadcast por template**
+- Ao publicar/compartilhar um imóvel, dispara o template para os contatos
+  **elegíveis** (Fase 1, com opt-in válido).
+- Log em `WhatsappBroadcast` + `WhatsappBroadcastRecipient` (status
+  QUEUED/SENT/DELIVERED/READ/FAILED, messageId, erro). Respeitar rate limits e
+  custo; usar fila/Scheduler.
+
+**Fase 4 — Chatbot da imobiliária (Premium)**
+- Inbound pelo webhook que já existe (`/api/social/webhook`), roteando por
+  `phone_number_id` → tenant.
+- Resposta gerada pelo `aiService` (Gemini) consultando os imóveis `ACTIVE` do
+  tenant: busca por filtros, envia fotos/link da vitrine, captura `PropertyLead`
+  automaticamente. Opera na janela de 24h (inbound iniciado pelo cliente).
+- Estado de conversa em `WhatsappConversation`/`WhatsappMessage`. Gate Premium.
+
+### Esboço de modelo de dados (Prisma, planejado)
+
+```
+Cliente            + aceitaDivulgacao Boolean @default(false)
+                   + divulgacaoOptInAt DateTime?
+PropertyShare      { id, tenantId, propertyId, usuarioId?, canal, createdAt }
+WhatsappAccount    { id, tenantId @unique, phoneNumberId, wabaId,
+                     accessToken (cifrado), verifyToken, ativo }
+WhatsappBroadcast  { id, tenantId, propertyId?, templateName, criadoPor, createdAt }
+WhatsappBroadcastRecipient { id, broadcastId, clienteId, status, messageId?, erro? }
+WhatsappConversation { id, tenantId, waId, clienteId?, ultimaMsgAt }
+WhatsappMessage    { id, conversationId, direcao, corpo, waMessageId?, createdAt }
+```
+
+### Dependências e ordem sugerida
+
+Fases 0 e 1 são baratas e independentes da Meta (0 = métricas; 1 = base da
+lista). Fases 3 e 4 dependem da Fase 2 (credenciais + templates). Transversais:
+**gate por plano**, **segredos por tenant cifrados** e **conformidade LGPD/opt-in**.

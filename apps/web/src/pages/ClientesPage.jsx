@@ -8,6 +8,7 @@ import { formatCep, formatCpf, formatPhone, formatRg, onlyDigits } from "../util
 const FORM_EMPTY = {
   nome: "", cpf: "", rg: "", nascimento: "", email: "", telefone: "", whatsapp: "",
   cep: "", endereco: "", bairro: "", cidade: "", estado: "", observacoes: "", ativo: true,
+  aceitaDivulgacao: false,
 };
 
 function formatarData(iso) {
@@ -25,6 +26,9 @@ const IconMail = () => (
 const IconPin = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
 );
+const IconMegafone = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 11 18-5v12L3 14v-3z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></svg>
+);
 
 export function ClientesPage({ session }) {
   const tenantSlug = session?.tenant?.slug;
@@ -37,6 +41,7 @@ export function ClientesPage({ session }) {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | inactive
+  const [soDivulgacao, setSoDivulgacao] = useState(false);  // só contatos que recebem divulgação
   const [cepLoading, setCepLoading] = useState(false);
   const searchTimer = useRef(null);
   const lastCepRef = useRef("");
@@ -76,6 +81,7 @@ export function ClientesPage({ session }) {
       cep: formatCep(c.cep || ""), endereco: c.endereco || "", bairro: c.bairro || "",
       cidade: c.cidade || "", estado: c.estado || "", observacoes: c.observacoes || "",
       ativo: c.ativo,
+      aceitaDivulgacao: Boolean(c.aceitaDivulgacao),
     });
     setError("");
     setView("form");
@@ -153,13 +159,16 @@ export function ClientesPage({ session }) {
       total: clientes.length,
       ativos: clientes.filter((c) => c.ativo).length,
       inativos: clientes.filter((c) => !c.ativo).length,
+      divulgacao: clientes.filter((c) => c.aceitaDivulgacao).length,
       aniversariantes: clientes.filter((c) => c.nascimento && new Date(c.nascimento).getUTCMonth() === mesAtual).length,
     };
   }, [clientes]);
 
-  const visiveis = useMemo(() => clientes.filter((c) =>
-    statusFilter === "all" || (statusFilter === "active" ? c.ativo : !c.ativo)
-  ), [clientes, statusFilter]);
+  const visiveis = useMemo(() => clientes.filter((c) => {
+    const passaStatus = statusFilter === "all" || (statusFilter === "active" ? c.ativo : !c.ativo);
+    const passaDivulgacao = !soDivulgacao || c.aceitaDivulgacao;
+    return passaStatus && passaDivulgacao;
+  }), [clientes, statusFilter, soDivulgacao]);
 
   if (view === "form") {
     return (
@@ -189,6 +198,18 @@ export function ClientesPage({ session }) {
             <input placeholder="Telefone" inputMode="tel" value={form.telefone} onChange={(e) => setField("telefone", formatPhone(e.target.value))} disabled={loading} />
             <input placeholder="WhatsApp" inputMode="tel" value={form.whatsapp} onChange={(e) => setField("whatsapp", formatPhone(e.target.value))} disabled={loading} />
           </div>
+
+          <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "12px 14px", borderRadius: "10px", background: "rgba(37,211,102,0.06)", border: "1px solid rgba(37,211,102,0.25)", cursor: form.whatsapp ? "pointer" : "not-allowed", opacity: form.whatsapp ? 1 : 0.6, marginTop: "4px" }}>
+            <input type="checkbox" checked={form.aceitaDivulgacao} onChange={(e) => setField("aceitaDivulgacao", e.target.checked)} disabled={loading || !form.whatsapp} style={{ marginTop: "2px" }} />
+            <span style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+              <span style={{ fontSize: "14px", fontWeight: 600 }}>Recebe divulgações de imóveis pelo WhatsApp</span>
+              <span style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                {form.whatsapp
+                  ? "O contato entra na lista que recebe novos imóveis por WhatsApp. Marque apenas com o consentimento dele."
+                  : "Preencha o WhatsApp acima para habilitar esta opção."}
+              </span>
+            </span>
+          </label>
 
           <div style={{ marginTop: "8px", marginBottom: "4px", fontSize: "11px", fontWeight: "600", opacity: 0.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Endereço
@@ -258,6 +279,7 @@ export function ClientesPage({ session }) {
         <StatCard label="Total" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
         <StatCard label="Ativos" value={stats.ativos} accent="#10b981" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>} />
         <StatCard label="Inativos" value={stats.inativos} accent="#94a3b8" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>} />
+        <StatCard label="Recebem divulgação" value={stats.divulgacao} accent="#25d366" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 11 18-5v12L3 14v-3z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></svg>} />
         <StatCard label="Aniversários no mês" value={stats.aniversariantes} accent="#f59e0b" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8" /><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1" /><path d="M2 21h20" /><path d="M7 8v3M12 8v3M17 8v3M7 4h.01M12 4h.01M17 4h.01" /></svg>} />
       </StatGrid>
       )}
@@ -269,6 +291,20 @@ export function ClientesPage({ session }) {
           { key: "active", label: "Ativos" },
           { key: "inactive", label: "Inativos" },
         ]} />
+        <button
+          type="button"
+          onClick={() => setSoDivulgacao((v) => !v)}
+          title="Mostrar apenas contatos que recebem divulgação"
+          style={{
+            width: "auto", display: "inline-flex", alignItems: "center", gap: "7px", padding: "8px 14px",
+            borderRadius: "9px", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+            background: soDivulgacao ? "rgba(37,211,102,0.16)" : "transparent",
+            border: `1px solid ${soDivulgacao ? "rgba(37,211,102,0.5)" : "var(--glass-border)"}`,
+            color: soDivulgacao ? "#4ade80" : "var(--text-muted)",
+          }}
+        >
+          <IconMegafone /> Recebem divulgação
+        </button>
       </div>
 
       {initialLoading ? (
@@ -276,7 +312,7 @@ export function ClientesPage({ session }) {
       ) : visiveis.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>
-            {search || statusFilter !== "all" ? "Nenhum cliente encontrado com estes filtros." : "Nenhum cliente cadastrado."}
+            {search || statusFilter !== "all" || soDivulgacao ? "Nenhum cliente encontrado com estes filtros." : "Nenhum cliente cadastrado."}
           </p>
         </div>
       ) : (
@@ -300,6 +336,7 @@ export function ClientesPage({ session }) {
                       {whats ? <Chip color="#25d366" href={`https://wa.me/${whats}`}><IconWhats /> {c.whatsapp || c.telefone}</Chip> : null}
                       {c.email ? <Chip color="#0ea5e9" href={`mailto:${c.email}`}><IconMail /> {c.email}</Chip> : null}
                       {local ? <Chip color="#a78bfa"><IconPin /> {local}</Chip> : null}
+                      {c.aceitaDivulgacao ? <Chip color="#25d366"><IconMegafone /> Recebe divulgações</Chip> : null}
                       {!whats && !c.email && !local ? <span style={{ fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic" }}>Sem informações de contato</span> : null}
                     </div>
                   </div>

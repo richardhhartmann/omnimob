@@ -7,6 +7,8 @@ import { COMODIDADES, EMPTY_COMODIDADES } from "../utils/comodidades.js";
 import { planoLiberaIA, planoLiberaRedes, planoLiberaTour360 } from "../utils/planos.js";
 import { Panorama360 } from "./Panorama360.jsx";
 import { overlay360 } from "../utils/cloudinaryOverlay.js";
+import { spawnRipple } from "../utils/rippleDrop.js";
+import { shareWhatsapp } from "../utils/shareWhatsapp.js";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -1043,7 +1045,7 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = "translateY(-6px)";
                   e.currentTarget.style.border = "1px solid rgba(255,255,255,0.3)";
-                  e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 100%)";
+                  e.currentTarget.style.background = "radial-gradient(circle at var(--px, 50%) var(--py, 50%), rgba(255,255,255,0.18) 0%, transparent 90%), linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%)";
                   e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.15)";
                 }}
                 onMouseLeave={(e) => {
@@ -1051,6 +1053,13 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
                   e.currentTarget.style.border = "1px solid rgba(255,255,255,0.15)";
                   e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)";
                   e.currentTarget.style.boxShadow = "none";
+                }}
+                onMouseDown={(e) => {
+                  spawnRipple(e, card.accent || "rgba(255,255,255,0.85)");
+                  e.currentTarget.style.transform = "translateY(-1px) scale(0.98)";
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = "translateY(-6px)";
                 }}
               >
                 <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1150,7 +1159,7 @@ export function RepublishModal({ platform, onKeep, onReplace, onCancel }) {
               Manter o original + publicar novo
               <small style={{ fontSize: "12px", fontWeight: 400, opacity: 0.8 }}>Fica com dois posts no {nome}.</small>
             </button>
-            <button type="button" onClick={onReplace} style={{ ...optBase, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#fca5a5" }}>
+            <button type="button" className="btn-danger" onClick={onReplace} style={{ ...optBase, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)", color: "#fca5a5" }}>
               Apagar o original e substituir
               <small style={{ fontSize: "12px", fontWeight: 400, opacity: 0.8 }}>Remove o post atual e publica o novo no lugar.</small>
             </button>
@@ -1299,6 +1308,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const lastCepRef = useRef("");
   const autoIaLockRef = useRef(false);
   const auto360Ref = useRef(new Set()); // ids de fotos já avaliadas para auto-marcar 360°
+  const descricaoRef = useRef(null); // textarea de descrição — auto-expande com o conteúdo
   const [tipos, setTipos] = useState([]);
   const isEditing = Boolean(initialData?.id);
 
@@ -1339,6 +1349,15 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   const visibleSteps = canPublish ? STEPS : STEPS.slice(0, 3);
   const navigate = useNavigate();
   const [, setSearchParams] = useSearchParams();
+
+  // Auto-expande a textarea de descrição conforme o conteúdo cresce — ao colar
+  // um texto grande ou quando a IA gera a descrição — sem barra de rolagem interna.
+  useLayoutEffect(() => {
+    const el = descricaoRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [form.description]);
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -1879,10 +1898,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [images.length]);
 
-  // Detecta se alguma foto atual é panorâmica (~2:1) — usado só para exibir o
-  // hint do selo 360° quando o usuário realmente subir uma equiretangular.
+  // Detecta se alguma foto atual é panorâmica (~2:1). Roda independente do plano:
+  // no Profissional+ vira o hint "já marcamos como 360°"; no Básico vira o convite
+  // para fazer upgrade e liberar o tour virtual.
   useEffect(() => {
-    if (!canUse360) { setTemPanoramica(false); return; }
     const srcs = [...images.map((im) => im.previewUrl), ...existingImages.map((im) => im.url)];
     if (srcs.length === 0) { setTemPanoramica(false); return; }
     let cancelled = false;
@@ -1898,7 +1917,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       el.src = src;
     });
     return () => { cancelled = true; };
-  }, [images, existingImages, canUse360]);
+  }, [images, existingImages]);
 
   // Auto-marca como 360° toda foto NOVA reconhecida como equiretangular (~2:1): quem
   // sobe uma panorâmica quase sempre quer exibi-la em 360°. Avalia cada foto só uma
@@ -2262,7 +2281,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   function handleWhatsApp() {
     const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
     const text = captions.whatsapp || `🏠 ${form.title}\n🔗 ${vitrineUrl}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    shareWhatsapp({ text, imageUrls: coverUrls, title: form.title });
   }
 
   const inputStyle = {
@@ -2465,6 +2484,26 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </p>
               )}
 
+              {!canUse360 && temPanoramica && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.28)", fontSize: "13px", color: "var(--text)", marginTop: "-8px" }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "1px" }}>
+                    <circle cx="12" cy="12" r="10" /><path d="M12 8v8M8 12h8" />
+                  </svg>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", lineHeight: 1.5 }}>
+                    <span>
+                      Detectamos uma <strong>foto panorâmica</strong>. O <strong style={{ color: "#a5b4fc" }}>Tour Virtual 360°</strong> está disponível a partir do plano <strong style={{ color: "#6366f1" }}>Profissional</strong> — no seu plano atual ela será exibida como uma imagem comum.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/configuracoes?tab=plano")}
+                      style={{ alignSelf: "flex-start", width: "auto", padding: "7px 16px", fontSize: "12px", fontWeight: 600, borderRadius: "8px", background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe", cursor: "pointer" }}
+                    >
+                      Conhecer o plano Profissional
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {aviso360 && (
                 <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "12px 16px", borderRadius: "12px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", fontSize: "13px", color: "#fbbf24" }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "1px" }}>
@@ -2585,8 +2624,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     WebkitMaskComposite: "xor", maskComposite: "exclude"
                   }} />
                   <textarea
+                    ref={descricaoRef}
                     className="input-scroll"
-                    style={{ ...withError("description"), resize: "vertical", minHeight: "100px", lineHeight: "1.6", paddingRight: "44px", position: "relative", zIndex: 2 }}
+                    style={{ ...withError("description"), resize: "none", overflowY: "hidden", minHeight: "100px", lineHeight: "1.6", paddingRight: "44px", position: "relative", zIndex: 2 }}
                     placeholder="Descreva os principais atrativos do imóvel, diferenciais, acabamento..."
                     value={form.description}
                     onChange={(e) => handleChangeField("description", e.target.value)}
@@ -2887,7 +2927,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   iaErro={redeIaErro.whatsapp}
                   statusText="Sempre disponível"
                   acao={
-                    <button type="button" className="divulgar-pub" onClick={handleWhatsApp} style={{ ...pubBtnBase, background: "#25d366", cursor: "pointer" }}>
+                    <button type="button" className="divulgar-pub btn-whatsapp" onClick={handleWhatsApp} style={{ ...pubBtnBase, background: "#25d366", cursor: "pointer" }}>
                       Compartilhar
                     </button>
                   }

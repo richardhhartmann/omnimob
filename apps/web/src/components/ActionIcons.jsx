@@ -14,7 +14,7 @@ const BASE = {
   color: "var(--text-main)",
 };
 
-function IconBtn({ title, onClick, disabled, style, children }) {
+function IconBtn({ title, onClick, disabled, style, className, children }) {
   return (
     <button
       type="button"
@@ -22,6 +22,7 @@ function IconBtn({ title, onClick, disabled, style, children }) {
       aria-label={title}
       onClick={onClick}
       disabled={disabled}
+      className={className}
       style={{ ...BASE, ...style }}
       onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = style?.background ?? "rgba(255,255,255,0.04)"; }}
@@ -48,6 +49,7 @@ export function BtnExcluir({ onClick, disabled }) {
       title="Excluir"
       onClick={onClick}
       disabled={disabled}
+      className="btn-danger"
       style={{ color: "#f87171", borderColor: "rgba(248,113,113,0.2)", background: "rgba(248,113,113,0.06)" }}
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,6 +68,7 @@ export function BtnDesativar({ onClick, disabled }) {
       title="Desativar"
       onClick={onClick}
       disabled={disabled}
+      className="btn-danger"
       style={{ color: "#f87171", borderColor: "rgba(248,113,113,0.2)", background: "rgba(248,113,113,0.06)" }}
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

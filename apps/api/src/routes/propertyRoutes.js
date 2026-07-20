@@ -22,6 +22,21 @@ const PROPERTY_INCLUDE = {
   atributos: { include: { atributo: true } },
 };
 
+// Tour 360° é recurso do Profissional+. Se o plano não libera (ex.: tenant que
+// era Profissional, marcou fotos como 360° e depois voltou pro Básico), zeramos
+// o flag na leitura para que nenhuma imagem seja renderizada em 360° — nem no
+// cadastro, nem na vitrine. O valor real permanece no banco e volta a valer se
+// o plano subir de novo.
+function gate360Images(images, plano) {
+  if (planoPermiteTour360(plano)) return images;
+  return (images || []).map((img) => (img.is360 ? { ...img, is360: false } : img));
+}
+
+function gate360Property(property, plano) {
+  if (!property || planoPermiteTour360(plano)) return property;
+  return { ...property, images: gate360Images(property.images, plano) };
+}
+
 // ─── Tipos de imóvel com seus atributos ──────────────────────────────────────
 
 propertyRouter.get("/tipos", async (_req, res) => {
@@ -144,7 +159,8 @@ propertyRouter.get("/", async (req, res) => {
       prisma.property.count({ where }),
     ]);
 
-    return res.json({ properties, total, page, limit });
+    const safe = properties.map((p) => gate360Property(p, req.tenant.plano));
+    return res.json({ properties: safe, total, page, limit });
   } catch (err) {
     console.error("[GET /properties]", err);
     return res.status(500).json({ error: "Erro ao listar imoveis.", detail: err.message });
@@ -162,7 +178,7 @@ propertyRouter.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Imovel nao encontrado para este tenant." });
     }
 
-    return res.json(property);
+    return res.json(gate360Property(property, req.tenant.plano));
   } catch {
     return res.status(500).json({ error: "Erro ao buscar imovel." });
   }
@@ -227,7 +243,7 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
     // Publicação nas redes acontece SÓ quando o usuário publica de fato
     // (rota /api/social/publish/*). Não marcamos nada como publicado aqui.
 
-    return res.status(201).json(property);
+    return res.status(201).json(gate360Property(property, req.tenant.plano));
   } catch (err) {
     console.error("[POST /properties]", err);
     return res.status(500).json({ error: "Erro ao criar imovel.", detail: err.message });
@@ -294,7 +310,7 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
       include: PROPERTY_INCLUDE,
     });
 
-    return res.json(property);
+    return res.json(gate360Property(property, req.tenant.plano));
   } catch (err) {
     console.error("[PUT /properties/:id]", err);
     return res.status(500).json({ error: "Erro ao atualizar imovel.", detail: err.message });
@@ -502,7 +518,7 @@ propertyRouter.get("/:id/images", async (req, res) => {
       orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     });
 
-    return res.json(images);
+    return res.json(gate360Images(images, req.tenant.plano));
   } catch {
     return res.status(500).json({ error: "Erro ao buscar imagens." });
   }

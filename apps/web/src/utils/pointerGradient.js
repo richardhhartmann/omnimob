@@ -23,9 +23,15 @@ export function initPointerGradient() {
     el.style.setProperty("--py", `${((y / r.height) * 100).toFixed(1)}%`);
     const dx = x - r.width / 2;
     const dy = y - r.height / 2;
-    // Inverte (atan2(-dx, dy)) para que a parte COLORIDA do gradiente (stop 0%)
-    // aponte para o cursor, e não a parte transparente.
-    el.style.setProperty("--pg-angle", `${((Math.atan2(-dx, dy) * 180) / Math.PI).toFixed(1)}deg`);
+    // Zona morta no centro: perto do meio, dx/dy ≈ 0 e o atan2 fica instável,
+    // fazendo o ângulo "pular". Ali quem manda no visual é o realce radial
+    // (--px/--py), então mantemos o último ângulo em vez de tremer.
+    const deadZone = Math.min(r.width, r.height) * 0.12;
+    if (Math.hypot(dx, dy) > deadZone) {
+      // Inverte (atan2(-dx, dy)) para que a parte COLORIDA do gradiente (stop 0%)
+      // aponte para o cursor, e não a parte transparente.
+      el.style.setProperty("--pg-angle", `${((Math.atan2(-dx, dy) * 180) / Math.PI).toFixed(1)}deg`);
+    }
   }
 
   function onMove(e) {

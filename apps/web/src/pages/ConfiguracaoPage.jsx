@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
-import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
+import { planoInfo } from "../utils/planos";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -272,6 +272,18 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
     }
     // Limpa params da URL
     setSearchParams({}, { replace: true });
+  }, []);
+
+  // Abre direto numa aba específica quando vier ?tab=... (ex.: CTA de upgrade de
+  // plano vindo do cadastro de imóvel ao subir uma foto panorâmica no Básico).
+  useEffect(() => {
+    const alvo = searchParams.get("tab");
+    if (alvo && TABS.some((t) => t.key === alvo)) {
+      setTab(alvo);
+      const next = new URLSearchParams(searchParams);
+      next.delete("tab");
+      setSearchParams(next, { replace: true });
+    }
   }, []);
 
   // Carrega status das redes sociais
@@ -689,6 +701,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               {socialStatus?.facebook?.connected && (
                 <button
                   type="button"
+                  className="btn-danger"
                   onClick={handleDesconectarRedes}
                   disabled={disconnectLoading}
                   style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 18px", borderRadius: "9px", fontSize: "13px", fontWeight: "600", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5", cursor: disconnectLoading ? "wait" : "pointer", opacity: disconnectLoading ? 0.6 : 1 }}
@@ -722,36 +735,11 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                     </span>
                   </div>
 
-                  {/* Tabela comparativa */}
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", minWidth: "420px" }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: "left", padding: "8px 10px", color: "var(--text-muted)", fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>Recurso</th>
-                          {PLANOS.map((p) => (
-                            <th key={p.key} style={{ textAlign: "center", padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                              <span style={{ color: p.key === atual.key ? p.cor : "var(--text)", fontWeight: 700 }}>{p.nome}</span>
-                              {p.key === atual.key && <span style={{ display: "block", fontSize: "9px", color: p.cor, textTransform: "uppercase", letterSpacing: "0.05em" }}>atual</span>}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {RECURSOS_PLANOS.map((r) => (
-                          <tr key={r.label}>
-                            <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)", color: "var(--text)" }}>{r.label}</td>
-                            {PLANOS.map((p) => (
-                              <td key={p.key} style={{ textAlign: "center", padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                                {r.plans.includes(p.key)
-                                  ? <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-                                  : <span style={{ color: "rgba(255,255,255,0.2)" }}>—</span>}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  {atual.descricao && (
+                    <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                      {atual.descricao}
+                    </p>
+                  )}
 
                   {/* Toggle: auto-gerar IA (só faz sentido no Premium) */}
                   <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", cursor: atual.ia ? "pointer" : "not-allowed", opacity: atual.ia ? 1 : 0.55 }}>

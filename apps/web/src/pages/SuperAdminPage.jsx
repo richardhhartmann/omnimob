@@ -203,7 +203,7 @@ export function SuperAdminPage({ session, onLogout }) {
                 <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
                   <a href={`/vitrine/${t.slug}`} target="_blank" rel="noreferrer" className="button-secondary" style={{ padding: "8px 12px", fontSize: "12px", textDecoration: "none" }}>Vitrine</a>
                   <button onClick={() => openEdit(t)} className="button-secondary" style={{ padding: "8px 12px", fontSize: "12px" }}>Editar</button>
-                  <button onClick={() => handleDelete(t)} style={{ padding: "8px 12px", fontSize: "12px", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", cursor: "pointer" }}>Excluir</button>
+                  <button className="btn-danger" onClick={() => handleDelete(t)} style={{ padding: "8px 12px", fontSize: "12px", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", cursor: "pointer" }}>Excluir</button>
                 </div>
               </div>
             );

@@ -1922,7 +1922,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "5px" }}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             Posições
           </button>
-          <button type="button" className="button-secondary" onClick={resetAllBuilder} style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.3)" }}>
+          <button type="button" className="button-secondary btn-danger" onClick={resetAllBuilder} style={{ color: "#fca5a5", borderColor: "rgba(239, 68, 68, 0.3)" }}>
             Resetar Tudo
           </button>
 

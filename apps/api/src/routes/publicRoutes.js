@@ -1,8 +1,20 @@
 import { Router } from "express";
 import prismaPkg from "@prisma/client";
 import { prisma } from "../db.js";
+import { planoPermiteTour360 } from "../middlewares/planoMiddleware.js";
 
 const { PropertyStatus, MetricEventType } = prismaPkg;
+
+// Tour 360° é recurso do Profissional+. Se o plano do tenant não libera, zeramos
+// o flag `is360` das imagens para que a vitrine pública exiba a foto normalmente,
+// sem o viewer panorâmico. O valor real permanece no banco.
+function gate360(properties, plano) {
+  if (planoPermiteTour360(plano)) return properties;
+  const zerar = (imgs) => (imgs || []).map((img) => (img.is360 ? { ...img, is360: false } : img));
+  return Array.isArray(properties)
+    ? properties.map((p) => ({ ...p, images: zerar(p.images) }))
+    : { ...properties, images: zerar(properties.images) };
+}
 
 function publicTenantShape(tenant) {
   return {
@@ -60,7 +72,7 @@ publicRouter.get("/:tenantSlug/properties", async (req, res) => {
       ]);
     }
 
-    return res.json({ tenant: publicTenantShape(tenant), properties });
+    return res.json({ tenant: publicTenantShape(tenant), properties: gate360(properties, tenant.plano) });
   } catch {
     return res.status(500).json({ error: "Erro ao carregar vitrine." });
   }
@@ -101,7 +113,7 @@ publicRouter.get("/:tenantSlug/properties/:propertyId", async (req, res) => {
 
     return res.json({
       tenant: publicTenantShape(tenant),
-      property: { ...property, viewCount: property.viewCount + 1 },
+      property: gate360({ ...property, viewCount: property.viewCount + 1 }, tenant.plano),
     });
   } catch {
     return res.status(500).json({ error: "Erro ao carregar imovel." });

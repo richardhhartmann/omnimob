@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/server.js",
+    "dev": "prisma generate && node --watch src/server.js",
     "start": "node src/server.js",
     "build": "echo \"API sem etapa de build\"",
     "prisma:generate": "prisma generate",

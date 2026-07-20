@@ -104,6 +104,7 @@ export function ConfirmModal({ open, message, confirmLabel = "Confirmar", onConf
             </button>
             <button
               type="button"
+              className="btn-danger"
               onClick={onConfirm}
               style={{
                 padding: "8px 18px",

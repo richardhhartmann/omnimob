@@ -128,7 +128,7 @@ function PhotoCarousel({ images }) {
         {current && current.is360 ? (
           <Panorama360 key={`pano-${current.id || current.url}`} src={current.url} height="100%" />
         ) : current ? (
-          <img src={current.url} alt={`foto ${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          <img key={idx} src={current.url} alt={`foto ${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", animation: "fadeIn 0.3s ease" }} />
         ) : (
           <div style={{ width: "100%", height: "100%", minHeight: "300px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)" }}>
             <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
@@ -149,9 +149,21 @@ function PhotoCarousel({ images }) {
         )}
       </div>
 
-      {/* Miniaturas (navegação) */}
+      {/* Miniaturas (navegação) — fundo é a imagem atual bem borrada */}
       {total > 1 && (
-        <div style={{ display: "flex", gap: "6px", padding: "10px", overflowX: "auto", background: "rgba(0,0,0,0.25)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ position: "relative", borderTop: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+          {current && (
+            <div
+              aria-hidden
+              style={{
+                position: "absolute", inset: 0,
+                backgroundImage: `url(${current.url})`, backgroundSize: "cover", backgroundPosition: "center",
+                filter: "blur(30px)", transform: "scale(1.3)", opacity: 0.5, transition: "background-image 0.3s ease",
+              }}
+            />
+          )}
+          <div style={{ position: "absolute", inset: 0, background: "rgba(10,13,20,0.45)" }} />
+          <div style={{ position: "relative", display: "flex", gap: "6px", padding: "10px", overflowX: "auto" }}>
           {images.map((img, i) => (
             <button
               key={img.id || i}
@@ -165,6 +177,7 @@ function PhotoCarousel({ images }) {
               )}
             </button>
           ))}
+          </div>
         </div>
       )}
     </div>
@@ -297,10 +310,10 @@ export function PropertyInsightsPage({ session }) {
           <button
             type="button"
             onClick={() => navigate("/imoveis")}
-            style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: "var(--text-muted)", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "12px" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", width: "auto", alignSelf: "flex-start", background: "none", border: "none", color: "var(--text-muted)", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "12px" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-            Portfólio Ativo
+            Voltar
           </button>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: "700", lineHeight: 1.2 }}>
             Painel de Performance
@@ -394,7 +407,7 @@ export function PropertyInsightsPage({ session }) {
       </div>
 
       {/* ── Filtro de período ──────────────────────────────────────────────── */}
-      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", padding: "16px 20px" }}>
+      <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: "14px", padding: "16px 20px" }}>
         <form onSubmit={(e) => { e.preventDefault(); loadAll(dateFrom, dateTo); }} style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
           <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", alignSelf: "center", marginRight: "4px" }}>
             Período
