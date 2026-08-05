@@ -2403,3 +2403,73 @@ svg.icon-moon,
 @media (prefers-reduced-motion: reduce) {
   .ripple-drop { animation: none; display: none; }
 }
+
+/* ── Transição de autenticação ────────────────────────────────────────────────
+   Login → painel em dois tempos.
+
+   1. SAÍDA: o conteúdo da tela de login sobe e sai pelo topo. Não é um slide
+      seco: há um recuo curto para baixo antes de subir (antecipação), e as
+      formas decorativas sobem mais rápido que o cartão, o que dá paralaxe. O
+      fundo só começa a apagar depois da metade, para o cartão ainda voar
+      sobre ele.
+
+   2. ENTRADA: o painel de destino aparece vindo de trás — ligeiramente menor,
+      um pouco abaixo e desfocado, resolvendo para o tamanho natural. A leitura
+      é de uma camada que estava atrás e foi descoberta.
+
+   Os dois tempos são sequenciais: a página de login só chama onLogin quando
+   sua própria saída termina, senão a rota trocaria no meio da animação e o
+   componente sumiria antes da hora.
+
+   O prefixo `authx-` não é enfeite: já existe `.auth-card` neste arquivo, do
+   login antigo, com regras em `h1` e `p` que herdam por descendência e venciam
+   por especificidade — o nome parecido custou tipografia trocada e vãos
+   fantasmas na tela de login. Não reaproveite `auth-` aqui.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.authx-out {
+  animation: authBackdropOut 620ms cubic-bezier(0.55, 0, 0.9, 0.35) forwards;
+  pointer-events: none;
+}
+@keyframes authBackdropOut {
+  0%, 52% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+/* O cartão é clipado pelo overflow:hidden da tela, então some pela borda de
+   cima em vez de encolher no meio da tela. */
+.authx-out .authx-card {
+  animation: authCardUp 620ms cubic-bezier(0.6, -0.3, 0.75, 0.05) forwards;
+}
+@keyframes authCardUp {
+  0%   { transform: translateY(0) scale(1); }
+  20%  { transform: translateY(20px) scale(0.99); }
+  100% { transform: translateY(-118vh) scale(0.9); }
+}
+
+.authx-out .authx-shapes {
+  animation: authShapesUp 620ms cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+@keyframes authShapesUp {
+  0%   { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-46vh); opacity: 0; }
+}
+
+/* `both` mantém o estado inicial antes do primeiro quadro, evitando o flash do
+   painel em tamanho natural. A classe é removida quando a animação acaba: um
+   transform diferente de `none` cria bloco de contenção e prenderia elementos
+   `position: fixed` (toasts, modais) ao invólucro. */
+.authx-in {
+  animation: authShellIn 660ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes authShellIn {
+  from { opacity: 0; transform: scale(0.968) translateY(24px); filter: blur(6px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .authx-out,
+  .authx-out .authx-card,
+  .authx-out .authx-shapes,
+  .authx-in { animation: none; }
+}

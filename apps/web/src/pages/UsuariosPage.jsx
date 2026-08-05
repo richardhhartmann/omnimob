@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnNovo } from "../components/ActionIcons";
 import { Avatar, Chip, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
+import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 
 const FORM_EMPTY = { nome: "", login: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
@@ -59,6 +60,11 @@ export function UsuariosPage({ session }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    // O combo é um botão, então o `required` do HTML não se aplica: validamos aqui.
+    if (!form.cargoCodigo) {
+      setError("Selecione o cargo do usuário.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -124,14 +130,13 @@ export function UsuariosPage({ session }) {
             onChange={(e) => setForm((p) => ({ ...p, login: e.target.value }))}
             required disabled={loading}
           />
-          <select
+          <SelectCustom
             value={form.cargoCodigo}
-            onChange={(e) => setForm((p) => ({ ...p, cargoCodigo: e.target.value }))}
-            required disabled={loading}
-          >
-            <option value="" disabled hidden>Selecione o cargo</option>
-            {cargos.map((c) => <option key={c.id} value={c.id}>{c.descricao}</option>)}
-          </select>
+            placeholder="Selecione o cargo"
+            disabled={loading}
+            options={cargos.map((c) => ({ value: String(c.id), label: c.descricao }))}
+            onChange={(v) => setForm((p) => ({ ...p, cargoCodigo: v }))}
+          />
 
           <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "center" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>

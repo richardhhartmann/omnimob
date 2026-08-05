@@ -5,7 +5,32 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
 import { planoLiberaRedes } from "../utils/planos.js";
+import { tipoContratoInfo } from "../utils/tiposContrato.js";
+import { SelectCustom } from "./SelectCustom.jsx";
 import { SkeletonCards } from "./Skeleton";
+
+// ─── Selo do tipo de contrato ────────────────────────────────────────────────
+
+function ContratoBadge({ tipoContrato, size = "md" }) {
+  const info = tipoContratoInfo(tipoContrato);
+  if (!info) return null;
+  const small = size === "sm";
+  return (
+    <span
+      title={info.descricao}
+      style={{
+        display: "inline-block", whiteSpace: "nowrap",
+        padding: small ? "2px 8px" : "3px 10px",
+        borderRadius: "999px",
+        fontSize: small ? "10px" : "11px",
+        fontWeight: "700", letterSpacing: "0.04em", textTransform: "uppercase",
+        color: info.cor, background: `${info.cor}1f`, border: `1px solid ${info.cor}59`,
+      }}
+    >
+      {info.label}
+    </span>
+  );
+}
 
 // ─── Badges de publicação social ─────────────────────────────────────────────
 
@@ -262,24 +287,36 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
             style={{ gridColumn: "1 / -1" }}
             disabled={disabled}
           />
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} disabled={disabled}>
-            <option value="">Todos os Tipos</option>
-            {uniqueTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-          </select>
-          <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} disabled={disabled}>
-            <option value="">Todas as Cidades</option>
-            {uniqueCities.map((city) => <option key={city} value={city}>{city}</option>)}
-          </select>
+          <SelectCustom
+            value={typeFilter}
+            placeholder="Todos os Tipos"
+            disabled={disabled}
+            options={[{ value: "", label: "Todos os Tipos" }, ...uniqueTypes.map((type) => ({ value: type, label: type }))]}
+            onChange={setTypeFilter}
+          />
+          <SelectCustom
+            value={cityFilter}
+            placeholder="Todas as Cidades"
+            disabled={disabled}
+            options={[{ value: "", label: "Todas as Cidades" }, ...uniqueCities.map((city) => ({ value: city, label: city }))]}
+            onChange={setCityFilter}
+          />
           <input type="number" placeholder="Preço Mínimo (R$)" value={minPriceFilter} onChange={(e) => setMinPriceFilter(e.target.value)} disabled={disabled} />
           <input type="number" placeholder="Preço Máximo (R$)" value={maxPriceFilter} onChange={(e) => setMaxPriceFilter(e.target.value)} disabled={disabled} />
-          <select value={bedroomsFilter} onChange={(e) => setBedroomsFilter(e.target.value)} disabled={disabled}>
-            <option value="">Quartos (Mínimo)</option>
-            <option value="1">1+ Quarto</option>
-            <option value="2">2+ Quartos</option>
-            <option value="3">3+ Quartos</option>
-            <option value="4">4+ Quartos</option>
-            <option value="5">5+ Quartos</option>
-          </select>
+          <SelectCustom
+            value={bedroomsFilter}
+            placeholder="Quartos (Mínimo)"
+            disabled={disabled}
+            options={[
+              { value: "", label: "Quartos (Mínimo)" },
+              { value: "1", label: "1+ Quarto" },
+              { value: "2", label: "2+ Quartos" },
+              { value: "3", label: "3+ Quartos" },
+              { value: "4", label: "4+ Quartos" },
+              { value: "5", label: "5+ Quartos" },
+            ]}
+            onChange={setBedroomsFilter}
+          />
         </div>
       </div>
 
@@ -315,9 +352,12 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 <div style={{ padding: "24px", flex: 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
                     <div style={{ flex: 1, paddingRight: "12px" }}>
-                      <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-muted)", fontWeight: "600", display: "block", marginBottom: "4px" }}>
-                        {property.propertyType || "Não definido"}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-muted)", fontWeight: "600" }}>
+                          {property.propertyType || "Não definido"}
+                        </span>
+                        <ContratoBadge tipoContrato={property.tipoContrato} size="sm" />
+                      </div>
                       <h3 style={{ fontSize: "20px", margin: 0, fontWeight: "600", lineHeight: "1.3", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {property.title}
                       </h3>
@@ -414,9 +454,12 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                   </div>
 
                   <div>
-                    <h3 style={{ fontSize: "16px", margin: "0 0 4px 0", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "400px" }}>
-                      {property.title}
-                    </h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+                      <h3 style={{ fontSize: "16px", margin: 0, fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "400px" }}>
+                        {property.title}
+                      </h3>
+                      <ContratoBadge tipoContrato={property.tipoContrato} size="sm" />
+                    </div>
                     <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
                       {property.propertyType || "Tipo não definido"} • {property.city || "Cidade não informada"} • {property.bedrooms ?? 0} quartos
                     </p>

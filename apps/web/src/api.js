@@ -88,6 +88,14 @@ export const api = {
       headers: { "x-tenant-slug": tenantSlug },
     }),
 
+  // Tipos de contrato liberados no cadastro (parametrização da imobiliária).
+  updateTiposContrato: (tenantSlug, tiposContrato) =>
+    request("/api/properties/tipos-contrato", {
+      method: "PUT",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ tiposContrato }),
+    }),
+
   listProperties: (tenantSlug, { page = 1, limit = 50, status } = {}) => {
     const params = new URLSearchParams({ page, limit });
     if (status) params.set("status", status);

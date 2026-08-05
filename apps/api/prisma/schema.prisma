@@ -44,6 +44,15 @@ enum AndamentoImovel {
   EM_CONSTRUCAO
 }
 
+// Natureza do negócio do imóvel. Cada tenant escolhe quais tipos ficam
+// disponíveis no cadastro (Tenant.tiposContrato).
+enum TipoContrato {
+  VENDA         // transferência de propriedade
+  LOCACAO       // aluguel
+  PERMUTA       // troca de bens
+  BUILT_TO_SUIT // construção sob medida para locação comercial
+}
+
 enum StatusPagamento {
   TRIAL
   EM_DIA
@@ -81,6 +90,9 @@ model Tenant {
   ativo               Boolean  @default(true)
   plano               String?         // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
   autoGerarIA         Boolean  @default(true)  // auto-preenche imóvel por IA ao lançar foto
+  // Tipos de contrato liberados no cadastro de imóvel desta imobiliária.
+  // Lista vazia = nenhum parametrizado; a UI trata como "todos" para não travar o cadastro.
+  tiposContrato       TipoContrato[]  @default([VENDA, LOCACAO, PERMUTA, BUILT_TO_SUIT]) @map("tipos_contrato")
   statusPagamento     StatusPagamento @default(TRIAL)
   proximoVencimento   DateTime?
   valorMensal         Decimal?        @db.Decimal(10, 2)
@@ -279,6 +291,7 @@ model Property {
   areaPrivativa Float?         @map("area_privativa")
   areaTotal     Float?         @map("area_total")
   andamento     AndamentoImovel?
+  tipoContrato  TipoContrato?   @map("tipo_contrato") // nulo nos imóveis cadastrados antes do campo existir
   aceitaPermuta Boolean         @default(false) @map("aceita_permuta")
   comodidades   Json?           // comodidades da regiao detectadas pelo CEP (ex.: { possuiMercado: true })
   status        PropertyStatus @default(DRAFT)

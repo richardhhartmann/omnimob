@@ -3,6 +3,8 @@ import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnGerenciar, BtnNovo, BtnVoltar } from "../components/ActionIcons";
 import { useConfirm } from "../components/ConfirmModal";
 
+import { TIPOS_CONTRATO, TIPOS_CONTRATO_KEYS } from "../utils/tiposContrato.js";
+
 const AREA_OPTIONS = [
   { key: "areaTerreno",    label: "Área do terreno" },
   { key: "areaConstruida", label: "Área construída" },
@@ -60,6 +62,105 @@ function AreaFieldsEditor({ value, onChange }) {
                   </span>
                 )}
               </div>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Parametrização dos tipos de contrato liberados no cadastro de imóvel.
+   Salva na hora (otimista) e volta atrás se a API recusar. */
+function TiposContratoCard({ tenantSlug }) {
+  const [ativos, setAtivos] = useState(null); // null = ainda carregando
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [salvoEm, setSalvoEm] = useState(null);
+
+  useEffect(() => {
+    if (!tenantSlug) return;
+    api.getTenantProfile(tenantSlug)
+      .then((t) => {
+        const lista = t?.tiposContrato;
+        // Lista vazia = nunca parametrizado; mostramos todos marcados.
+        setAtivos(Array.isArray(lista) && lista.length > 0 ? lista : TIPOS_CONTRATO_KEYS);
+      })
+      .catch(() => setAtivos(TIPOS_CONTRATO_KEYS));
+  }, [tenantSlug]);
+
+  async function toggle(key) {
+    if (!ativos || salvando) return;
+    const proximos = ativos.includes(key) ? ativos.filter((k) => k !== key) : [...ativos, key];
+
+    // Zero tipos ativos travaria o cadastro de imóveis por completo.
+    if (proximos.length === 0) {
+      setErro("Mantenha ao menos um tipo de contrato ativo.");
+      return;
+    }
+
+    const anteriores = ativos;
+    setAtivos(proximos);
+    setErro("");
+    setSalvando(true);
+    try {
+      await api.updateTiposContrato(tenantSlug, proximos);
+      setSalvoEm(Date.now());
+    } catch (err) {
+      setAtivos(anteriores);
+      setErro(err.message || "Não foi possível salvar. Tente de novo.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div style={{
+      marginBottom: "24px", padding: "18px 20px", borderRadius: "12px",
+      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+        <div>
+          <span style={{ fontWeight: "600", fontSize: "15px" }}>Tipos de contrato</span>
+          <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+            Escolha quais naturezas de negócio aparecem no cadastro de imóveis desta imobiliária.
+          </p>
+        </div>
+        <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.8 }}>
+          {salvando ? "Salvando…" : salvoEm ? "✓ Salvo" : ""}
+        </span>
+      </div>
+
+      {erro ? (
+        <div style={{ marginTop: "12px", padding: "8px 12px", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5", fontSize: "12px" }}>
+          {erro}
+        </div>
+      ) : null}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: "8px", marginTop: "14px" }}>
+        {TIPOS_CONTRATO.map((t) => {
+          const checked = ativos ? ativos.includes(t.key) : false;
+          return (
+            <label key={t.key} style={{
+              display: "flex", alignItems: "flex-start", gap: "10px", padding: "10px 12px",
+              borderRadius: "10px", cursor: ativos ? "pointer" : "wait", userSelect: "none",
+              border: checked ? `1px solid ${t.cor}66` : "1px solid rgba(255,255,255,0.08)",
+              background: checked ? `${t.cor}1f` : "rgba(255,255,255,0.02)",
+              transition: "all 0.15s ease", opacity: ativos ? 1 : 0.5,
+            }}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggle(t.key)}
+                disabled={!ativos}
+                style={{ accentColor: t.cor, width: "15px", height: "15px", flexShrink: 0, marginTop: "2px" }}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: "13px", fontWeight: "600" }}>{t.label}</span>
+                <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", lineHeight: 1.5, marginTop: "2px" }}>
+                  {t.descricao}
+                </span>
+              </span>
             </label>
           );
         })}
@@ -346,6 +447,8 @@ export function TiposImovelPage({ session }) {
         <h2 style={{ margin: 0 }}>Tipos de Imóvel e Atributos</h2>
         <BtnNovo onClick={abrirCriarTipo} label="Novo Tipo" />
       </div>
+
+      <TiposContratoCard tenantSlug={tenantSlug} />
 
       {tipos.length === 0 ? (
         <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "48px 0" }}>Nenhum tipo de imóvel cadastrado.</p>

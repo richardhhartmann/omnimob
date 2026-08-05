@@ -1,7 +1,7 @@
 import prismaPkg from "@prisma/client";
 import { z } from "zod";
 
-const { PropertyStatus, AndamentoImovel } = prismaPkg;
+const { PropertyStatus, AndamentoImovel, TipoContrato } = prismaPkg;
 
 // Limite do campo price (Decimal(12,2) no banco): máx. 9.999.999.999,99.
 const PRICE_MAX = 9_999_999_999.99;
@@ -29,12 +29,20 @@ export const createPropertySchema = z.object({
   areaPrivativa: z.number().nonnegative().nullable().optional(),
   areaTotal: z.number().nonnegative().nullable().optional(),
   andamento: z.nativeEnum(AndamentoImovel).nullable().optional(),
+  // Natureza do negócio. Se o tenant liberou tipos, a rota ainda checa se o
+  // valor escolhido está entre eles — o enum sozinho não sabe disso.
+  tipoContrato: z.nativeEnum(TipoContrato).nullable().optional(),
   aceitaPermuta: z.boolean().optional().default(false),
   comodidades: z.record(z.boolean()).nullable().optional(),
   status: z.nativeEnum(PropertyStatus).optional().default(PropertyStatus.DRAFT),
 });
 
 export const updatePropertySchema = createPropertySchema.partial();
+
+// Parametrização por imobiliária: quais tipos de contrato aparecem no cadastro.
+export const updateTiposContratoSchema = z.object({
+  tiposContrato: z.array(z.nativeEnum(TipoContrato)),
+});
 
 export const createTenantSchema = z.object({
   name: z.string().min(2),

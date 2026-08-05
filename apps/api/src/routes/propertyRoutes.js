@@ -6,9 +6,11 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { planoPermiteTour360 } from "../middlewares/planoMiddleware.js";
 import { gerarConteudoImovel, inferirComodidadesRegiao, isAiEnabled } from "../services/aiService.js";
-import { createPropertySchema, updatePropertySchema } from "../validators/propertyValidators.js";
+import { createPropertySchema, updatePropertySchema, updateTiposContratoSchema } from "../validators/propertyValidators.js";
 
-const { PropertyStatus, MetricEventType } = prismaPkg;
+const { PropertyStatus, MetricEventType, TipoContrato } = prismaPkg;
+
+const TODOS_TIPOS_CONTRATO = Object.values(TipoContrato);
 
 const requireImoveis = [requireAuth, requirePermissao("gerenciarImoveis")];
 
@@ -36,6 +38,40 @@ function gate360Property(property, plano) {
   if (!property || planoPermiteTour360(plano)) return property;
   return { ...property, images: gate360Images(property.images, plano) };
 }
+
+// ─── Tipos de contrato liberados pela imobiliária ────────────────────────────
+//
+// Precisa vir antes de `PUT /:id`, senão "/tipos-contrato" seria capturado
+// como se fosse o id de um imóvel.
+
+// Lista vazia no banco significa "não parametrizado": liberamos todos em vez de
+// travar o cadastro por completo.
+function tiposContratoDoTenant(tenant) {
+  const lista = tenant?.tiposContrato;
+  return Array.isArray(lista) && lista.length > 0 ? lista : TODOS_TIPOS_CONTRATO;
+}
+
+propertyRouter.put("/tipos-contrato", requireImoveis, async (req, res) => {
+  try {
+    const parsed = updateTiposContratoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Tipos de contrato inválidos.", details: parsed.error.flatten() });
+    }
+
+    // Remove duplicatas mantendo a ordem canônica do enum.
+    const tiposContrato = TODOS_TIPOS_CONTRATO.filter((t) => parsed.data.tiposContrato.includes(t));
+
+    const tenant = await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: { tiposContrato },
+      select: { tiposContrato: true },
+    });
+    return res.json(tenant);
+  } catch (err) {
+    console.error("[PUT /properties/tipos-contrato]", err);
+    return res.status(500).json({ error: "Erro ao salvar tipos de contrato." });
+  }
+});
 
 // ─── Tipos de imóvel com seus atributos ──────────────────────────────────────
 
@@ -186,6 +222,15 @@ propertyRouter.get("/:id", async (req, res) => {
 
 // Valida que os atributosIds existem e (quando há tipo) pertencem ao tipo escolhido.
 // Retorna null se tudo OK, ou um objeto de erro pronto para responder com 400.
+// O tipo de contrato escolhido precisa estar entre os liberados pela
+// imobiliária. Sem essa checagem, bastaria um POST direto na API para gravar um
+// tipo que a tela nem oferece.
+function validarTipoContrato(tipoContrato, tenant) {
+  if (tipoContrato == null) return null;
+  if (tiposContratoDoTenant(tenant).includes(tipoContrato)) return null;
+  return { error: "Este tipo de contrato não está habilitado para a sua imobiliária.", tipoContrato };
+}
+
 async function validarAtributos(atributosIds, tipoImovelId) {
   const encontrados = await prisma.modeloAtributo.findMany({
     where: {
@@ -212,6 +257,9 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
     }
 
     const { tipoImovelId, atributosIds, ...propertyData } = parsed.data;
+
+    const erroContrato = validarTipoContrato(propertyData.tipoContrato, req.tenant);
+    if (erroContrato) return res.status(400).json(erroContrato);
 
     // Deriva propertyType do tipo selecionado para manter compatibilidade
     let propertyType = propertyData.propertyType || "";
@@ -267,6 +315,9 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
     }
 
     const { tipoImovelId, atributosIds, ...propertyData } = parsed.data;
+
+    const erroContrato = validarTipoContrato(propertyData.tipoContrato, req.tenant);
+    if (erroContrato) return res.status(400).json(erroContrato);
 
     let propertyType = propertyData.propertyType;
     if (tipoImovelId !== undefined) {

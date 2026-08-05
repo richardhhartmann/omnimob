@@ -9,6 +9,7 @@ import {
 } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
 import { comodidadesAtivas } from "../utils/comodidades";
+import { tipoContratoInfo } from "../utils/tiposContrato";
 import { loadShowcaseFonts, setCachedTenant } from "../utils/showcaseFonts";
 
 // Elemento interno (sem min-height) usado para medir a altura REAL de cada bloco.
@@ -344,7 +345,8 @@ export function ShowcasePage() {
               const mainImage = images[currentIndex]?.url;
               const lancamento = isLancamento(p.createdAt);
               const andamentoLabel = { PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" }[p.andamento];
-              
+              const contratoInfo = tipoContratoInfo(p.tipoContrato);
+
               return (
                 <Link
                   key={p.id}
@@ -367,6 +369,15 @@ export function ShowcasePage() {
                       {!lancamento && andamentoLabel && (
                         <span className="featured-badge">
                           {andamentoLabel}
+                        </span>
+                      )}
+                      {contratoInfo && (
+                        <span
+                          className="featured-badge"
+                          title={contratoInfo.descricao}
+                          style={{ top: "16px", left: "auto", right: "16px", background: contratoInfo.cor, color: "#fff", borderColor: "transparent" }}
+                        >
+                          {contratoInfo.label}
                         </span>
                       )}
                       {p.aceitaPermuta && (

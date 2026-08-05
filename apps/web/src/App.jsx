@@ -53,9 +53,31 @@ export default function App() {
     if (!location.hash) window.scrollTo(0, 0);
   }, [location.pathname, location.hash]);
 
+  /* Entrada do painel logo depois do login.
+
+     A classe fica só durante a animação e depois sai: enquanto ela vale, o
+     invólucro tem `transform`, e um transform diferente de `none` vira bloco
+     de contenção — elementos `position: fixed` (toasts, modais) passariam a se
+     posicionar por ele em vez de pela viewport. */
+  const [entrando, setEntrando] = useState(false);
+  useEffect(() => {
+    if (!entrando) return undefined;
+    const t = setTimeout(() => setEntrando(false), 800);
+    return () => clearTimeout(t);
+  }, [entrando]);
+
+  /* O invólucro é sempre renderizado, mesmo sem a classe. Se ele aparecesse e
+     sumisse, o tipo do elemento naquela posição mudaria de <div> para o próprio
+     painel, e o React desmontaria e remontaria a árvore inteira ao fim da
+     animação — perdendo estado e refazendo as requisições. */
+  function comEntrada(node) {
+    return <div className={entrando ? "authx-in" : undefined}>{node}</div>;
+  }
+
   function handleAdminLogin(next) {
     saveAdminSession(next);
     setAdminSession(next);
+    setEntrando(true);
   }
   function handleAdminLogout() {
     clearAdminSession();
@@ -89,6 +111,7 @@ export default function App() {
   function handleLogin(nextSession) {
     saveSession(nextSession);
     setSession(nextSession);
+    setEntrando(true);
   }
 
   function handleSessionUpdate(nextSession) {
@@ -123,14 +146,14 @@ export default function App() {
       />
       <Route
         path="/admin"
-        element={adminSession ? <SuperAdminPage session={adminSession} onLogout={handleAdminLogout} /> : <Navigate to="/admin/login" replace />}
+        element={adminSession ? comEntrada(<SuperAdminPage session={adminSession} onLogout={handleAdminLogout} />) : <Navigate to="/admin/login" replace />}
       />
 
       {/* Raiz: landing da Domus para visitantes; dashboard para tenant logado */}
       <Route
         element={
           session && canAccessTenantPanel ? (
-            <AdminLayout session={session} onLogout={handleLogout} />
+            comEntrada(<AdminLayout session={session} onLogout={handleLogout} />)
           ) : session ? (
             <Navigate to={defaultPublicPath} replace />
           ) : (

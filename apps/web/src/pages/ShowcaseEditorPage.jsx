@@ -14,6 +14,7 @@ import {
 import { BuilderSidePanel } from "../components/builder/BuilderSidePanel";
 import { OnboardingOverlay } from "../components/builder/OnboardingOverlay";
 import { useConfirm } from "../components/ConfirmModal";
+import { SelectCustom } from "../components/SelectCustom";
 import { comodidadesAtivas } from "../utils/comodidades";
 
 const PRESET_THEMES = {
@@ -158,6 +159,9 @@ function isNodeUnderFormatToolbar(node, toolbarEl) {
   if (!toolbarEl || !node) return false;
   let n = node.nodeType === 1 ? node : node.parentElement;
   if (!n || n.nodeType !== 1) return false;
+  // A lista do SelectCustom é renderizada num portal no <body>, então não é
+  // descendente da toolbar — mas clicar nela ainda é interagir com a toolbar.
+  if (typeof n.closest === "function" && n.closest("[data-selectcustom-list]")) return true;
   while (n) {
     if (n === toolbarEl) return true;
     if (typeof toolbarEl.contains === "function" && toolbarEl.contains(n)) return true;
@@ -1793,28 +1797,44 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                 onChange={(e) => applyFormat("foreColor", e.currentTarget.value)}
                 style={{ width: "28px", height: "28px", padding: 0, border: "none", borderRadius: "4px", cursor: "pointer" }}
               />
-              <select title="Família da Fonte" onChange={(e) => applyFormat("fontName", e.target.value)}
-                style={{ padding: "4px 8px", borderRadius: "4px", background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid rgba(255,255,255,0.1)", fontSize: "12px", outline: "none" }}
-              >
-                <option value="">Fonte Padrão</option>
-                <option value="Arial">Arial</option>
-                <option value="Georgia">Georgia</option>
-                <option value="Courier New">Courier New</option>
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Verdana">Verdana</option>
-              </select>
-              <select title="Tamanho da Fonte" onChange={(e) => applyFormat("fontSize", e.target.value)}
-                style={{ padding: "4px 8px", borderRadius: "4px", background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid rgba(255,255,255,0.1)", fontSize: "12px", outline: "none" }}
-              >
-                <option value="">Tamanho</option>
-                <option value="1">Muito Pequeno</option>
-                <option value="2">Pequeno</option>
-                <option value="3">Normal</option>
-                <option value="4">Médio</option>
-                <option value="5">Grande</option>
-                <option value="6">Muito Grande</option>
-                <option value="7">Gigante</option>
-              </select>
+              {/* Menus de ação: não guardam estado, só aplicam o formato na seleção. */}
+              <SelectCustom
+                size="sm"
+                zIndex={2147483647}
+                title="Família da Fonte"
+                ariaLabel="Família da fonte"
+                value=""
+                placeholder="Fonte"
+                style={{ minWidth: "120px" }}
+                options={[
+                  { value: "", label: "Fonte Padrão" },
+                  { value: "Arial", label: "Arial" },
+                  { value: "Georgia", label: "Georgia" },
+                  { value: "Courier New", label: "Courier New" },
+                  { value: "Times New Roman", label: "Times New Roman" },
+                  { value: "Verdana", label: "Verdana" },
+                ]}
+                onChange={(v) => applyFormat("fontName", v)}
+              />
+              <SelectCustom
+                size="sm"
+                zIndex={2147483647}
+                title="Tamanho da Fonte"
+                ariaLabel="Tamanho da fonte"
+                value=""
+                placeholder="Tamanho"
+                style={{ minWidth: "120px" }}
+                options={[
+                  { value: "1", label: "Muito Pequeno" },
+                  { value: "2", label: "Pequeno" },
+                  { value: "3", label: "Normal" },
+                  { value: "4", label: "Médio" },
+                  { value: "5", label: "Grande" },
+                  { value: "6", label: "Muito Grande" },
+                  { value: "7", label: "Gigante" },
+                ]}
+                onChange={(v) => applyFormat("fontSize", v)}
+              />
             </div>,
             document.body
           )
@@ -1874,16 +1894,15 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5, flexShrink: 0 }}>
               <polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>
             </svg>
-            <select
+            <SelectCustom
+              size="sm"
               value={globalFont}
-              onChange={(e) => updateShowcaseConfig((prev) => ({ ...prev, globalFont: e.target.value }))}
               title="Fonte da vitrine"
-              style={{ padding: "5px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", fontSize: "12px", cursor: "pointer", maxWidth: "160px" }}
-            >
-              {FONT_OPTIONS.map((f) => (
-                <option key={f.value} value={f.value} style={{ background: "#1e293b" }}>{f.label}</option>
-              ))}
-            </select>
+              ariaLabel="Fonte da vitrine"
+              style={{ width: "160px" }}
+              options={FONT_OPTIONS.map((f) => ({ value: f.value, label: f.label }))}
+              onChange={(v) => updateShowcaseConfig((prev) => ({ ...prev, globalFont: v }))}
+            />
           </div>
 
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />

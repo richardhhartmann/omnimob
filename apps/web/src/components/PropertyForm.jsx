@@ -1,11 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
 import { COMODIDADES, EMPTY_COMODIDADES } from "../utils/comodidades.js";
 import { planoLiberaIA, planoLiberaRedes, planoLiberaTour360 } from "../utils/planos.js";
+import { tipoContratoInfo, tiposContratoAtivos } from "../utils/tiposContrato.js";
 import { Panorama360 } from "./Panorama360.jsx";
+import { SelectCustom } from "./SelectCustom.jsx";
 import { overlay360 } from "../utils/cloudinaryOverlay.js";
 import { spawnRipple } from "../utils/rippleDrop.js";
 import { shareWhatsapp } from "../utils/shareWhatsapp.js";
@@ -59,6 +61,7 @@ function fileParaBase64Reduzido(file, maxDim = 1024, quality = 0.75) {
 
 const EMPTY = {
   tipoImovelId: "",
+  tipoContrato: "",
   atributosIds: [],
   title: "",
   description: "",
@@ -141,14 +144,14 @@ function areasParaTipo(descricao) {
 }
 
 const FIELD_STEP = {
-  title: 0, description: 0, tipoImovelId: 0, price: 0,
+  title: 0, description: 0, tipoImovelId: 0, tipoContrato: 0, price: 0,
   address: 1, neighborhood: 1, city: 1, state: 1,
   bedrooms: 2, parkingSpots: 2, suites: 2, salas: 2, banheiros: 2,
   areaTerreno: 2, areaConstruida: 2, areaPrivativa: 2, areaTotal: 2,
 };
 
 const FIELD_LABELS = {
-  title: "Título", description: "Descrição", tipoImovelId: "Tipo de imóvel", price: "Preço",
+  title: "Título", description: "Descrição", tipoImovelId: "Tipo de imóvel", tipoContrato: "Tipo de contrato", price: "Preço",
   address: "Endereço", neighborhood: "Bairro", city: "Cidade", state: "Estado (UF)",
   bedrooms: "Quartos", parkingSpots: "Vagas", suites: "Suítes", salas: "Salas", banheiros: "Banheiros",
   ...AREA_FIELDS,
@@ -160,6 +163,7 @@ function getValidationErrors(form, areaFields = TODAS_AREAS) {
   if (!form.title || form.title.trim().length < 3) fe.title = "Informe um título com ao menos 3 caracteres.";
   if (!form.description || form.description.trim().length < 10) fe.description = "A descrição deve ter ao menos 10 caracteres.";
   if (!form.tipoImovelId) fe.tipoImovelId = "Selecione o tipo de imóvel.";
+  if (!form.tipoContrato) fe.tipoContrato = "Selecione o tipo de contrato.";
   const p = parseCurrencyBRL(String(form.price));
   if (!Number.isFinite(p) || p <= 0) fe.price = "Informe um preço válido maior que zero.";
   else if (p > 9999999999.99) fe.price = "Preço acima do máximo permitido (R$ 9.999.999.999,99).";
@@ -364,6 +368,7 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
   const hasStats = areaExibicao || form.bedrooms || form.suites || form.salas || form.banheiros || form.parkingSpots;
   const statusLabel = { ACTIVE: "Ativo", INACTIVE: "Inativo", DRAFT: "Rascunho" }[form.status] || "Rascunho";
   const statusColor = { ACTIVE: "#10b981", INACTIVE: "#ef4444", DRAFT: "#f59e0b" }[form.status] || "#f59e0b";
+  const contratoPreview = tipoContratoInfo(form.tipoContrato);
   const currentUrl = previewUrls[idx] || null;
 
   function prev(e) { e.stopPropagation(); setIdx((i) => (i - 1 + previewUrls.length) % previewUrls.length); }
@@ -414,6 +419,11 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
           {form.andamento && (
             <span style={{ position: "absolute", top: "10px", left: "10px", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", padding: "3px 8px", borderRadius: "999px" }}>
               {{ PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" }[form.andamento]}
+            </span>
+          )}
+          {contratoPreview && (
+            <span style={{ position: "absolute", top: "10px", right: "10px", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", background: contratoPreview.cor, backdropFilter: "blur(4px)", padding: "3px 8px", borderRadius: "999px" }}>
+              {contratoPreview.label}
             </span>
           )}
           {form.aceitaPermuta && (
@@ -1285,6 +1295,18 @@ function IaSkeleton({ active, radius = "10px" }) {
   );
 }
 
+// Cobre o conteúdo com o skeleton enquanto `active` — usado nos campos que o
+// CEP preenche sozinho. O IaSkeleton fica sempre montado para aproveitar o
+// dissolve de saída, e bloqueia o clique só enquanto está visível.
+function ComSkeleton({ active, radius = "10px", style, children }) {
+  return (
+    <div style={{ position: "relative", ...style }}>
+      {children}
+      <IaSkeleton active={active} radius={radius} />
+    </div>
+  );
+}
+
 export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) {
   const { confirm, modal: confirmModal } = useConfirm();
   const [form, setForm] = useState(EMPTY);
@@ -1364,6 +1386,21 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     api.getTiposImovel(tenantSlug).then(setTipos).catch(() => {});
   }, [tenantSlug]);
 
+  // Tipos de contrato liberados pela imobiliária. Vem do perfil do tenant (e
+  // não da sessão) porque a parametrização pode mudar depois do login.
+  const [tiposContratoTenant, setTiposContratoTenant] = useState(null);
+  useEffect(() => {
+    if (!tenantSlug) return;
+    api.getTenantProfile(tenantSlug)
+      .then((t) => setTiposContratoTenant(t?.tiposContrato ?? null))
+      .catch(() => {});
+  }, [tenantSlug]);
+
+  const contratosDisponiveis = useMemo(
+    () => tiposContratoAtivos({ tiposContrato: tiposContratoTenant }),
+    [tiposContratoTenant],
+  );
+
   useEffect(() => {
     return () => { images.forEach((img) => URL.revokeObjectURL(img.previewUrl)); };
   }, []);
@@ -1400,8 +1437,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
     const whatsapp = session?.tenant?.whatsapp || "";
 
+    const contratoLabel = tipoContratoInfo(form.tipoContrato)?.label || "";
+
     const lines = [
       `🏠 ${form.title}`,
+      contratoLabel ? `📄 ${contratoLabel}` : "",
       location ? `📍 ${location}` : "",
       priceStr ? `💰 ${priceStr}` : "",
       stats ? `📐 ${stats}` : "",
@@ -1609,6 +1649,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       areaPrivativa: initialData.areaPrivativa != null ? String(initialData.areaPrivativa) : "",
       areaTotal: initialData.areaTotal != null ? String(initialData.areaTotal) : "",
       andamento: initialData.andamento || "",
+      tipoContrato: initialData.tipoContrato || "",
       aceitaPermuta: Boolean(initialData.aceitaPermuta),
       status: initialData.status || "DRAFT",
       comodidades: { ...EMPTY_COMODIDADES, ...(initialData.comodidades || {}) },
@@ -1772,6 +1813,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       areaTerreno: form.areaTerreno,
       squareFootage: form.squareFootage,
       andamento: form.andamento,
+      tipoContrato: form.tipoContrato,
       aceitaPermuta: form.aceitaPermuta,
       atributos,
     };
@@ -2103,6 +2145,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
       finalidade: form.finalidade || null,
       ...areaPayload,
       andamento: form.andamento || null,
+      tipoContrato: form.tipoContrato || null,
       aceitaPermuta: Boolean(form.aceitaPermuta),
       status: form.status,
       comodidades: form.comodidades,
@@ -2667,12 +2710,37 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
               <Field label="Tipo de imóvel" required error={fieldErrors.tipoImovelId}>
                 <AiFlare active={aiFields.tipoImovelId}>
-                  <select style={{ ...withError("tipoImovelId", selectStyle), position: "relative", zIndex: 2 }} value={form.tipoImovelId} onChange={(e) => { setForm((prev) => ({ ...prev, tipoImovelId: e.target.value, atributosIds: [] })); clearFieldError("tipoImovelId"); setAiFields((p) => ({ ...p, tipoImovelId: false, atributos: false })); }} disabled={disabled}>
-                    <option value="" disabled hidden>Selecione uma categoria...</option>
-                    {tipos.map((t) => <option key={t.id} value={t.id}>{t.descricao}</option>)}
-                  </select>
+                  <SelectCustom
+                    style={{ position: "relative", zIndex: 2 }}
+                    value={form.tipoImovelId}
+                    placeholder="Selecione uma categoria..."
+                    disabled={disabled}
+                    invalid={Boolean(fieldErrors.tipoImovelId)}
+                    flash={Boolean(flashFields.tipoImovelId)}
+                    options={tipos.map((t) => ({ value: String(t.id), label: t.descricao }))}
+                    onChange={(v) => {
+                      setForm((prev) => ({ ...prev, tipoImovelId: v, atributosIds: [] }));
+                      clearFieldError("tipoImovelId");
+                      setAiFields((p) => ({ ...p, tipoImovelId: false, atributos: false }));
+                    }}
+                  />
                   <IaSkeleton active={gerandoCampo === "auto" && regeraCampo("tipoImovelId", !form.tipoImovelId)} radius="10px" />
                 </AiFlare>
+              </Field>
+
+              <Field label="Tipo de contrato" required error={fieldErrors.tipoContrato}>
+                <SelectCustom
+                  id="tipo-contrato"
+                  value={form.tipoContrato}
+                  placeholder="Selecione o tipo de negócio..."
+                  disabled={disabled}
+                  invalid={Boolean(fieldErrors.tipoContrato)}
+                  flash={Boolean(flashFields.tipoContrato)}
+                  options={contratosDisponiveis.map((t) => ({
+                    value: t.key, label: t.label, description: t.descricao, color: t.cor,
+                  }))}
+                  onChange={(v) => { set("tipoContrato", v); clearFieldError("tipoContrato"); }}
+                />
               </Field>
 
               {tipoSelecionado && tipoSelecionado.atributos?.length > 0 ? (
@@ -2701,18 +2769,26 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               </Field>
               <Field label="Endereço" required error={fieldErrors.address}>
-                <input style={withError("address")} placeholder="Rua, número, complemento" value={form.address} onChange={(e) => set("address", e.target.value)} disabled={disabled} />
+                <ComSkeleton active={cepLoading}>
+                  <input style={withError("address")} placeholder="Rua, número, complemento" value={form.address} onChange={(e) => set("address", e.target.value)} disabled={disabled} />
+                </ComSkeleton>
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <Field label="Bairro" required error={fieldErrors.neighborhood}>
-                  <input style={withError("neighborhood")} placeholder="Bairro" value={form.neighborhood} onChange={(e) => set("neighborhood", e.target.value)} disabled={disabled} />
+                  <ComSkeleton active={cepLoading}>
+                    <input style={withError("neighborhood")} placeholder="Bairro" value={form.neighborhood} onChange={(e) => set("neighborhood", e.target.value)} disabled={disabled} />
+                  </ComSkeleton>
                 </Field>
                 <Field label="Cidade" required error={fieldErrors.city}>
-                  <input style={withError("city")} placeholder="Cidade" value={form.city} onChange={(e) => set("city", e.target.value)} disabled={disabled} />
+                  <ComSkeleton active={cepLoading}>
+                    <input style={withError("city")} placeholder="Cidade" value={form.city} onChange={(e) => set("city", e.target.value)} disabled={disabled} />
+                  </ComSkeleton>
                 </Field>
               </div>
               <Field label="Estado (UF)" required error={fieldErrors.state}>
-                <input style={{ ...withError("state"), maxWidth: "100px", textTransform: "uppercase" }} placeholder="GO" maxLength={2} value={form.state} onChange={(e) => set("state", e.target.value.toUpperCase())} disabled={disabled} />
+                <ComSkeleton active={cepLoading} style={{ maxWidth: "100px" }}>
+                  <input style={{ ...withError("state"), maxWidth: "100px", textTransform: "uppercase" }} placeholder="GO" maxLength={2} value={form.state} onChange={(e) => set("state", e.target.value.toUpperCase())} disabled={disabled} />
+                </ComSkeleton>
               </Field>
 
               <AiFlare active={aiFields.comodidades} radius="12px">
@@ -2730,6 +2806,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", opacity: 0.7, marginBottom: "12px" }}>
                   Sugerido por IA a partir do CEP. Você pode ajustar manualmente.
                 </span>
+                {/* Cobre da consulta do CEP até o fim da inferência por IA, sem piscar entre as duas etapas. */}
+                <ComSkeleton active={cepLoading || comodidadesLoading} radius="10px">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "8px" }}>
                   {COMODIDADES.map((c) => {
                     const checked = Boolean(form.comodidades?.[c.key]);
@@ -2751,6 +2829,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                     );
                   })}
                 </div>
+                </ComSkeleton>
               </div>
               </AiFlare>
             </>
@@ -2760,11 +2839,18 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             <>
               <Field label="Finalidade">
                 <AiFlare active={aiFields.finalidade}>
-                  <select style={{ ...selectStyle, position: "relative", zIndex: 2 }} value={form.finalidade} onChange={(e) => { set("finalidade", e.target.value); setAiFields((p) => ({ ...p, finalidade: false })); }} disabled={disabled}>
-                    <option value="">Não informado</option>
-                    <option value="RESIDENCIAL">Residencial</option>
-                    <option value="COMERCIAL">Comercial</option>
-                  </select>
+                  <SelectCustom
+                    style={{ position: "relative", zIndex: 2 }}
+                    value={form.finalidade}
+                    placeholder="Não informado"
+                    disabled={disabled}
+                    options={[
+                      { value: "", label: "Não informado" },
+                      { value: "RESIDENCIAL", label: "Residencial" },
+                      { value: "COMERCIAL", label: "Comercial" },
+                    ]}
+                    onChange={(v) => { set("finalidade", v); setAiFields((p) => ({ ...p, finalidade: false })); }}
+                  />
                 </AiFlare>
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
@@ -2796,18 +2882,29 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <Field label="Status">
-                  <select style={selectStyle} value={form.status} onChange={(e) => set("status", e.target.value)} disabled={disabled}>
-                    <option value="DRAFT">Rascunho</option>
-                    <option value="ACTIVE">Ativo</option>
-                    <option value="INACTIVE">Inativo</option>
-                  </select>
+                  <SelectCustom
+                    value={form.status}
+                    disabled={disabled}
+                    options={[
+                      { value: "DRAFT", label: "Rascunho", color: "#f59e0b" },
+                      { value: "ACTIVE", label: "Ativo", color: "#10b981" },
+                      { value: "INACTIVE", label: "Inativo", color: "#ef4444" },
+                    ]}
+                    onChange={(v) => set("status", v)}
+                  />
                 </Field>
                 <Field label="Andamento">
-                  <select style={selectStyle} value={form.andamento} onChange={(e) => set("andamento", e.target.value)} disabled={disabled}>
-                    <option value="">Não informado</option>
-                    <option value="PRONTO_PARA_MORAR">Pronto para morar</option>
-                    <option value="EM_CONSTRUCAO">Em construção</option>
-                  </select>
+                  <SelectCustom
+                    value={form.andamento}
+                    placeholder="Não informado"
+                    disabled={disabled}
+                    options={[
+                      { value: "", label: "Não informado" },
+                      { value: "PRONTO_PARA_MORAR", label: "Pronto para morar" },
+                      { value: "EM_CONSTRUCAO", label: "Em construção" },
+                    ]}
+                    onChange={(v) => set("andamento", v)}
+                  />
                 </Field>
               </div>
               <label style={{

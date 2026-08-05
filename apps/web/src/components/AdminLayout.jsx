@@ -21,42 +21,46 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 
-// ── Paleta da sidebar ─────────────────────────────────────────────────────────
-const S = {
-  bg:         "#0c0f1a",
-  border:     "rgba(255,255,255,0.07)",
-  text:       "#64748b",
-  textActive: "#f1f5f9",
-  hover:      "rgba(255,255,255,0.05)",
-  active:     "rgba(129,140,248,0.10)",
-  separator:  "rgba(255,255,255,0.06)",
-  avatarBg:   "#4f46e5",
-};
+/* ────────────────────────────────────────────────────────────────────────────
+   Layout do painel do tenant (sidebar + conteúdo).
+
+   A sidebar segue a mesma linguagem visual da landing — micro-labels em
+   JetBrains Mono, itens com raio de 10px, estado ativo com borda de acento,
+   separadores hairline — mas mantendo a paleta que ela já tinha (#0c0f1a,
+   texto #64748b/#f1f5f9, ativo em indigo a 10%, avatar #4f46e5).
+
+   IMPORTANTE: os estilos são escopados em `.ds-*` de propósito. O kit
+   (`styles/domusKit.jsx`) traz um reset em `.dl-root` que vazaria pelo
+   <Outlet/> e quebraria as telas internas do painel, que ainda vivem no
+   styles.css global.
+   ──────────────────────────────────────────────────────────────────────────── */
 
 // ── Tooltip lateral (só quando recolhida) ─────────────────────────────────────
 function SideTooltip({ label, collapsed, children }) {
-  if (!collapsed) return children;
+  if (!collapsed || !label) return children;
   return (
     <Tooltip.Root delayDuration={300}>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
+        {/* Renderiza fora da sidebar (portal), então o estilo fica inline. */}
         <Tooltip.Content
           side="right"
           sideOffset={10}
           style={{
-            background: "rgba(15,23,42,0.95)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: "6px",
-            padding: "5px 10px",
+            background: "#141821",
+            border: "1px solid rgba(255,255,255,0.10)",
+            borderRadius: "10px",
+            padding: "7px 12px",
             fontSize: "12px",
-            fontWeight: 500,
+            fontWeight: 600,
+            letterSpacing: "-0.01em",
             color: "#f1f5f9",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            boxShadow: "0 18px 40px -16px rgba(0,0,0,0.85)",
             zIndex: 9999,
           }}
         >
           {label}
-          <Tooltip.Arrow style={{ fill: "rgba(15,23,42,0.95)" }} />
+          <Tooltip.Arrow style={{ fill: "#141821" }} />
         </Tooltip.Content>
       </Tooltip.Portal>
     </Tooltip.Root>
@@ -65,80 +69,27 @@ function SideTooltip({ label, collapsed, children }) {
 
 // ── Item de navegação ──────────────────────────────────────────────────────────
 function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge }) {
-  const baseStyle = {
-    display: "flex",
-    alignItems: "center",
-    gap: collapsed ? 0 : "10px",
-    justifyContent: collapsed ? "center" : "flex-start",
-    width: "100%",
-    padding: collapsed ? "8px" : "8px 10px",
-    borderRadius: "6px",
-    fontSize: "13px",
-    fontWeight: 500,
-    cursor: "pointer",
-    textDecoration: "none",
-    background: active ? S.active : "transparent",
-    color: active ? S.textActive : S.text,
-    border: "none",
-    boxShadow: "none",
-    transform: "none",
-    transition: "background 0.15s, color 0.15s",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textAlign: "left",
-  };
-
-  function handleMouseEnter(e) {
-    if (!active) {
-      e.currentTarget.style.background = S.hover;
-      e.currentTarget.style.color = S.textActive;
-    }
-  }
-  function handleMouseLeave(e) {
-    if (!active) {
-      e.currentTarget.style.background = "transparent";
-      e.currentTarget.style.color = S.text;
-    }
-  }
+  const cls = `ds-item${active ? " is-active" : ""}`;
 
   const content = (
     <>
-      <span style={{ display: "flex", flexShrink: 0, color: active ? "#fff" : "currentColor", position: "relative" }}>
+      <span className="ds-item__icon">
         <Icon size={16} weight={active ? "fill" : "regular"} />
-        {collapsed && badge > 0 && (
-          <span style={{ position: "absolute", top: "-4px", right: "-4px", width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444", border: "1.5px solid #0c0f1a" }} />
-        )}
+        {collapsed && badge > 0 ? <span className="ds-item__pip" /> : null}
       </span>
-      {!collapsed && (
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{label}</span>
-      )}
-      {!collapsed && badge > 0 && (
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "18px", height: "18px", padding: "0 5px", borderRadius: "999px", background: "#ef4444", color: "#fff", fontSize: "10px", fontWeight: 700, flexShrink: 0 }}>
-          {badge > 99 ? "99+" : badge}
-        </span>
-      )}
+      {!collapsed ? <span className="ds-item__label">{label}</span> : null}
+      {!collapsed && badge > 0 ? (
+        <span className="ds-item__badge">{badge > 99 ? "99+" : badge}</span>
+      ) : null}
     </>
   );
 
   const el = href ? (
-    <Link
-      to={href}
-      style={baseStyle}
-      target={external ? "_blank" : undefined}
-      rel={external ? "noreferrer" : undefined}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
+    <Link to={href} className={cls} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}>
       {content}
     </Link>
   ) : (
-    <button
-      type="button"
-      style={baseStyle}
-      onClick={onClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
+    <button type="button" className={cls} onClick={onClick}>
       {content}
     </button>
   );
@@ -148,9 +99,9 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 const TOAST_META = {
-  success: { Icon: CheckCircle,   bg: "rgba(16,185,129,0.92)" },
-  error:   { Icon: XCircle,       bg: "rgba(239,68,68,0.92)"  },
-  warning: { Icon: WarningCircle, bg: "rgba(245,158,11,0.92)" },
+  success: { Icon: CheckCircle,   cor: "#10b981" },
+  error:   { Icon: XCircle,       cor: "#ef4444" },
+  warning: { Icon: WarningCircle, cor: "#f59e0b" },
 };
 
 // ── Layout principal ───────────────────────────────────────────────────────────
@@ -223,218 +174,140 @@ export function AdminLayout({ session, onLogout }) {
   }, [tenantSlug, canSeeLeads]);
   useEffect(() => { if (isLeads) setLeadsBadge(0); }, [isLeads]);
 
+  // ── Grupos de navegação ───────────────────────────────────────────────────────
+  // Um grupo só aparece se sobrar algum item depois do filtro de permissões.
+  const grupos = useMemo(() => {
+    const g = [
+      {
+        itens: [{ key: "inicio", Icon: House, label: "Início", active: isDashboard, onClick: () => navigate("/") }],
+      },
+      {
+        label: "IMÓVEIS",
+        itens: cargo?.gerenciarImoveis ? [
+          { key: "imoveis-novo", Icon: Buildings, label: "Gerenciar Imóveis", active: isImovelNovo, onClick: () => navigate("/imoveis/novo") },
+          { key: "imoveis-lista", Icon: SquaresFour, label: "Portfólio Ativo", active: isImovelList || isInsights, onClick: () => navigate("/imoveis") },
+        ] : [],
+      },
+      {
+        label: "RELACIONAMENTO",
+        itens: [
+          cargo?.gerenciarLeads && { key: "leads", Icon: Users, label: "Leads", active: isLeads, onClick: () => navigate("/leads"), badge: leadsBadge },
+          cargo?.gerenciarClientes && { key: "clientes", Icon: UserCircle, label: "Clientes", active: isClientes, onClick: () => navigate("/clientes") },
+        ].filter(Boolean),
+      },
+      {
+        label: "EQUIPE",
+        itens: [
+          cargo?.gerenciarUsuarios && { key: "usuarios", Icon: UserSquare, label: "Usuários", active: isUsuarios, onClick: () => navigate("/usuarios") },
+          cargo?.gerenciarCargos && { key: "cargos", Icon: Shield, label: "Cargos", active: isCargos, onClick: () => navigate("/cargos") },
+        ].filter(Boolean),
+      },
+      {
+        label: "VITRINE",
+        itens: [
+          (cargo?.editarPagina || cargo?.gerenciarUsuarios) && { key: "config", Icon: GearSix, label: "Configurações", active: isConfiguracoes, onClick: () => navigate("/configuracoes") },
+          cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar página", active: isShowcaseEditor, href: showcaseEditorLink },
+          { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver página", href: showcaseLink, external: true },
+        ].filter(Boolean),
+      },
+    ];
+    return g.filter((grupo) => grupo.itens.length > 0);
+  }, [
+    cargo, navigate, leadsBadge, showcaseEditorLink, showcaseLink,
+    isDashboard, isImovelNovo, isImovelList, isInsights, isLeads,
+    isClientes, isUsuarios, isCargos, isConfiguracoes, isShowcaseEditor,
+  ]);
+
   const c = collapsed;
-  const sidebarWidth = c ? 64 : 240;
 
   return (
     <Tooltip.Provider>
-      <div style={{ display: "flex", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}>
+      <style>{CSS}</style>
 
+      <div className="ds-shell">
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-        <aside style={{
-          width: `${sidebarWidth}px`,
-          minWidth: `${sidebarWidth}px`,
-          height: "100vh",
-          position: "sticky",
-          top: 0,
-          display: "flex",
-          flexDirection: "column",
-          background: S.bg,
-          borderRight: `1px solid ${S.border}`,
-          overflowX: "hidden",
-          overflowY: "auto",
-          transition: "width 0.25s cubic-bezier(0.4,0,0.2,1), min-width 0.25s cubic-bezier(0.4,0,0.2,1)",
-          flexShrink: 0,
-          zIndex: 10,
-        }}>
+        <aside className={`ds-side${c ? " is-collapsed" : ""}`}>
 
-          {/* Header da sidebar */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: c ? 0 : "10px",
-            justifyContent: c ? "center" : "flex-start",
-            height: "56px",
-            padding: c ? "0" : "0 14px",
-            borderBottom: `1px solid ${S.border}`,
-            flexShrink: 0,
-          }}>
-            <div style={{
-              width: "28px",
-              height: "28px",
-              borderRadius: "6px",
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
-              background: session?.tenant?.logoUrl ? "transparent" : S.avatarBg,
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: "13px",
-            }}>
+          {/* Header */}
+          <div className="ds-head">
+            <div className={`ds-mark${session?.tenant?.logoUrl ? " has-logo" : ""}`}>
               {session?.tenant?.logoUrl
-                ? <img src={session.tenant.logoUrl} alt={tenantName} style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                ? <img src={session.tenant.logoUrl} alt={tenantName} onError={(e) => { e.currentTarget.style.display = "none"; }} />
                 : tenantName.charAt(0).toUpperCase()}
             </div>
-            {!c && (
-              <span style={{
-                fontSize: "13px",
-                fontWeight: 600,
-                color: S.textActive,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                letterSpacing: "-0.01em",
-              }}>
-                {tenantName}
-              </span>
-            )}
+            {!c ? (
+              <div className="ds-head__text">
+                <span className="ds-head__name">{tenantName}</span>
+                {tenantSlug ? <span className="ds-head__slug">/{tenantSlug}</span> : null}
+              </div>
+            ) : null}
           </div>
 
           {/* Navegação */}
-          <nav style={{ flex: 1, overflowY: "auto", padding: "8px", display: "flex", flexDirection: "column", gap: "2px" }}>
-            <NavItem Icon={House}          label="Início"           active={isDashboard}              onClick={() => navigate("/")}            collapsed={c} />
-
-            {cargo?.gerenciarImoveis && (<>
-              <NavItem Icon={Buildings}    label="Gerenciar Imóveis" active={isImovelNovo}             onClick={() => navigate("/imoveis/novo")} collapsed={c} />
-              <NavItem Icon={SquaresFour}  label="Portfólio Ativo"   active={isImovelList || isInsights} onClick={() => navigate("/imoveis")}   collapsed={c} />
-            </>)}
-
-            {cargo?.gerenciarLeads && (
-              <NavItem Icon={Users}        label="Leads"             active={isLeads}                  onClick={() => navigate("/leads")}       collapsed={c} badge={leadsBadge} />
-            )}
-
-            {cargo?.gerenciarClientes && (
-              <NavItem Icon={UserCircle}   label="Clientes"          active={isClientes}               onClick={() => navigate("/clientes")}    collapsed={c} />
-            )}
-
-            {cargo?.gerenciarUsuarios && (
-              <NavItem Icon={UserSquare}   label="Usuários"          active={isUsuarios}               onClick={() => navigate("/usuarios")}    collapsed={c} />
-            )}
-            {cargo?.gerenciarCargos && (
-              <NavItem Icon={Shield}       label="Cargos"            active={isCargos}                 onClick={() => navigate("/cargos")}      collapsed={c} />
-            )}
-
-            <div style={{ height: "1px", background: S.separator, margin: "6px 4px" }} />
-
-            {(cargo?.editarPagina || cargo?.gerenciarUsuarios) && (
-              <NavItem Icon={GearSix}      label="Configurações"     active={isConfiguracoes}          onClick={() => navigate("/configuracoes")} collapsed={c} />
-            )}
-
-            {cargo?.editarPagina && (
-              <NavItem Icon={PencilSimple} label="Editar página"    active={isShowcaseEditor}         href={showcaseEditorLink}               collapsed={c} />
-            )}
-
-            <NavItem Icon={ArrowSquareOut} label="Ver página"        href={showcaseLink} external      collapsed={c} />
+          <nav className="ds-nav">
+            {grupos.map((grupo, gi) => (
+              <div className="ds-group" key={grupo.label || `g-${gi}`}>
+                {grupo.label ? (
+                  c
+                    ? <span className="ds-group__rule" aria-hidden="true" />
+                    : <span className="ds-group__label">{grupo.label}</span>
+                ) : null}
+                {grupo.itens.map((item) => (
+                  <NavItem
+                    key={item.key}
+                    Icon={item.Icon}
+                    label={item.label}
+                    active={item.active}
+                    onClick={item.onClick}
+                    href={item.href}
+                    external={item.external}
+                    badge={item.badge}
+                    collapsed={c}
+                  />
+                ))}
+              </div>
+            ))}
           </nav>
 
           {/* Rodapé */}
-          <div style={{ padding: "8px", borderTop: `1px solid ${S.border}`, display: "flex", flexDirection: "column", gap: "2px", flexShrink: 0 }}>
-            {/* Toggle colapso */}
-            <SideTooltip label={c ? "Expandir" : ""} collapsed={c}>
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: c ? 0 : "10px",
-                  justifyContent: c ? "center" : "flex-start",
-                  width: "100%",
-                  padding: c ? "8px" : "8px 10px",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  background: "transparent",
-                  color: S.text,
-                  border: "none",
-                  boxShadow: "none",
-                  transform: "none",
-                  transition: "background 0.15s, color 0.15s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = S.hover; e.currentTarget.style.color = S.textActive; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = S.text; }}
-              >
-                <span style={{ display: "flex", flexShrink: 0 }}>
-                  {c ? <CaretRight size={16} /> : <CaretLeft size={16} />}
-                </span>
-                {!c && <span>Recolher menu</span>}
+          <div className="ds-foot">
+            <SideTooltip label="Expandir menu" collapsed={c}>
+              <button type="button" className="ds-item" onClick={toggleCollapsed}>
+                <span className="ds-item__icon">{c ? <CaretRight size={16} /> : <CaretLeft size={16} />}</span>
+                {!c ? <span className="ds-item__label">Recolher menu</span> : null}
               </button>
             </SideTooltip>
 
             <NavItem Icon={SignOut} label="Encerrar Sessão" onClick={onLogout} collapsed={c} />
 
-            {/* Perfil */}
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              justifyContent: c ? "center" : "flex-start",
-              padding: c ? "8px" : "8px 10px",
-              marginTop: "2px",
-            }}>
-              <div style={{
-                width: "24px",
-                height: "24px",
-                borderRadius: "50%",
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: S.avatarBg,
-                color: "#fff",
-                fontSize: "11px",
-                fontWeight: 700,
-              }}>
-                {userInitial}
-              </div>
-              {!c && (
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: "12px", fontWeight: 500, color: S.textActive, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 }}>{userName}</p>
-                  <p style={{ margin: "1px 0 0", fontSize: "11px", color: S.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 }}>{userRole}</p>
+            <div className="ds-profile">
+              <div className="ds-avatar">{userInitial}</div>
+              {!c ? (
+                <div className="ds-profile__text">
+                  <span className="ds-profile__name">{userName}</span>
+                  <span className="ds-profile__role">{userRole}</span>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </aside>
 
         {/* ── Conteúdo principal ───────────────────────────────────────────────── */}
-        <main
-          className={isShowcaseEditor ? "main-content--editor-vitrine" : "main-content"}
-          style={{ flex: 1, minWidth: 0 }}
-        >
+        <main className={isShowcaseEditor ? "main-content--editor-vitrine" : "main-content"} style={{ flex: 1, minWidth: 0 }}>
           <div key={location.pathname} style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}>
             <Outlet context={{ showToast }} />
           </div>
         </main>
 
         {/* ── Toasts ───────────────────────────────────────────────────────────── */}
-        <div style={{ position: "fixed", bottom: "24px", right: "24px", zIndex: 99999, display: "flex", flexDirection: "column", gap: "8px", pointerEvents: "none" }}>
+        <div className="ds-toasts">
           {toasts.map((toast) => {
             const meta = TOAST_META[toast.type] ?? TOAST_META.success;
             return (
-              <div
-                key={toast.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  padding: "12px 16px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "#fff",
-                  background: meta.bg,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  maxWidth: "360px",
-                  pointerEvents: "auto",
-                  animation: "toastIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards",
-                }}
-              >
-                <meta.Icon size={15} weight="fill" />
+              <div key={toast.id} className="ds-toast">
+                <span className="ds-toast__icon" style={{ color: meta.cor }}>
+                  <meta.Icon size={15} weight="fill" />
+                </span>
                 <span>{toast.message}</span>
               </div>
             );
@@ -444,3 +317,155 @@ export function AdminLayout({ session, onLogout }) {
     </Tooltip.Provider>
   );
 }
+
+/* ── Estilos da sidebar ──────────────────────────────────────────────────────
+   Escopados em `.ds-*`. A paleta é a mesma de antes; o que mudou foi a
+   linguagem: raio de 10px, borda de acento no item ativo, labels de grupo em
+   mono e hairlines no lugar dos separadores sólidos.
+   ────────────────────────────────────────────────────────────────────────── */
+
+const CSS = `
+.ds-shell {
+  --s-bg: #0c0f1a;
+  --s-border: rgba(255,255,255,0.07);
+  --s-sep: rgba(255,255,255,0.06);
+  --s-text: #64748b;
+  --s-strong: #f1f5f9;
+  --s-hover: rgba(255,255,255,0.05);
+  --s-active: rgba(129,140,248,0.10);
+  --s-accent: #818cf8;
+  --s-avatar: #4f46e5;
+  --s-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  display: flex; min-height: 100vh;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+}
+
+.ds-side {
+  width: 240px; min-width: 240px;
+  height: 100vh; position: sticky; top: 0; z-index: 10; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  background: var(--s-bg);
+  border-right: 1px solid var(--s-border);
+  overflow-x: hidden; overflow-y: auto;
+  transition: width 0.25s cubic-bezier(0.4,0,0.2,1), min-width 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+.ds-side.is-collapsed { width: 64px; min-width: 64px; }
+
+/* ── Header ── */
+.ds-head {
+  display: flex; align-items: center; gap: 10px;
+  height: 56px; padding: 0 14px; flex-shrink: 0;
+  border-bottom: 1px solid var(--s-border);
+}
+.ds-side.is-collapsed .ds-head { justify-content: center; padding: 0; gap: 0; }
+.ds-mark {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--s-avatar); color: #fff; font-weight: 700; font-size: 13px;
+}
+.ds-mark.has-logo { background: transparent; }
+.ds-mark img { width: 100%; height: 100%; object-fit: contain; }
+.ds-head__text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ds-head__name {
+  font-size: 13px; font-weight: 600; color: var(--s-strong); letter-spacing: -0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-head__slug {
+  font-family: var(--s-mono); font-size: 8.5px; letter-spacing: 0.08em;
+  color: var(--s-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Navegação ── */
+.ds-nav { flex: 1; overflow-y: auto; padding: 10px 8px; display: flex; flex-direction: column; gap: 12px; }
+.ds-group { display: flex; flex-direction: column; gap: 2px; }
+.ds-group__label {
+  font-family: var(--s-mono); font-size: 8.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: #475569; font-weight: 500;
+  padding: 4px 10px 5px;
+}
+.ds-group__rule { height: 1px; background: var(--s-sep); margin: 4px 6px 5px; }
+
+.ds-shell .ds-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 10px; border-radius: 10px;
+  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left;
+  color: var(--s-text); background: transparent;
+  border: 1px solid transparent; box-shadow: none; transform: none;
+  cursor: pointer; text-decoration: none; white-space: nowrap; overflow: hidden;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.ds-shell .ds-item:hover {
+  background: var(--s-hover); color: var(--s-strong);
+  box-shadow: none; transform: none; border-color: transparent;
+}
+.ds-shell .ds-item.is-active {
+  background: var(--s-active); color: var(--s-strong);
+  border-color: rgba(129,140,248,0.26);
+}
+.ds-side.is-collapsed .ds-item { justify-content: center; padding: 8px; gap: 0; }
+
+.ds-item__icon { display: flex; flex-shrink: 0; position: relative; color: currentColor; }
+.ds-item.is-active .ds-item__icon { color: #fff; }
+.ds-item__label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.ds-item__pip {
+  position: absolute; top: -4px; right: -4px; width: 8px; height: 8px;
+  border-radius: 50%; background: #ef4444; border: 1.5px solid var(--s-bg);
+}
+.ds-item__badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0;
+}
+
+/* ── Rodapé ── */
+.ds-foot {
+  padding: 8px; flex-shrink: 0;
+  border-top: 1px solid var(--s-border);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ds-profile {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; margin-top: 4px;
+  border-top: 1px solid var(--s-sep);
+}
+.ds-side.is-collapsed .ds-profile { justify-content: center; padding: 10px 8px; }
+.ds-avatar {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--s-avatar); color: #fff; font-size: 11px; font-weight: 700;
+}
+.ds-profile__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ds-profile__name {
+  font-size: 12px; font-weight: 600; color: var(--s-strong); line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-profile__role {
+  font-family: var(--s-mono); font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--s-text); line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Toasts ── */
+.ds-toasts {
+  position: fixed; bottom: 24px; right: 24px; z-index: 99999;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.ds-toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; border-radius: 12px; max-width: 360px;
+  font-size: 13px; font-weight: 500; color: var(--s-strong);
+  background: rgba(20,24,33,0.92);
+  backdrop-filter: blur(14px) saturate(150%); -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 20px 48px -18px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.06);
+  pointer-events: auto;
+  animation: toastIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.ds-toast__icon { display: flex; flex-shrink: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-side { transition: none; }
+  .ds-toast { animation: none; }
+}
+`;

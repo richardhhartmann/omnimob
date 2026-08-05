@@ -5,6 +5,7 @@ import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
 import { Panorama360 } from "../components/Panorama360";
 import { comodidadesAtivas } from "../utils/comodidades";
+import { tipoContratoInfo } from "../utils/tiposContrato";
 import { loadShowcaseFonts, getCachedTenant, setCachedTenant } from "../utils/showcaseFonts";
 
 const IcPin  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
@@ -155,6 +156,7 @@ export function ShowcasePropertyPage() {
     : null;
 
   const andamentoLabel = { PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" }[property?.andamento];
+  const contratoInfo = tipoContratoInfo(property?.tipoContrato);
   const lancamento = isLancamento(property?.createdAt);
 
   const stat = (icon, label, value) => value ? (
@@ -251,6 +253,7 @@ export function ShowcasePropertyPage() {
 
                 {/* Badges */}
                 <div style={{ position: "absolute", top: "16px", left: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {contratoInfo && <span title={contratoInfo.descricao} style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.06em", color: "#fff", background: contratoInfo.cor, padding: "4px 12px", borderRadius: "999px", boxShadow: `0 2px 10px ${contratoInfo.cor}80` }}>{contratoInfo.label}</span>}
                   {lancamento && <span style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.06em", color: "#fff", background: "linear-gradient(135deg,#f59e0b,#ef4444)", padding: "4px 12px", borderRadius: "999px", boxShadow: "0 2px 10px rgba(245,158,11,0.5)" }}>✦ Lançamento</span>}
                   {andamentoLabel && <span style={{ fontSize: "11px", fontWeight: "700", color: "#fff", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", padding: "4px 12px", borderRadius: "999px" }}>{andamentoLabel}</span>}
                   {property.aceitaPermuta && <span style={{ fontSize: "11px", fontWeight: "700", color: "#fff", background: "rgba(99,102,241,0.85)", backdropFilter: "blur(6px)", padding: "4px 12px", borderRadius: "999px" }}>✓ Aceita permuta</span>}

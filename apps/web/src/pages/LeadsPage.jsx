@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useConfirm } from "../components/ConfirmModal";
+import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 
 function formatDate(iso) {
@@ -275,14 +276,22 @@ export function LeadsPage({ session }) {
             style={{ ...inputStyle, paddingLeft: "36px" }}
           />
         </div>
-        <select value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)} style={{ ...inputStyle, width: "auto", minWidth: "180px", cursor: "pointer" }}>
-          <option value="">Todos os imóveis</option>
-          {properties.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-        </select>
-        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} style={{ ...inputStyle, width: "auto", cursor: "pointer" }}>
-          <option value="recent">Mais recentes</option>
-          <option value="old">Mais antigos</option>
-        </select>
+        <SelectCustom
+          value={propertyFilter}
+          placeholder="Todos os imóveis"
+          style={{ minWidth: "200px", maxWidth: "260px" }}
+          options={[{ value: "", label: "Todos os imóveis" }, ...properties.map((p) => ({ value: p.id, label: p.title }))]}
+          onChange={setPropertyFilter}
+        />
+        <SelectCustom
+          value={sortOrder}
+          style={{ minWidth: "160px" }}
+          options={[
+            { value: "recent", label: "Mais recentes" },
+            { value: "old", label: "Mais antigos" },
+          ]}
+          onChange={setSortOrder}
+        />
         {/* Filtro de contato */}
         <div style={{ display: "flex", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "3px", border: "1px solid rgba(255,255,255,0.08)" }}>
           {[

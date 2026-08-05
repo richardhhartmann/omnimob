@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { comodidadesAtivas } from "../utils/comodidades";
+import { tipoContratoInfo, tipoContratoLabel } from "../utils/tiposContrato";
 import { Panorama360 } from "../components/Panorama360";
 
 const STATUS_LABEL = { ACTIVE: "Ativo", INACTIVE: "Inativo", DRAFT: "Rascunho" };
@@ -283,6 +284,7 @@ export function PropertyInsightsPage({ session }) {
 
   // Linhas do bloco "Detalhes do Ativo" (só as que têm valor)
   const detalhes = property ? [
+    ["Tipo de contrato", tipoContratoLabel(property.tipoContrato)],
     ["Finalidade", FINALIDADE_LABEL[property.finalidade] || "—"],
     ["Tipo", property.propertyType || property.tipoImovel?.descricao || "—"],
     property.andamento ? ["Andamento", ANDAMENTO_LABEL[property.andamento]] : null,
@@ -347,6 +349,14 @@ export function PropertyInsightsPage({ session }) {
               <span style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.06em", color: STATUS_COLOR[status], background: `${STATUS_COLOR[status]}18`, padding: "3px 10px", borderRadius: "999px" }}>
                 {STATUS_LABEL[status]}
               </span>
+              {tipoContratoInfo(property?.tipoContrato) && (
+                <span
+                  title={tipoContratoInfo(property.tipoContrato).descricao}
+                  style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: tipoContratoInfo(property.tipoContrato).cor, background: `${tipoContratoInfo(property.tipoContrato).cor}1f`, border: `1px solid ${tipoContratoInfo(property.tipoContrato).cor}59`, padding: "3px 10px", borderRadius: "999px" }}
+                >
+                  {tipoContratoInfo(property.tipoContrato).label}
+                </span>
+              )}
               {property?.finalidade && (
                 <span style={{ fontSize: "10px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", color: "#a5b4fc", background: "rgba(99,102,241,0.15)", padding: "3px 10px", borderRadius: "999px" }}>
                   {FINALIDADE_LABEL[property.finalidade]}
