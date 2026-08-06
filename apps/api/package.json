@@ -14,7 +14,9 @@
     "prisma:baseline": "prisma migrate resolve --applied 0_init",
     "prisma:push": "prisma db push --skip-generate",
     "prisma:seed": "node prisma/seed.js",
-    "prisma:seed:dev": "node prisma/seed.js --dev"
+    "prisma:seed:dev": "node prisma/seed.js --dev",
+    "faxina": "node scripts/faxina.js",
+    "stripe:limpar": "node scripts/stripe-limpar.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

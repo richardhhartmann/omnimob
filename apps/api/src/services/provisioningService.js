@@ -95,6 +95,10 @@ export async function provisionTenant(input = {}) {
             tenantId: tenant.id,
             cargoCodigo: cargo.id,
             ativo: true,
+            /* A senha inicial é gerada por nós e trafega por e-mail — ou seja,
+               fica registrada na caixa de entrada de alguém. Obrigar a troca no
+               primeiro acesso encerra a validade dela ali mesmo. */
+            forcaAlterarSenha: true,
           },
         });
         adminCreated = true;

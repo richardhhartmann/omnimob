@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import { prisma } from "../db.js";
 import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
 import { provisionTenant } from "../services/provisioningService.js";
+import { limparTrials, fidelizarTrial } from "../services/trialService.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
 
@@ -131,5 +132,40 @@ adminRouter.delete("/tenants/:id", async (req, res) => {
   } catch (err) {
     console.error("[DELETE /admin/tenants/:id]", err);
     res.status(500).json({ error: "Erro ao excluir tenant.", detail: err.message });
+  }
+});
+
+/* ── Trials ──────────────────────────────────────────────────────────────────
+   Faxina dos testes vencidos. O padrão é ENSAIO: só relata o que seria feito.
+   A remoção é irreversível e cascateia para imóveis, fotos, leads e usuários,
+   então exige `aplicar: true` explícito no corpo. Enquanto não houver agendador
+   no projeto, isto é chamado à mão — e depois é só pendurar num cron. */
+adminRouter.post("/trials/faxina", async (req, res) => {
+  try {
+    const aplicar = req.body?.aplicar === true;
+    const resultado = await limparTrials({ aplicar });
+    res.json({
+      aplicado: resultado.aplicado,
+      totalDesativados: resultado.desativados.length,
+      totalRemovidos: resultado.removidos.length,
+      desativados: resultado.desativados,
+      removidos: resultado.removidos,
+    });
+  } catch (err) {
+    console.error("[POST /admin/trials/faxina]", err);
+    res.status(500).json({ error: "Erro na faxina de trials.", detail: err.message });
+  }
+});
+
+// Converte um teste em cliente pagante. Nenhum dado se move: o tenant já vive
+// no lugar definitivo desde que nasceu.
+adminRouter.post("/tenants/:id/fidelizar", async (req, res) => {
+  try {
+    const { plano, valorMensal, proximoVencimento } = req.body || {};
+    const tenant = await fidelizarTrial(req.params.id, { plano, valorMensal, proximoVencimento });
+    res.json({ tenant });
+  } catch (err) {
+    console.error("[POST /admin/tenants/:id/fidelizar]", err);
+    res.status(500).json({ error: "Erro ao fidelizar tenant.", detail: err.message });
   }
 });

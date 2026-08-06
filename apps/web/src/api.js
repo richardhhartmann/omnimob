@@ -363,6 +363,52 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // Situação do teste do tenant logado (dias restantes + o que ele já criou).
+  getTrialStatus: (tenantSlug) =>
+    request("/api/tenants/me/trial", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  // Converte o teste em assinatura. `tokenPagamento` vem do provedor, gerado
+  // no navegador — o número do cartão nunca passa pela nossa API.
+  assinarPlano: (tenantSlug, payload = {}) =>
+    request("/api/tenants/me/assinar", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  // Interesse comercial pela própria Domus (landing), antes de existir tenant.
+  enviarInteresseDomus: (payload = {}) =>
+    request("/public/interesse", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // Preços vigentes dos planos, lidos do provedor de pagamento. Público: a
+  // landing precisa deles antes de existir qualquer sessão.
+  getPlanosPublicos: () => request("/public/planos"),
+
+  // Teste grátis, etapa 1: dispara o link mágico de confirmação por e-mail.
+  criarTrialDomus: (payload = {}) =>
+    request("/public/trial", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // Assinatura direta pela landing: cria a conta já paga, sem passar pelo teste.
+  assinarDireto: (payload = {}) =>
+    request("/public/assinar", { method: "POST", body: JSON.stringify(payload) }),
+
+  // Link do e-mail de quem assinou direto: devolve o acesso e o plano.
+  confirmarAssinaturaDireta: (payload = {}) =>
+    request("/public/assinatura/confirmar", { method: "POST", body: JSON.stringify(payload) }),
+
+  // Teste grátis, etapa 2: o token do e-mail vira um tenant de verdade.
+  confirmarTrialDomus: (payload = {}) =>
+    request("/public/trial/confirmar", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ─── Super-admin (painel da Domus) — usa token próprio ─────────────────────────

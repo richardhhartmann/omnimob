@@ -24,3 +24,21 @@ export const requirePlanoIA = requirePlano(2, "Premium");
 export function planoPermiteTour360(plano) {
   return nivelDoPlano(plano) >= 1;
 }
+
+/* Nome e o que cada plano libera — para textos voltados ao cliente (e-mail de
+   confirmação, por exemplo). Espelha PLANOS em apps/web/src/utils/planos.js;
+   as regras de liberação continuam sendo as do nível, acima. */
+const NOME = { BASICO: "Básico", PROFISSIONAL: "Profissional", PREMIUM: "Premium" };
+
+export function planoInfo(plano) {
+  const chave = String(plano || "").toUpperCase();
+  const nivel = nivelDoPlano(chave);
+  return {
+    chave: NOME[chave] ? chave : "BASICO",
+    nome: NOME[chave] || NOME.BASICO,
+    nivel,
+    redes: nivel >= 1,
+    tour360: nivel >= 1,
+    ia: nivel >= 2,
+  };
+}

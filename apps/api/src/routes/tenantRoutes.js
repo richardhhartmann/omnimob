@@ -4,6 +4,11 @@ import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
+import { criarAssinatura, precosDosPlanos } from "../services/pagamentoService.js";
+import { fidelizarTrial } from "../services/trialService.js";
+import { sendEmail } from "../services/notificationService.js";
+import { emailAssinaturaConfirmada } from "../services/emailTemplates.js";
+import { planoInfo } from "../middlewares/planoMiddleware.js";
 
 export const tenantRouter = Router();
 
@@ -78,3 +83,160 @@ tenantRouter.put("/me", requireAuth, requireTenant, requirePermissao("editarPagi
     return res.status(500).json({ error: "Erro ao atualizar perfil do tenant." });
   }
 });
+
+/* ── Trial: situação e conversão ─────────────────────────────────────────────
+   Alimenta o aviso de trial no painel e executa a assinatura.
+
+   COMO SEPARAMOS O QUE É DEMONSTRAÇÃO DO QUE O CLIENTE FEZ: o povoamento de
+   demonstração acontece na criação do tenant, em segundos. Então tudo que
+   nasceu depois de uma janela curta a partir de `tenant.createdAt` é obra do
+   próprio cliente. É heurística, mas não exige coluna nova (nem migração) e
+   não quebra se ele editar um registro de exemplo — `createdAt` não muda.
+
+   Cargos ficam de fora da conta de propósito: no schema atual `Cargo` não tem
+   `tenantId`, é global. Contar como perda do cliente seria mentira. */
+const JANELA_DEMO_MS = 90 * 1000;
+
+tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.tenant.id },
+      select: {
+        id: true, name: true, plano: true, statusPagamento: true, valorMensal: true,
+        proximoVencimento: true, createdAt: true, showcaseConfig: true,
+      },
+    });
+    if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+    const emTrial = tenant.statusPagamento === "TRIAL";
+    const corte = new Date(tenant.createdAt.getTime() + JANELA_DEMO_MS);
+    const depoisDoCorte = { tenantId: tenant.id, createdAt: { gt: corte } };
+
+    const [imoveis, clientes, usuarios, leads, fotos] = await Promise.all([
+      prisma.property.count({ where: depoisDoCorte }),
+      prisma.cliente.count({ where: depoisDoCorte }),
+      prisma.usuario.count({ where: depoisDoCorte }),
+      prisma.propertyLead.count({ where: depoisDoCorte }),
+      prisma.propertyImage.count({ where: depoisDoCorte }),
+    ]);
+
+    // Quais planos dá para assinar agora, com o preço que está valendo no
+    // provedor. Sem isso a tela ofereceria plano que a cobrança recusa.
+    const precos = await precosDosPlanos();
+
+    const expiraEm = tenant.proximoVencimento;
+    const diasRestantes = expiraEm
+      ? Math.max(0, Math.ceil((expiraEm.getTime() - Date.now()) / 86400000))
+      : null;
+
+    /* Gatilho das boas-vindas no painel. Só diz que a assinatura está ativa —
+       QUANDO ela começou o schema não guarda, e quem "assina" pode ter testado
+       antes por semanas, então a idade do tenant não serve de pista.
+
+       Quem garante que o modal aparece uma vez só é o cliente, com uma marca no
+       navegador. É deliberado: gravar isso no servidor pediria coluna nova (e
+       migração) para um detalhe de interface. O preço é que um cliente antigo
+       abrindo em outra máquina veria uma boas-vindas fora de hora — some assim
+       que existir um `assinadoEm` de verdade. */
+    const assinaturaAtiva = tenant.statusPagamento === "EM_DIA";
+
+    return res.json({
+      emTrial,
+      assinaturaAtiva,
+      nomeTenant: tenant.name,
+      valorMensal: tenant.valorMensal ? Number(tenant.valorMensal) : null,
+      plano: tenant.plano,
+      expiraEm,
+      diasRestantes,
+      precos,
+      inventario: {
+        imoveis, clientes, usuarios, leads, fotos,
+        vitrinePersonalizada: Boolean(tenant.showcaseConfig),
+      },
+    });
+  } catch (err) {
+    console.error("[GET /tenants/me/trial]", err);
+    return res.status(500).json({ error: "Erro ao carregar situação do teste." });
+  }
+});
+
+tenantRouter.post(
+  "/me/assinar",
+  requireAuth,
+  requireTenant,
+  requirePermissao("gerenciarUsuarios"),
+  async (req, res) => {
+    const { plano, tokenPagamento } = req.body || {};
+    if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
+      return res.status(400).json({ error: "Plano inválido." });
+    }
+
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.tenant.id } });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      const assinatura = await criarAssinatura({ tenant, plano, tokenPagamento });
+
+      const atualizado = await fidelizarTrial(tenant.id, {
+        plano,
+        valorMensal: assinatura.valorMensal,
+        proximoVencimento: assinatura.proximoVencimento,
+      });
+
+      /* Confirmação por escrito: a tela de comemoração some quando a pessoa
+         fecha, e ela precisa ter em algum lugar o que contratou e quando cai a
+         próxima cobrança. Falha de envio não desfaz a assinatura — já foi
+         cobrada —, então só registramos. */
+      if (tenant.email) {
+        const corte = new Date(tenant.createdAt.getTime() + JANELA_DEMO_MS);
+        const depois = { tenantId: tenant.id, createdAt: { gt: corte } };
+        const [imoveis, clientes, usuarios, leads, fotos] = await Promise.all([
+          prisma.property.count({ where: depois }),
+          prisma.cliente.count({ where: depois }),
+          prisma.usuario.count({ where: depois }),
+          prisma.propertyLead.count({ where: depois }),
+          prisma.propertyImage.count({ where: depois }),
+        ]);
+        const info = planoInfo(plano);
+        const modelo = emailAssinaturaConfirmada({
+          imobiliaria: tenant.name,
+          plano: info?.nome || plano,
+          valorRotulo: assinatura.valorMensal
+            ? `R$ ${assinatura.valorMensal.toFixed(2).replace(".", ",")}/mês`
+            : "conforme contratado",
+          proximaCobranca: assinatura.proximoVencimento
+            ? assinatura.proximoVencimento.toLocaleDateString("pt-BR")
+            : "",
+          inventario: { imoveis, clientes, usuarios, leads, fotos },
+          recursos: [
+            "Imóveis, vitrine, leads, clientes e equipe sem limite de uso",
+            info?.redes && "Publicação em Facebook, Instagram e WhatsApp",
+            info?.tour360 && "Tour virtual 360° nos imóveis",
+            info?.ia && "Descrição, título e legendas gerados por IA",
+          ].filter(Boolean),
+          base: (process.env.APP_URL || "").replace(/\/+$/, ""),
+          slug: tenant.slug,
+        });
+        await sendEmail({
+          to: tenant.email,
+          subject: modelo.subject,
+          body: modelo.body,
+          html: modelo.html,
+        }).catch((e) => console.error("[assinar] e-mail de confirmação falhou:", e.message));
+      }
+
+      return res.json({ tenant: atualizado, assinaturaId: assinatura.assinaturaId });
+    } catch (err) {
+      // Falta de provedor e plano sob consulta não são erro do cliente: são
+      // caminhos previstos, e a interface oferece falar com o time.
+      if (err.code === "PROVEDOR_NAO_CONFIGURADO" || err.code === "PLANO_SOB_CONSULTA") {
+        return res.status(503).json({ error: err.message, code: err.code });
+      }
+      if (err.code === "TOKEN_AUSENTE" || err.code === "RECUSADO") {
+        return res.status(402).json({ error: err.message, code: err.code });
+      }
+      console.error("[POST /tenants/me/assinar]", err);
+      return res.status(500).json({ error: "Erro ao processar a assinatura." });
+    }
+  },
+);

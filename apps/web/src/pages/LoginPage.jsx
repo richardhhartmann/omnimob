@@ -150,11 +150,10 @@ function DefinirSenhaCard({ alvo, onConcluir, onCancelar }) {
       eyebrow="PRIMEIRO ACESSO"
       strong="Defina sua"
       soft="senha para continuar."
-      descricao={<>Primeiro acesso de <strong>{alvo.login}</strong>. Crie uma senha com ao menos 6 caracteres.</>}
       onSubmit={handleSubmit}
       error={error}
       saindo={saindo}
-      nota="// a senha fica salva com hash; ninguém da equipe consegue lê-la"
+      nota="// a senha fica salva com hash; absolutamente ninguém consegue vê-la"
     >
       <Field label="Nova senha" hint="Mínimo de 6 caracteres.">
         <input

@@ -9,6 +9,7 @@ import { PropertyInsightsPage } from "./pages/PropertyInsightsPage";
 import { ShowcaseEditorPage } from "./pages/ShowcaseEditorPage";
 import { ShowcasePropertyPage } from "./pages/ShowcasePropertyPage";
 import { ShowcasePage } from "./pages/ShowcasePage";
+import { TrialConfirmarPage } from "./pages/TrialConfirmarPage";
 import { AdminLayout } from "./components/AdminLayout";
 import { CargosPage } from "./pages/CargosPage";
 import { ClientesPage } from "./pages/ClientesPage";
@@ -136,6 +137,9 @@ export default function App() {
           session ? <Navigate to={canAccessTenantPanel ? "/" : defaultPublicPath} replace /> : <LoginPage onLogin={handleLogin} />
         }
       />
+      {/* Destino do link mágico do teste grátis: público e sem sessão. */}
+      <Route path="/comecar" element={<TrialConfirmarPage />} />
+
       <Route path="/vitrine/:tenantSlug" element={<ShowcasePage />} />
       <Route path="/vitrine/:tenantSlug/imovel/:propertyId" element={<ShowcasePropertyPage />} />
 

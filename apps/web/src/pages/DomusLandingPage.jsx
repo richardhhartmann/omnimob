@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import FOG from "vanta/dist/vanta.fog.min";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Buildings,
@@ -7,9 +9,21 @@ import {
   Megaphone,
   UsersThree,
   ShieldCheck,
+  FacebookLogo,
+  InstagramLogo,
+  WhatsappLogo,
+  CloudArrowUp,
+  Sparkle,
+  Globe,
+  ChatCircleText,
 } from "@phosphor-icons/react";
+import { api } from "../api";
+import { DomusSplash } from "../components/DomusSplash";
+import { PlanoModal } from "../components/PlanoModal";
+import { TrialModal } from "../components/TrialModal";
 import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
 import {
+  ACCENT,
   ACCENT_SOFT,
   GOLD,
   MINT,
@@ -94,14 +108,160 @@ const JORNADA = [
 
 // Ícones do mesmo conjunto (Phosphor) usado na sidebar do painel — nada de
 // emoji, que renderiza com a fonte do sistema e destoa entre Windows e Mac.
+// `tela`, `url` e `legenda` alimentam o mock ao lado: cada recurso mostra a
+// parte do produto de que está falando.
 const RECURSOS = [
-  { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar." },
-  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito." },
-  { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel." },
-  { Icon: Megaphone, title: "Publicação em redes", desc: "Divulgue imóveis no Facebook, Instagram e WhatsApp com legenda pronta em poucos cliques." },
-  { Icon: UsersThree, title: "Usuários e permissões", desc: "Crie cargos com permissões granulares para corretores, marketing, gerência e mais." },
-  { Icon: ShieldCheck, title: "Multi-tenant seguro", desc: "Cada imobiliária com seus próprios dados, usuários e vitrine — isolados e seguros." },
+  { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar.", tela: "imoveis", url: "domus.app / imóveis", legenda: "PAINEL WEB · IMÓVEIS" },
+  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "suaimobiliaria.domus.app", legenda: "VITRINE PÚBLICA · AO VIVO" },
+  { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel.", tela: "metricas", url: "domus.app / métricas", legenda: "PAINEL WEB · MÉTRICAS" },
+  { Icon: Megaphone, title: "Publicação em redes", desc: "Divulgue imóveis no Facebook, Instagram e WhatsApp com legenda pronta em poucos cliques.", tela: "redes", url: "domus.app / publicações", legenda: "PAINEL WEB · PUBLICAÇÕES" },
+  { Icon: UsersThree, title: "Usuários e permissões", desc: "Crie cargos com permissões granulares para corretores, marketing, gerência e mais.", tela: "usuarios", url: "domus.app / usuários", legenda: "PAINEL WEB · EQUIPE" },
+  { Icon: ShieldCheck, title: "Multi-tenant seguro", desc: "Cada imobiliária com seus próprios dados, usuários e vitrine — isolados e seguros.", tela: "tenants", url: "domus.app / admin", legenda: "SUPER-ADMIN · TENANTS" },
 ];
+
+// De quantos em quantos milissegundos o carrossel avança sozinho.
+const RECURSO_INTERVALO = 3000;
+
+/* Os três previews da tela de publicações. Cores e degradês são os mesmos do
+   passo "Divulgar" do cadastro (PropertyForm), para a landing e o produto
+   falarem a mesma língua. `de` é de onde o card entra: os laterais vêm do
+   centro, simulando o card único que se divide em três. */
+const REDES = [
+  {
+    nome: "FACEBOOK", Icon: FacebookLogo, raio: "8px", de: "62%",
+    cor: "#1877f2",
+    anel: "linear-gradient(115deg,#1877f2,#4293ff,#0a58ca,#3b82f6,#1877f2)",
+    brilho: "rgba(24,119,242,0.45)",
+  },
+  {
+    nome: "INSTAGRAM", Icon: InstagramLogo, raio: "8px", de: "0%",
+    cor: "linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",
+    anel: "linear-gradient(115deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888,#f09433)",
+    brilho: "rgba(220,39,67,0.42)",
+  },
+  {
+    nome: "WHATSAPP", Icon: WhatsappLogo, raio: "50%", de: "-62%",
+    cor: "#25d366",
+    anel: "linear-gradient(115deg,#25d366,#128c7e,#34e07a,#25d366)",
+    brilho: "rgba(37,211,102,0.42)",
+  },
+];
+
+/* ── Editor ao vivo ──────────────────────────────────────────────────────────
+   O mock da seção do editor mostra um ponteiro rearranjando os blocos da
+   vitrine, em laço. Em vez de escrever os keyframes na mão (seis blocos × seis
+   movimentos = muita coordenada para manter à mão e fácil de dessincronizar),
+   os passos abaixo descrevem só o LAYOUT de cada momento e o CSS sai calculado
+   daí — inclusive o caminho do ponteiro, que é sempre o centro do bloco que
+   está sendo levado.
+
+   Cada passo é a vitrine inteira: linhas empilhadas, com um ou dois blocos
+   dividindo a largura. `arrasta` é o bloco que o ponteiro leva ao sair deste
+   passo para o próximo. O último passo volta ao primeiro, então o laço fecha
+   sem salto. ──────────────────────────────────────────────────────────────── */
+
+// Sem rótulo dentro: os blocos são só volumes, como as miniaturas do mockup.
+const EDITOR_BLOCOS = ["header", "titulo", "destaques", "imoveis", "widgets", "rodape"];
+
+/* Quantas silhuetas cada bloco tem por dentro. O arranjo delas (grade, coluna,
+   fila) fica no CSS de cada modificador — aqui só a contagem, porque é o que
+   muda de bloco para bloco:
+     header    marca + três itens de menu
+     titulo    uma chamada e uma linha de apoio
+     destaques três cartões lado a lado
+     imoveis   grade de seis cartões de imóvel
+     widgets   dois painéis
+     rodape    três links */
+const EDITOR_MIOLO = { header: 4, titulo: 2, destaques: 3, imoveis: 6, widgets: 2, rodape: 3 };
+
+// Peso de altura de cada bloco; a altura da linha é a do bloco mais alto dela.
+const EDITOR_PESO = { header: 1, titulo: 0.8, destaques: 1.5, imoveis: 1.5, widgets: 1.5, rodape: 0.7 };
+
+const EDITOR_PASSOS = [
+  { arrasta: "destaques", linhas: [["header"], ["titulo"], ["destaques", "imoveis"], ["widgets"], ["rodape"]] },
+  { arrasta: "titulo", linhas: [["header"], ["titulo"], ["imoveis", "destaques"], ["widgets"], ["rodape"]] },
+  { arrasta: "rodape", linhas: [["header"], ["imoveis", "destaques"], ["titulo"], ["widgets"], ["rodape"]] },
+  { arrasta: "titulo", linhas: [["header"], ["imoveis", "destaques"], ["titulo"], ["widgets", "rodape"]] },
+  { arrasta: "rodape", linhas: [["header"], ["titulo"], ["imoveis", "destaques"], ["widgets", "rodape"]] },
+  { arrasta: "destaques", linhas: [["header"], ["titulo"], ["imoveis", "destaques"], ["widgets"], ["rodape"]] },
+];
+
+const EDITOR_VAO = 4; // respiro entre blocos, em % da caixa
+const EDITOR_FATIA = 100 / EDITOR_PASSOS.length; // fatia da linha do tempo por movimento
+const EDITOR_PEGA = 0.3; // instante em que o ponteiro alcança o bloco
+const EDITOR_SOLTA = 0.72; // instante em que o bloco chega ao destino
+const EDITOR_ASSENTA = 0.06; // sobra depois de soltar, para o bloco assentar
+
+// Converte um passo (linhas) em caixas x/y/largura/altura, tudo em %.
+function editorPosicoes(linhas) {
+  const alturas = linhas.map((linha) => Math.max(...linha.map((id) => EDITOR_PESO[id])));
+  const soma = alturas.reduce((a, b) => a + b, 0);
+  const escala = (100 - EDITOR_VAO * (linhas.length - 1)) / soma;
+  const pos = {};
+  let y = 0;
+  linhas.forEach((linha, i) => {
+    const h = alturas[i] * escala;
+    const w = (100 - EDITOR_VAO * (linha.length - 1)) / linha.length;
+    linha.forEach((id, j) => {
+      pos[id] = { x: j * (w + EDITOR_VAO), y, w, h };
+    });
+    y += h + EDITOR_VAO;
+  });
+  return pos;
+}
+
+function editorCSS() {
+  const mapas = EDITOR_PASSOS.map((passo) => editorPosicoes(passo.linhas));
+  const n = EDITOR_PASSOS.length;
+  const num = (v) => Number(v.toFixed(3));
+  const caixa = (p) => `left:${num(p.x)}%;top:${num(p.y)}%;width:${num(p.w)}%;height:${num(p.h)}%`;
+  const centro = (p) => ({ x: p.x + p.w / 2, y: p.y + p.h / 2 });
+  const EASE = "animation-timing-function:cubic-bezier(0.5,0,0.2,1)";
+  const NO_AR = "box-shadow:0 18px 34px -12px rgba(0,0,0,0.8);border-color:rgba(129,140,248,0.55);z-index:3";
+  const POUSADO = "box-shadow:0 0 0 0 rgba(0,0,0,0);border-color:transparent;z-index:1";
+
+  let css = "";
+
+  EDITOR_BLOCOS.forEach((id) => {
+    // Posição de partida também fora da animação: assim o bloco já nasce no
+    // lugar certo, e com movimento reduzido ele simplesmente fica parado ali.
+    css += `.dl-ed__bloco--${id}{${caixa(mapas[0][id])};animation-name:edBloco-${id}}\n`;
+
+    const paradas = [];
+    for (let k = 0; k < n; k += 1) {
+      const t0 = k * EDITOR_FATIA;
+      const atual = mapas[k][id];
+      const proximo = mapas[(k + 1) % n][id];
+      const naMao = EDITOR_PASSOS[k].arrasta === id;
+      paradas.push(`${num(t0)}%{${caixa(atual)};${POUSADO}}`);
+      paradas.push(`${num(t0 + EDITOR_PEGA * EDITOR_FATIA)}%{${caixa(atual)};${naMao ? NO_AR : POUSADO};${EASE}}`);
+      paradas.push(`${num(t0 + EDITOR_SOLTA * EDITOR_FATIA)}%{${caixa(proximo)};${naMao ? NO_AR : POUSADO}}`);
+      paradas.push(
+        `${num(t0 + (EDITOR_SOLTA + EDITOR_ASSENTA) * EDITOR_FATIA)}%{${caixa(proximo)};${POUSADO}}`,
+      );
+    }
+    paradas.push(`100%{${caixa(mapas[0][id])};${POUSADO}}`);
+    css += `@keyframes edBloco-${id}{${paradas.join("")}}\n`;
+  });
+
+  // Ponteiro: vai até o centro do bloco da vez, aperta, leva até o destino.
+  const inicio = centro(mapas[0][EDITOR_PASSOS[n - 1].arrasta]);
+  const ponto = (c, escala) => `left:${num(c.x)}%;top:${num(c.y)}%;scale:${escala}`;
+  const paradasP = [`0%{${ponto(inicio, 1)};${EASE}}`];
+  for (let k = 0; k < n; k += 1) {
+    const t0 = k * EDITOR_FATIA;
+    const id = EDITOR_PASSOS[k].arrasta;
+    const de = centro(mapas[k][id]);
+    const para = centro(mapas[(k + 1) % n][id]);
+    paradasP.push(`${num(t0 + EDITOR_PEGA * EDITOR_FATIA)}%{${ponto(de, 0.84)};${EASE}}`);
+    paradasP.push(`${num(t0 + EDITOR_SOLTA * EDITOR_FATIA)}%{${ponto(para, 0.84)}}`);
+    paradasP.push(`${num(t0 + (EDITOR_SOLTA + EDITOR_ASSENTA) * EDITOR_FATIA)}%{${ponto(para, 1)};${EASE}}`);
+  }
+  paradasP.push(`100%{${ponto(inicio, 1)}}`);
+  css += `@keyframes edPonteiro{${paradasP.join("")}}\n`;
+
+  return css;
+}
 
 // Itens do menu em tela cheia. A numeração e o atraso em cascata saem do
 // índice, então a ordem aqui é a ordem que aparece.
@@ -114,15 +274,23 @@ const MENU_ITENS = [
   { label: "Contato", href: "#contato" },
 ];
 
+/* `cor` é qualquer fundo CSS (as marcas com degradê usam o mesmo do painel, em
+   PropertyForm) e `texto` só aparece quando o fundo é claro demais para branco
+   — caso do dourado das métricas. */
 const INTEGRACOES = [
-  { type: "REDES", name: "Facebook" },
-  { type: "REDES", name: "Instagram" },
-  { type: "MENSAGENS", name: "WhatsApp" },
-  { type: "MÍDIA", name: "Cloudinary" },
-  { type: "IA", name: "Google Gemini" },
-  { type: "VITRINE", name: "Página pública" },
-  { type: "LEADS", name: "Formulário de contato" },
-  { type: "MÉTRICAS", name: "Painel de desempenho" },
+  { type: "REDES", name: "Facebook", Icon: FacebookLogo, cor: "#1877f2" },
+  {
+    type: "REDES",
+    name: "Instagram",
+    Icon: InstagramLogo,
+    cor: "linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",
+  },
+  { type: "MENSAGENS", name: "WhatsApp", Icon: WhatsappLogo, cor: "#25d366" },
+  { type: "MÍDIA", name: "Cloudinary", Icon: CloudArrowUp, cor: "#3448c5" },
+  { type: "IA", name: "Google Gemini", Icon: Sparkle, cor: "linear-gradient(135deg,#4285f4,#9b72cb,#d96570)" },
+  { type: "VITRINE", name: "Página pública", Icon: Globe, cor: ACCENT },
+  { type: "LEADS", name: "Formulário de contato", Icon: ChatCircleText, cor: MINT },
+  { type: "MÉTRICAS", name: "Painel de desempenho", Icon: ChartLineUp, cor: GOLD, texto: "#0a0a0b" },
 ];
 
 // Faixa horizontal de destaques. Cards claros funcionam como "marca-texto"
@@ -172,7 +340,7 @@ const FAQ = [
 const PRECOS = {
   BASICO: { price: "R$ 99", per: "/mês", nota: "cobrado mensalmente" },
   PROFISSIONAL: { price: "R$ 199", per: "/mês", nota: "cobrado mensalmente" },
-  PREMIUM: { price: "Sob consulta", per: "", nota: "proposta sob medida" },
+  PREMIUM: { price: "Sob consulta", per: "", nota: "cobrado mensalmente" },
 };
 
 // Linhas da tabela comparativa. As linhas "Tudo do Plano X" existem só para os
@@ -188,7 +356,10 @@ function incluiRecurso(planKey, recurso) {
   return planoInfo(planKey).nivel >= (NIVEL_MINIMO[exigido] ?? 0);
 }
 
-const PLANS = PLANOS.map((p) => ({
+/* Preços de reserva: valem só até a resposta do provedor chegar (ou se ele não
+   estiver configurado). O valor exibido de verdade vem de /public/planos, para a
+   página nunca anunciar um preço diferente do que será cobrado. */
+const PLANS_BASE = PLANOS.map((p) => ({
   key: p.key,
   name: p.nome,
   desc: p.descricao,
@@ -198,6 +369,34 @@ const PLANS = PLANOS.map((p) => ({
   linhas: LINHAS_PLANO.map((r) => ({ label: r.label, incluso: incluiRecurso(p.key, r) })),
   highlight: p.key === "PROFISSIONAL",
 }));
+
+/* Busca os preços vigentes uma vez por carga da página. Falha de rede não
+   quebra nada: fica com os valores de reserva. */
+function usePrecosVigentes() {
+  const [precos, setPrecos] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    api
+      .getPlanosPublicos()
+      .then((r) => vivo && setPrecos(r?.precos || {}))
+      .catch(() => vivo && setPrecos({}));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  return useMemo(
+    () =>
+      PLANS_BASE.map((p) => {
+        const vivo = precos?.[p.key];
+        if (!vivo) return p;
+        // O rótulo do Stripe já vem inteiro ("R$ 199,00/mês"), então o sufixo
+        // separado (`per`) sai de cena para não duplicar o "/mês".
+        return { ...p, price: vivo.rotulo, per: "", valor: vivo.valor };
+      }),
+    [precos],
+  );
+}
 
 /* Cabeçalho fixo + menu em tela cheia, no modelo do Header do Contable: a
    barra não tem fundo próprio, flutua sobre o conteúdo e só encolhe o respiro
@@ -404,32 +603,261 @@ function DashboardMockup() {
   );
 }
 
+/* Conteúdo do mock, um por recurso. São composições de barras e blocos — não
+   capturas reais —, montadas com as mesmas peças (`dl-skel`, cartões, chips)
+   para as seis telas parecerem o mesmo produto. */
+function Tela({ tipo }) {
+  if (tipo === "vitrine") {
+    return (
+      <>
+        <div className="dl-browser__banner" />
+        <div className="dl-skel" style={{ width: "38%", height: "11px" }} />
+        <div className="dl-browser__mini">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="dl-browser__minicard">
+              <div className="dl-browser__minithumb" />
+              <div className="dl-skel" style={{ width: "80%" }} />
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if (tipo === "metricas") {
+    return (
+      <>
+        <div className="dl-browser__kpis">
+          {[["Visitas", "2.4k"], ["Leads", "46"], ["Vendas", "12"]].map(([l, n]) => (
+            <div key={l} className="dl-browser__kpi">
+              <span>{l}</span>
+              <strong>{n}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="dl-browser__chart">
+          {[38, 62, 45, 78, 56, 88, 70].map((h, i) => (
+            <i key={i} style={{ height: `${h}%` }} />
+          ))}
+        </div>
+        <div className="dl-browser__rows">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="dl-browser__linha">
+              <span className="dl-browser__av" />
+              <span className="dl-browser__lin">
+                <span className="dl-skel" style={{ width: `${70 - i * 10}%` }} />
+                <span className="dl-skel" style={{ width: "36%", opacity: 0.55 }} />
+              </span>
+              <span className="dl-mono dl-browser__chip">LEAD</span>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if (tipo === "redes") {
+    return (
+      <>
+        {/* Mesma gramática dos previews do passo "Divulgar" do cadastro: os três
+            nascem do centro, o card sob o mouse cresce com anel colorido e os
+            outros recuam desfocados. */}
+        <div className="dl-redes">
+          {REDES.map((r, i) => (
+            <div
+              key={r.nome}
+              className="dl-redes__card"
+              style={{ "--marca": r.cor, "--anel": r.anel, "--brilho": r.brilho, "--de": r.de }}
+            >
+              <div className="dl-redes__anel">
+                <div className="dl-redes__inner">
+                  <span className="dl-redes__foto" />
+                  <span className="dl-redes__linhas">
+                    <span className="dl-skel" style={{ width: "78%" }} />
+                    <span className="dl-skel" style={{ width: "48%" }} />
+                  </span>
+                </div>
+              </div>
+              <span className="dl-redes__logo" style={{ borderRadius: r.raio }}>
+                <r.Icon size={15} weight="fill" />
+              </span>
+              <span className="dl-mono dl-redes__status">{r.nome}</span>
+            </div>
+          ))}
+        </div>
+        <div className="dl-browser__chips">
+          {["FACEBOOK", "INSTAGRAM", "WHATSAPP"].map((c) => (
+            <span key={c} className="dl-mono dl-browser__chip">{c}</span>
+          ))}
+        </div>
+        <div className="dl-browser__rows">
+          {["PUBLICADO", "PUBLICADO", "NA FILA"].map((estado, i) => (
+            <div key={i} className="dl-browser__linha">
+              <span className="dl-browser__av" />
+              <span className="dl-browser__lin">
+                <span className="dl-skel" style={{ width: `${74 - i * 9}%` }} />
+                <span className="dl-skel" style={{ width: "38%", opacity: 0.55 }} />
+              </span>
+              <span className={`dl-mono dl-browser__chip${i < 2 ? " dl-browser__chip--ok" : ""}`}>
+                {estado}
+              </span>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if (tipo === "usuarios") {
+    return (
+      <div className="dl-browser__rows">
+        {["ADMIN", "CORRETOR", "CORRETOR", "MARKETING", "GERÊNCIA", "CORRETOR"].map((cargo, i) => (
+          <div key={i} className="dl-browser__linha">
+            <span className="dl-browser__av" />
+            <span className="dl-browser__lin">
+              <span className="dl-skel" style={{ width: `${74 - (i % 4) * 8}%` }} />
+              <span className="dl-skel" style={{ width: "40%", opacity: 0.55 }} />
+            </span>
+            <span className="dl-mono dl-browser__chip">{cargo}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (tipo === "tenants") {
+    return (
+      <div className="dl-browser__rows">
+        {["Imobiliária Centro", "Casa Nobre", "Alto Padrão", "Vista Mar", "Recanto Sul", "Novo Lar"].map(
+          (nome, i) => (
+            <div key={nome} className="dl-browser__linha">
+              <span className="dl-browser__av" />
+              <span className="dl-browser__lin">
+                <span className="dl-skel" style={{ width: `${76 - (i % 4) * 11}%` }} />
+                <span className="dl-skel" style={{ width: "34%", opacity: 0.55 }} />
+              </span>
+              <span className="dl-mono dl-browser__chip dl-browser__chip--ok">● ISOLADO</span>
+            </div>
+          ),
+        )}
+      </div>
+    );
+  }
+
+  // imoveis (padrão)
+  return (
+    <>
+      <div className="dl-skel" style={{ width: "42%", height: "13px" }} />
+      <div className="dl-browser__grid">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="dl-browser__card">
+            <div className="dl-browser__thumb" />
+            <div className="dl-skel" style={{ width: "72%" }} />
+            <div className="dl-skel" style={{ width: "40%", opacity: 0.6 }} />
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 // Mock do painel dentro de uma moldura de navegador (seção de recursos).
-function BrowserMock({ caption }) {
+function BrowserMock({ recurso, indice }) {
   return (
     <figure className="dl-browser-wrap">
-      {caption ? <figcaption className="dl-mono dl-browser-cap">▪ {caption}</figcaption> : null}
+      <figcaption className="dl-mono dl-browser-cap">▪ {recurso.legenda}</figcaption>
       <div className="dl-browser">
         <div className="dl-browser__chrome">
           <span className="dl-dot" style={{ background: "#f87171" }} />
           <span className="dl-dot" style={{ background: "#fbbf24" }} />
           <span className="dl-dot" style={{ background: "#4ade80" }} />
-          <span className="dl-browser__url">domus.app / vitrine</span>
+          <span className="dl-browser__url">{recurso.url}</span>
         </div>
         <div className="dl-browser__body">
-          <div className="dl-skel" style={{ width: "42%", height: "13px" }} />
-          <div className="dl-browser__grid">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="dl-browser__card">
-                <div className="dl-browser__thumb" />
-                <div className="dl-skel" style={{ width: "72%" }} />
-                <div className="dl-skel" style={{ width: "40%", opacity: 0.6 }} />
-              </div>
-            ))}
+          {/* A chave troca com o recurso: o React remonta o bloco e a animação
+              de entrada roda de novo a cada mudança. */}
+          <div className="dl-browser__tela" key={indice} id="dl-tela-recurso" role="tabpanel">
+            <Tela tipo={recurso.tela} />
           </div>
         </div>
       </div>
     </figure>
+  );
+}
+
+/* Recursos: as células da esquerda são abas e o mock da direita é o painel.
+   Enquanto ninguém clicar, avança sozinho de 3 em 3 segundos, em ciclo. O
+   primeiro clique entrega o controle ao usuário e a rotação para de vez. */
+function Recursos() {
+  const [ref, visivel] = useReveal();
+  const [ativo, setAtivo] = useState(0);
+  const [manual, setManual] = useState(false);
+  const botoes = useRef([]);
+
+  function selecionar(i) {
+    setAtivo(i);
+    setManual(true); // a partir do primeiro comando do usuário, nada mais gira sozinho
+  }
+
+  // Papel de aba pede navegação por setas — sem isso, o role prometeria um
+  // comportamento que não existe. O tabIndex móvel deixa o grupo inteiro como
+  // uma parada só do Tab, que é o previsto para tablist.
+  function aoTeclar(evento, i) {
+    const passo =
+      evento.key === "ArrowRight" || evento.key === "ArrowDown" ? 1
+      : evento.key === "ArrowLeft" || evento.key === "ArrowUp" ? -1
+      : 0;
+    if (!passo) return;
+    evento.preventDefault();
+    const proximo = (i + passo + RECURSOS.length) % RECURSOS.length;
+    selecionar(proximo);
+    botoes.current[proximo]?.focus();
+  }
+
+  useEffect(() => {
+    // Só gira depois que a seção aparece: girando fora da tela, o visitante
+    // chegaria aqui num item aleatório do ciclo.
+    if (manual || !visivel) return undefined;
+    const id = setInterval(
+      () => setAtivo((i) => (i + 1) % RECURSOS.length),
+      RECURSO_INTERVALO,
+    );
+    return () => clearInterval(id);
+  }, [manual, visivel]);
+
+  return (
+    <div className="dl-split" ref={ref}>
+      <div className="dl-grid-hair dl-grid-hair--2" role="tablist" aria-label="Recursos da plataforma">
+        {/* O Reveal fica na célula, não no botão: ele escreve transition-delay
+            inline (a cascata de entrada), e no botão esse atraso valeria também
+            para a inversão de cor — o clique demoraria a responder. */}
+        {RECURSOS.map((f, i) => (
+          <Reveal key={f.title} className="dl-cell dl-cell--aba" delay={i * 80}>
+            <button
+              type="button"
+              role="tab"
+              ref={(el) => { botoes.current[i] = el; }}
+              aria-selected={i === ativo}
+              aria-controls="dl-tela-recurso"
+              tabIndex={i === ativo ? 0 : -1}
+              className={`dl-feature dl-feature--aba${i === ativo ? " is-ativo" : ""}`}
+              onClick={() => selecionar(i)}
+              onKeyDown={(e) => aoTeclar(e, i)}
+            >
+              <span className="dl-feature__icon" aria-hidden="true">
+                <f.Icon size={17} weight="duotone" />
+              </span>
+              <span className="dl-mono dl-index">[{String(i + 1).padStart(2, "0")}]</span>
+              <h3 className="dl-feature__title">{f.title}</h3>
+              <p className="dl-feature__desc">{f.desc}</p>
+            </button>
+          </Reveal>
+        ))}
+      </div>
+      <Reveal delay={160} style={{ display: "flex" }}>
+        <BrowserMock recurso={RECURSOS[ativo]} indice={ativo} />
+      </Reveal>
+    </div>
   );
 }
 
@@ -554,9 +982,54 @@ export function DomusLandingPage() {
   const [faqAberto, setFaqAberto] = useState(0);
   const ano = new Date().getFullYear();
 
+  // `null` = modal fechado; string = aberto com aquele plano ("" = nenhum).
+  const [planoInteresse, setPlanoInteresse] = useState(null);
+  const [trialAberto, setTrialAberto] = useState(false);
+
+  // Valores vigentes no provedor; enquanto não chegam, valem os de reserva.
+  const PLANS = usePrecosVigentes();
+
+  const vantaRef = useRef(null);
+
+  /* A instância fica em variável local, não em estado. Guardada em estado, a
+     limpeza fechava sobre o valor ANTERIOR (ainda null) e não destruía o efeito
+     que aquela mesma execução tinha acabado de criar — no StrictMode, que roda
+     efeito/limpeza/efeito, sobrava um canvas órfão e a névoa ficava dobrada.
+     Rodando uma vez só, cada execução destrói exatamente o que criou. */
+  useEffect(() => {
+    if (!vantaRef.current) return undefined;
+    const efeito = FOG({
+      el: vantaRef.current,
+      THREE: THREE,
+      mouseControls: true,
+      touchControls: true,
+      gyroControls: false,
+      minHeight: 200.00,
+      minWidth: 200.00,
+      highlightColor: "#6b70f3",
+      midtoneColor: "#ffb221",
+      lowlightColor: "#f4f5f7",
+      baseColor: "#ffffff",
+      blurFactor: 0.50,
+      zoom: 2.00,
+    });
+    return () => efeito.destroy();
+  }, []);
+
   return (
     <div className="dl-root">
       <DomusStyles extra={CSS} />
+
+      <DomusSplash />
+
+      <PlanoModal
+        aberto={planoInteresse !== null}
+        planoInicial={planoInteresse || ""}
+        planos={PLANS}
+        aoFechar={() => setPlanoInteresse(null)}
+      />
+
+      <TrialModal aberto={trialAberto} aoFechar={() => setTrialAberto(false)} />
 
       <LandingHeader />
 
@@ -613,7 +1086,9 @@ export function DomusLandingPage() {
 
               <Reveal delay={330}>
                 <div className="dl-btn-row">
-                  <Button href="#contato" variant="primary">Agendar demonstração</Button>
+                  <Button as="button" type="button" variant="primary" onClick={() => setTrialAberto(true)}>
+                    Testar grátis
+                  </Button>
                   <Button href="#planos" variant="ghost" arrow={false}>Ver planos</Button>
                 </div>
               </Reveal>
@@ -689,59 +1164,6 @@ export function DomusLandingPage() {
         </div>
       </section>
 
-      {/* ── Jornada ── */}
-      <section id="jornada" className="dl-section dl-section--alt">
-        <div className="dl-wrap">
-          <SectionHead eyebrow="JORNADA COMPLETA" strong="Do cadastro ao lead" soft="numa plataforma só.">
-            A Domus organiza a rotina comercial da imobiliária. Cada passo abaixo já existe no produto — não é
-            promessa de roadmap.
-          </SectionHead>
-
-          <ol className="dl-journey">
-            {JORNADA.map((s, i) => (
-              <Reveal as="li" key={s.title} className="dl-journey__item" delay={i * 70}>
-                <span className="dl-mono dl-journey__num">{String(i + 1).padStart(2, "0")}</span>
-                <h3 className="dl-journey__title">{s.title}</h3>
-                <p className="dl-journey__desc">{s.desc}</p>
-                {s.chips ? (
-                  <span className="dl-journey__tag">
-                    <i className="dl-journey__dash" aria-hidden="true" />
-                    <span className="dl-mono">{s.chips.join(" · ")}</span>
-                  </span>
-                ) : null}
-              </Reveal>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      {/* ── Recursos + mock ── */}
-      <section id="recursos" className="dl-section">
-        <div className="dl-wrap">
-          <SectionHead eyebrow="RECURSOS" strong="Tudo que sua imobiliária" soft="precisa. Em um só lugar.">
-            Um sistema, do cadastro à conversão — sem juntar cinco ferramentas para dar conta da operação.
-          </SectionHead>
-
-          <div className="dl-split">
-            <div className="dl-grid-hair dl-grid-hair--2">
-              {RECURSOS.map((f, i) => (
-                <Reveal key={f.title} className="dl-cell dl-feature" delay={i * 80}>
-                  <span className="dl-feature__icon" aria-hidden="true">
-                    <f.Icon size={17} weight="duotone" />
-                  </span>
-                  <span className="dl-mono dl-index">[{String(i + 1).padStart(2, "0")}]</span>
-                  <h3 className="dl-feature__title">{f.title}</h3>
-                  <p className="dl-feature__desc">{f.desc}</p>
-                </Reveal>
-              ))}
-            </div>
-            <Reveal delay={160} style={{ display: "flex" }}>
-              <BrowserMock caption="PAINEL WEB · DOMUS" />
-            </Reveal>
-          </div>
-        </div>
-      </section>
-
       {/* ── Editor de vitrine ── */}
       <section className="dl-section dl-section--alt">
         <div className="dl-wrap dl-editor">
@@ -759,35 +1181,61 @@ export function DomusLandingPage() {
               O layout do mobile é independente do desktop — e, se preferir, você copia um para o outro num
               clique. Tudo salva sozinho enquanto você edita.
             </p>
-            <div className="dl-btn-row">
-              <Button href="#contato" variant="primary">Ver o editor funcionando</Button>
-            </div>
           </Reveal>
 
-          <Reveal className="dl-editor__panel dl-glass" delay={140}>
-            <span className="dl-mono dl-browser-cap">▪ EDITOR DE VITRINE · BLOCOS</span>
-            <ul className="dl-editor__blocks">
-              {[
-                ["Cabeçalho", "header"],
-                ["Título", "title"],
-                ["Destaques", "highlights"],
-                ["Imóveis", "properties"],
-                ["Widgets", "widgets"],
-                ["Rodapé", "footer"],
-              ].map(([label, key], i) => (
-                <li key={key} className={i === 2 ? "is-active" : undefined}>
-                  <span className="dl-mono">{String(i + 1).padStart(2, "0")}</span>
-                  {label}
-                  <em className="dl-mono">{key}</em>
-                </li>
-              ))}
-            </ul>
+          <Reveal className="dl-ed dl-glass" delay={140}>
+            <div className="dl-ed__bar">
+              <span className="dl-dot" style={{ background: "#f87171" }} />
+              <span className="dl-dot" style={{ background: "#fbbf24" }} />
+              <span className="dl-dot" style={{ background: "#4ade80" }} />
+              <span className="dl-ed__url dl-mono">domus.app / vitrine / editar</span>
+              {/* Pisca uma vez por movimento, logo depois de soltar o bloco. */}
+              <span className="dl-ed__salvo dl-mono" aria-hidden="true">
+                <i className="dl-ed__ponto" />
+                alterações salvas
+              </span>
+            </div>
+
+            {/* Só enfeite: quem descreve o editor é o texto ao lado. */}
+            <div
+              className="dl-ed__tela"
+              role="img"
+              aria-label="Demonstração: blocos da vitrine sendo reposicionados com o mouse"
+            >
+              <div className="dl-ed__area">
+                {EDITOR_BLOCOS.map((id) => (
+                  <span key={id} className={`dl-ed__bloco dl-ed__bloco--${id}`}>
+                    {Array.from({ length: EDITOR_MIOLO[id] }, (_, k) => (
+                      <i key={k} />
+                    ))}
+                  </span>
+                ))}
+                <span className="dl-ed__ponteiro" aria-hidden="true" />
+              </div>
+            </div>
+
+            <span className="dl-mono dl-browser-cap dl-ed__legenda">
+              ▪ ARRASTE E SOLTE · SALVA SOZINHO
+            </span>
           </Reveal>
         </div>
       </section>
 
+      {/* ── Recursos + mock ── */}
+      <section id="recursos" className="dl-section">
+        <div className="dl-wrap">
+          <SectionHead eyebrow="RECURSOS" strong="Tudo que sua imobiliária" soft="precisa. Em um só lugar.">
+            Um sistema, do cadastro à conversão — sem juntar cinco ferramentas para dar conta da operação.
+          </SectionHead>
+
+          <Recursos />
+        </div>
+      </section>
+
+      
+
       {/* ── Integrações ── */}
-      <section className="dl-section">
+      <section className="dl-section dl-section--alt">
         <div className="dl-wrap">
           <SectionHead eyebrow="CANAIS E INTEGRAÇÕES" strong="Conectada aos canais" soft="onde seu cliente já está.">
             A Domus liga o cadastro do imóvel aos canais que realmente trazem cliente, com a IA cuidando do
@@ -796,7 +1244,15 @@ export function DomusLandingPage() {
 
           <div className="dl-grid-hair dl-grid-hair--4">
             {INTEGRACOES.map((it, i) => (
-              <Reveal key={it.name} className="dl-cell dl-int" delay={i * 60}>
+              <Reveal
+                key={it.name}
+                className={`dl-cell dl-int${it.texto ? " dl-int--claro" : ""}`}
+                delay={i * 60}
+                style={{ "--int-cor": it.cor, "--int-texto": it.texto || "#fff" }}
+              >
+                <span className="dl-int__marca" aria-hidden="true">
+                  <it.Icon size={92} weight="fill" />
+                </span>
                 <span className="dl-mono dl-int__type">{it.type}</span>
                 <span className="dl-int__name">{it.name}</span>
               </Reveal>
@@ -806,7 +1262,7 @@ export function DomusLandingPage() {
       </section>
 
       {/* ── Faixa de destaques ── */}
-      <section className="dl-section dl-section--alt dl-section--tight">
+      <section className="dl-section dl-section--tight">
         <div className="dl-wrap">
           <SectionHead eyebrow="POR QUE DOMUS" strong="O que muda no dia a dia" soft="de quem usa.">
             Detalhes pequenos que aparecem toda semana na rotina da imobiliária.
@@ -836,7 +1292,7 @@ export function DomusLandingPage() {
       </section>
 
       {/* ── Planos ── */}
-      <section id="planos" className="dl-section">
+      <section id="planos" className="dl-section dl-section--alt">
         <div className="dl-wrap">
           <SectionHead eyebrow="PLANOS" eyebrowTone={GOLD} strong="Escolha o plano ideal" soft="para sua imobiliária.">
             Sem fidelidade, cancele quando quiser. Todo o núcleo do produto já está no Básico.
@@ -861,7 +1317,13 @@ export function DomusLandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Button href="#contato" variant={p.highlight ? "primary" : "outline"} className="dl-btn--block">
+                <Button
+                  as="button"
+                  type="button"
+                  variant={p.highlight ? "primary" : "outline"}
+                  className="dl-btn--block"
+                  onClick={() => setPlanoInteresse(p.key)}
+                >
                   Quero este plano
                 </Button>
               </Reveal>
@@ -871,7 +1333,7 @@ export function DomusLandingPage() {
       </section>
 
       {/* ── FAQ ── */}
-      <section id="faq" className="dl-section dl-section--alt">
+      <section id="faq" className="dl-section">
         <div className="dl-wrap">
           <SectionHead eyebrow="PERGUNTAS FREQUENTES" strong="Tudo sobre a Domus," soft="direto ao ponto.">
             As dúvidas que mais aparecem antes de começar.
@@ -891,39 +1353,8 @@ export function DomusLandingPage() {
         </div>
       </section>
 
-      {/* ── O que é a Domus ── */}
-      <section className="dl-section">
-        <div className="dl-wrap">
-          <Reveal>
-            <Eyebrow>SOBRE O PRODUTO</Eyebrow>
-            <h2 className="dl-h2">
-              <span className="dl-h2__strong">O que é a</span>
-              <span className="dl-h2__soft">Domus?</span>
-            </h2>
-          </Reveal>
-
-          <Reveal className="dl-def" delay={120}>
-            <h3>Domus — plataforma de gestão imobiliária com vitrine digital</h3>
-            <p>
-              A Domus é uma plataforma para imobiliárias e corretores que atuam com venda e locação de imóveis.
-              Ela cobre o cadastro do imóvel com fotos e atributos, a página pública de vitrine, a captura de
-              leads, a gestão de clientes, os cargos e permissões da equipe e os relatórios de desempenho.
-            </p>
-            <p>
-              A plataforma também gera conteúdo com inteligência artificial — descrições, títulos, hashtags,
-              posts e anúncios a partir dos dados do imóvel — e publica nos canais sociais da imobiliária.
-            </p>
-            <p>
-              Cada imobiliária opera como um ambiente isolado, com seus próprios imóveis, usuários, leads e
-              vitrine personalizável.
-            </p>
-            <span className="dl-mono dl-def__updated">// última atualização · {ano}</span>
-          </Reveal>
-        </div>
-      </section>
-
       {/* ── CTA final (seção clara) ── */}
-      <section id="contato" className="dl-cta">
+      <section id="contato" className="dl-cta" ref={vantaRef}>
         <div className="dl-cta__shapes" aria-hidden="true">
           <Scallop size={170} color="#c7d2fe" style={{ position: "absolute", top: "-30px", left: "-50px" }} />
           <Scallop size={120} color="#fde68a" style={{ position: "absolute", bottom: "-20px", right: "-30px" }} />
@@ -942,11 +1373,15 @@ export function DomusLandingPage() {
             <span className="dl-cta__grad">com processo?</span>
           </h2>
           <p className="dl-cta__sub">
-            Agende uma demonstração e veja a Domus funcionando com os imóveis da sua imobiliária.
+            Crie um ambiente de teste em segundos ou fale com a gente para escolher o plano certo.
           </p>
           <div className="dl-btn-row dl-btn-row--center">
-            <Button href="https://wa.me/" target="_blank" rel="noreferrer" variant="dark">Falar no WhatsApp</Button>
-            <Button href="mailto:contato@domus.com" variant="light" arrow={false}>Enviar e-mail</Button>
+            <Button as="button" type="button" variant="dark" onClick={() => setTrialAberto(true)}>
+              Testar grátis
+            </Button>
+            <Button as="button" type="button" variant="light" arrow={false} onClick={() => setPlanoInteresse("")}>
+              Assinar a Domus
+            </Button>
           </div>
           <p className="dl-mono dl-cta__note">DOMUS · IMÓVEIS · VITRINE · LEADS · IA · GESTÃO DE IMOBILIÁRIAS</p>
         </Reveal>
@@ -1331,10 +1766,63 @@ const CSS = `
 }
 .dl-feature__title { font-size: 14.5px; font-weight: 700; color: var(--strong); letter-spacing: -0.015em; }
 .dl-feature__desc { font-size: 13px; line-height: 1.72; color: var(--subtle); }
+
+/* ── Recursos como abas ──
+   A célula virou <button>, e o styles.css global pinta todo button de roxo,
+   centralizado e arredondado. Daí a desmontagem abaixo vir prefixada com
+   .dl-root: só assim ela ganha do seletor button e do button:hover. As bordas
+   de hairline não entram aqui — .dl-cell já vence o "border: none" do global. */
+/* A célula cede o respiro ao botão, senão o fundo invertido pararia antes da
+   borda de hairline e sobraria uma moldura escura em volta. */
+.dl-cell--aba { padding: 0; }
+.dl-root .dl-feature--aba {
+  width: 100%; height: 100%; padding: 22px;
+  background: transparent; color: inherit; border: none;
+  font: inherit; text-align: left; border-radius: 0;
+  align-items: stretch; justify-content: flex-start;
+  cursor: pointer;
+  transition: background-color 0.34s var(--ease-out), color 0.34s var(--ease-out);
+}
+.dl-root .dl-feature--aba:hover {
+  background: rgba(255,255,255,0.03); transform: none; box-shadow: none;
+}
+.dl-root .dl-feature--aba:active { scale: 1; }
+.dl-root .dl-feature--aba:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: -3px; }
+
+/* Selecionada: o cartão inverte — fundo claro, texto escuro. */
+.dl-root .dl-feature--aba.is-ativo { background: #f6f6f8; color: #0a0a0b; }
+.dl-feature--aba.is-ativo .dl-feature__title { color: #0a0a0b; }
+.dl-feature--aba.is-ativo .dl-feature__desc { color: #3b3b45; }
+.dl-feature--aba.is-ativo .dl-index { color: #7a7a86; }
+.dl-feature--aba.is-ativo .dl-feature__icon {
+  background: rgba(10,10,11,0.07); border-color: rgba(10,10,11,0.14); color: #0a0a0b;
+}
+/* O hover não pode clarear ainda mais o que já está claro. */
+.dl-root .dl-feature--aba.is-ativo:hover { background: #f6f6f8; }
 .dl-split { display: grid; grid-template-columns: 1fr 0.92fr; gap: 26px; align-items: stretch; }
-.dl-int { display: flex; flex-direction: column; gap: 5px; }
+/* ── Integrações ──
+   No hover a célula inteira se pinta com a cor da marca e o ícone dela ocupa o
+   fundo. O ícone é grande de propósito e o overflow corta o que passa: a
+   sensação é de a marca preencher a célula, não de um selo no cantinho. */
+.dl-int { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 5px; }
+.dl-int__marca {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--int-cor);
+  color: rgba(255,255,255,0.75);
+  opacity: 0; transform: scale(1.14);
+  transition: opacity 0.38s var(--ease-out), transform 0.55s var(--ease-out);
+}
+.dl-int:hover .dl-int__marca { opacity: 1; transform: none; }
+/* Fundo claro (o dourado das métricas) pede marca escura: branco não se lê. */
+.dl-int--claro .dl-int__marca { color: rgba(10,10,11,0.26); }
+
+.dl-int__type,
+.dl-int__name { position: relative; z-index: 1; transition: color 0.35s ease; }
 .dl-int__type { color: var(--accent-soft); font-size: 9px; }
 .dl-int__name { font-size: 13.5px; font-weight: 600; color: var(--strong); }
+.dl-int:hover .dl-int__type { color: var(--int-texto); opacity: 0.75; }
+.dl-int:hover .dl-int__name { color: var(--int-texto); }
 
 /* ── Jornada ──
    Colunas abertas por uma régua fina, sem cartão: o passo inteiro reage ao
@@ -1367,8 +1855,13 @@ const CSS = `
 /* ── Mock de navegador ── */
 .dl-browser-wrap { display: flex; flex-direction: column; flex: 1; }
 .dl-browser-cap { color: var(--placeholder); margin-bottom: 10px; font-size: 9px; display: block; }
+/* O teto de altura existe porque a coluna da esquerda (seis células) é bem mais
+   alta que qualquer uma das telas: sem ele, a moldura esticava junto e sobrava
+   um vazio enorme por dentro. O que sobra agora fica fora da moldura, onde não
+   se vê. Continua sendo altura fixa, então trocar de aba não pula o layout. */
 .dl-browser {
-  flex: 1; border-radius: 14px; overflow: hidden;
+  flex: 1; max-height: 468px; display: flex; flex-direction: column;
+  border-radius: 14px; overflow: hidden;
   background: var(--bg); border: 1px solid var(--line);
   box-shadow: 0 28px 50px -20px rgba(0,0,0,0.6);
 }
@@ -1391,23 +1884,259 @@ const CSS = `
   background: linear-gradient(135deg, rgba(99,102,241,0.38), rgba(212,175,55,0.24));
 }
 
+/* ── Telas do mock (uma por recurso) ── */
+.dl-browser__body { flex: 1; align-content: start; }
+.dl-browser__tela { display: grid; gap: 14px; align-content: start; animation: dlTela 0.42s var(--ease-out) both; }
+@keyframes dlTela {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+
+.dl-browser__banner {
+  height: 76px; border-radius: 10px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.42), rgba(212,175,55,0.30));
+}
+.dl-browser__mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.dl-browser__minicard {
+  border-radius: 9px; border: 1px solid var(--line); background: var(--surface);
+  padding: 8px; display: grid; gap: 6px;
+}
+.dl-browser__minithumb {
+  height: 32px; border-radius: 6px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.34), rgba(212,175,55,0.20));
+}
+
+.dl-browser__kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dl-browser__kpi {
+  border-radius: 10px; border: 1px solid var(--line); background: var(--surface);
+  padding: 10px 11px; display: grid; gap: 4px;
+}
+.dl-browser__kpi span { font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--placeholder); }
+.dl-browser__kpi strong { font-size: 17px; font-weight: 700; letter-spacing: -0.03em; color: var(--strong); }
+
+.dl-browser__chart {
+  display: flex; align-items: flex-end; gap: 7px; height: 92px; padding: 12px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--surface);
+}
+.dl-browser__chart i {
+  flex: 1; border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, var(--accent-soft), rgba(99,102,241,0.22));
+}
+.dl-browser__chart i:last-child { background: linear-gradient(180deg, var(--gold), rgba(212,175,55,0.22)); }
+
+.dl-browser__rows { display: grid; gap: 10px; }
+.dl-browser__linha {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 10px; background: rgba(255,255,255,0.03);
+}
+.dl-browser__av {
+  width: 26px; height: 26px; border-radius: 999px; flex: 0 0 auto;
+  background: linear-gradient(135deg, rgba(99,102,241,0.55), rgba(212,175,55,0.38));
+}
+.dl-browser__lin { display: grid; gap: 5px; flex: 1; }
+/* ── Previews de publicação (tela "redes") ──
+   Recorte do passo "Divulgar" do cadastro: anel em degradê animado no card em
+   foco, os outros recuando desfocados, e a logo da rede flutuando na quina.
+   A entrada usa fill-mode backwards de propósito — com "both", o estado final
+   da animação venceria o transform do hover e o card em foco não cresceria. */
+/* O respiro embaixo é para o rótulo da rede, que fica pendurado fora do card. */
+.dl-redes { display: flex; align-items: stretch; gap: 12px; height: 150px; padding: 10px 0 18px; }
+.dl-redes__card {
+  position: relative; flex: 1 1 0; min-width: 0;
+  animation: dlRedesEntra 0.62s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  transition:
+    flex-grow 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.45s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dl-redes__card:nth-child(1) { animation-delay: 0.16s; }
+.dl-redes__card:nth-child(2) { animation-delay: 0.06s; }
+.dl-redes__card:nth-child(3) { animation-delay: 0.16s; }
+@keyframes dlRedesEntra {
+  from { opacity: 0; transform: translateX(var(--de)) scale(0.62); }
+  to { opacity: 1; transform: none; }
+}
+
+.dl-redes:hover .dl-redes__card:not(:hover) {
+  flex-grow: 0.7; transform: scale(0.8); filter: blur(2px) brightness(0.55) saturate(0.85);
+}
+.dl-redes__card:hover { flex-grow: 2.4; z-index: 4; }
+
+.dl-redes__anel {
+  height: 100%; padding: 2px; border-radius: 12px;
+  background: rgba(255,255,255,0.10);
+  transition: padding 0.45s ease, background-color 0.45s ease, box-shadow 0.45s ease;
+}
+.dl-redes__card:hover .dl-redes__anel {
+  padding: 3px; background: var(--anel); background-size: 300% 300%;
+  box-shadow: 0 14px 34px -12px var(--brilho);
+  animation: dlAnelFlui 4.5s ease infinite;
+}
+@keyframes dlAnelFlui {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* O preview no produto é branco, como o feed da rede. Aqui ele é escuro de
+   propósito: é só simulação, e um cartão branco no meio da landing brigaria
+   com todo o resto. Mesma superfície dos outros mocks (--surface). */
+.dl-redes__inner {
+  height: 100%; border-radius: 10px; overflow: hidden;
+  background: var(--surface); display: flex; flex-direction: column;
+}
+.dl-redes__foto {
+  flex: 1; min-height: 0;
+  background: linear-gradient(135deg, rgba(99,102,241,0.42), rgba(212,175,55,0.34));
+}
+.dl-redes__linhas { display: grid; gap: 5px; padding: 8px; flex: 0 0 auto; }
+
+.dl-redes__logo {
+  position: absolute; top: -9px; right: -9px; width: 27px; height: 27px; z-index: 7;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; background: var(--marca);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.42);
+  transform: scale(0.84); opacity: 0.88;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease;
+}
+.dl-redes__card:hover .dl-redes__logo { transform: scale(1.1); opacity: 1; }
+
+.dl-redes__status {
+  position: absolute; bottom: -15px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 8px; color: var(--placeholder);
+  opacity: 0; transition: opacity 0.4s ease; pointer-events: none;
+}
+.dl-redes__card:hover .dl-redes__status { opacity: 1; }
+
+.dl-browser__chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.dl-browser__chip {
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--line-soft); color: var(--placeholder); font-size: 8px;
+}
+.dl-browser__chip--ok { color: var(--mint); border-color: rgba(20,184,166,0.28); }
+
 /* ── Editor ── */
 .dl-editor { display: grid; grid-template-columns: 1fr 0.85fr; gap: 48px; align-items: center; }
-.dl-editor__panel { border-radius: 18px; padding: 20px; }
-.dl-editor__blocks { display: grid; gap: 2px; margin-top: 14px; }
-.dl-editor__blocks li {
-  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
-  border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid transparent;
-  font-size: 13px; font-weight: 600; color: var(--default);
-  transition: background 0.2s ease;
+/* ── Editor ao vivo ──
+   Uma tela de desktop com os blocos da vitrine sendo reposicionados por um
+   ponteiro, em laço. As posições e o caminho do ponteiro são calculados em
+   editorCSS(), a partir dos layouts declarados em EDITOR_PASSOS. */
+.dl-ed {
+  --ed-dur: 13.2s;                       /* 6 movimentos de 2,2 s */
+  border-radius: 18px; padding: 14px; display: grid; gap: 12px;
 }
-.dl-editor__blocks li:hover { background: rgba(255,255,255,0.07); }
-.dl-editor__blocks li span { color: var(--placeholder); font-size: 9.5px; }
-.dl-editor__blocks li em { margin-left: auto; font-style: normal; color: var(--placeholder); font-size: 9px; }
-.dl-editor__blocks li.is-active {
-  border-color: rgba(99,102,241,0.45); background: rgba(99,102,241,0.14); color: var(--strong);
+.dl-ed__bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 4px 11px; border-bottom: 1px solid var(--line-soft);
 }
-.dl-editor__blocks li.is-active em { color: var(--accent-soft); }
+.dl-ed__url { margin-left: 10px; color: var(--placeholder); font-size: 9px; }
+
+/* Aviso de salvo, encostado à direita da barra e no mesmo corpo da URL.
+   Um pulso por movimento: a duração é uma fatia da linha do tempo, e o pico
+   cai logo depois de EDITOR_SOLTA, quando o bloco assenta no destino. */
+.dl-ed__salvo {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 9px; color: var(--mint); white-space: nowrap;
+  animation: edSalvo calc(var(--ed-dur) / 6) ease-out infinite both;
+}
+.dl-ed__ponto {
+  width: 6px; height: 6px; border-radius: 999px; flex: 0 0 auto;
+  background: var(--mint); box-shadow: 0 0 7px rgba(20,184,166,0.85);
+}
+@keyframes edSalvo {
+  0%, 70% { opacity: 0; transform: translateY(3px); }
+  78%, 92% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+.dl-ed__tela {
+  position: relative; aspect-ratio: 4 / 3.15; border-radius: 12px; overflow: hidden;
+  background: rgba(0,0,0,0.34); border: 1px solid var(--line-soft);
+}
+/* Caixa interna: os blocos são absolutos e a porcentagem deles corre sobre a
+   caixa de padding do pai — sem esta camada, o respiro das bordas sumiria. */
+.dl-ed__area { position: absolute; inset: 13px; }
+/* Mesmo acabamento das miniaturas do mockup do hero, sem texto: aqui o bloco
+   é só volume. A borda nasce transparente só para o realce de "no ar" ter o
+   que colorir sem mudar o tamanho da caixa. */
+.dl-ed__bloco {
+  position: absolute;
+  border-radius: 6px; border: 1px solid transparent;
+  background: linear-gradient(135deg, rgba(99,102,241,0.55), rgba(212,175,55,0.35));
+  animation: var(--ed-dur) linear infinite both;
+}
+
+/* Miolo: silhuetas de uma cor só, sem texto, insinuando o que cada bloco é —
+   mesma ideia das linhas do mockup do hero. Como os blocos mudam de tamanho o
+   tempo todo (linha inteira ou meia linha), o arranjo é sempre proporcional. */
+.dl-ed__bloco i { display: block; border-radius: 3px; background: rgba(255,255,255,0.125); }
+
+/* Marca à esquerda, itens de menu empurrados para a direita pelo margin auto. */
+.dl-ed__bloco--header { display: flex; align-items: center; gap: 5px; padding: 0 9px; }
+.dl-ed__bloco--header i { width: 15px; height: 4px; border-radius: 999px; }
+.dl-ed__bloco--header i:first-child {
+  width: 13px; height: 13px; border-radius: 4px; margin-right: auto;
+}
+
+.dl-ed__bloco--titulo {
+  display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 0 11px;
+}
+.dl-ed__bloco--titulo i { width: 52%; height: 5px; border-radius: 999px; }
+.dl-ed__bloco--titulo i:last-child { width: 30%; height: 4px; opacity: 0.72; }
+
+.dl-ed__bloco--destaques {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 7px;
+}
+.dl-ed__bloco--destaques i { border-radius: 4px; }
+
+.dl-ed__bloco--imoveis {
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+  gap: 5px; padding: 6px;
+}
+
+.dl-ed__bloco--widgets {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; padding: 7px;
+}
+.dl-ed__bloco--widgets i { border-radius: 4px; }
+
+.dl-ed__bloco--rodape {
+  display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 9px;
+}
+.dl-ed__bloco--rodape i { width: 20px; height: 4px; border-radius: 999px; }
+
+/* Ponteiro desenhado em CSS: um losango com a ponta no canto superior
+   esquerdo, que é o ponto que a animação leva até o centro do bloco. */
+.dl-ed__ponteiro {
+  position: absolute;
+  width: 15px;
+  height: 21px;
+  z-index: 5;
+  pointer-events: none;
+  transform-origin: 0 0;
+  filter: drop-shadow(1px 0 0 #ffffff) drop-shadow(-1px 0 0 #ffffff) drop-shadow(0 1px 0 #ffffff) drop-shadow(0 -1px 0 #ffffff) drop-shadow(0 3px 6px rgba(0,0,0,0.6));
+  animation: edPonteiro var(--ed-dur) linear infinite both;
+}
+
+.dl-ed__ponteiro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #000000;
+  clip-path: polygon(0 0, 0 76%, 27% 59%, 47% 100%, 66% 91%, 46% 51%, 74% 48%);
+}
+/* Anel do clique: um pulso por movimento, por isso a duração é a fatia. */
+.dl-ed__ponteiro::after {
+  content: ""; position: absolute; left: -9px; top: -9px; width: 22px; height: 22px;
+  border-radius: 999px; border: 1.5px solid rgba(129,140,248,0.9);
+  animation: edClique calc(var(--ed-dur) / 6) ease-out infinite both;
+}
+@keyframes edClique {
+  0%, 26% { opacity: 0; scale: 0.4; }
+  32% { opacity: 0.95; scale: 0.6; }
+  52% { opacity: 0; scale: 1.5; }
+  100% { opacity: 0; scale: 1.5; }
+}
+.dl-ed__legenda { margin: 0; }
+
+/* Posições de partida + keyframes dos blocos e do ponteiro, calculados. */
+${editorCSS()}
 
 /* ── Faixa horizontal ── */
 .dl-marquee {
@@ -1525,20 +2254,40 @@ const CSS = `
 
 /* ── CTA final (claro) ── */
 .dl-cta {
-  position: relative; overflow: hidden;
-  background: #f4f5f7; color: #0c121a;
+  position: relative;
+  overflow: hidden;
+  background: #f4f5f7;
+  color: #0c121a;
   padding: clamp(72px, 9vw, 128px) 0;
 }
+.dl-cta canvas {
+  opacity: 0.5;
+}
+
 .dl-cta__shapes { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
 .dl-cta__inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
 
 /* Marca de fechamento. O halo é ::before e a imagem é relative de propósito:
    as duas são caixas posicionadas, então quem vem depois no DOM pinta por
    cima — sem isso o brilho cobriria a logo. */
-.dl-cta__brand { position: relative; display: inline-flex; margin-bottom: 24px; }
+.dl-cta__brand {
+  position: relative;
+  display: inline-flex;
+  margin-bottom: 24px;
+}
+
 .dl-cta__brand::before {
-  content: ""; position: absolute; inset: -60%; pointer-events: none;
-  background: radial-gradient(closest-side, rgba(212,175,55,0.30), transparent 72%);
+  content: "";
+  position: absolute;
+  inset: -60%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(212,175,55,0.30), transparent 75%);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.dl-cta__brand:hover::before {
+  opacity: 1;
 }
 .dl-cta__brand img {
   position: relative; display: block;
@@ -1551,9 +2300,16 @@ const CSS = `
   letter-spacing: -0.045em; font-weight: 800; color: #0c121a;
 }
 .dl-cta__grad {
-  background: linear-gradient(100deg, var(--accent), var(--accent-soft) 45%, var(--gold));
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
+  background: linear-gradient(
+    100deg, 
+    color-mix(in srgb, var(--accent) 75%, transparent), 
+    color-mix(in srgb, var(--accent-soft) 75%, transparent) 45%, 
+    color-mix(in srgb, var(--gold) 75%, transparent)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 .dl-cta__sub { margin-top: 20px; font-size: 15.5px; line-height: 1.72; color: #4b5563; max-width: 46ch; }
 .dl-cta__note { margin-top: 32px; color: #9aa2ad; font-size: 9px; letter-spacing: 0.16em; }
@@ -1627,6 +2383,11 @@ const CSS = `
 
 @media (prefers-reduced-motion: reduce) {
   .dl-marquee__track, .dl-stage__float, .dl-chip-float, .dl-pulse { animation: none; }
+  /* O editor congela no primeiro layout, que já é a posição base dos blocos.
+     O aviso de salvo para de piscar e fica só posto. */
+  .dl-ed__bloco { animation: none; }
+  .dl-ed__ponteiro { display: none; }
+  .dl-ed__salvo { animation: none; opacity: 1; }
   .dl-stage:hover .dl-mockup { transform: perspective(1700px) rotateY(-15deg) rotateX(7deg) rotateZ(1.2deg); }
 
   /* O menu troca de estado sem o círculo crescendo nem os links subindo, e o

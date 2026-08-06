@@ -10,6 +10,8 @@ import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
 import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
+import { stripeWebhookRouter } from "./routes/stripeWebhookRoutes.js";
+import { iniciarFaxinaAutomatica } from "./services/faxinaScheduler.js";
 import { socialRouter } from "./routes/socialRoutes.js";
 import { socialWebhookRouter } from "./routes/socialWebhookRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
@@ -43,6 +45,8 @@ app.use(
 // Webhook do Meta — montado ANTES do express.json() e com corpo cru, pois a
 // validação de assinatura (X-Hub-Signature-256) exige o body sem parsing.
 app.use("/api/social/webhook", express.raw({ type: "*/*" }), socialWebhookRouter);
+// Mesmo motivo: a assinatura do Stripe é sobre os bytes crus do corpo.
+app.use("/api/webhooks/stripe", express.raw({ type: "*/*" }), stripeWebhookRouter);
 
 // Limite maior que o padrão (100kb) para acomodar imagens em base64 enviadas
 // à IA (rota /api/ai/imovel/sugerir). Demais rotas continuam pequenas.
@@ -90,4 +94,6 @@ app.use((error, _req, res, _next) => {
 
 app.listen(port, () => {
   console.log(`API rodando em http://localhost:${port}`);
+  // Só liga com FAXINA_AUTOMATICA=true — ver o porquê em faxinaScheduler.js.
+  iniciarFaxinaAutomatica();
 });

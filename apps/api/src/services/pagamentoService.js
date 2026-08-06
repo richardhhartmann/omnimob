@@ -1,0 +1,234 @@
+/**
+ * ─── Payment Service (Stripe Billing) ────────────────────────────────────────
+ * Seam da cobrança recorrente, no mesmo espírito do tenantRegistry: quem chama
+ * não sabe qual provedor está atrás. Trocar de provedor deve ser mexer só aqui.
+ *
+ * Usa a REST API do Stripe via `fetch`, sem SDK — mesmo padrão do aiService
+ * (Gemini) e do notificationService (Resend).
+ *
+ * ─── O NÚMERO DO CARTÃO NÃO PASSA POR AQUI ────────────────────────────────────
+ * Este serviço recebe um PaymentMethod (`pm_...`) já criado pelo Stripe Elements
+ * dentro do navegador, num iframe do próprio Stripe. Se o número do cartão
+ * passasse por este servidor, a Domus entraria no escopo mais pesado do PCI-DSS
+ * (SAQ D): auditoria anual, varredura trimestral, segregação de rede. Inviável
+ * para uma operação pequena — e, num vazamento, a responsabilidade é de quem
+ * armazenou.
+ *
+ * ─── POR QUE NÃO GUARDAMOS IDS DO STRIPE NO TENANT ────────────────────────────
+ * O vínculo vai em `metadata` (tenantId e slug) no cliente e na assinatura do
+ * Stripe. O webhook lê de lá para saber de quem é o pagamento. Assim não é
+ * preciso criar colunas novas — nem migração — só para casar os dois lados.
+ */
+
+const SECRET = process.env.STRIPE_SECRET_KEY || "";
+const API = "https://api.stripe.com/v1";
+
+/* Preços recorrentes criados no painel do Stripe (um por plano).
+   Aceita duas grafias por variável — a longa, que espelha a chave do plano, e a
+   abreviada em inglês. É fácil digitar uma pela outra, e um preço não lido faz
+   o plano simplesmente sumir da tela, sem erro nenhum: melhor tolerar. */
+const env = (...nomes) => nomes.map((n) => process.env[n]).find(Boolean) || "";
+
+const PRECOS = {
+  BASICO: env("STRIPE_PRICE_BASICO", "STRIPE_PRICE_BASIC"),
+  PROFISSIONAL: env("STRIPE_PRICE_PROFISSIONAL", "STRIPE_PRICE_PRO"),
+  PREMIUM: env("STRIPE_PRICE_PREMIUM"),
+};
+
+export function pagamentoConfigurado() {
+  return Boolean(SECRET);
+}
+
+export function planoTemPreco(plano) {
+  return Boolean(PRECOS[plano]);
+}
+
+/* A API do Stripe é form-urlencoded e aceita aninhamento por colchetes
+   (`metadata[tenantId]`, `items[0][price]`). Este encoder achata o objeto
+   nesse formato. */
+function paraForm(objeto, prefixo = "", saida = new URLSearchParams()) {
+  Object.entries(objeto).forEach(([chave, valor]) => {
+    if (valor === undefined || valor === null) return;
+    const nome = prefixo ? `${prefixo}[${chave}]` : chave;
+    if (Array.isArray(valor)) {
+      valor.forEach((item, i) => {
+        if (item && typeof item === "object") paraForm(item, `${nome}[${i}]`, saida);
+        else saida.append(`${nome}[${i}]`, String(item));
+      });
+    } else if (valor && typeof valor === "object") {
+      paraForm(valor, nome, saida);
+    } else {
+      saida.append(nome, String(valor));
+    }
+  });
+  return saida;
+}
+
+async function stripe(caminho, { method = "POST", dados, idempotencia } = {}) {
+  const headers = {
+    Authorization: `Bearer ${SECRET}`,
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  // Chave de idempotência: a rede cai, o cliente clica de novo, e sem isso
+  // sairiam duas assinaturas para o mesmo tenant.
+  if (idempotencia) headers["Idempotency-Key"] = idempotencia;
+
+  const resposta = await fetch(`${API}${caminho}`, {
+    method,
+    headers,
+    body: dados ? paraForm(dados).toString() : undefined,
+  });
+
+  const corpo = await resposta.json().catch(() => ({}));
+  if (!resposta.ok) {
+    const err = new Error(corpo?.error?.message || `Stripe respondeu ${resposta.status}.`);
+    // card_error = cartão recusado, e a mensagem do Stripe já vem em bom
+    // português para o portador; o resto é problema nosso.
+    err.code = corpo?.error?.type === "card_error" ? "RECUSADO" : "PROVEDOR_FALHOU";
+    err.stripe = corpo?.error;
+    throw err;
+  }
+  return corpo;
+}
+
+/**
+ * Cria a assinatura recorrente do tenant.
+ *
+ * @param {object} args
+ * @param {object} args.tenant           tenant que está assinando
+ * @param {string} args.plano            BASICO | PROFISSIONAL | PREMIUM
+ * @param {string} args.tokenPagamento   PaymentMethod (`pm_...`) vindo do Elements
+ * @returns {Promise<{ assinaturaId, clienteId, proximoVencimento, valorMensal, statusStripe }>}
+ * @throws  {Error} `.code`: PROVEDOR_NAO_CONFIGURADO | TOKEN_AUSENTE |
+ *                  PLANO_SOB_CONSULTA | RECUSADO | PENDENTE | PROVEDOR_FALHOU
+ */
+export async function criarAssinatura({ tenant, plano, tokenPagamento }) {
+  if (!pagamentoConfigurado()) {
+    const err = new Error(
+      "Cobrança automática ainda não está conectada. Fale com o time para fechar o plano.",
+    );
+    err.code = "PROVEDOR_NAO_CONFIGURADO";
+    throw err;
+  }
+  if (!tokenPagamento) {
+    const err = new Error("Dados de pagamento não recebidos.");
+    err.code = "TOKEN_AUSENTE";
+    throw err;
+  }
+  const preco = PRECOS[plano];
+  if (!preco) {
+    const err = new Error("Este plano é fechado sob consulta. Fale com o time.");
+    err.code = "PLANO_SOB_CONSULTA";
+    throw err;
+  }
+
+  // 1. Cliente no Stripe, já com o método de pagamento como padrão das faturas.
+  const cliente = await stripe("/customers", {
+    dados: {
+      name: tenant.name,
+      email: tenant.email || undefined,
+      payment_method: tokenPagamento,
+      invoice_settings: { default_payment_method: tokenPagamento },
+      metadata: { tenantId: tenant.id, slug: tenant.slug },
+    },
+    idempotencia: `cliente-${tenant.id}`,
+  });
+
+  // 2. Assinatura. `expand` traz o PaymentIntent da primeira fatura, que é onde
+  //    se vê se o cartão passou ou se caiu em autenticação (3-D Secure).
+  const assinatura = await stripe("/subscriptions", {
+    dados: {
+      customer: cliente.id,
+      items: [{ price: preco }],
+      default_payment_method: tokenPagamento,
+      payment_behavior: "error_if_incomplete", // falha na hora em vez de nascer pendente
+      expand: ["latest_invoice.payment_intent"],
+      metadata: { tenantId: tenant.id, slug: tenant.slug, plano },
+    },
+    idempotencia: `assinatura-${tenant.id}-${plano}`,
+  });
+
+  const intent = assinatura?.latest_invoice?.payment_intent;
+  if (intent && intent.status !== "succeeded") {
+    // Cartão que exige 3-D Secure cai aqui. Tratar exige devolver o
+    // client_secret e concluir no navegador — ver a ressalva no README.
+    const err = new Error(
+      "O banco pediu confirmação extra para este cartão. Tente outro cartão ou fale com o time.",
+    );
+    err.code = "PENDENTE";
+    err.clientSecret = intent.client_secret;
+    throw err;
+  }
+
+  return {
+    assinaturaId: assinatura.id,
+    clienteId: cliente.id,
+    statusStripe: assinatura.status,
+    valorMensal: (assinatura.items?.data?.[0]?.price?.unit_amount ?? 0) / 100,
+    /* Nas versões recentes da API o `current_period_end` saiu da assinatura e
+       passou para o item — a chave antiga volta undefined e a data da próxima
+       cobrança sumia da tela e do e-mail. Lemos as duas, na ordem nova. */
+    proximoVencimento: (() => {
+      const fim =
+        assinatura.items?.data?.[0]?.current_period_end ?? assinatura.current_period_end;
+      return fim ? new Date(fim * 1000) : null;
+    })(),
+  };
+}
+
+/** Cancela a assinatura no fim do período já pago. */
+export async function cancelarAssinatura(assinaturaId) {
+  if (!pagamentoConfigurado()) return null;
+  return stripe(`/subscriptions/${assinaturaId}`, {
+    dados: { cancel_at_period_end: true },
+  });
+}
+
+/* ── Preços vindos do Stripe ─────────────────────────────────────────────────
+   O valor exibido no painel é lido do próprio Stripe, não fixado no código.
+   Assim, mudar o preço lá dentro (ou pôr R$ 1 para testar) reflete na hora, e
+   não existe a chance de a tela dizer um valor e a cobrança fazer outro.
+
+   Cache curto em memória: preço muda raramente e isso evita uma ida ao Stripe
+   a cada abertura do modal. */
+let cachePrecos = { em: 0, dados: null };
+const CACHE_MS = 5 * 60 * 1000;
+
+function formatarBRL(centavos, moeda) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: (moeda || "brl").toUpperCase(),
+  }).format((centavos ?? 0) / 100);
+}
+
+/**
+ * @returns {Promise<{ [plano: string]: { rotulo: string, valor: number } }>}
+ *          Só os planos com preço configurado E existente no Stripe.
+ */
+export async function precosDosPlanos() {
+  if (!pagamentoConfigurado()) return {};
+  if (cachePrecos.dados && Date.now() - cachePrecos.em < CACHE_MS) return cachePrecos.dados;
+
+  const saida = {};
+  await Promise.all(
+    Object.entries(PRECOS)
+      .filter(([, id]) => Boolean(id))
+      .map(async ([plano, id]) => {
+        try {
+          const preco = await stripe(`/prices/${id}`, { method: "GET" });
+          const porMes = preco.recurring?.interval === "month";
+          saida[plano] = {
+            valor: (preco.unit_amount ?? 0) / 100,
+            rotulo: `${formatarBRL(preco.unit_amount, preco.currency)}${porMes ? "/mês" : ""}`,
+          };
+        } catch (erro) {
+          // Preço apagado ou id errado no .env: melhor sumir da lista do que
+          // oferecer um plano que vai falhar na hora de cobrar.
+          console.warn(`[pagamento] preço do plano ${plano} indisponível:`, erro.message);
+        }
+      }),
+  );
+
+  cachePrecos = { em: Date.now(), dados: saida };
+  return saida;
+}

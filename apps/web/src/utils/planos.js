@@ -49,7 +49,7 @@ export const RECURSOS_PLANOS = [
   { label: "Usuários, cargos e permissões", plans: "BASICO" },
   { label: "Relatórios e métricas de desempenho", plans: "BASICO" },
   { label: "Tudo do Plano Básico", plans: ["PROFISSIONAL"] },
-  { label: "Divulgação em redes sociais", plans: ["PROFISSIONAL"] },
+  { label: "Divulgação automática em redes sociais", plans: ["PROFISSIONAL"] },
   { label: "Tour virtual 360°", plans: ["PROFISSIONAL"] },
   { label: "Tudo do Plano Profissional", plans: ["PREMIUM"] },
   { label: "Geração de conteúdo por IA", plans: ["PREMIUM"] },

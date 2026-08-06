@@ -167,8 +167,8 @@ export function Eyebrow({ children, tone }) {
    O cabeçalho da landing usa uma arte própria (`_HEADER`), de mesma proporção,
    ajustada para aquele contexto. Todo o resto fica no lockup padrão. */
 export const LOGO_SRC = "/logo.png";
-export const LOGO_LOCKUP_SRC = "/tipo.png";
-export const LOGO_LOCKUP_HEADER_SRC = "/tipo_header.png";
+export const LOGO_LOCKUP_SRC = "/tipo_alt.png";
+export const LOGO_LOCKUP_HEADER_SRC = "/tipo_header_alt.png";
 
 // `size` é o lado da caixa; o PNG é mais alto que largo e se encaixa por
 // `object-fit: contain`, então a altura manda no tamanho aparente.

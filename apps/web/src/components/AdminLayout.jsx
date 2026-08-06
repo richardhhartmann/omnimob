@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { TrialAviso } from "./TrialAviso";
+import { BoasVindasModal } from "./BoasVindasModal";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   House,
@@ -224,6 +226,9 @@ export function AdminLayout({ session, onLogout }) {
     <Tooltip.Provider>
       <style>{CSS}</style>
 
+      {/* Recebe quem acabou de assinar, uma vez só, já dentro do produto. */}
+      <BoasVindasModal tenantSlug={tenantSlug} />
+
       <div className="ds-shell">
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
         <aside className={`ds-side${c ? " is-collapsed" : ""}`}>
@@ -271,6 +276,17 @@ export function AdminLayout({ session, onLogout }) {
 
           {/* Rodapé */}
           <div className="ds-foot">
+            {/* Só aparece enquanto o tenant estiver em teste; some ao assinar. */}
+            <SideTooltip label="Assinar a Domus" collapsed={c}>
+              <div>
+                <TrialAviso
+                  tenantSlug={tenantSlug}
+                  podeAssinar={Boolean(cargo?.gerenciarUsuarios)}
+                  aoAssinar={() => window.location.reload()}
+                />
+              </div>
+            </SideTooltip>
+
             <SideTooltip label="Expandir menu" collapsed={c}>
               <button type="button" className="ds-item" onClick={toggleCollapsed}>
                 <span className="ds-item__icon">{c ? <CaretRight size={16} /> : <CaretLeft size={16} />}</span>
