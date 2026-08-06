@@ -13,9 +13,5 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
-  },
-  "dependencies": {
-    "three": "^0.185.1",
-    "vanta": "^0.5.24"
   }
 }
