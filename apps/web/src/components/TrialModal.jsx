@@ -568,21 +568,27 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                   onChange={(e) => definir("imobiliaria", e.target.value)}
                   placeholder="Imobiliária Centro"
                   autoComplete="organization"
-                  aria-describedby="tm-endereco"
+                  aria-describedby={form.imobiliaria.trim() ? "tm-endereco" : undefined}
                 />
                 {erros.imobiliaria ? <span className="pm-erro">{erros.imobiliaria}</span> : null}
 
-                <span className={`tm-endereco is-${slug.estado}`} id="tm-endereco" aria-live="polite">
-                  <span className="tm-endereco__linha">
-                    <span className="dl-mono tm-endereco__url">
-                      {HOST_VITRINE}/<b>{slug.valor || "sua-imobiliaria"}</b>
+                {/* Só existe depois que há um nome: com o campo vazio, o bloco
+                    mostrava um endereço de mentira ("sua-imobiliaria") e uma
+                    frase sobre uma vitrine que ainda não tem nome — ruído antes
+                    de a pessoa ter feito qualquer coisa. */}
+                {form.imobiliaria.trim() ? (
+                  <span className={`tm-endereco is-${slug.estado}`} id="tm-endereco" aria-live="polite">
+                    <span className="tm-endereco__linha">
+                      <span className="dl-mono tm-endereco__url">
+                        {HOST_VITRINE}/<b>{slug.valor}</b>
+                      </span>
+                      <span className="tm-endereco__selo">{SELO_SLUG[slug.estado]}</span>
                     </span>
-                    <span className="tm-endereco__selo">{SELO_SLUG[slug.estado]}</span>
+                    <span className="tm-endereco__nota">
+                      {slug.mensagem || "Este será o endereço da sua vitrine pública."}
+                    </span>
                   </span>
-                  <span className="tm-endereco__nota">
-                    {slug.mensagem || "Este será o endereço da sua vitrine pública."}
-                  </span>
-                </span>
+                ) : null}
               </label>
 
               <div className="pm-dupla">

@@ -3164,7 +3164,17 @@ ${editorCSS()}
     --acao: 80%;
     flex-direction: column; align-items: stretch; gap: 12px;
   }
-  .dl-hero__copy .dl-btn-row > :first-child { width: var(--acao); heigh }
+  /* Sem o respiro de 30px que o kit dá à linha de ações: acima dela já vem o
+     espaço entre blocos do hero, e os dois somados abriam um vão morto entre o
+     parágrafo e os botões. */
+  .dl-hero__copy .dl-btn-row { margin-top: 0; }
+  /* A lista de vantagens está escondida no celular, mas o embrulho dela — a div
+     da entrada por rolagem — continuava cobrando o respiro de um bloco inteiro
+     ali no meio. Era metade do vão. */
+  .dl-hero__copy > *:has(.dl-checks) { display: none; }
+  /* Alvo de toque mais generoso: 11px de altura interna é medida de mouse. */
+  .dl-root .dl-btn-row .dl-btn { padding-top: 15px; padding-bottom: 15px; }
+  .dl-hero__copy .dl-btn-row > :first-child { width: var(--acao); }
   /* max-content como piso: em telas bem estreitas, metade da linha ficaria
      menor que "Ver planos" e o texto vazaria do botão. */
   .dl-hero__copy .dl-btn-row > :last-child { width: calc(var(--acao) / 2); min-width: max-content; }
@@ -3248,7 +3258,11 @@ ${editorCSS()}
   .dl-stage { order: 2; margin-bottom: 24px; width: 100%; }
   .dl-hero__copy > :last-child { order: 3; margin-bottom: 0; }
   .dl-hero__aside { display: none; }
-  .dl-editor { display: flex; flex-direction: column; }
+  /* Mesmo motivo do .dl-hero__grid: "center" serve à grade de duas colunas do
+     desktop, mas em coluna ele encolhe cada bloco até o conteúdo e centraliza.
+     Quem denunciava era o eyebrow — por ser inline-flex, ele é o mais estreito
+     de todos e aparecia sozinho no meio da tela, com o título à esquerda. */
+  .dl-editor { display: flex; flex-direction: column; align-items: stretch; }
   .dl-editor > div:first-child { display: contents; }
   .dl-editor .dl-eyebrow { order: 1; }
   .dl-editor .dl-h2 { order: 2; }
@@ -3298,11 +3312,13 @@ ${editorCSS()}
     /* O respiro de cima e de baixo é onde cabem a coroa pendurada e o estouro
        do flare: rolagem horizontal obriga a recortar o eixo vertical, e o corte
        acontece na borda da caixa de padding. Sem folga suficiente o neon
-       terminava numa linha reta — e reta é justamente o que denuncia que ele é
-       um efeito, e não luz. A conta da folga: a camada mais larga do flare
-       (blur 58, spread -12) sai uns 17px do cartão, mais a coroa, que sobe 14
-       e ainda tem sombra própria. */
-    padding: 38px 0 30px;
+       termina numa linha reta — e reta é justamente o que denuncia que ele é um
+       efeito, e não luz.
+
+       A conta: a camada mais larga do flare tem blur 58 e spread -12. O miolo
+       forte dela some por volta dos 17px, mas a cauda fraca vai até uns 46 —
+       era ela que estava sendo decepada com 38px de folga. Daí os 60. */
+    padding: 60px 0 46px;
     scrollbar-width: none; -ms-overflow-style: none;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
     mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
@@ -3313,7 +3329,14 @@ ${editorCSS()}
      embaixo eles só apareceriam depois de rolar o cartão inteiro — tarde
      demais para o que eles servem, que é avisar na chegada que existem três. */
   .dl-plans-caixa { display: flex; flex-direction: column; }
-  .dl-plans__pontos { order: -1; margin: 0 0 -4px; }
+  /* Os pontos entram POR DENTRO da folga do trilho (margem negativa) e sobem
+     uma camada. As duas coisas juntas são o que faz o flare passar por trás
+     deles: a folga guarda a cauda do neon, e o z-index deixa os pontos por
+     cima dela em vez de o brilho ser cortado ao chegar perto. */
+  .dl-plans__pontos {
+    order: -1; margin: 0 0 -34px;
+    position: relative; z-index: 1;
+  }
 
   /* Na tela estreita a seção é mais alta e a marca de cor precisa subir junto,
      senão ela morre antes do título. A máscara também abre, porque aqui a
