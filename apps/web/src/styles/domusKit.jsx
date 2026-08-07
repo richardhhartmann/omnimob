@@ -306,7 +306,14 @@ const CORE_CSS = `
   color: var(--default);
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Corta o que as formas decorativas jogam para fora sem virar contêiner de
+     rolagem. A diferença importa: hidden cria um scrollport, e todo
+     position:sticky daqui para dentro passa a se prender a ele — que não rola —
+     em vez de se prender à janela; era isso que soltava o painel de recursos do
+     topo no celular. clip recorta igual e não cria scrollport. A declaração
+     anterior fica como reserva para quem ainda não conhece o clip. */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 .dl-page { min-height: 100vh; }
 .dl-root *, .dl-root *::before, .dl-root *::after { box-sizing: border-box; }

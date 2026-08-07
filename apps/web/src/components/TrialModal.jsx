@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { formatPhone } from "../utils/masks";
+import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { MODAL_CSS } from "./modalCSS";
 import { SelectCustom } from "./SelectCustom";
 import { IconeEnvelope } from "./Icones.jsx";
@@ -47,6 +48,28 @@ const ITENS_MIGRACAO = [
 
 const VOLUMES = ["Até 50", "51 a 200", "201 a 500", "Mais de 500"];
 
+/* Quanto tempo sem digitar antes de perguntar ao servidor se o endereço está
+   livre. Curto o bastante para a resposta chegar antes de a pessoa passar para
+   o campo seguinte, longo o bastante para não consultar letra por letra. */
+const ESPERA_SLUG = 450;
+
+// Só o host: o endereço fica curto e não mente entre ambientes (em produção é
+// o domínio de verdade, em desenvolvimento é o localhost mesmo).
+const HOST_VITRINE =
+  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "domus.app/vitrine";
+
+const SLUG_VAZIO = { valor: "", estado: "vazio", mensagem: "" };
+
+// Selo ao lado do endereço. O estado "vazio" não diz nada de propósito: quem
+// mal começou a digitar não tem o que ser avisado.
+const SELO_SLUG = {
+  vazio: "",
+  checando: "verificando…",
+  livre: "✓ disponível",
+  indisponivel: "✕ indisponível",
+  erro: "não verificado",
+};
+
 /* Como os dados podem sair de lá. É a pergunta que decide o custo da migração,
    e por isso ela é feita agora e não na primeira reunião. "Não sei" é resposta
    legítima e a mais comum — quem cuida disso costuma ser o fornecedor antigo. */
@@ -77,8 +100,11 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
   const [criando, setCriando] = useState(false);
   const [enviado, setEnviado] = useState(false);   // link de confirmação a caminho
   const [falha, setFalha] = useState("");
+  /* Endereço da vitrine, derivado do nome da imobiliária.
+     estado: "vazio" | "checando" | "livre" | "indisponivel" | "erro" */
+  const [slug, setSlug] = useState(SLUG_VAZIO);
   const caixaRef = useRef(null);
-  const primeiroRef = useRef(null);
+  const primeiroRef = useRef(null); // campo do nome da imobiliária
 
   useEffect(() => {
     if (!aberto) return;
@@ -90,7 +116,67 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
     setEnviado(false);
     setFalha("");
     setCriando(false);
+    setSlug(SLUG_VAZIO);
   }, [aberto, planoDesejado]);
+
+  /* ── Endereço da vitrine ────────────────────────────────────────────────
+     O slug nasce do nome da imobiliária, e dois tenants não podem dividir o
+     mesmo. Descobrir isso só na criação do ambiente seria tarde: ou a pessoa
+     ganharia um endereço com sufixo que ela não escolheu, ou o cadastro
+     falharia depois de tudo preenchido. Aqui o conflito aparece enquanto o
+     nome ainda está sendo digitado, que é quando ele custa um clique.
+
+     O que dá para julgar sem rede (tamanho, caracteres, nomes reservados) é
+     julgado na hora; só o "esse já é de alguém" precisa do servidor, e essa
+     pergunta espera a digitação parar. A resposta anterior é abortada a cada
+     tecla, então uma consulta lenta nunca sobrescreve uma mais nova. */
+  const nomeDigitado = form.imobiliaria;
+  useEffect(() => {
+    if (!aberto) return undefined;
+
+    const bruto = nomeDigitado.trim();
+    const valor = slugify(bruto);
+
+    // Ainda no começo da digitação: mostra o endereço se formando, sem cobrar
+    // nada de quem mal começou a escrever.
+    if (bruto.length < 2) {
+      setSlug({ valor, estado: "vazio", mensagem: "" });
+      return undefined;
+    }
+
+    const motivo = motivoLocal(bruto);
+    if (motivo) {
+      setSlug({ valor, estado: "indisponivel", mensagem: MOTIVO_SLUG[motivo] });
+      return undefined;
+    }
+
+    setSlug({ valor, estado: "checando", mensagem: "" });
+
+    const controle = new AbortController();
+    const timer = setTimeout(() => {
+      api
+        .verificarSlugDomus(bruto, { signal: controle.signal })
+        .then((r) =>
+          setSlug({
+            valor: r.slug || valor,
+            estado: r.disponivel ? "livre" : "indisponivel",
+            mensagem: r.mensagem || "",
+          }),
+        )
+        .catch((erro) => {
+          if (erro.name === "AbortError") return;
+          // Sem resposta não dá para afirmar nada — e travar o cadastro por
+          // causa de uma consulta que caiu seria pior que deixar seguir: o
+          // servidor confere de novo no envio.
+          setSlug({ valor, estado: "erro", mensagem: "" });
+        });
+    }, ESPERA_SLUG);
+
+    return () => {
+      clearTimeout(timer);
+      controle.abort();
+    };
+  }, [aberto, nomeDigitado]);
 
   useEffect(() => {
     if (!aberto) return undefined;
@@ -158,6 +244,13 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
     const achados = validar(form);
     setErros(achados);
     if (Object.keys(achados).length) return;
+    /* O botão já fica desligado nestes dois casos; a trava aqui é para o Enter,
+       que envia o formulário sem passar por ele. O aviso vermelho embaixo do
+       campo já está na tela — só falta levar o cursor até lá. */
+    if (slug.estado === "indisponivel" || slug.estado === "checando") {
+      primeiroRef.current?.focus();
+      return;
+    }
     if (perfil === "existente") {
       setFalha("");
       setPasso("migracao");
@@ -192,6 +285,21 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
       });
       setEnviado(true);
     } catch (erro) {
+      /* O servidor confere o endereço de novo na hora do envio, e ele pode ter
+         sido levado por outra imobiliária entre a digitação e o clique. Quando
+         é isso, o erro pertence ao campo do nome — volta para lá em vez de
+         virar um aviso genérico no rodapé da etapa de migração. */
+      if (erro.body?.code === "SLUG_INDISPONIVEL") {
+        setSlug({
+          valor: erro.body.slug || slug.valor,
+          estado: "indisponivel",
+          mensagem: erro.message,
+        });
+        setFalha("");
+        setPasso("dados");
+        setTimeout(() => primeiroRef.current?.focus(), 60);
+        return;
+      }
       setFalha(erro.message || "Não foi possível criar o ambiente agora.");
     } finally {
       setCriando(false);
@@ -447,17 +555,34 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                 </div>
               ) : null}
 
+              {/* O nome não é só um rótulo: é dele que sai o endereço da
+                  vitrine, que precisa ser único entre todas as imobiliárias.
+                  Por isso o campo mostra o endereço se formando e diz na hora
+                  se ele está livre. */}
               <label className="pm-campo">
                 <span className="pm-rotulo">Nome da imobiliária</span>
                 <input
                   ref={primeiroRef}
-                  className={`pm-entrada${erros.imobiliaria ? " is-erro" : ""}`}
+                  className={`pm-entrada${erros.imobiliaria || slug.estado === "indisponivel" ? " is-erro" : ""}`}
                   value={form.imobiliaria}
                   onChange={(e) => definir("imobiliaria", e.target.value)}
                   placeholder="Imobiliária Centro"
                   autoComplete="organization"
+                  aria-describedby="tm-endereco"
                 />
                 {erros.imobiliaria ? <span className="pm-erro">{erros.imobiliaria}</span> : null}
+
+                <span className={`tm-endereco is-${slug.estado}`} id="tm-endereco" aria-live="polite">
+                  <span className="tm-endereco__linha">
+                    <span className="dl-mono tm-endereco__url">
+                      {HOST_VITRINE}/<b>{slug.valor || "sua-imobiliaria"}</b>
+                    </span>
+                    <span className="tm-endereco__selo">{SELO_SLUG[slug.estado]}</span>
+                  </span>
+                  <span className="tm-endereco__nota">
+                    {slug.mensagem || "Este será o endereço da sua vitrine pública."}
+                  </span>
+                </span>
               </label>
 
               <div className="pm-dupla">
@@ -504,9 +629,16 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                 <button type="button" className="pm-botao" onClick={() => setPasso("perfil")} disabled={criando}>
                   Voltar
                 </button>
-                <button type="submit" className="pm-botao pm-botao--primario" disabled={criando}>
+                {/* Desligado enquanto o endereço não fecha: seguir com um slug
+                    ocupado só adiaria a mesma recusa para o fim do cadastro. */}
+                <button
+                  type="submit"
+                  className="pm-botao pm-botao--primario"
+                  disabled={criando || slug.estado === "indisponivel" || slug.estado === "checando"}
+                >
                   {criando
                     ? "Preparando ambiente…"
+                    : slug.estado === "checando" ? "Verificando endereço…"
                     : perfil === "existente" ? "Próximo" : "Começar o teste"}
                 </button>
               </div>
@@ -539,6 +671,47 @@ const CSS = `${MODAL_CSS}
   background: rgba(99,102,241,0.16); border: 1px solid rgba(99,102,241,0.4);
   color: var(--accent-soft); margin-bottom: 4px;
 }
+/* ── Endereço da vitrine ──────────────────────────────────────────────────
+   Fica colado no campo do nome, com um respiro menor que o do próximo campo:
+   é consequência do que foi digitado ali em cima, não um campo novo. A caixa
+   troca de cor conforme o estado, e o texto de apoio troca junto — no lugar do
+   "este será o endereço" entra o motivo da recusa, sem a linha pular.
+   ─────────────────────────────────────────────────────────────────────── */
+.tm-endereco {
+  display: grid; gap: 5px; margin-top: 1px;
+  padding: 9px 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+  transition: background 0.22s ease, border-color 0.22s ease;
+}
+.tm-endereco__linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* O slug pode ficar longo; ele encolhe e corta, e o selo não sai da linha. */
+/* Sem o caixa-alta do .dl-mono: o slug é minúsculo de verdade, e mostrá-lo em
+   maiúsculas seria prometer um endereço que não é o que vai ser criado. */
+.tm-endereco__url {
+  flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--placeholder);
+  text-transform: none; letter-spacing: 0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tm-endereco__url b { color: var(--subtle); font-weight: 600; }
+.tm-endereco__selo {
+  flex: 0 0 auto; font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--placeholder);
+}
+.tm-endereco__nota { font-size: 11px; line-height: 1.5; color: var(--placeholder); }
+
+.tm-endereco.is-checando .tm-endereco__selo { color: var(--subtle); }
+.tm-endereco.is-livre {
+  background: rgba(20,184,166,0.08); border-color: rgba(20,184,166,0.3);
+}
+.tm-endereco.is-livre .tm-endereco__url b { color: var(--mint); }
+.tm-endereco.is-livre .tm-endereco__selo { color: var(--mint); }
+.tm-endereco.is-indisponivel {
+  background: rgba(248,113,113,0.09); border-color: rgba(248,113,113,0.3);
+}
+.tm-endereco.is-indisponivel .tm-endereco__url b { color: #fca5a5; text-decoration: line-through; }
+.tm-endereco.is-indisponivel .tm-endereco__selo,
+.tm-endereco.is-indisponivel .tm-endereco__nota { color: #fca5a5; }
+
 .tm-opcional {
   font-style: normal; font-weight: 500; color: var(--placeholder); font-size: 10.5px;
   margin-left: 5px;

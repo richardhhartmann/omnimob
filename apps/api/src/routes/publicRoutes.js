@@ -17,6 +17,8 @@ import {
   assinarConvite,
   lerConvite,
   trialExistenteParaEmail,
+  verificarSlug,
+  MOTIVO_SLUG,
 } from "../services/trialService.js";
 
 const { PropertyStatus, MetricEventType } = prismaPkg;
@@ -289,6 +291,31 @@ function baseDoApp(req) {
   return null;
 }
 
+/* Conferência do endereço da vitrine, enquanto a pessoa ainda está digitando o
+   nome da imobiliária. Só lê, e é chamada a cada pausa na digitação, então tem
+   limite próprio — bem mais folgado que o do teste, que escreve no banco.
+
+   Não expõe nada de quem já existe: a resposta é um sim ou um não sobre um
+   slug que o próprio visitante acabou de compor. */
+const slugLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: "Muitas verificações. Aguarde um instante." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+publicRouter.get("/slug", slugLimiter, async (req, res) => {
+  const nome = typeof req.query?.nome === "string" ? req.query.nome.slice(0, 120) : "";
+  try {
+    const resultado = await verificarSlug(nome);
+    return res.json({ ...resultado, mensagem: resultado.motivo ? MOTIVO_SLUG[resultado.motivo] : null });
+  } catch (erro) {
+    console.error("[slug] falha ao verificar:", erro);
+    return res.status(500).json({ error: "Não foi possível verificar o endereço agora." });
+  }
+});
+
 publicRouter.post("/trial", trialLimiter, async (req, res) => {
   const parsed = trialSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -309,6 +336,20 @@ publicRouter.post("/trial", trialLimiter, async (req, res) => {
       });
     }
 
+    /* O endereço da vitrine é conferido de novo aqui, e não só na digitação: o
+       aviso no formulário é conveniência, esta é a regra. Sem isto, bastaria
+       enviar o formulário sem passar pelo campo (ou dois cadastros simultâneos
+       com o mesmo nome) para o conflito voltar. */
+    const endereco = await verificarSlug(imobiliaria);
+    if (!endereco.disponivel) {
+      return res.status(409).json({
+        error: MOTIVO_SLUG[endereco.motivo] || "Escolha outro nome para a imobiliária.",
+        code: "SLUG_INDISPONIVEL",
+        motivo: endereco.motivo,
+        slug: endereco.slug,
+      });
+    }
+
     const base = baseDoApp(req);
     if (!base) {
       console.error(
@@ -325,7 +366,17 @@ publicRouter.post("/trial", trialLimiter, async (req, res) => {
        só nasce no clique do link. Guardar isso em banco exigiria uma tabela de
        convites pendentes (e a faxina dela) para um dado que só interessa se a
        pessoa confirmar. No token, ele chega junto de quem confirmou. */
-    const token = assinarConvite({ imobiliaria, email, telefone, perfil, planoDesejado, migracao });
+    const token = assinarConvite({
+      imobiliaria,
+      email,
+      telefone,
+      perfil,
+      planoDesejado,
+      migracao,
+      // O endereço já mostrado na landing viaja junto para o ambiente nascer
+      // onde foi prometido, e não num slug recalculado meia hora depois.
+      slug: endereco.slug,
+    });
     const link = `${base}/comecar?token=${encodeURIComponent(token)}`;
 
     const modelo = emailConviteTrial({ imobiliaria, link });
@@ -385,6 +436,9 @@ publicRouter.post("/trial/confirmar", trialLimiter, async (req, res) => {
       email: convite.email,
       telefone: convite.telefone || "",
       plano: convite.planoDesejado || "PREMIUM",
+      // Convites emitidos antes desta mudança não trazem o campo; sem ele o
+      // slug volta a ser calculado na hora, como era antes.
+      slugEscolhido: convite.slug || "",
     });
     if (aviso) console.warn("[trial]", aviso);
 

@@ -84,10 +84,14 @@ export async function trialExistenteParaEmail(email) {
 
 // ─── Slug ────────────────────────────────────────────────────────────────────
 
-const RESERVADOS = new Set([
+export const RESERVADOS = new Set([
   "admin", "api", "app", "www", "domus", "painel", "public", "static",
   "login", "vitrine", "suporte", "contato", "blog", "teste", "demo",
 ]);
+
+// Mesmo mínimo do nome da imobiliária (trialSchema): um nome aceito no
+// formulário não pode gerar um slug recusado aqui.
+export const SLUG_MIN = 2;
 
 export function slugify(texto) {
   return String(texto || "")
@@ -119,6 +123,43 @@ export async function gerarSlugUnico(nome) {
   return `${inicial}-${Date.now().toString(36)}`;
 }
 
+/**
+ * O slug deste nome está livre?
+ *
+ * Complementa `gerarSlugUnico` em vez de substituí-lo, e a diferença é de
+ * INTENÇÃO: lá o objetivo é sempre sair com um endereço válido (colisão vira
+ * "-2"), aqui é dizer um sim ou um não para quem ainda está digitando. Sufixo
+ * numérico resolve o banco e estraga a marca — ninguém quer descobrir depois
+ * que a vitrine dele mora em /vitrine/imobiliaria-central-3. Melhor avisar
+ * enquanto o nome ainda pode mudar.
+ *
+ * @returns {Promise<{ slug: string, disponivel: boolean, motivo: string|null }>}
+ *   motivo: "curto" | "invalido" | "reservado" | "ocupado" | null
+ */
+export async function verificarSlug(nome) {
+  const slug = slugify(nome);
+  const bruto = String(nome || "").trim();
+
+  if (!slug) return { slug: "", disponivel: false, motivo: bruto ? "invalido" : "curto" };
+  if (slug.length < SLUG_MIN) return { slug, disponivel: false, motivo: "curto" };
+  if (RESERVADOS.has(slug)) return { slug, disponivel: false, motivo: "reservado" };
+
+  const prisma = getGlobalPrisma();
+  const existe = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+  if (existe) return { slug, disponivel: false, motivo: "ocupado" };
+
+  return { slug, disponivel: true, motivo: null };
+}
+
+/* Mensagens em um lugar só: a rota de verificação, a de criação e a landing
+   precisam dizer a mesma coisa sobre o mesmo nome. */
+export const MOTIVO_SLUG = {
+  curto: "Nome curto demais. Use pelo menos duas letras.",
+  invalido: "Use letras ou números no nome da imobiliária.",
+  reservado: "Este nome é reservado pela Domus. Escolha outro.",
+  ocupado: "Este nome já está em uso por outra imobiliária. Escolha outro.",
+};
+
 // ─── Senha temporária ────────────────────────────────────────────────────────
 
 // Sem 0/O/1/l/I: a senha vai por e-mail e alguém vai digitar à mão.
@@ -141,11 +182,22 @@ export function senhaTemporaria(tamanho = 10) {
  * parâmetro `emTeste` sumiu junto com aquele fluxo: um booleano que só recebia
  * `true` é uma bifurcação que ninguém percorre e que engana quem lê depois.
  *
+ * `slugEscolhido` é o endereço que a landing conferiu e mostrou para a pessoa
+ * antes de ela pedir o teste — ele vem junto no convite para o ambiente nascer
+ * exatamente no endereço prometido. Entre o pedido e o clique no e-mail cabem
+ * até 30 minutos, e nesse intervalo alguém pode ter levado o mesmo nome: aí, e
+ * só aí, cai no sufixo numérico de `gerarSlugUnico` — um endereço com "-2" é
+ * melhor que recusar um teste que já foi confirmado.
+ *
  * @returns {{ tenant, login, senha, expiraEm, imoveis, aviso }}
  */
-export async function criarTrial({ imobiliaria, email, telefone = "", plano = "PREMIUM" }) {
+export async function criarTrial({ imobiliaria, email, telefone = "", plano = "PREMIUM", slugEscolhido = "" }) {
   const prisma = getGlobalPrisma();
-  const slug = await gerarSlugUnico(imobiliaria);
+  const preferido = slugEscolhido ? await verificarSlug(slugEscolhido) : null;
+  const slug = preferido?.disponivel ? preferido.slug : await gerarSlugUnico(imobiliaria);
+  if (slugEscolhido && slug !== slugEscolhido) {
+    console.warn(`[trial] slug "${slugEscolhido}" ficou indisponível entre o convite e a confirmação; usando "${slug}".`);
+  }
   const expiraEm = fimDoTrial();
   const senha = senhaTemporaria();
   const login = `admin-${slug}`.slice(0, 60);

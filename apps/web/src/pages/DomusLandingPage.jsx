@@ -1,9 +1,11 @@
 import * as THREE from "three";
 import FOG from "vanta/dist/vanta.fog.min";
+import WAVES from "vanta/dist/vanta.waves.min";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Buildings,
+  Crown,
   PaintBrushBroad,
   ChartLineUp,
   Megaphone,
@@ -11,7 +13,6 @@ import {
   ShieldCheck,
   FacebookLogo,
   InstagramLogo,
-  WhatsappLogo,
   CloudArrowUp,
   Sparkle,
   Globe,
@@ -122,6 +123,25 @@ const RECURSOS = [
 // De quantos em quantos milissegundos o carrossel avança sozinho.
 const RECURSO_INTERVALO = 3000;
 
+/* Marca do WhatsApp, o glifo oficial — o mesmo caminho já usado nos previews de
+   publicação do cadastro (WA_ICON em PropertyForm). O do Phosphor é desenho
+   próprio da família: um telefone em traço grosso dentro de um balão. Ao lado
+   do "f" do Facebook e da câmera do Instagram, que são as marcas de verdade,
+   só ele destoa.
+
+   A assinatura imita a dos ícones do Phosphor (`size`) para o componente entrar
+   nas mesmas listas sem caso especial. `weight` é aceito e descartado: quem
+   chama passa "fill" para os outros ícones, e aqui o preenchimento já é o
+   próprio desenho. A cor sai de currentColor, então o glifo acompanha o
+   contexto — branco sobre a cor da marca, escuro sobre fundo claro. */
+function WhatsappMarca({ size = 24, weight, ...rest }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" {...rest}>
+      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z" />
+    </svg>
+  );
+}
+
 /* Os três previews da tela de publicações. Cores e degradês são os mesmos do
    passo "Divulgar" do cadastro (PropertyForm), para a landing e o produto
    falarem a mesma língua. `de` é de onde o card entra: os laterais vêm do
@@ -140,7 +160,7 @@ const REDES = [
     brilho: "rgba(220,39,67,0.42)",
   },
   {
-    nome: "WHATSAPP", Icon: WhatsappLogo, raio: "50%", de: "-62%",
+    nome: "WHATSAPP", Icon: WhatsappMarca, raio: "50%", de: "-62%",
     cor: "#25d366",
     anel: "linear-gradient(115deg,#25d366,#128c7e,#34e07a,#25d366)",
     brilho: "rgba(37,211,102,0.42)",
@@ -285,7 +305,7 @@ const INTEGRACOES = [
     Icon: InstagramLogo,
     cor: "linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",
   },
-  { type: "MENSAGENS", name: "WhatsApp", Icon: WhatsappLogo, cor: "#25d366" },
+  { type: "MENSAGENS", name: "WhatsApp", Icon: WhatsappMarca, cor: "#25d366" },
   { type: "MÍDIA", name: "Cloudinary", Icon: CloudArrowUp, cor: "#3448c5" },
   { type: "IA", name: "Google Gemini", Icon: Sparkle, cor: "linear-gradient(135deg,#4285f4,#9b72cb,#d96570)" },
   { type: "VITRINE", name: "Página pública", Icon: Globe, cor: ACCENT },
@@ -356,6 +376,35 @@ const PRECOS = {
 // cards resumidos do painel e não fazem sentido numa comparação lado a lado.
 const LINHAS_PLANO = RECURSOS_PLANOS.filter((r) => !String(r.label).startsWith("Tudo do Plano"));
 
+/* ── Resumo do plano (celular) ───────────────────────────────────────────────
+   As dez linhas com ✓ e ✕ são uma tabela de comparação: elas funcionam com os
+   três planos lado a lado, onde o olho corre na horizontal. No carrossel só há
+   um plano por vez, e aí a tabela vira uma lista alta demais, quase toda igual
+   entre os três cartões — as sete primeiras linhas são as mesmas em todos.
+
+   O resumo diz a única coisa que muda de um plano para o outro: o que ele
+   acrescenta ao anterior. É para isso que servem as linhas "Tudo do Plano X",
+   que a comparação descarta. Quem quiser a tabela inteira abre pelo botão.
+   ────────────────────────────────────────────────────────────────────────── */
+const HERANCA = Object.fromEntries(
+  RECURSOS_PLANOS
+    .filter((r) => String(r.label).startsWith("Tudo do Plano"))
+    .map((r) => [Array.isArray(r.plans) ? r.plans[0] : r.plans, r.label]),
+);
+
+// Teto do resumo. Só morde o Básico, que não herda nada e abre com os próprios
+// sete recursos; do Profissional em diante a lista já nasce com duas ou três.
+const TETO_RESUMO = 4;
+
+function resumoDoPlano(planKey) {
+  const proprios = LINHAS_PLANO
+    .filter((r) => (Array.isArray(r.plans) ? r.plans[0] : r.plans) === planKey)
+    .map((r) => ({ label: r.label, heranca: false }));
+  const herdado = HERANCA[planKey];
+  const lista = herdado ? [{ label: herdado, heranca: true }, ...proprios] : proprios;
+  return lista.slice(0, TETO_RESUMO);
+}
+
 const NIVEL_MINIMO = { BASICO: 0, PROFISSIONAL: 1, PREMIUM: 2 };
 
 // `plans` vem como string (recurso base, todos os planos têm) ou array com o
@@ -376,6 +425,7 @@ const PLANS_BASE = PLANOS.map((p) => ({
   per: PRECOS[p.key]?.per ?? "",
   nota: PRECOS[p.key]?.nota ?? "",
   linhas: LINHAS_PLANO.map((r) => ({ label: r.label, incluso: incluiRecurso(p.key, r) })),
+  resumo: resumoDoPlano(p.key),
   highlight: p.key === "PROFISSIONAL",
 }));
 
@@ -863,7 +913,11 @@ function Recursos() {
           </Reveal>
         ))}
       </div>
-      <Reveal delay={160} style={{ display: "flex" }}>
+      {/* O painel das abas. No celular ele passa a vir primeiro e gruda no topo
+          (ver CSS): as seis abas são altas, e sem isso tocar numa delas mudaria
+          uma tela que está a mil pixels de distância — um controle sem efeito
+          visível é um controle quebrado. */}
+      <Reveal className="dl-split__tela" delay={160} style={{ display: "flex" }}>
         <BrowserMock recurso={RECURSOS[ativo]} indice={ativo} />
       </Reveal>
     </div>
@@ -962,6 +1016,318 @@ function FaqItem({ item, indice, aberto, onToggle }) {
   );
 }
 
+/* ── Planos ──────────────────────────────────────────────────────────────────
+   No desktop continuam sendo três colunas de uma tabela só: lado a lado é o
+   arranjo que deixa comparar, e comparar é a decisão desta seção.
+
+   No celular não existe lado a lado — empilhados, os três viravam três telas de
+   rolagem e ninguém comparava nada. Viram carrossel: um plano por vez, centrado,
+   com o vizinho aparecendo pela borda para dizer que há mais. O passo automático
+   é só para quem chega e não toca em nada; ao primeiro gesto ele para de vez,
+   porque carrossel que continua andando embaixo do dedo é armadilha.
+   ────────────────────────────────────────────────────────────────────────── */
+const CARROSSEL = "(max-width: 640px)";
+const INTERVALO_PLANO = 5000;
+
+/* Cor de cada plano no carrossel. Uma escala que sobe junto com os planos: azul
+   é o tom de entrada, roxo é a cor da marca e dourado é o que a Domus já usa
+   para o que é topo de linha.
+
+     cor    contorno neon do cartão em foco
+     onda   cor das ondas do fundo (Vanta WAVES) — o Básico não tem, e é isso
+            que faz a escada existir: o fundo neutro dele é a referência de onde
+            a progressão começa
+     tinta  reserva estática para quem pede movimento reduzido, onde as ondas
+            não rodam */
+const FLARE = {
+  BASICO: { cor: "#3882f8b4", onda: null, tinta: null },
+  PROFISSIONAL: { cor: "#a855f7", onda: 0x5331b6, tinta: "rgba(83,49,182,0.22)" },
+  PREMIUM: { cor: "#f0c24b", onda: 0xa0732e, tinta: "rgba(160,115,46,0.22)" },
+};
+
+// Primeira cor de onda da escala: o efeito nasce nela, então a primeira
+// aparição já entra na cor certa em vez de atravessar meio espectro até ela.
+const ONDA_INICIAL = FLARE.PROFISSIONAL.onda;
+
+function Planos({ planos, aoTestar }) {
+  const [caixaRef, visivel] = useReveal();
+  const trilhoRef = useRef(null);
+  const [atual, setAtual] = useState(0);
+  const [manual, setManual] = useState(false);
+  // O passo automático lê o índice de dentro do intervalo; em estado ele leria
+  // sempre o valor da montagem, e o carrossel ficaria pulando entre 0 e 1.
+  const atualRef = useRef(0);
+  atualRef.current = atual;
+
+  const [emCarrossel, setEmCarrossel] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(CARROSSEL).matches,
+  );
+  /* ── Fundo em ondas ────────────────────────────────────────────────────
+     O plano em foco tinge o fundo da seção, e a troca é gradual porque a cor
+     das ondas é interpolada quadro a quadro — não trocada de uma vez.
+
+     Dá para mexer na cor sem recriar nada: o onUpdate do WAVES lê
+     `options.color` a cada quadro, então basta escrever ali. Uma instância
+     nova por plano significaria destruir e criar um contexto WebGL a cada
+     cinco segundos.
+
+     A instância fica em variável local do efeito (não em estado nem em ref):
+     é a mesma armadilha do FOG lá embaixo — guardada fora, a limpeza fecha
+     sobre o valor anterior e sobra um canvas órfão no StrictMode. */
+  const ondaRef = useRef(null);
+  const corOnda = useRef(null);
+  const alvoOnda = useRef(null);
+  if (!corOnda.current) {
+    corOnda.current = new THREE.Color(ONDA_INICIAL);
+    alvoOnda.current = new THREE.Color(ONDA_INICIAL);
+  }
+
+  useEffect(() => {
+    const el = ondaRef.current;
+    if (!el || !emCarrossel || !visivel) return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+
+    const efeito = WAVES({
+      el,
+      THREE,
+      mouseControls: true,
+      touchControls: true,
+      gyroControls: false,
+      minHeight: 200.0,
+      minWidth: 200.0,
+      scale: 1.0,
+      scaleMobile: 1.0,
+      color: corOnda.current.getHex(),
+    });
+
+    /* O WAVES mede o elemento uma vez e só remede no resize da janela. Como a
+       camada acompanha a altura da seção — que muda quando alguém abre a
+       tabela de um plano —, sem isto o canvas ficaria com a altura antiga e as
+       ondas terminariam no meio do fundo. */
+    const observador = new ResizeObserver(() => efeito.resize());
+    observador.observe(el);
+
+    let quadro = requestAnimationFrame(function passo() {
+      // Perto o bastante do alvo: para de escrever e só mantém o laço vivo
+      // para a próxima troca de plano.
+      if (corOnda.current.getHex() !== alvoOnda.current.getHex()) {
+        corOnda.current.lerp(alvoOnda.current, 0.05);
+        efeito.options.color = corOnda.current.getHex();
+      }
+      quadro = requestAnimationFrame(passo);
+    });
+
+    return () => {
+      cancelAnimationFrame(quadro);
+      observador.disconnect();
+      efeito.destroy();
+    };
+  }, [emCarrossel, visivel]);
+
+  // O alvo muda com o cartão em foco; o laço acima leva a cor até ele. Planos
+  // sem onda (o Básico) não mexem no alvo: o que some é a camada inteira, e
+  // guardar a última cor evita a volta atravessando o espectro.
+  const ondaAtual = FLARE[planos[atual]?.key]?.onda;
+  useEffect(() => {
+    if (ondaAtual) alvoOnda.current.setHex(ondaAtual);
+  }, [ondaAtual]);
+
+  // Quais cartões estão com a tabela inteira aberta. Por plano, e não um só
+  // aberto por vez: quem abre um está comparando, e fechar o anterior sozinho
+  // desfaria justamente a comparação.
+  const [abertos, setAbertos] = useState({});
+
+  useEffect(() => {
+    const consulta = window.matchMedia(CARROSSEL);
+    const aoMudar = (e) => setEmCarrossel(e.matches);
+    consulta.addEventListener("change", aoMudar);
+    return () => consulta.removeEventListener("change", aoMudar);
+  }, []);
+
+  /* Centraliza o cartão no trilho. A conta sai de getBoundingClientRect, e não
+     de offsetLeft, porque offsetLeft é medido a partir do primeiro ancestral
+     posicionado — que aqui não é o trilho. */
+  function irPara(i) {
+    const trilho = trilhoRef.current;
+    const cartao = trilho?.children?.[i];
+    if (!trilho || !cartao) return;
+    const t = trilho.getBoundingClientRect();
+    const c = cartao.getBoundingClientRect();
+    const alvo = trilho.scrollLeft + (c.left - t.left) - (t.width - c.width) / 2;
+    const semMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    trilho.scrollTo({ left: alvo, behavior: semMovimento ? "auto" : "smooth" });
+  }
+
+  // Passo automático: só no carrossel, só com a seção à vista e só enquanto
+  // ninguém tiver tomado o controle.
+  useEffect(() => {
+    if (!emCarrossel || manual || !visivel) return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const id = setInterval(() => {
+      const proximo = (atualRef.current + 1) % planos.length;
+      setAtual(proximo);
+      irPara(proximo);
+    }, INTERVALO_PLANO);
+    return () => clearInterval(id);
+  }, [emCarrossel, manual, visivel, planos.length]);
+
+  /* Quem manda no ponto aceso é a posição real do trilho, não o clique: assim
+     arrastar com o dedo acende o ponto certo, e o passo automático não precisa
+     avisar ninguém. */
+  useEffect(() => {
+    const trilho = trilhoRef.current;
+    if (!trilho || !emCarrossel) return undefined;
+    let quadro = 0;
+    const aoRolar = () => {
+      cancelAnimationFrame(quadro);
+      quadro = requestAnimationFrame(() => {
+        const meio = trilho.getBoundingClientRect().left + trilho.clientWidth / 2;
+        let perto = 0;
+        let menor = Infinity;
+        Array.from(trilho.children).forEach((cartao, i) => {
+          const r = cartao.getBoundingClientRect();
+          const dist = Math.abs(r.left + r.width / 2 - meio);
+          if (dist < menor) { menor = dist; perto = i; }
+        });
+        setAtual(perto);
+      });
+    };
+    trilho.addEventListener("scroll", aoRolar, { passive: true });
+    return () => {
+      trilho.removeEventListener("scroll", aoRolar);
+      cancelAnimationFrame(quadro);
+    };
+  }, [emCarrossel]);
+
+  return (
+    <div className="dl-plans-caixa" ref={caixaRef}>
+      {/* Camada do fundo: fica atrás do conteúdo da seção inteira (z-index -1
+          dentro do .dl-wrap, que é quem cria o contexto de empilhamento) e
+          extravasa o respiro lateral para o clarão não terminar numa quina.
+          A tinta estática só aparece quando as ondas não podem rodar. */}
+      <div
+        className={`dl-plans-onda${ondaAtual ? " is-on" : ""}`}
+        ref={ondaRef}
+        aria-hidden="true"
+        style={{ "--tinta": FLARE[planos[atual]?.key]?.tinta || "transparent" }}
+      />
+
+      <div
+        className="dl-plans"
+        ref={trilhoRef}
+        // Pointerdown e não scroll: rolagem também é disparada pelo passo
+        // automático, e aí ele se desligaria sozinho no primeiro movimento.
+        onPointerDown={() => setManual(true)}
+      >
+        {planos.map((p, i) => {
+          // Resumido só no carrossel: no desktop os três aparecem juntos e a
+          // tabela inteira é o que permite comparar de relance.
+          const resumido = emCarrossel && !abertos[p.key];
+          return (
+          <Reveal
+            key={p.key}
+            className={`dl-plan${p.highlight ? " is-highlight" : ""}${i === atual ? " is-atual" : ""}`}
+            delay={i * 110}
+            style={{ "--flare": FLARE[p.key]?.cor || "var(--accent-soft)" }}
+          >
+            {/* A coroa fica pendurada na borda de cima, metade dentro e metade
+                fora: é um selo pregado no cartão, não mais uma linha dentro
+                dele. Vale para os dois planos que se destacam — o mais
+                procurado e o topo de linha — e cada uma sai na cor do próprio
+                plano, então elas não se confundem: a roxa é o queridinho das
+                imobiliárias, a dourada é o teto do produto. Quem separa uma da
+                outra em palavras é a etiqueta "MAIS POPULAR", que só o
+                Profissional tem. */}
+            {p.key === "PREMIUM" ? (
+              <span className="dl-plan__coroa" aria-hidden="true">
+                <Crown size={13} weight="fill" />
+              </span>
+            ) : null}
+            {p.highlight ? <span className="dl-plan__tag dl-mono">● MAIS POPULAR</span> : null}
+            <h3 className="dl-plan__name">{p.name}</h3>
+            <p className="dl-plan__desc">{p.desc}</p>
+            <div className="dl-plan__price">
+              <strong>{p.price}</strong>
+              {p.per ? <span>{p.per}</span> : null}
+            </div>
+            <span className="dl-mono dl-plan__nota">{p.nota}</span>
+
+            {resumido ? (
+              <ul className="dl-plan__list dl-plan__list--resumo" id={`plano-lista-${p.key}`}>
+                {p.resumo.map((l) => (
+                  <li key={l.label} className={l.heranca ? "is-heranca" : ""}>
+                    <span aria-hidden="true"><IconeCheck size={12} /></span>
+                    {l.label}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="dl-plan__list" id={`plano-lista-${p.key}`}>
+                {p.linhas.map((l) => (
+                  <li key={l.label} className={l.incluso ? "" : "is-off"}>
+                    <span aria-hidden="true">{l.incluso ? <IconeCheck size={12} /> : <IconeX size={11} />}</span>
+                    {l.label}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {emCarrossel ? (
+              <button
+                type="button"
+                className="dl-plan__mais"
+                aria-expanded={!resumido}
+                aria-controls={`plano-lista-${p.key}`}
+                onClick={() => setAbertos((a) => ({ ...a, [p.key]: !a[p.key] }))}
+              >
+                {resumido ? "Ver todos os recursos" : "Ver menos"}
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 6.5 8 10.5l4-4" />
+                </svg>
+              </button>
+            ) : null}
+            {/* Todo caminho da página leva ao teste — não existe mais "assinar
+                sem testar". O plano escolhido aqui não muda o que o teste
+                libera (ele libera tudo); vai junto como intenção, para o time
+                saber com o que a pessoa se identificou. */}
+            {/* O botão cheio marca "é este aqui". No desktop isso é fixo, e é o
+                Profissional — ele está no meio de três, e o destaque diz qual
+                deles recomendamos. No carrossel só existe um plano por vez: o
+                destaque passa a seguir o cartão em foco, senão o botão cheio
+                apareceria num cartão recuado enquanto o que está no centro fica
+                com o contorno vazio. */}
+            <Button
+              as="button"
+              type="button"
+              variant={emCarrossel && i === atual ? "primary" : "outline"}
+              className="dl-btn--block"
+              onClick={() => aoTestar(p.key)}
+            >
+              Testar com este plano
+            </Button>
+          </Reveal>
+          );
+        })}
+      </div>
+
+      {emCarrossel ? (
+        <div className="dl-plans__pontos">
+          {planos.map((p, i) => (
+            <button
+              key={p.key}
+              type="button"
+              className={`dl-plans__ponto${i === atual ? " is-on" : ""}`}
+              aria-label={`Ver o plano ${p.name}`}
+              aria-current={i === atual}
+              onClick={() => { setManual(true); setAtual(i); irPara(i); }}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // Grid de métricas: um observer só para o bloco inteiro, então os quatro
 // números começam a contar juntos enquanto os cards entram em cascata.
 function StatsGrid() {
@@ -988,7 +1354,10 @@ function StatsGrid() {
 // ── Página ──────────────────────────────────────────────────────────────────
 
 export function DomusLandingPage() {
-  const [faqAberto, setFaqAberto] = useState(0);
+  // -1 = todas fechadas. A lista abre inteira à vista, e quem escolhe o que
+  // ler é o visitante — com uma já aberta, a primeira pergunta ganhava um
+  // destaque que ela não tem sobre as outras.
+  const [faqAberto, setFaqAberto] = useState(-1);
   const ano = new Date().getFullYear();
 
   /* Uma porta só para a página inteira: o teste. `planoDesejado` guarda com
@@ -1136,7 +1505,10 @@ export function DomusLandingPage() {
       </section>
 
       {/* ── Números ── */}
-      <section className="dl-section dl-section--alt">
+      {/* Os ids das seções sem âncora de menu existem para o revezamento de
+          fundos: no celular a seção do desafio sai de cena e o xadrez precisa
+          ser refeito de lá para baixo (ver "Zebra do celular" no CSS). */}
+      <section className="dl-section dl-section--alt" id="numeros">
         <div className="dl-wrap">
           <SectionHead eyebrow="NÚMEROS DA DOMUS" strong="A plataforma completa" soft="para quem vive de vender imóveis.">
             Uma base só, pensada para imobiliárias brasileiras: imóveis, vitrine, leads, equipe e divulgação
@@ -1149,8 +1521,13 @@ export function DomusLandingPage() {
         </div>
       </section>
 
-      {/* ── O desafio ── */}
-      <section className="dl-section dl-section--ghost">
+      {/* ── O desafio ──
+          Só no desktop: a seção inteira é construída em torno da palavra
+          gigante que o cursor revela, e sem cursor sobra um texto solto num
+          fundo vazio. Quem esconde é o CSS, não uma condição em JS — assim não
+          há um segundo componente montado por largura de tela, e girar o
+          aparelho volta a mostrar a seção sem remontar nada. */}
+      <section className="dl-section dl-section--ghost" id="desafio">
         <GhostWord>+ visibilidade.</GhostWord>
         <div className="dl-wrap">
           <SectionHead eyebrow="O DESAFIO" eyebrowTone={GOLD} strong="Pare de perder cliente" soft="por falta de presença digital.">
@@ -1176,7 +1553,7 @@ export function DomusLandingPage() {
       </section>
 
       {/* ── Editor de vitrine ── */}
-      <section className="dl-section dl-section--alt">
+      <section className="dl-section dl-section--alt" id="editor">
         <div className="dl-wrap dl-editor">
           <Reveal>
             <Eyebrow tone={ROSE}>EDITOR VISUAL</Eyebrow>
@@ -1246,7 +1623,7 @@ export function DomusLandingPage() {
       
 
       {/* ── Integrações ── */}
-      <section className="dl-section dl-section--alt">
+      <section className="dl-section dl-section--alt" id="integracoes">
         <div className="dl-wrap">
           <SectionHead eyebrow="CANAIS E INTEGRAÇÕES" strong="Conectada aos canais" soft="onde seu cliente já está.">
             A Domus liga o cadastro do imóvel aos canais que realmente trazem cliente, com a IA cuidando do
@@ -1273,7 +1650,7 @@ export function DomusLandingPage() {
       </section>
 
       {/* ── Faixa de destaques ── */}
-      <section className="dl-section dl-section--tight">
+      <section className="dl-section dl-section--tight" id="porque">
         <div className="dl-wrap">
           <SectionHead eyebrow="POR QUE DOMUS" strong="O que muda no dia a dia" soft="de quem usa.">
             Detalhes pequenos que aparecem toda semana na rotina da imobiliária.
@@ -1309,41 +1686,7 @@ export function DomusLandingPage() {
             Sem fidelidade, cancele quando quiser. Todo o núcleo do produto já está no Básico.
           </SectionHead>
 
-          <div className="dl-plans">
-            {PLANS.map((p, i) => (
-              <Reveal key={p.key} className={`dl-plan${p.highlight ? " is-highlight" : ""}`} delay={i * 110}>
-                {p.highlight ? <span className="dl-plan__tag dl-mono">● MAIS POPULAR</span> : null}
-                <h3 className="dl-plan__name">{p.name}</h3>
-                <p className="dl-plan__desc">{p.desc}</p>
-                <div className="dl-plan__price">
-                  <strong>{p.price}</strong>
-                  {p.per ? <span>{p.per}</span> : null}
-                </div>
-                <span className="dl-mono dl-plan__nota">{p.nota}</span>
-                <ul className="dl-plan__list">
-                  {p.linhas.map((l) => (
-                    <li key={l.label} className={l.incluso ? "" : "is-off"}>
-                      <span aria-hidden="true">{l.incluso ? <IconeCheck size={12} /> : <IconeX size={11} />}</span>
-                      {l.label}
-                    </li>
-                  ))}
-                </ul>
-                {/* Todo caminho da página leva ao teste — não existe mais
-                    "assinar sem testar". O plano escolhido aqui não muda o que
-                    o teste libera (ele libera tudo); vai junto como intenção,
-                    para o time saber com o que a pessoa se identificou. */}
-                <Button
-                  as="button"
-                  type="button"
-                  variant={p.highlight ? "primary" : "outline"}
-                  className="dl-btn--block"
-                  onClick={() => abrirTeste(p.key)}
-                >
-                  Testar com este plano
-                </Button>
-              </Reveal>
-            ))}
-          </div>
+          <Planos planos={PLANS} aoTestar={abrirTeste} />
         </div>
       </section>
 
@@ -1370,10 +1713,8 @@ export function DomusLandingPage() {
 
       {/* ── CTA final (seção clara) ── */}
       <section id="contato" className="dl-cta" ref={vantaRef}>
-        <div className="dl-cta__shapes" aria-hidden="true">
-          <Scallop size={170} color="#c7d2fe" style={{ position: "absolute", top: "-30px", left: "-50px" }} />
-          <Scallop size={120} color="#fde68a" style={{ position: "absolute", bottom: "-20px", right: "-30px" }} />
-        </div>
+        {/* Sem escalopes aqui: a névoa em WebGL já é o movimento desta seção, e
+            as flores disputavam com ela em cima do mesmo fundo claro. */}
         <Reveal className="dl-wrap dl-cta__inner">
           {/* A marca fecha a página aqui, e não por acaso: esta é a única
               seção clara, a única em que os vazados do PNG (as janelas e o
@@ -1474,9 +1815,21 @@ const CSS = `
   backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 
-.dl-header__logo { z-index: 1001; display: inline-flex; align-items: center; transition: opacity 0.4s var(--ease-out); }
+/* O flex-shrink zerado é o que impede a tipografia de amassar. Sem ele o link é
+   um item de flex encolhível, e quando a barra aperta (celular, com o CTA ainda
+   dentro dela) ele espremia a arte: a imagem tem largura automática, então ela
+   cedia em largura sem ceder em altura e as letras saíam achatadas. */
+.dl-header__logo {
+  z-index: 1001; display: inline-flex; align-items: center; flex: 0 0 auto;
+  transition: opacity 0.4s var(--ease-out);
+}
 .dl-header.is-menu-open .dl-header__logo { opacity: 0; pointer-events: none; }
-.dl-header__tipo { height: 44px; transition: height 0.45s var(--ease-out); }
+/* Segunda trava, agora do lado da imagem: seja qual for a caixa que sobrar, a
+   arte cabe dentro dela inteira, na proporção original. */
+.dl-header__tipo {
+  height: 44px; width: auto; max-width: 100%; object-fit: contain; object-position: left center;
+  transition: height 0.45s var(--ease-out);
+}
 .dl-header.is-scrolled .dl-header__tipo { height: 34px; }
 .dl-header__right { display: flex; align-items: center; gap: 22px; z-index: 1001; }
 .dl-header__cta { transition: opacity 0.4s var(--ease-out); }
@@ -2228,6 +2581,61 @@ ${editorCSS()}
 }
 .dl-plans__note b { color: var(--default); }
 
+/* Pontos do carrossel. Só existem no DOM quando a tela é de celular, então não
+   há nada a esconder aqui — o alvo de toque é o botão inteiro (24 × 26), e o
+   ponto visível é o ::before, bem menor que ele. */
+/* ── Plano sob o mouse (desktop) ────────────────────────────────────────────
+   O mesmo par do carrossel — o flare do plano e o botão aceso —, agora regido
+   pelo mouse em vez do foco. Vale para o cartão inteiro: quem está lendo a
+   lista de recursos já está considerando aquele plano, e o botão acender antes
+   de o cursor chegar nele é o que transforma a leitura em clique.
+
+   O flare aqui é PARA DENTRO, e não em volta como no celular. No desktop os
+   três planos dividem uma moldura só, com overflow escondido para os cantos
+   arredondados valerem: qualquer brilho externo seria decepado na borda do
+   quadro e nas divisórias entre os cartões. Para dentro, o cartão acende
+   inteiro e a moldura continua intacta.
+
+   Só onde existe mouse de verdade: em tela de toque o :hover fica grudado
+   depois do primeiro toque, e o carrossel já tem o dono do destaque, que é o
+   cartão em foco. */
+@media (hover: hover) and (pointer: fine) and (min-width: 641px) {
+  .dl-plan { transition: box-shadow 0.4s var(--ease-out); }
+  .dl-plan:hover {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--flare) 45%, transparent),
+      inset 0 0 30px -14px var(--flare),
+      inset 0 -40px 60px -50px var(--flare);
+  }
+  /* O botão de contorno assume o mesmo preenchimento do botão do plano em
+     destaque. A regra precisa de três classes para vencer .dl-root .dl-btn--
+     outline, que já pesa duas. */
+  .dl-root .dl-plan:hover .dl-btn--outline {
+    background: #fff; color: #0a0a0b; border-color: #fff;
+  }
+  .dl-plan:hover .dl-btn--outline .dl-btn__arrow { background: rgba(0,0,0,0.10); }
+}
+
+/* Camada do fundo em ondas e coroa do queridinho: as duas são peças do
+   carrossel e só existem lá (ver o bloco do celular). Ficam escondidas aqui, e
+   não removidas do JSX, para virar a orientação do aparelho não depender de um
+   re-render — no desktop quem cumpre esse papel é a etiqueta "MAIS POPULAR". */
+.dl-plans-onda, .dl-plan__coroa { display: none; }
+
+.dl-plans__pontos { display: flex; justify-content: center; gap: 6px; margin-top: 2px; }
+.dl-root .dl-plans__ponto {
+  width: 24px; height: 26px; padding: 0; border: 0; border-radius: 0;
+  background: none; box-shadow: none; transform: none; cursor: pointer;
+  display: grid; place-items: center;
+}
+.dl-root .dl-plans__ponto:hover { background: none; box-shadow: none; transform: none; }
+.dl-plans__ponto::before {
+  content: ""; width: 7px; height: 7px; border-radius: 999px;
+  background: rgba(255,255,255,0.24);
+  transition: width 0.35s var(--ease-out), background 0.35s ease;
+}
+.dl-plans__ponto.is-on::before { width: 20px; background: var(--accent-soft); }
+
 /* ── FAQ ── */
 .dl-faq { border-top: 1px solid var(--line); }
 .dl-faq__item { border-bottom: 1px solid var(--line); }
@@ -2297,7 +2705,6 @@ ${editorCSS()}
   opacity: 0.5;
 }
 
-.dl-cta__shapes { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
 .dl-cta__inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
 
 /* Marca de fechamento. O halo é ::before e a imagem é relative de propósito:
@@ -2391,8 +2798,36 @@ ${editorCSS()}
   .dl-menu__inner { grid-template-columns: 1fr; gap: 46px; align-content: start; padding-top: 108px; }
   .dl-menu__ghost { font-size: 11rem; }
 }
+/* ── Tablet estreito ──
+   As abas de recursos já estão empilhadas sobre o painel desde os 1024px, e é
+   aqui que a distância entre um e outro começa a incomodar. */
+@media (max-width: 860px) {
+  /* Coluna de flex, e não mais grade: item de grade fica preso à própria
+     célula, que aqui tem a altura do painel — ele descolaria do topo no
+     primeiro rolar. Em flex, quem contém o sticky é a coluna inteira, então o
+     painel acompanha as seis abas até a última. */
+  .dl-split { display: flex; flex-direction: column; gap: 16px; }
+  /* O painel vem primeiro e fica preso no alto enquanto as abas passam por
+     baixo. É o que devolve sentido ao toque: a tela muda à vista de quem
+     tocou. O fundo é obrigatório — sem ele o conteúdo rolaria por trás da
+     legenda, que não tem superfície própria. */
+  .dl-split__tela {
+    order: -1; position: sticky; top: 58px; z-index: 2;
+    padding: 10px 0; background: var(--bg);
+  }
+  /* Preso no topo, o painel não pode comer a tela inteira: o que sobra é para
+     as abas, que são o conteúdo desta seção. */
+  .dl-browser { max-height: min(468px, 42vh); }
+}
+
 @media (max-width: 640px) {
-  .dl-browser__grid, .dl-footer__cols { grid-template-columns: 1fr; }
+  /* O mock é a miniatura de uma tela de desktop: as duas colunas continuam,
+     agora em escala menor. Empilhado numa coluna só ele deixava de parecer o
+     produto e virava uma lista de cartões enormes, dos quais cabia um e meio. */
+  .dl-browser__body { padding: 14px; gap: 11px; }
+  .dl-browser__thumb { height: 44px; }
+  .dl-browser__banner { height: 60px; }
+  .dl-browser__chart { height: 74px; }
   .dl-hero__shapes { display: none; }
   .dl-def { padding: 22px 20px; }
   .dl-journey { grid-template-columns: 1fr; }
@@ -2400,9 +2835,13 @@ ${editorCSS()}
   .dl-root .dl-faq__q { grid-template-columns: 40px 1fr 24px; gap: 12px; }
   .dl-faq__a { padding: 0 0 20px 52px; }
   /* Sem largura para o CTA nem para o rótulo: sobram o logo e o hambúrguer, e
-     o CTA continua alcançável de dentro do menu. */
-  .dl-header__cta, .dl-burger__label { display: none; }
-  .dl-header__tipo, .dl-header.is-scrolled .dl-header__tipo { height: 32px; }
+     o CTA continua alcançável de dentro do menu.
+
+     Com .dl-root porque as variantes de botão do kit (.dl-root .dl-btn) pesam
+     mais que uma classe solta: sem o prefixo, este display:none perde e o CTA
+     continua na barra — foi ele que espremeu a tipografia do logo até aqui. */
+  .dl-root .dl-header__cta, .dl-burger__label { display: none; }
+  .dl-header__tipo, .dl-header.is-scrolled .dl-header__tipo { height: 34px; }
   .dl-menu__socials { flex-direction: column; gap: 8px; }
   .dl-menu__ghost { font-size: 7.5rem; }
   /* Sem cursor não há foco para revelar a palavra — ela só ocuparia memória. */
@@ -2412,10 +2851,260 @@ ${editorCSS()}
   .dl-mockup__body { grid-template-columns: 72px 1fr; }
   .dl-chip-float { display: none; }
   .dl-stage__float { animation: none; }
+
+  /* ── Densidade ──
+     Uma coluna só (o padrão do kit no celular) transforma listas curtas em
+     rolagem infinita: oito integrações viram oito cartões de tela cheia, e
+     quatro números viram quatro. Como esses cartões são só um rótulo e um
+     valor, eles cabem em dupla e a seção encolhe pela metade. */
+  .dl-grid-hair--4 { grid-template-columns: repeat(2, 1fr); }
+  .dl-cell { padding: 18px 16px; }
+  .dl-stat__l { font-size: 12px; }
+
+  /* ── Zebra do celular ──
+     Sem a seção do desafio, o revezamento de fundos quebra: sobrariam duas
+     seções claras coladas e o resto trocado. Daqui para baixo o xadrez é
+     refeito à mão — é o preço de esconder uma seção do meio, e é por isso que
+     as seções sem âncora de menu ganharam id. */
+  .dl-section--ghost { display: none; }
+  #editor, #integracoes, #planos { background: var(--bg); }
+  #recursos, #porque, #faq { background: var(--bg-alt); }
+  /* A seção de recursos deixa de ser a base: o painel grudado no topo tem de
+     acompanhar o fundo dela, senão aparece um retângulo escuro sobre o claro. */
+  .dl-split__tela { background: var(--bg-alt); }
+
+  /* ── Integrações ──
+     O preenchimento pela cor da marca é um hover, e hover não existe no
+     celular: sem ele a seção virava oito linhas de texto. A marca sai de
+     fundo da célula e vira um selo, sempre visível — mesma informação, mesma
+     cor, sem depender de um cursor que não existe. */
+  .dl-int { padding-top: 16px; }
+  .dl-int__marca {
+    position: relative; inset: auto; z-index: 1;
+    width: 34px; height: 34px; border-radius: 11px; margin-bottom: 9px;
+    flex: 0 0 auto; opacity: 1; transform: none;
+    color: #fff; box-shadow: 0 6px 16px -8px rgba(0,0,0,0.9);
+  }
+  .dl-int--claro .dl-int__marca { color: rgba(10,10,11,0.72); }
+  .dl-int__marca svg { width: 18px; height: 18px; }
+  /* Uma superfície de leve para a célula deixar de ser um retângulo vazio em
+     volta do selo. Cor sólida de propósito: --int-cor é um degradê em duas das
+     marcas, e degradê dentro de degradê é declaração inválida — o efeito
+     sumiria justamente no Instagram e no Gemini, sem erro nenhum aparecer. */
+  .dl-int { background: rgba(255,255,255,0.022); }
+
+  /* O hero é a primeira tela: menos respiro morto entre o texto e o mockup. */
+  .dl-hero { padding-top: clamp(104px, 26vw, 132px); }
+  .dl-hero__grid { gap: 38px; margin-top: 0px; }
+  .dl-hero__aside { margin-top: 22px; padding: 20px 18px; }
+  .dl-lead { font-size: 15px; margin-top: 18px; }
+
+  /* Cartões da faixa: mais estreitos, para caber um inteiro na tela em vez de
+     um e meio cortado, e a máscara recua para não comer o que aparece. */
+  .dl-fcard { width: 224px; min-height: 150px; padding: 18px 20px; }
+  .dl-fcard__value { font-size: 32px; }
+  .dl-marquee {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+
+  /* A barra do mock do editor não comporta URL e aviso lado a lado; some a
+     URL, que é enfeite, e fica o aviso, que é a história da seção. */
+  .dl-ed__url { display: none; }
+  .dl-ed { padding: 12px; }
+  .dl-ed__area { inset: 9px; }
+
+  /* ── Carrossel de planos ──
+     A moldura única vira trilho: cada plano é um cartão inteiro, com borda e
+     canto próprios. A máscara apaga as pontas, e o que sobra do vizinho ali é
+     o convite para arrastar.
+
+     O respiro das pontas é metade do que sobra do trilho depois do cartão — é
+     ele que deixa o PRIMEIRO e o ÚLTIMO pararem no centro, e não encostados na
+     borda. Ele é margem dos cartões das pontas, e não padding do trilho, para
+     as duas medidas correrem sobre a MESMA base: com padding lateral, a
+     largura do cartão passaria a ser uma porcentagem do que sobrou depois dele
+     e a conta nunca fecharia (o cartão do meio centraliza, os das pontas
+     ficam alguns pixels fora). Margem de item flex também conta na área
+     rolável, então a última ponta tem para onde rolar. */
+  .dl-plans {
+    --dl-cartao: 70%;
+    --dl-ponta: 15%; /* (100 - 70) / 2 */
+    display: flex; gap: 12px;
+    /* Cada cartão com a própria altura: esticados todos na altura do maior,
+       abrir a tabela de um deles esticaria os três, e os dois fechados
+       ficariam com um vão morto entre a lista e o botão. */
+    align-items: flex-start;
+    border: 0; border-radius: 0;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    /* O respiro de cima e de baixo é onde cabem a coroa pendurada e o estouro
+       do flare: rolagem horizontal obriga a recortar o eixo vertical, e o corte
+       acontece na borda da caixa de padding. Sem folga suficiente o neon
+       terminava numa linha reta — e reta é justamente o que denuncia que ele é
+       um efeito, e não luz. A conta da folga: a camada mais larga do flare
+       (blur 58, spread -12) sai uns 17px do cartão, mais a coroa, que sobe 14
+       e ainda tem sombra própria. */
+    padding: 38px 0 30px;
+    scrollbar-width: none; -ms-overflow-style: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  }
+  .dl-plans::-webkit-scrollbar { display: none; }
+
+  /* Os pontos sobem para cima do trilho. Um plano é mais alto que a tela, então
+     embaixo eles só apareceriam depois de rolar o cartão inteiro — tarde
+     demais para o que eles servem, que é avisar na chegada que existem três. */
+  .dl-plans-caixa { display: flex; flex-direction: column; }
+  .dl-plans__pontos { order: -1; margin: 0 0 -4px; }
+
+  /* ── Fundo da seção ──
+     As ondas do plano em foco. A camada mora atrás de TODO o conteúdo do
+     .dl-wrap (z-index -1 dentro do contexto que ele cria) e transborda o
+     respiro lateral dele, para o clarão morrer fora da tela em vez de numa
+     quina. A máscara arredonda o fim das ondas; sem ela o efeito termina num
+     retângulo, que é o que denuncia o truque.
+
+     O degradê de fundo é a reserva de quem pede movimento reduzido: ali o
+     Vanta não roda e a camada fica só com a mancha de cor. */
+  .dl-plans-onda {
+    display: block; position: absolute; z-index: -1;
+    inset: -48px -24px -28px;
+    border-radius: 30px; overflow: hidden; pointer-events: none;
+    opacity: 0; transition: opacity 1.1s ease;
+    background: radial-gradient(115% 70% at 50% 45%, var(--tinta, transparent), transparent 72%);
+    -webkit-mask-image: radial-gradient(112% 74% at 50% 46%, #000 40%, transparent 100%);
+    mask-image: radial-gradient(112% 74% at 50% 46%, #000 40%, transparent 100%);
+  }
+  /* Fraca de propósito: é fundo de uma seção com texto branco por cima, não
+     papel de parede. */
+  .dl-plans-onda.is-on { opacity: 0.5; }
+  .dl-plan {
+    flex: 0 0 var(--dl-cartao); scroll-snap-align: center;
+    padding: 22px 18px; border: 1px solid var(--line); border-radius: 18px;
+    transform-origin: 50% 40%;
+    /* O fundo não entra na transição porque não muda: só a luz em volta muda. */
+    transition:
+      filter 0.45s var(--ease-out), transform 0.45s var(--ease-out),
+      border-color 0.45s ease, box-shadow 0.45s ease;
+  }
+  /* Repetido com o mesmo peso da regra de ≤1024 (que zera a borda de baixo do
+     último) só para vencer no empate: aqui todo cartão é fechado dos quatro
+     lados. */
+  .dl-plan:last-child { border-bottom: 1px solid var(--line); }
+  .dl-plan:first-child { margin-left: var(--dl-ponta); }
+  .dl-plan:last-child { margin-right: var(--dl-ponta); }
+  /* ── Cartão fora de foco ──
+     Superfície SEMPRE a mesma, e sempre opaca; o recuo é feito por brilho, não
+     por opacidade. As duas decisões vêm do mesmo bug: o cartão piscava com a
+     cor do plano ao trocar de foco.
+
+     Opacidade menor que 1 faz duas coisas ao mesmo tempo. Deixa passar o que
+     está atrás — e atrás está o fundo em ondas, colorido. E cria contexto de
+     empilhamento: o halo do flare, que morava em z-index -1 (atrás de todos os
+     cartões), passava a valer DENTRO do cartão, e ali o negativo fica acima do
+     fundo, não atrás. Daí o miolo pegar a cor durante a animação e voltar ao
+     normal quando a opacidade fechava em 1.
+
+     brightness escurece sem tirar a opacidade: o cartão continua sólido do
+     começo ao fim. E o halo virou sombra externa, que não tem como pintar
+     miolo nenhum.
+
+     Sem .is-visible no seletor, de propósito: essa classe é da entrada por
+     rolagem, e o terceiro cartão vive fora da tela — ele chegava à ponta do
+     trilho sem escurecer, porque a regra ainda não valia para ele. */
+  .dl-plans .dl-plan {
+    background: var(--surface);
+    filter: brightness(0.55); transform: scale(0.965);
+  }
+  /* ── Flare do cartão em foco ──
+     A cor vem de --flare, escrito no cartão pelo JS, então cada plano acende na
+     sua. Quatro camadas de sombra: o fio da borda, a luz curta e duas de
+     estouro, que é o que dá a leitura de neon.
+
+     Tudo em box-shadow, e nenhuma camada por baixo do cartão. Sombra externa é
+     desenhada FORA da caixa de borda, então ela não tem como pintar o miolo em
+     nenhum estado — nem quando o cartão vira contexto de empilhamento. Foi a
+     tentativa anterior, com um pseudo-elemento borrado atrás, que fazia o
+     cartão piscar de cor no meio da troca.
+
+     Nada de sombra interna, pelo mesmo motivo: ela pintaria a beirada do miolo
+     com a cor do plano. */
+  .dl-plans .dl-plan.is-atual {
+    filter: none; transform: none;
+    border-color: color-mix(in srgb, var(--flare) 65%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--flare) 42%, transparent),
+      0 0 11px -2px color-mix(in srgb, var(--flare) 55%, transparent),
+      0 0 26px -4px color-mix(in srgb, var(--flare) 42%, transparent),
+      0 0 58px -12px color-mix(in srgb, var(--flare) 72%, transparent);
+  }
+  /* ── Coroa ──
+     Pendurada na borda de cima, metade para dentro e metade para fora. A cor
+     sai do --flare do próprio cartão em vez de um dourado fixo: assim a coroa
+     do Profissional é roxa e a do Premium é dourada, e cada uma pertence ao
+     seu plano em vez de as duas parecerem o mesmo selo repetido. */
+  .dl-plan__coroa {
+    position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 2;
+    width: 34px; height: 27px; border-radius: 10px;
+    display: grid; place-items: center; color: #17071f;
+    background: linear-gradient(165deg, color-mix(in srgb, var(--flare) 65%, #fff), var(--flare));
+    box-shadow:
+      0 6px 15px -6px color-mix(in srgb, var(--flare) 80%, transparent),
+      0 0 0 3px var(--bg);
+  }
+
+  .dl-plan__name { font-size: 23px; }
+  .dl-plan__price strong { font-size: 30px; }
+  .dl-plan__price { margin-top: 14px; }
+  .dl-plan__desc { font-size: 12.5px; line-height: 1.6; }
+  /* Cada linha economizada aqui aparece três vezes na altura do cartão. */
+  .dl-plan__list li { font-size: 12.5px; }
+  .dl-head { margin-bottom: 28px; }
+
+  /* ── Resumo do cartão ──
+     A tabela de dez linhas era quase toda a altura do plano, e ela nem compara
+     nada aqui: um cartão por vez, com sete linhas iguais em todos. Fica o que
+     este plano acrescenta ao anterior; a tabela inteira continua a um toque. */
+  .dl-plan__list { margin: 16px 0 8px; gap: 9px; }
+  .dl-plan__list--resumo li.is-heranca { color: var(--strong); font-weight: 600; }
+  .dl-plan__list--resumo li.is-heranca span { color: var(--accent-soft); }
+  .dl-root .dl-plan__mais {
+    width: 100%; margin: 0 0 18px; padding: 9px 0;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    background: none; border: 0; border-radius: 0; box-shadow: none; transform: none;
+    font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-soft);
+    cursor: pointer;
+  }
+  .dl-root .dl-plan__mais:hover,
+  .dl-root .dl-plan__mais:active {
+    background: none; box-shadow: none; transform: none; scale: 1; color: var(--strong);
+  }
+  .dl-plan__mais svg { transition: transform 0.3s var(--ease-out); }
+  .dl-plan__mais[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+  .dl-callout { padding: 22px 20px; }
+
+  /* Rodapé em duas colunas: em uma só, três blocos de links viravam meia tela
+     de rolagem para fechar a página. */
+  .dl-footer__cols { grid-template-columns: repeat(2, 1fr); gap: 24px 18px; }
+  .dl-footer__inner { gap: 34px; }
+  .dl-footer__bottom { flex-direction: column; gap: 8px; margin-top: 34px; }
+}
+
+/* Telas bem estreitas (≤ 360px): o que ainda estava em dupla passa a caber
+   melhor sozinho. */
+@media (max-width: 380px) {
+  .dl-grid-hair--4 { grid-template-columns: 1fr; }
+  .dl-footer__cols { grid-template-columns: 1fr; }
+  .dl-btn-row .dl-btn { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dl-marquee__track, .dl-stage__float, .dl-chip-float, .dl-pulse { animation: none; }
+  /* As ondas do fundo nem chegam a ser criadas (ver o efeito em Planos); no
+     lugar delas fica a mancha de cor estática da própria camada. O flare do
+     cartão já é sombra parada, então não há o que desligar nele. */
   /* O editor congela no primeiro layout, que já é a posição base dos blocos.
      O aviso de salvo para de piscar e fica só posto. */
   .dl-ed__bloco { animation: none; }

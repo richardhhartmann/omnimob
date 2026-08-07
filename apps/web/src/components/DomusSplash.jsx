@@ -70,6 +70,42 @@ const LETRAS = [
   },
 ];
 
+/* ── Versão empilhada (telas pequenas) ───────────────────────────────────────
+   No celular não cabe o lockup deitado: a 92vw o símbolo fica do tamanho de uma
+   unha e a palavra encosta nas duas bordas. Abaixo deste ponto a marca se monta
+   em coluna — símbolo em cima, DOMUS embaixo, tudo centralizado — e o conjunto
+   pode crescer, porque agora quem manda na largura é só a palavra.
+
+   As medidas estão no espaço do viewBox (2485 × 603), o mesmo dos caminhos das
+   letras, e valem para o grupo inteiro da palavra (D + O + M + U + S):
+
+     a palavra ocupa x 803,5 → 2280   (centro 1541,75) e y 183,5 → 417,5
+     o símbolo ocupa x 0 → 500        (centro 250)
+
+   Levar a palavra para debaixo do símbolo é, então, alinhar os dois centros em
+   x e empurrar a palavra para baixo do rodapé do símbolo (603) com um respiro. */
+const EMPILHADO = "(max-width: 640px)";
+const RESPIRO_COLUNA = 175;                    // vão entre o pé do símbolo e o topo da palavra
+const PALAVRA_DX = 250 - 1541.75;              // centro da palavra sob o centro do símbolo
+const PALAVRA_DY = 603 + RESPIRO_COLUNA + 117 - 300.5; // topo da palavra logo abaixo do símbolo
+const ALTURA_COLUNA = 603 + RESPIRO_COLUNA + 234;      // símbolo + vão + palavra
+
+/* Empilhada, a marca ocupa metade da largura que ocupava deitada — e ficaria
+   pequena demais. A ampliação acontece DENTRO do SVG (que tem overflow
+   visível), não na caixa do palco: caixa maior que a tela vira item de grid
+   que estoura só para um lado, porque alinhamento não produz deslocamento
+   negativo. Assim a caixa continua cabendo e só o desenho cresce.
+
+   O ponto fixo da ampliação é o centro do símbolo (x 250 · y 301,5 = 10,06% ·
+   50% da caixa), que é justamente onde o palco já centraliza a marca. */
+const ESCALA_COLUNA = 1.44;
+const ORIGEM_COLUNA = `${((250 / 2485) * 100).toFixed(2)}% 50%`;
+
+/* Com a palavra embaixo, o conjunto passa a ser bem mais alto que a caixa de
+   603 — e a ampliação estica isso mais ainda. O palco sobe a diferença entre o
+   centro do conjunto e o centro da caixa, e o todo volta ao meio da tela. */
+const PALCO_SUBIDA = `${(-(ALTURA_COLUNA / 603 / 2 - 0.5) * ESCALA_COLUNA * 100).toFixed(2)}%`;
+
 // Fim da animação (ver CSS). O overlay só sai depois disso E depois da página
 // estar pronta, para o traço nunca ser cortado no meio.
 const DURACAO_MS = 2860;
@@ -87,6 +123,13 @@ const ALVO = ".dl-header__tipo";
 function calcularVoo(palco) {
   const alvo = document.querySelector(ALVO);
   if (!palco || !alvo) return null;
+  /* Empilhado, a marca não preenche mais a caixa do palco: o símbolo fica no
+     meio dela e a palavra desce para fora, embaixo. Mapear caixa → logo do
+     cabeçalho, que é o que este cálculo faz, mandaria o conjunto para um lugar
+     que não corresponde ao que se vê. No celular a marca termina onde ela está,
+     centralizada, e só esmaece — que é justamente o fecho que a versão em
+     coluna pede. */
+  if (window.matchMedia(EMPILHADO).matches) return null;
   const a = alvo.getBoundingClientRect();
   const p = palco.getBoundingClientRect();
   if (!a.width || !p.width) return null;
@@ -185,24 +228,32 @@ export function DomusSplash() {
             <image className="ds-simbolo" href={SIMBOLO_SRC} x="0" y="0" width="500" height="603" />
             <image className="ds-simbolo-alt" href={SIMBOLO_ALT_SRC} x="0" y="0" width="500" height="603" />
 
-            <g className="ds-letras" clipPath="url(#ds-atras-do-d)">
-              {LETRAS.map((l, i) => (
-                <path
-                  key={l.id}
-                  className={`ds-letra ds-letra--${l.id}`}
-                  d={l.d}
-                  clipPath={l.recorte ? `url(#${l.recorte})` : undefined}
-                  style={{ "--de": `${l.de}px`, "--atraso": `${i * 120}ms` }}
-                />
-              ))}
-            </g>
+            {/* A palavra inteira num grupo só. No desktop ele não faz nada (a
+                marca já nasce deitada); no celular é ele que leva D, O, M, U e S
+                para baixo do símbolo, sem que nenhuma peça precise saber disso —
+                inclusive o recorte "atrás do D", que continua valendo no espaço
+                interno do grupo e viaja junto. */}
+            <g className="ds-palavra">
+              <g className="ds-letras" clipPath="url(#ds-atras-do-d)">
+                {LETRAS.map((l, i) => (
+                  <path
+                    key={l.id}
+                    className={`ds-letra ds-letra--${l.id}`}
+                    d={l.d}
+                    clipPath={l.recorte ? `url(#${l.recorte})` : undefined}
+                    style={{ "--de": `${l.de}px`, "--atraso": `${i * 120}ms` }}
+                  />
+                ))}
+              </g>
 
-            {/* O D fica por cima de tudo: é ele que esconde as letras na largada.
-                A ponta luminosa vai no mesmo grupo para herdar o voo — solta, ela
-                correria pelo caminho na posição do lockup, longe do símbolo. */}
-            <g className="ds-grupo-d">
-              <path className="ds-d" d={D_PATH} pathLength="1" />
-              <circle className="ds-ponta" r="13" />
+              {/* O D fica por cima de tudo: é ele que esconde as letras na
+                  largada. A ponta luminosa vai no mesmo grupo para herdar o voo
+                  — solta, ela correria pelo caminho na posição do lockup, longe
+                  do símbolo. */}
+              <g className="ds-grupo-d">
+                <path className="ds-d" d={D_PATH} pathLength="1" />
+                <circle className="ds-ponta" r="13" />
+              </g>
             </g>
           </svg>
         </div>
@@ -370,6 +421,33 @@ body.ds-com-splash-saindo .dl-header {
   to   { opacity: 1; transform: translateX(0); }
 }
 
+/* ── Celular: a marca se monta em coluna ────────────────────────────────────
+   Duas mudanças, e as duas no mesmo instante em que o D sai do vão (1,43 s),
+   para o roteiro continuar sendo um movimento só:
+
+     · a palavra desce para debaixo do símbolo em vez de o palco deslizar para
+       a esquerda — o D já sai do vão rumo ao lugar novo, e O, M, U e S saem de
+       trás dele exatamente como antes;
+     · o palco sobe o que a coluna cresceu para baixo, e o conjunto termina
+       centralizado na tela.
+
+   O desenho ainda cresce junto: deitada, a marca tinha de caber símbolo +
+   palavra lado a lado na mesma largura; em coluna, quem mede é só a palavra, e
+   sem a ampliação a marca terminaria ocupando metade da tela. */
+@media ${EMPILHADO} {
+  .ds-svg { transform: scale(${ESCALA_COLUNA}); transform-origin: ${ORIGEM_COLUNA}; }
+  .ds-stage { animation-name: ds-palco-coluna; }
+  .ds-palavra { animation: ds-palavra 0.67s cubic-bezier(0.16, 1, 0.3, 1) 1.43s both; }
+}
+@keyframes ds-palco-coluna {
+  from { transform: translate(39.94%, 0) scale(var(--ds-zoom)); }
+  to   { transform: translate(39.94%, ${PALCO_SUBIDA}) scale(1); }
+}
+@keyframes ds-palavra {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(${PALAVRA_DX}px, ${PALAVRA_DY}px); }
+}
+
 /* Sem movimento: o lockup já aparece montado e o overlay só desaparece. */
 @media (prefers-reduced-motion: reduce) {
   .ds-overlay::before, .ds-stage, .ds-simbolo, .ds-simbolo-alt, .ds-grupo-d, .ds-d, .ds-letra { animation: none; }
@@ -382,6 +460,17 @@ body.ds-com-splash-saindo .dl-header {
   .ds-ponta { display: none; }
   .ds-d { stroke: #ffffff; stroke-dasharray: none; }
   .ds-overlay { animation: ds-simbolo 0.3s ease-out both; }
+  .ds-palavra { animation: none; }
+}
+
+/* Sem movimento E em coluna: a marca precisa nascer já montada no arranjo
+   empilhado. Sem isto ela apareceria deitada dentro de uma caixa de 146vw —
+   larga demais para a tela, porque essa largura só existe por causa da
+   coluna. Vem por último para vencer o bloco acima, que zera as animações mas
+   não diz onde cada peça para. */
+@media ${EMPILHADO} and (prefers-reduced-motion: reduce) {
+  .ds-stage { transform: translate(39.94%, ${PALCO_SUBIDA}); }
+  .ds-palavra { transform: translate(${PALAVRA_DX}px, ${PALAVRA_DY}px); }
 }
 `;
 

@@ -418,6 +418,12 @@ export const api = {
   // landing precisa deles antes de existir qualquer sessão.
   getPlanosPublicos: () => request("/public/planos"),
 
+  /* O endereço da vitrine (slug) que sai deste nome está livre? Consultado
+     enquanto a pessoa digita, para o conflito aparecer com o nome ainda em
+     aberto — e não depois do ambiente criado. */
+  verificarSlugDomus: (nome, { signal } = {}) =>
+    request(`/public/slug?nome=${encodeURIComponent(nome)}`, { signal }),
+
   // Teste grátis, etapa 1: dispara o link mágico de confirmação por e-mail.
   criarTrialDomus: (payload = {}) =>
     request("/public/trial", {
