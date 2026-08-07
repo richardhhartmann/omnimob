@@ -206,6 +206,33 @@ const EDITOR_PASSOS = [
   { arrasta: "destaques", linhas: [["header"], ["titulo"], ["imoveis", "destaques"], ["widgets"], ["rodape"]] },
 ];
 
+/* O que cada bloco é, em uma frase. Aparece quando alguém toca no bloco dentro
+   da demonstração — a animação sozinha mostra que os blocos se movem, mas não
+   diz o que eles são, e essa é justamente a dúvida de quem nunca abriu o
+   editor. */
+const EDITOR_INFO = {
+  header: { nome: "Cabeçalho", texto: "Sua marca, o menu e o contato. É o que fica no topo de toda a vitrine." },
+  titulo: { nome: "Título", texto: "A chamada de abertura da página, escrita direto nela — sem campo, sem formulário." },
+  destaques: { nome: "Destaques", texto: "Três cartões para o que você quer primeiro: um bairro, um lançamento, uma condição." },
+  imoveis: { nome: "Imóveis", texto: "A vitrine em si. Puxa sozinha o que está publicado no painel, na ordem que você definir." },
+  widgets: { nome: "Widgets", texto: "Blocos livres: um texto, um botão, um convite para chamar no WhatsApp." },
+  rodape: { nome: "Rodapé", texto: "Links, redes sociais e os dados da imobiliária — CRECI, endereço, telefone." },
+};
+
+// Quanto tempo parado antes de a demonstração voltar a andar sozinha.
+const EDITOR_ESPERA = 4000;
+
+/* Fechar é em dois tempos: primeiro o texto some, e só depois o bloco volta ao
+   tamanho normal. Este é o intervalo entre as duas coisas, e ele precisa cobrir
+   o fade do texto (0,16s no CSS).
+
+   Por que em JS e não com transition-delay: a geometria do bloco pertence à
+   animação em laço, e transição não age sobre propriedade que uma animação está
+   dirigindo — no instante em que a classe cai, o bloco assume a posição do laço
+   sem passar por nenhum meio-termo. A única forma de segurá-lo é adiar a queda
+   da classe, que é o que este tempo faz. */
+const EDITOR_SAIDA = 200;
+
 const EDITOR_VAO = 4; // respiro entre blocos, em % da caixa
 const EDITOR_FATIA = 100 / EDITOR_PASSOS.length; // fatia da linha do tempo por movimento
 const EDITOR_PEGA = 0.3; // instante em que o ponteiro alcança o bloco
@@ -853,14 +880,22 @@ function Recursos() {
   const [manual, setManual] = useState(false);
   const botoes = useRef([]);
 
+  const [emMobile, setEmMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 860px)").matches
+  );
+
+  useEffect(() => {
+    const consulta = window.matchMedia("(max-width: 860px)");
+    const aoMudar = (e) => setEmMobile(e.matches);
+    consulta.addEventListener("change", aoMudar);
+    return () => consulta.removeEventListener("change", aoMudar);
+  }, []);
+
   function selecionar(i) {
     setAtivo(i);
-    setManual(true); // a partir do primeiro comando do usuário, nada mais gira sozinho
+    setManual(true);
   }
 
-  // Papel de aba pede navegação por setas — sem isso, o role prometeria um
-  // comportamento que não existe. O tabIndex móvel deixa o grupo inteiro como
-  // uma parada só do Tab, que é o previsto para tablist.
   function aoTeclar(evento, i) {
     const passo =
       evento.key === "ArrowRight" || evento.key === "ArrowDown" ? 1
@@ -874,22 +909,59 @@ function Recursos() {
   }
 
   useEffect(() => {
-    // Só gira depois que a seção aparece: girando fora da tela, o visitante
-    // chegaria aqui num item aleatório do ciclo.
-    if (manual || !visivel) return undefined;
+    if (emMobile || manual || !visivel) return undefined;
     const id = setInterval(
       () => setAtivo((i) => (i + 1) % RECURSOS.length),
       RECURSO_INTERVALO,
     );
     return () => clearInterval(id);
-  }, [manual, visivel]);
+  }, [emMobile, manual, visivel]);
+
+  useEffect(() => {
+    if (!emMobile || !visivel) return undefined;
+    
+    let quadro = 0;
+    
+    const aoRolar = () => {
+      cancelAnimationFrame(quadro);
+      quadro = requestAnimationFrame(() => {
+        const linhaGatilho = window.innerHeight * 0.65;
+        let menorDist = Infinity;
+        let melhorIndice = -1;
+
+        botoes.current.forEach((btn, i) => {
+          if (!btn) return;
+          const rect = btn.getBoundingClientRect();
+          
+          if (rect.bottom > 0 && rect.top < window.innerHeight) {
+            const centroBotao = rect.top + (rect.height / 2);
+            const dist = Math.abs(centroBotao - linhaGatilho);
+            
+            if (dist < menorDist) {
+              menorDist = dist;
+              melhorIndice = i;
+            }
+          }
+        });
+
+        if (melhorIndice !== -1) {
+          setAtivo((prev) => prev !== melhorIndice ? melhorIndice : prev);
+        }
+      });
+    };
+
+    window.addEventListener("scroll", aoRolar, { passive: true });
+    aoRolar();
+
+    return () => {
+      window.removeEventListener("scroll", aoRolar);
+      cancelAnimationFrame(quadro);
+    };
+  }, [emMobile, visivel]);
 
   return (
     <div className="dl-split" ref={ref}>
       <div className="dl-grid-hair dl-grid-hair--2" role="tablist" aria-label="Recursos da plataforma">
-        {/* O Reveal fica na célula, não no botão: ele escreve transition-delay
-            inline (a cascata de entrada), e no botão esse atraso valeria também
-            para a inversão de cor — o clique demoraria a responder. */}
         {RECURSOS.map((f, i) => (
           <Reveal key={f.title} className="dl-cell dl-cell--aba" delay={i * 80}>
             <button
@@ -913,10 +985,6 @@ function Recursos() {
           </Reveal>
         ))}
       </div>
-      {/* O painel das abas. No celular ele passa a vir primeiro e gruda no topo
-          (ver CSS): as seis abas são altas, e sem isso tocar numa delas mudaria
-          uma tela que está a mil pixels de distância — um controle sem efeito
-          visível é um controle quebrado. */}
       <Reveal className="dl-split__tela" delay={160} style={{ display: "flex" }}>
         <BrowserMock recurso={RECURSOS[ativo]} indice={ativo} />
       </Reveal>
@@ -1016,6 +1084,152 @@ function FaqItem({ item, indice, aberto, onToggle }) {
   );
 }
 
+/* ── Editor ao vivo ──────────────────────────────────────────────────────────
+   A demonstração roda sozinha em laço, e sozinha ela só conta metade: mostra
+   que os blocos se movem, não o que cada um deles é. Tocar num bloco congela a
+   cena e abre o bloco com uma frase sobre ele.
+
+   Congelar e continuar "de onde parou" é de graça no CSS: animation-play-state
+   guarda a posição na linha do tempo, então soltar a pausa retoma o mesmo
+   movimento em vez de recomeçar o laço.
+
+   A volta é por inatividade, e não por um botão de fechar: quem está lendo não
+   deveria ter de desfazer nada, e quem só tocou por curiosidade não fica preso
+   numa cena parada. Qualquer movimento do ponteiro sobre a tela reinicia a
+   contagem — é o que separa "parado lendo" de "parado porque esqueceu".
+   ────────────────────────────────────────────────────────────────────────── */
+function EditorAoVivo() {
+  const [aberto, setAberto] = useState(null);
+  const [saindo, setSaindo] = useState(false);
+  const [fugas, setFugas] = useState({});
+  const areaRef = useRef(null);
+  const relogio = useRef(0);
+
+  // Apaga o texto e, só quando ele tiver sumido, devolve o bloco ao laço.
+  function fechar() {
+    clearTimeout(relogio.current);
+    setSaindo(true);
+    relogio.current = setTimeout(() => {
+      setAberto(null);
+      setSaindo(false);
+    }, EDITOR_SAIDA);
+  }
+
+  function adiarVolta() {
+    clearTimeout(relogio.current);
+    relogio.current = setTimeout(fechar, EDITOR_ESPERA);
+  }
+
+  /* Para onde cada bloco sai quando outro abre. A conta é feita no clique, e
+     não escrita à mão, porque a posição de cada um depende do instante em que
+     a animação parou — o mesmo bloco está no meio da tela num momento e na
+     borda no seguinte.
+
+     De cada bloco saem quatro saídas possíveis (uma por borda) e vale a mais
+     curta: quem está em cima sai por cima, quem está na lateral sai de lado. É
+     o que faz o movimento parecer que o bloco aberto EMPURROU os outros, em vez
+     de eles fugirem todos para o mesmo canto.
+
+     Vai em transform de propósito: as keyframes mexem em left/top/width/height,
+     e transform é a única propriedade de posição que sobra livre — assim o
+     empurrão não briga com a animação nem precisa de !important. */
+  function calcularFugas(idAberto) {
+    const area = areaRef.current;
+    if (!area) return {};
+    const a = area.getBoundingClientRect();
+    const folga = 14;
+    const saida = {};
+    area.querySelectorAll("[data-bloco]").forEach((el) => {
+      const id = el.dataset.bloco;
+      if (id === idAberto) return;
+      const r = el.getBoundingClientRect();
+      const rotas = [
+        { x: -(r.right - a.left + folga), y: 0 },
+        { x: a.right - r.left + folga, y: 0 },
+        { x: 0, y: -(r.bottom - a.top + folga) },
+        { x: 0, y: a.bottom - r.top + folga },
+      ];
+      saida[id] = rotas.reduce((menor, rota) =>
+        Math.abs(rota.x + rota.y) < Math.abs(menor.x + menor.y) ? rota : menor);
+    });
+    return saida;
+  }
+
+  function alternar(id) {
+    clearTimeout(relogio.current);
+    if (aberto === id) {
+      fechar();
+      return;
+    }
+    setSaindo(false);
+    setFugas(calcularFugas(id));
+    setAberto(id);
+    adiarVolta();
+  }
+
+  useEffect(() => () => clearTimeout(relogio.current), []);
+
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const aoTeclar = (e) => { if (e.key === "Escape") fechar(); };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [aberto]);
+
+  return (
+    <Reveal className={`dl-ed dl-glass${aberto ? " is-parado" : ""}${saindo ? " is-saindo" : ""}`} delay={140}>
+      <div className="dl-ed__bar">
+        <span className="dl-dot" style={{ background: "#f87171" }} />
+        <span className="dl-dot" style={{ background: "#fbbf24" }} />
+        <span className="dl-dot" style={{ background: "#4ade80" }} />
+        <span className="dl-ed__url dl-mono">domus.app / vitrine / editar</span>
+        {/* Pisca uma vez por movimento, logo depois de soltar o bloco. */}
+        <span className="dl-ed__salvo dl-mono" aria-hidden="true">
+          <i className="dl-ed__ponto" />
+          alterações salvas
+        </span>
+      </div>
+
+      <div
+        className="dl-ed__tela"
+        // Mexer o ponteiro aqui dentro conta como ação e adia a volta.
+        onPointerMove={aberto ? adiarVolta : undefined}
+      >
+        <div className="dl-ed__area" ref={areaRef} role="group" aria-label="Blocos da vitrine — toque em um para saber o que ele é">
+          {EDITOR_BLOCOS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              data-bloco={id}
+              className={`dl-ed__bloco dl-ed__bloco--${id}${aberto === id ? " is-aberto" : ""}`}
+              style={fugas[id] ? { "--fuga-x": `${Math.round(fugas[id].x)}px`, "--fuga-y": `${Math.round(fugas[id].y)}px` } : undefined}
+              onClick={() => alternar(id)}
+              aria-expanded={aberto === id}
+              aria-label={EDITOR_INFO[id].nome}
+            >
+              {Array.from({ length: EDITOR_MIOLO[id] }, (_, k) => (
+                <i key={k} aria-hidden="true" />
+              ))}
+              {/* Fora do fluxo de propósito: cada bloco arruma as silhuetas com
+                  o próprio flex/grid, e um filho a mais viraria mais uma
+                  silhueta torta no meio delas. */}
+              <span className="dl-ed__info">
+                <b>{EDITOR_INFO[id].nome}</b>
+                <em>{EDITOR_INFO[id].texto}</em>
+              </span>
+            </button>
+          ))}
+          <span className="dl-ed__ponteiro" aria-hidden="true" />
+        </div>
+      </div>
+
+      <span className="dl-mono dl-browser-cap dl-ed__legenda">
+        ▪ {aberto ? "TOQUE DE NOVO PARA FECHAR" : "ARRASTE E SOLTE · SALVA SOZINHO"}
+      </span>
+    </Reveal>
+  );
+}
+
 /* ── Planos ──────────────────────────────────────────────────────────────────
    No desktop continuam sendo três colunas de uma tabela só: lado a lado é o
    arranjo que deixa comparar, e comparar é a decisão desta seção.
@@ -1062,9 +1276,17 @@ function Planos({ planos, aoTestar }) {
   const [emCarrossel, setEmCarrossel] = useState(
     () => typeof window !== "undefined" && window.matchMedia(CARROSSEL).matches,
   );
+
+  /* Cartão sob o mouse. É o que rege o fundo no desktop, onde não existe
+     "cartão em foco": lá os três estão à vista ao mesmo tempo, e quem escolhe
+     um é o cursor. No celular ele fica sempre nulo — toque não tem hover. */
+  const [sobHover, setSobHover] = useState(null);
   /* ── Fundo em ondas ────────────────────────────────────────────────────
-     O plano em foco tinge o fundo da seção, e a troca é gradual porque a cor
-     das ondas é interpolada quadro a quadro — não trocada de uma vez.
+     O plano escolhido tinge o fundo da seção, e a troca é gradual porque a cor
+     das ondas é interpolada quadro a quadro — não trocada de uma vez. Quem é
+     "o escolhido" muda com o formato da tela: no celular é o cartão em foco no
+     carrossel; no desktop, o que está sob o mouse (e, sem mouse em cima, o
+     fundo volta ao neutro).
 
      Dá para mexer na cor sem recriar nada: o onUpdate do WAVES lê
      `options.color` a cada quadro, então basta escrever ali. Uma instância
@@ -1082,9 +1304,23 @@ function Planos({ planos, aoTestar }) {
     alvoOnda.current = new THREE.Color(ONDA_INICIAL);
   }
 
+  /* O plano que manda na cor do fundo, e a cor dele. No desktop o hover; no
+     carrossel, o foco. Nulo (Básico, ou nenhum cartão sob o mouse) apaga a
+     camada — é o estado neutro de onde a escala de cores parte. */
+  const planoDaOnda = emCarrossel ? planos[atual] : (sobHover != null ? planos[sobHover] : null);
+  const ondaAtual = FLARE[planoDaOnda?.key]?.onda || null;
+
+  /* O contexto WebGL só nasce quando alguém pede cor pela primeira vez. Criar
+     junto com a seção custaria uma tela 3D rodando atrás de um fundo neutro em
+     toda visita que nunca passa o mouse por um plano. */
+  const [ondaPedida, setOndaPedida] = useState(false);
+  useEffect(() => {
+    if (ondaAtual) setOndaPedida(true);
+  }, [ondaAtual]);
+
   useEffect(() => {
     const el = ondaRef.current;
-    if (!el || !emCarrossel || !visivel) return undefined;
+    if (!el || !ondaPedida || !visivel) return undefined;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
 
     const efeito = WAVES({
@@ -1122,12 +1358,12 @@ function Planos({ planos, aoTestar }) {
       observador.disconnect();
       efeito.destroy();
     };
-  }, [emCarrossel, visivel]);
+  }, [ondaPedida, visivel]);
 
-  // O alvo muda com o cartão em foco; o laço acima leva a cor até ele. Planos
-  // sem onda (o Básico) não mexem no alvo: o que some é a camada inteira, e
-  // guardar a última cor evita a volta atravessando o espectro.
-  const ondaAtual = FLARE[planos[atual]?.key]?.onda;
+  // O alvo muda com o plano escolhido; o laço acima leva a cor até ele. Quando
+  // não há plano (Básico, ou mouse fora), o alvo fica onde estava: o que some é
+  // a camada inteira, e guardar a última cor evita a volta atravessando o
+  // espectro na próxima vez que ela acender.
   useEffect(() => {
     if (ondaAtual) alvoOnda.current.setHex(ondaAtual);
   }, [ondaAtual]);
@@ -1229,15 +1465,19 @@ function Planos({ planos, aoTestar }) {
             className={`dl-plan${p.highlight ? " is-highlight" : ""}${i === atual ? " is-atual" : ""}`}
             delay={i * 110}
             style={{ "--flare": FLARE[p.key]?.cor || "var(--accent-soft)" }}
+            // Só o desktop usa: é daqui que sai a cor do fundo da seção quando
+            // não há carrossel. A saída só limpa se o índice ainda for o dele,
+            // senão o mouse passando de um cartão para o vizinho apagaria o
+            // que o vizinho acabou de acender.
+            onMouseEnter={() => setSobHover(i)}
+            onMouseLeave={() => setSobHover((h) => (h === i ? null : h))}
           >
-            {/* A coroa fica pendurada na borda de cima, metade dentro e metade
-                fora: é um selo pregado no cartão, não mais uma linha dentro
-                dele. Vale para os dois planos que se destacam — o mais
-                procurado e o topo de linha — e cada uma sai na cor do próprio
-                plano, então elas não se confundem: a roxa é o queridinho das
-                imobiliárias, a dourada é o teto do produto. Quem separa uma da
-                outra em palavras é a etiqueta "MAIS POPULAR", que só o
-                Profissional tem. */}
+            {/* A coroa fica pendurada na borda de cima do topo de linha, metade
+                dentro e metade fora: é um selo pregado no cartão, não mais uma
+                linha dentro dele. Ela sai na cor do próprio plano (dourada, no
+                Premium), e o Profissional continua marcado pela etiqueta
+                "MAIS POPULAR" — cada um com um sinal, sem os dois disputarem o
+                mesmo. */}
             {p.key === "PREMIUM" ? (
               <span className="dl-plan__coroa" aria-hidden="true">
                 <Crown size={13} weight="fill" />
@@ -1571,41 +1811,7 @@ export function DomusLandingPage() {
             </p>
           </Reveal>
 
-          <Reveal className="dl-ed dl-glass" delay={140}>
-            <div className="dl-ed__bar">
-              <span className="dl-dot" style={{ background: "#f87171" }} />
-              <span className="dl-dot" style={{ background: "#fbbf24" }} />
-              <span className="dl-dot" style={{ background: "#4ade80" }} />
-              <span className="dl-ed__url dl-mono">domus.app / vitrine / editar</span>
-              {/* Pisca uma vez por movimento, logo depois de soltar o bloco. */}
-              <span className="dl-ed__salvo dl-mono" aria-hidden="true">
-                <i className="dl-ed__ponto" />
-                alterações salvas
-              </span>
-            </div>
-
-            {/* Só enfeite: quem descreve o editor é o texto ao lado. */}
-            <div
-              className="dl-ed__tela"
-              role="img"
-              aria-label="Demonstração: blocos da vitrine sendo reposicionados com o mouse"
-            >
-              <div className="dl-ed__area">
-                {EDITOR_BLOCOS.map((id) => (
-                  <span key={id} className={`dl-ed__bloco dl-ed__bloco--${id}`}>
-                    {Array.from({ length: EDITOR_MIOLO[id] }, (_, k) => (
-                      <i key={k} />
-                    ))}
-                  </span>
-                ))}
-                <span className="dl-ed__ponteiro" aria-hidden="true" />
-              </div>
-            </div>
-
-            <span className="dl-mono dl-browser-cap dl-ed__legenda">
-              ▪ ARRASTE E SOLTE · SALVA SOZINHO
-            </span>
-          </Reveal>
+          <EditorAoVivo />
         </div>
       </section>
 
@@ -2425,11 +2631,91 @@ const CSS = `
 /* Mesmo acabamento das miniaturas do mockup do hero, sem texto: aqui o bloco
    é só volume. A borda nasce transparente só para o realce de "no ar" ter o
    que colorir sem mudar o tamanho da caixa. */
+/* Cada bloco é um <button> — ele responde ao toque e abre a explicação.
+
+   ATENÇÃO ao peso desta regra: ela precisa continuar valendo UMA classe. As
+   posições e o animation-name de cada bloco saem de editorCSS(), que também
+   escreve seletores de uma classe (.dl-ed__bloco--header e companhia) e conta
+   com a ordem para vencer. Prefixar isto com .dl-root subiria o peso e mataria
+   os dois: os blocos perderiam a animação e encolheriam até o tamanho do
+   conteúdo. Foi o que aconteceu na primeira tentativa.
+
+   O que o button traz de fábrica do styles.css (largura cheia, respiro, raio,
+   fundo roxo) já perde para as regras de uma classe daqui — só os estados
+   interativos precisam de desmontagem à parte, logo abaixo. */
 .dl-ed__bloco {
   position: absolute;
   border-radius: 6px; border: 1px solid transparent;
   background: linear-gradient(135deg, rgba(99,102,241,0.55), rgba(212,175,55,0.35));
   animation: var(--ed-dur) linear infinite both;
+  /* Só transform e opacity entram na transição: left/top/width/height pertencem
+     à animação, e transição não age sobre propriedade que uma animação está
+     dirigindo — declará-las aqui seria enfeite morto. Quem cuida do tempo da
+     abertura e do fechamento é o JS (EDITOR_SAIDA). */
+  transition: transform 0.5s var(--ease-out), opacity 0.3s ease;
+}
+/* button:hover global desloca o elemento e o pinta de roxo; aqui ele só clareia
+   um pouco, sem sair do lugar. */
+.dl-root .dl-ed__bloco:hover {
+  background: linear-gradient(135deg, rgba(99,102,241,0.72), rgba(212,175,55,0.48));
+  transform: none;
+}
+.dl-root .dl-ed__bloco:active { scale: 1; }
+.dl-root .dl-ed__bloco:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* ── Bloco aberto ──
+   O !important existe porque quem manda na geometria do bloco é a animação, e
+   animação vence declaração comum na cascata — só um !important passa na
+   frente dela. É o que permite abrir o bloco sem tirar a animação do ar: ela
+   continua lá, pausada, guardando a posição para quando a explicação fechar. */
+.dl-root .dl-ed__bloco.is-aberto {
+  left: 3% !important; top: 4% !important;
+  width: 94% !important; height: 92% !important;
+  z-index: 9 !important;
+  border-color: rgba(255,255,255,0.34);
+  box-shadow: 0 24px 50px -18px rgba(0,0,0,0.9);
+  /* Fundo OPACO: o degradê dos blocos é translúcido, e aberto sobre os outros
+     cinco ele deixava as silhuetas de trás atravessarem o texto. A camada
+     sólida embaixo resolve, e o degradê fica só como cor da casa. */
+  background: linear-gradient(135deg, rgba(99,102,241,0.5), rgba(212,175,55,0.26)), #101018;
+  cursor: default;
+}
+/* Os outros são empurrados para fora da tela do editor pela borda mais próxima
+   — a rota de cada um é calculada no clique e chega aqui em --fuga-x/--fuga-y.
+   O recorte da moldura faz o resto: eles saem de cena, não ficam por baixo. Ao
+   fechar, a classe cai e o transform volta a zero, então eles entram de novo
+   pelo mesmo caminho. */
+.dl-ed.is-parado .dl-ed__bloco:not(.is-aberto) {
+  transform: translate(var(--fuga-x, 0px), var(--fuga-y, 0px));
+  opacity: 0.5;
+}
+/* As silhuetas somem para o texto ocupar o lugar delas. */
+.dl-ed__bloco.is-aberto > i { opacity: 0; transition: opacity 0.2s ease; }
+
+.dl-ed__info {
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; flex-direction: column; justify-content: center; gap: 8px;
+  padding: clamp(14px, 4%, 26px); text-align: left;
+  opacity: 0; pointer-events: none;
+  /* Sumir é rápido e sem espera: o texto tem de ter ido embora ANTES de o bloco
+     começar a encolher (a espera correspondente está no .dl-ed__bloco). */
+  transition: opacity 0.18s ease;
+}
+/* Aparecer é o contrário: espera o bloco crescer para então escrever nele. */
+.dl-ed__bloco.is-aberto .dl-ed__info { opacity: 1; transition: opacity 0.26s ease 0.22s; }
+/* Primeiro tempo do fechamento: o bloco ainda está aberto, e só o texto sai. O
+   segundo tempo (o bloco voltar ao laço) espera este fade terminar — quem
+   segura é o EDITOR_SAIDA, no JS. */
+.dl-ed.is-saindo .dl-ed__bloco.is-aberto .dl-ed__info { opacity: 0; transition: opacity 0.16s ease; }
+.dl-ed__info b {
+  font-size: clamp(14px, 3.4vw, 19px); font-weight: 700; letter-spacing: -0.02em; color: #fff;
+}
+/* Mesma cor do texto de apoio da página (--subtle, a do .dl-lead): a descrição
+   aqui cumpre o mesmo papel que o parágrafo ao lado do mock, e não faz sentido
+   ela ter um tom só dela. O nome do bloco continua em branco — ele é título. */
+.dl-ed__info em {
+  font-style: normal; font-size: clamp(11.5px, 2.6vw, 14px); line-height: 1.62;
+  color: var(--subtle); max-width: 46ch;
 }
 
 /* Miolo: silhuetas de uma cor só, sem texto, insinuando o que cada bloco é —
@@ -2513,13 +2799,24 @@ const CSS = `
    mesmo para todas e o problema não aparece.
    Presas em pausa até o bloco entrar em cena, todas soltam no mesmo recálculo de
    estilo, num momento calmo — e a demonstração ainda começa sempre do princípio,
-   em vez de a pessoa pegar o laço no meio. */
+   em vez de a pessoa pegar o laço no meio.
+
+   A mesma pausa serve ao bloco aberto (.is-parado): a cena congela enquanto
+   alguém lê, e soltar a pausa retoma o movimento no ponto em que ele estava —
+   animation-play-state guarda a posição na linha do tempo. */
 .dl-ed:not(.is-visible) .dl-ed__bloco,
 .dl-ed:not(.is-visible) .dl-ed__ponteiro,
 .dl-ed:not(.is-visible) .dl-ed__ponteiro::after,
-.dl-ed:not(.is-visible) .dl-ed__salvo {
+.dl-ed:not(.is-visible) .dl-ed__salvo,
+.dl-ed.is-parado .dl-ed__bloco,
+.dl-ed.is-parado .dl-ed__ponteiro,
+.dl-ed.is-parado .dl-ed__ponteiro::after,
+.dl-ed.is-parado .dl-ed__salvo {
   animation-play-state: paused;
 }
+/* Com a cena congelada o ponteiro desenhado sai de cena: ele fica no meio de um
+   arrasto que não termina, e por cima do bloco aberto vira sujeira. */
+.dl-ed.is-parado .dl-ed__ponteiro { opacity: 0; transition: opacity 0.25s ease; }
 
 /* Posições de partida + keyframes dos blocos e do ponteiro, calculados. */
 ${editorCSS()}
@@ -2616,11 +2913,37 @@ ${editorCSS()}
   .dl-plan:hover .dl-btn--outline .dl-btn__arrow { background: rgba(0,0,0,0.10); }
 }
 
-/* Camada do fundo em ondas e coroa do queridinho: as duas são peças do
-   carrossel e só existem lá (ver o bloco do celular). Ficam escondidas aqui, e
-   não removidas do JSX, para virar a orientação do aparelho não depender de um
-   re-render — no desktop quem cumpre esse papel é a etiqueta "MAIS POPULAR". */
-.dl-plans-onda, .dl-plan__coroa { display: none; }
+/* ── Fundo em ondas da seção de planos ──
+   A camada vale nos dois formatos: no celular ela segue o cartão em foco, no
+   desktop segue o cartão sob o mouse. Vaza para os lados até a largura da
+   janela (o .dl-wrap tem no máximo 1120px e é centrado, então tirar metade da
+   diferença de cada lado chega na borda da tela) — tingir só a coluna de
+   conteúdo deixaria um retângulo colorido boiando no meio da seção.
+
+   Fica atrás de tudo pelo z-index negativo, que aqui não escapa da seção
+   porque o .dl-wrap tem z-index 1 e portanto cria o próprio contexto. */
+.dl-plans-onda {
+  position: absolute; z-index: -1; pointer-events: none;
+  top: -70px; bottom: -70px;
+  left: calc(50% - 50vw); right: calc(50% - 50vw);
+  opacity: 0; transition: opacity 0.9s ease;
+  background: radial-gradient(70% 62% at 50% 48%, var(--tinta, transparent), transparent 72%);
+  -webkit-mask-image: radial-gradient(72% 68% at 50% 50%, #000 34%, transparent 100%);
+  mask-image: radial-gradient(72% 68% at 50% 50%, #000 34%, transparent 100%);
+}
+.dl-plans-onda.is-on { opacity: 0.5; }
+
+/* Fundo opaco nos cartões, e é isto que impede as ondas de tingirem os planos
+   que não foram escolhidos: sem ele, Básico e Premium são transparentes e
+   deixariam a cor passar por dentro. Os valores repetem o que já se via antes
+   (a superfície da seção, e a mais clara no destaque), então nada muda de
+   aparência — muda só o que está por baixo. */
+.dl-plan { background: var(--bg-alt); }
+
+/* A coroa é peça do carrossel e só aparece lá (ver o bloco do celular). Fica
+   escondida aqui, e não removida do JSX, para virar a orientação do aparelho
+   não depender de um re-render. */
+.dl-plan__coroa { display: none; }
 
 .dl-plans__pontos { display: flex; justify-content: center; gap: 6px; margin-top: 2px; }
 .dl-root .dl-plans__ponto {
@@ -2821,9 +3144,30 @@ ${editorCSS()}
 }
 
 @media (max-width: 640px) {
-  /* O mock é a miniatura de uma tela de desktop: as duas colunas continuam,
-     agora em escala menor. Empilhado numa coluna só ele deixava de parecer o
-     produto e virava uma lista de cartões enormes, dos quais cabia um e meio. */
+  .dl-checks { display: none; }
+  /* ── Ações do hero ──
+     Empilhados e ancorados na esquerda, o principal mais largo e o secundário
+     com metade dele — a diferença de largura é o que diz, sem palavra nenhuma,
+     qual dos dois é o caminho.
+
+     A peça que faltava para isso funcionar não está aqui: é o align-items do
+     .dl-hero__grid, lá embaixo. Ele nasce "center" para o desktop, onde o
+     mockup e o texto se alinham pelo meio; no celular a grade vira uma coluna,
+     e center passa a significar "encolha cada bloco até o conteúdo e
+     centralize" — era isso que mantinha os botões no meio da tela, com largura
+     de texto, por mais 100% que se pedisse a eles.
+
+     A largura do principal vive numa variável, e a do secundário sai dela pela
+     metade: mexer em --acao reajusta os dois de uma vez e a proporção entre
+     eles não se perde no caminho. */
+  .dl-hero__copy .dl-btn-row {
+    --acao: 80%;
+    flex-direction: column; align-items: stretch; gap: 12px;
+  }
+  .dl-hero__copy .dl-btn-row > :first-child { width: var(--acao); heigh }
+  /* max-content como piso: em telas bem estreitas, metade da linha ficaria
+     menor que "Ver planos" e o texto vazaria do botão. */
+  .dl-hero__copy .dl-btn-row > :last-child { width: calc(var(--acao) / 2); min-width: max-content; }
   .dl-browser__body { padding: 14px; gap: 11px; }
   .dl-browser__thumb { height: 44px; }
   .dl-browser__banner { height: 60px; }
@@ -2895,9 +3239,22 @@ ${editorCSS()}
 
   /* O hero é a primeira tela: menos respiro morto entre o texto e o mockup. */
   .dl-hero { padding-top: clamp(104px, 26vw, 132px); }
-  .dl-hero__grid { gap: 38px; margin-top: 0px; }
-  .dl-hero__aside { margin-top: 22px; padding: 20px 18px; }
-  .dl-lead { font-size: 15px; margin-top: 18px; }
+  /* align-items volta para stretch: em coluna, o "center" que serve ao desktop
+     encolhe cada bloco até o tamanho do conteúdo e o centraliza — texto, lista
+     e botões saíam todos com largura de texto, boiando no meio da tela. */
+  .dl-hero__grid { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin-top: 0; }
+  .dl-hero__copy, .dl-hero__side { display: contents; }
+  .dl-hero__copy > * { order: 1; margin-bottom: 22px; }
+  .dl-stage { order: 2; margin-bottom: 24px; width: 100%; }
+  .dl-hero__copy > :last-child { order: 3; margin-bottom: 0; }
+  .dl-hero__aside { display: none; }
+  .dl-editor { display: flex; flex-direction: column; }
+  .dl-editor > div:first-child { display: contents; }
+  .dl-editor .dl-eyebrow { order: 1; }
+  .dl-editor .dl-h2 { order: 2; }
+  .dl-editor .dl-lead { order: 3; }
+  .dl-ed { order: 4; margin: 32px 0 24px; width: 100%; box-sizing: border-box; }
+  .dl-editor .dl-body { order: 5; }
 
   /* Cartões da faixa: mais estreitos, para caber um inteiro na tela em vez de
      um e meio cortado, e a máscara recua para não comer o que aparece. */
@@ -2958,27 +3315,15 @@ ${editorCSS()}
   .dl-plans-caixa { display: flex; flex-direction: column; }
   .dl-plans__pontos { order: -1; margin: 0 0 -4px; }
 
-  /* ── Fundo da seção ──
-     As ondas do plano em foco. A camada mora atrás de TODO o conteúdo do
-     .dl-wrap (z-index -1 dentro do contexto que ele cria) e transborda o
-     respiro lateral dele, para o clarão morrer fora da tela em vez de numa
-     quina. A máscara arredonda o fim das ondas; sem ela o efeito termina num
-     retângulo, que é o que denuncia o truque.
-
-     O degradê de fundo é a reserva de quem pede movimento reduzido: ali o
-     Vanta não roda e a camada fica só com a mancha de cor. */
+  /* Na tela estreita a seção é mais alta e a marca de cor precisa subir junto,
+     senão ela morre antes do título. A máscara também abre, porque aqui a
+     camada é quase quadrada e a elipse padrão deixaria os cantos vazios. */
   .dl-plans-onda {
-    display: block; position: absolute; z-index: -1;
-    inset: -48px -24px -28px;
-    border-radius: 30px; overflow: hidden; pointer-events: none;
-    opacity: 0; transition: opacity 1.1s ease;
+    top: -48px; bottom: -30px;
     background: radial-gradient(115% 70% at 50% 45%, var(--tinta, transparent), transparent 72%);
     -webkit-mask-image: radial-gradient(112% 74% at 50% 46%, #000 40%, transparent 100%);
     mask-image: radial-gradient(112% 74% at 50% 46%, #000 40%, transparent 100%);
   }
-  /* Fraca de propósito: é fundo de uma seção com texto branco por cima, não
-     papel de parede. */
-  .dl-plans-onda.is-on { opacity: 0.5; }
   .dl-plan {
     flex: 0 0 var(--dl-cartao); scroll-snap-align: center;
     padding: 22px 18px; border: 1px solid var(--line); border-radius: 18px;

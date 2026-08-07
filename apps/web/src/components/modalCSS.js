@@ -44,6 +44,12 @@ export const MODAL_CSS = `
 .pm-sub { margin-top: 10px; font-size: 13.5px; line-height: 1.7; color: var(--subtle); }
 
 .pm-form { display: grid; gap: 15px; margin-top: 24px; }
+/* min-width: 0 em tudo que é item de grade aqui.
+   Item de grade nasce com min-width: auto, que é o tamanho MÍNIMO do conteúdo
+   — e basta um texto que não quebra (o endereço da vitrine, que é uma linha só
+   de 300px) para a coluna inteira esticar além da caixa e todo o formulário
+   vazar para fora do modal. Foi o que aconteceu no celular. */
+.pm-form, .pm-form > *, .pm-dupla > *, .pm-campo > * { min-width: 0; }
 .pm-dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .pm-campo { display: grid; gap: 6px; }
 .pm-rotulo { font-size: 11.5px; font-weight: 600; color: var(--subtle); }
@@ -140,10 +146,31 @@ export const MODAL_CSS = `
 .pm-feito .pm-botao { margin-top: 10px; }
 
 @media (max-width: 560px) {
-  .pm-caixa { padding: 30px 22px 24px; }
+  /* ── Modal no celular ──
+     A caixa deixa de ser um cartão flutuando no meio da tela e passa a ocupá-la
+     quase inteira: com 24px de véu de cada lado sobravam 296px de conteúdo para
+     um formulário de cadastro, e cada campo ficava mais estreito que o texto
+     que ele guarda. O véu encolhe, a caixa cresce e o que não couber rola
+     dentro dela — a rolagem fica na caixa, e não na página atrás. */
+  .pm-veu { padding: 12px; align-items: start; }
+  .pm-caixa {
+    padding: 26px 18px 22px; border-radius: 18px;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    margin-top: 12px;
+  }
+  /* O ✕ é um quadrado no canto de cima; sem esta reserva o texto de abertura
+     passa por baixo dele. */
+  .pm-eyebrow, .pm-titulo { padding-right: 42px; }
+  .pm-titulo { font-size: 20px; }
+  .pm-sub { font-size: 13px; }
+  .pm-form { margin-top: 20px; gap: 13px; }
   .pm-dupla { grid-template-columns: 1fr; }
   .pm-acoes { flex-direction: column-reverse; }
   .dl-root .pm-acoes .pm-botao { width: 100%; }
+  /* Três ações empilhadas (a etapa de migração) viram três botões de tela
+     cheia; o do meio é o "pular", que não precisa do mesmo peso. */
+  .pm-acoes--tres { gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -767,7 +767,39 @@ const CSS = `${MODAL_CSS}
 .tm-area { resize: vertical; min-height: 74px; line-height: 1.6; }
 
 @media (max-width: 620px) {
-  .tm-escolha { grid-template-columns: 1fr; }
+  .tm-escolha { grid-template-columns: 1fr; margin-top: 18px; gap: 10px; }
+}
+
+@media (max-width: 560px) {
+  /* ── Escolha do perfil ──
+     Empilhados, os dois cartões passavam de uma tela inteira só para fazer uma
+     pergunta de um clique. O ícone sai da linha própria e vai para o lado do
+     título, e a seta pendurada embaixo some: o cartão inteiro já é o botão, a
+     seta era enfeite ocupando uma faixa de altura só dela. */
+  .dl-root .tm-opcao {
+    grid-template-rows: auto auto; grid-template-columns: auto 1fr;
+    gap: 6px 12px; padding: 14px 16px;
+  }
+  .tm-opcao__icone { width: 34px; height: 34px; border-radius: 10px; grid-row: span 2; align-self: start; }
+  .tm-opcao__icone svg { width: 18px; height: 18px; }
+  .tm-opcao__titulo { align-self: end; }
+  .tm-opcao__texto { font-size: 12px; line-height: 1.5; }
+  .tm-opcao__seta { display: none; }
+  .tm-rodape { margin-top: 14px; font-size: 11px; }
+
+  /* ── Endereço da vitrine ──
+     Sem corte no fim da linha: o endereço quebra e aparece inteiro. Cortado
+     com reticências, o que sumiria seria justamente o slug, que fica no final
+     e é a única parte que a pessoa escolheu. */
+  .tm-endereco__url {
+    white-space: normal; overflow: visible; text-overflow: clip;
+    overflow-wrap: anywhere; line-height: 1.45;
+  }
+  .tm-endereco { padding: 8px 10px; }
+
+  .tm-fichas { gap: 6px; }
+  .dl-root .tm-ficha { padding: 7px 11px; font-size: 12px; }
+  .tm-area { min-height: 62px; }
 }
 `;
 
