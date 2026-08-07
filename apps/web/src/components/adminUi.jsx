@@ -6,20 +6,36 @@ export function initial(name) {
   return c ? c.toUpperCase() : "?";
 }
 
-// Cor estável (por hash do texto) para avatares.
-export function avatarColor(seed) {
-  const s = seed || "?";
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-  return `hsl(${h}, 55%, 52%)`;
+/* Preto ou branco por cima de uma cor de fundo — a que der mais contraste.
+
+   Existe porque a cor do avatar passou a ser a do tenant, e o tenant escolhe
+   qual é. Um branco fixo funcionava com o índigo padrão e sumia no dia em que
+   alguém pusesse um dourado ou um lima ali. A conta é a luminância relativa da
+   WCAG; o corte em 0,55 é o ponto onde o contraste com o branco cai abaixo do
+   contraste com o preto. */
+export function corDeTextoPara(fundo) {
+  const hex = String(fundo || "").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#fff";
+  const canal = (i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const luminancia = 0.2126 * canal(0) + 0.7152 * canal(2) + 0.0722 * canal(4);
+  return luminancia > 0.55 ? "#141416" : "#fff";
 }
 
-export function Avatar({ name, size = 40, seed }) {
+/* A cor sai de `--tenant-primary`, declarada uma vez no `.ds-shell` do
+   AdminLayout a partir do perfil da imobiliária. Era um matiz sorteado pelo
+   hash do nome, o que enchia as listas de cores que não são de ninguém — a
+   marca do cliente vale mais que uma paleta aleatória. Os fallbacks cobrem o
+   uso fora do painel, onde a variável não existe. */
+export function Avatar({ name, size = 40 }) {
   return (
     <div style={{
       width: `${size}px`, height: `${size}px`, borderRadius: "50%", flexShrink: 0,
       display: "flex", alignItems: "center", justifyContent: "center",
-      background: avatarColor(seed || name), color: "#fff",
+      background: "var(--tenant-primary, #6366f1)",
+      color: "var(--tenant-primary-ink, #fff)",
       fontWeight: "700", fontSize: `${Math.round(size * 0.4)}px`,
     }}>
       {initial(name)}
@@ -110,6 +126,44 @@ export function PageHeader({ title, subtitle, action }) {
         {subtitle && <p style={{ margin: "5px 0 0", color: "var(--text-muted)", fontSize: "14px" }}>{subtitle}</p>}
       </div>
       {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+    </div>
+  );
+}
+
+/* Lista vazia, com a saída à mão.
+
+   Uma tela que só diz "nenhum cliente cadastrado" faz a pessoa procurar o botão
+   no topo — e no primeiro acesso, quando TODAS as listas estão assim, ela faz
+   isso quatro vezes. O convite fica onde o olho já está.
+
+   `acaoLabel`/`onAcao` são opcionais de propósito: quando a lista está vazia
+   porque um FILTRO escondeu tudo, "cadastrar o primeiro" é falso — já existem
+   itens, só não estes. Nesse caso quem chama passa só a mensagem. */
+export function EmptyState({ mensagem, acaoLabel, onAcao, padding = "48px 24px" }) {
+  return (
+    <div className="glass-panel" style={{ textAlign: "center", padding }}>
+      <p style={{ color: "var(--text-muted)", margin: 0 }}>{mensagem}</p>
+      {acaoLabel && onAcao ? (
+        <button
+          type="button"
+          onClick={onAcao}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "7px",
+            width: "auto", marginTop: "18px", padding: "9px 16px",
+            borderRadius: "9px", border: "none",
+            background: "var(--accent)", color: "#fff",
+            fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            transition: "opacity 0.15s ease",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          {acaoLabel}
+        </button>
+      ) : null}
     </div>
   );
 }

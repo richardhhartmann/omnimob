@@ -4,6 +4,7 @@ import { BtnEditar, BtnExcluir, BtnGerenciar, BtnNovo, BtnVoltar } from "../comp
 import { useConfirm } from "../components/ConfirmModal";
 
 import { TIPOS_CONTRATO, TIPOS_CONTRATO_KEYS } from "../utils/tiposContrato.js";
+import { IconeEstrela } from "../components/Icones.jsx";
 
 const AREA_OPTIONS = [
   { key: "areaTerreno",    label: "Área do terreno" },
@@ -127,7 +128,7 @@ function TiposContratoCard({ tenantSlug }) {
           </p>
         </div>
         <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.8 }}>
-          {salvando ? "Salvando…" : salvoEm ? "✓ Salvo" : ""}
+          {salvando ? "Salvando…" : salvoEm ? "Salvo" : ""}
         </span>
       </div>
 
@@ -483,7 +484,7 @@ export function TiposImovelPage({ session }) {
                           color: i === 0 ? "#a5b4fc" : "var(--text-muted)",
                           border: i === 0 ? "1px solid rgba(99,102,241,0.3)" : "1px solid transparent",
                         }}>
-                          {i === 0 ? "★ " : ""}{AREA_LABEL[k] ?? k}
+                          {i === 0 ? <IconeEstrela size={10} style={{ marginRight: 4, color: "#d4af37" }} /> : null}{AREA_LABEL[k] ?? k}
                         </span>
                       ))}
                     </div>

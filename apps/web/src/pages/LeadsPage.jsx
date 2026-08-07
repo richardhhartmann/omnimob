@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { Avatar } from "../components/adminUi";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
@@ -25,18 +26,6 @@ function timeAgo(iso) {
   if (d === 1) return "ontem";
   if (d < 7) return `há ${d} dias`;
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-// Inicial e cor estável (por hash do nome) para o avatar do lead.
-function initial(name) {
-  const c = (name || "").trim().charAt(0);
-  return c ? c.toUpperCase() : "?";
-}
-function leadColor(seed) {
-  const s = seed || "?";
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-  return `hsl(${h}, 55%, 52%)`;
 }
 
 const PAGE_SIZE = 8;
@@ -220,7 +209,7 @@ export function LeadsPage({ session }) {
   return (
     <div className="main-content" style={{ maxWidth: "1100px" }}>
       {confirmModal}
-      <header style={{ marginBottom: "24px" }}>
+      <header data-tour="leads-cabecalho" style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "28px", marginBottom: "6px" }}>Gestão de Leads</h1>
         <p style={{ color: "var(--text-muted)", margin: 0 }}>
           Contatos captados pela sua vitrine pública. Responda rápido para aumentar a conversão.
@@ -244,7 +233,7 @@ export function LeadsPage({ session }) {
       )}
 
       {/* Barra de filtros */}
-      <div className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+      <div data-tour="leads-lista" className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
         {/*
         {allLeads.length > 0 && (
           <button
@@ -321,9 +310,8 @@ export function LeadsPage({ session }) {
       {/* Estados vazios */}
       {!loading && allLeads.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "56px 24px" }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "16px" }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>
           <p style={{ color: "var(--text-muted)", fontSize: "16px", margin: 0 }}>
-            Nenhum lead registrado ainda. Quando visitantes manifestarem interesse pela vitrine, aparecerão aqui.
+            Nenhum lead registrado ainda.
           </p>
         </div>
       ) : !loading && filtered.length === 0 ? (
@@ -341,7 +329,6 @@ export function LeadsPage({ session }) {
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {pageItems.map((lead) => {
             const phoneDigits = (lead.phone || "").replace(/\D/g, "");
-            const color = leadColor(lead.name || lead.email || lead.id);
             return (
               <div
                 key={lead.id}
@@ -350,10 +337,8 @@ export function LeadsPage({ session }) {
                 onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
               >
-                {/* Avatar */}
-                <div style={{ width: "44px", height: "44px", borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: color, color: "#fff", fontWeight: "700", fontSize: "18px" }}>
-                  {initial(lead.name)}
-                </div>
+                {/* Avatar — o mesmo das outras listas, na cor da imobiliária. */}
+                <Avatar name={lead.name} size={44} />
 
                 {/* Conteúdo */}
                 <div style={{ flex: 1, minWidth: 0 }}>

@@ -90,7 +90,7 @@ export function emailConviteTrial({ imobiliaria, link }) {
       paragrafo(
         `Assim que você abrir o link abaixo, criamos o ambiente da ${forte(
           imobiliaria,
-        )} na hora — com vitrine no ar e imóveis de exemplo para você explorar.`,
+        )} na hora — com o painel liberado e a vitrine pública já no ar.`,
       ),
       botao("Liberar meu teste", link),
       linkDeReserva(link),
@@ -105,7 +105,9 @@ export function emailConviteTrial({ imobiliaria, link }) {
 
 // ─── 3. Ambiente no ar (credenciais) ─────────────────────────────────────────
 
-export function emailTrialNoAr({ imobiliaria, login, senha, slug, imoveis, validade, base }) {
+// `imoveis` continua na assinatura porque as rotas ainda o passam; o ambiente
+// nasce vazio, então o texto não promete mais nada cadastrado lá dentro.
+export function emailTrialNoAr({ imobiliaria, login, senha, slug, validade, base }) {
   const urlPainel = `${base}/login`;
   const urlVitrine = `${base}/vitrine/${slug}`;
   const subject = "Seu teste da Domus está no ar";
@@ -119,7 +121,7 @@ export function emailTrialNoAr({ imobiliaria, login, senha, slug, imoveis, valid
     "",
     `Sua vitrine pública: ${urlVitrine}`,
     "",
-    `Deixamos ${imoveis} imóveis de exemplo lá dentro para você ver a plataforma funcionando.`,
+    `O ambiente está limpo, esperando os seus imóveis — o primeiro cadastro leva poucos minutos.`,
     `O teste vale até ${validade} — e nada se perde se você fechar plano antes.`,
   ].join("\n");
 
@@ -129,7 +131,7 @@ export function emailTrialNoAr({ imobiliaria, login, senha, slug, imoveis, valid
       eyebrow("● TUDO PRONTO", COR.menta),
       titulo("Seu ambiente está no ar"),
       paragrafo(
-        `Criamos a ${forte(imobiliaria)} com ${imoveis} imóveis de exemplo, para você ver a plataforma funcionando sem precisar cadastrar nada.`,
+        `Criamos a ${forte(imobiliaria)} do zero, com a vitrine já no ar. Ela está esperando os seus imóveis — nada de anúncio de mentira para você apagar depois.`,
       ),
       dados([
         { rotulo: "Usuário", valor: login, mono: true },
@@ -143,9 +145,9 @@ export function emailTrialNoAr({ imobiliaria, login, senha, slug, imoveis, valid
       divisor(),
       paragrafo(`Por onde começar:`),
       itens([
-        "Abra a vitrine e veja como seus imóveis aparecem para o cliente",
+        "Cadastre o primeiro imóvel com fotos, valor e endereço",
+        "Abra a vitrine e veja como ele aparece para o cliente",
         "Arraste os blocos no editor para deixar a página com a sua cara",
-        "Cadastre um imóvel de verdade e acompanhe as visitas e leads",
       ]),
       botao("Ver minha vitrine", urlVitrine, { tom: "escuro" }),
       aviso(
@@ -163,26 +165,79 @@ export function emailTrialNoAr({ imobiliaria, login, senha, slug, imoveis, valid
 
 // ─── 4. Aviso de novo teste (vai para o time) ────────────────────────────────
 
-export function emailAvisoNovoTrial({ imobiliaria, email, telefone, slug, validade, base }) {
-  const subject = `Domus · novo teste grátis — ${imobiliaria}`;
+/* Rótulos legíveis para o que o formulário manda em código. Ficam aqui, e não
+   no front, porque quem lê este e-mail é uma pessoa do time — "nao_sei" numa
+   caixa de entrada obriga quem lê a decorar o enum. */
+const ITEM_MIGRACAO = {
+  imoveis: "imóveis e fotos",
+  clientes: "clientes",
+  leads: "leads",
+  usuarios: "usuários e cargos",
+};
+const FORMATO_MIGRACAO = {
+  planilha: "tem planilha/CSV",
+  exportacao: "consegue exportar do sistema atual",
+  api: "o sistema atual tem API",
+  nao_sei: "não sabe como exportar — precisa de ajuda",
+};
+
+export function emailAvisoNovoTrial({
+  imobiliaria, email, telefone, slug, validade, base,
+  perfil = "nova", planoDesejado, migracao,
+}) {
+  /* Duas conversas diferentes, e é o assunto do e-mail que precisa separá-las:
+     quem já opera tem uma base para trazer e um fornecedor para deixar, e esse
+     contato tem urgência e roteiro próprios. */
+  const jaOpera = perfil === "existente";
+  const subject = jaOpera
+    ? `Domus · teste com MIGRAÇÃO — ${imobiliaria}`
+    : `Domus · novo teste grátis — ${imobiliaria}`;
+
+  // `itensTexto` e não `itens`: este módulo importa um helper `itens()` do
+  // layout, e a variável local o esconderia dentro desta função.
+  const itensTexto = (migracao?.itens || []).map((i) => ITEM_MIGRACAO[i] || i).join(", ");
+  const linhasMigracao = migracao
+    ? [
+        { rotulo: "Sistema atual", valor: migracao.sistemaAtual || "não informou" },
+        { rotulo: "Quer trazer", valor: itensTexto || "não marcou nada" },
+        { rotulo: "Volume", valor: migracao.volume || "não informou" },
+        { rotulo: "Exportação", valor: FORMATO_MIGRACAO[migracao.formato] || "não informou" },
+        ...(migracao.observacao ? [{ rotulo: "Observação", valor: migracao.observacao }] : []),
+      ]
+    : [];
 
   const body = [
-    "Alguém confirmou o e-mail e iniciou um teste grátis.",
+    jaOpera
+      ? "Uma imobiliária JÁ EM OPERAÇÃO confirmou o e-mail e iniciou um teste."
+      : "Alguém confirmou o e-mail e iniciou um teste grátis.",
     "",
     `Imobiliária: ${imobiliaria}`,
     `E-mail:      ${email}`,
     `Telefone:    ${telefone || "(não informou)"}`,
     `Slug:        ${slug}`,
     `Vence em:    ${validade}`,
+    `Perfil:      ${jaOpera ? "já tem imobiliária (quer migrar)" : "está abrindo agora"}`,
+    ...(planoDesejado ? [`Plano de interesse: ${planoDesejado}`] : []),
+    ...(linhasMigracao.length
+      ? ["", "— Migração —", ...linhasMigracao.map((l) => `${l.rotulo}: ${l.valor}`)]
+      : jaOpera
+        ? ["", "— Migração —", "Pulou o questionário. Vale perguntar no contato."]
+        : []),
   ].join("\n");
 
   const html = layoutEmail({
-    preheader: `${imobiliaria} está testando a plataforma. Vence em ${validade}.`,
+    preheader: jaOpera
+      ? `${imobiliaria} já opera e quer trazer a base. Vence em ${validade}.`
+      : `${imobiliaria} está testando a plataforma. Vence em ${validade}.`,
     conteudo: [
-      eyebrow("● NOVO TESTE GRÁTIS", COR.menta),
-      titulo("Lead quente: alguém entrou na plataforma"),
+      eyebrow(jaOpera ? "● TESTE COM MIGRAÇÃO" : "● NOVO TESTE GRÁTIS", jaOpera ? COR.dourado : COR.menta),
+      titulo(jaOpera ? "Imobiliária em operação quer migrar" : "Lead quente: alguém entrou na plataforma"),
       paragrafo(
-        `Confirmou o e-mail e já está com o ambiente rodando. Vale um contato antes do teste vencer.`,
+        jaOpera
+          ? "Confirmou o e-mail, o ambiente está rodando e ela tem uma base em outro sistema. "
+            + "<strong>A promessa feita na landing foi que um especialista responde para combinar a importação</strong> — "
+            + "esse retorno precisa sair antes do teste vencer."
+          : "Confirmou o e-mail e já está com o ambiente rodando. Vale um contato antes do teste vencer.",
       ),
       dados([
         { rotulo: "Imobiliária", valor: imobiliaria },
@@ -190,7 +245,16 @@ export function emailAvisoNovoTrial({ imobiliaria, email, telefone, slug, valida
         { rotulo: "Telefone", valor: telefone || "não informou", mono: true },
         { rotulo: "Slug", valor: slug, mono: true },
         { rotulo: "Vence em", valor: validade },
+        ...(planoDesejado ? [{ rotulo: "Interesse", valor: planoDesejado }] : []),
       ]),
+      ...(linhasMigracao.length
+        ? [divisor(), eyebrow("● O QUE ELA TEM HOJE", COR.dourado), dados(linhasMigracao)]
+        : jaOpera
+          ? [divisor(), paragrafo(
+              `<span style="color:${COR.apagado};font-size:13px;">Pulou o questionário de migração — `
+              + "levante isso no primeiro contato.</span>",
+            )]
+          : []),
       botao("Ver a vitrine dele", `${base}/vitrine/${slug}`),
       divisor(),
       paragrafo(
@@ -306,70 +370,6 @@ export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base }) 
       ),
     ].join(""),
     rodape: `Vitrine: ${esc(base)}/vitrine/${esc(slug)}`,
-  });
-
-  return { subject, body, html };
-}
-
-// ─── 7. Assinou direto pela landing (acesso + boas-vindas) ───────────────────
-
-export function emailAssinaturaDireta({
-  imobiliaria, plano, valorRotulo, proximaCobranca, login, senha, slug, link, base,
-}) {
-  const subject = `Sua conta Domus está pronta — plano ${plano}`;
-
-  const body = [
-    `Pagamento confirmado! A conta da ${imobiliaria} já está ativa no plano ${plano}.`,
-    "",
-    `Acesse por aqui: ${link}`,
-    "",
-    `Usuário: ${login}`,
-    `Senha:   ${senha}`,
-    "",
-    `Valor: ${valorRotulo}`,
-    proximaCobranca ? `Próxima cobrança: ${proximaCobranca}` : "",
-    "",
-    `Sua vitrine pública: ${base}/vitrine/${slug}`,
-    "",
-    "No primeiro acesso vamos pedir que você troque a senha.",
-    "A cobrança é mensal e automática. Para cancelar ou trocar o cartão, responda este e-mail.",
-  ]
-    .filter((l) => l !== "")
-    .join("\n");
-
-  const html = layoutEmail({
-    preheader: `Plano ${plano} ativo. Seu acesso está aqui dentro.`,
-    conteudo: [
-      eyebrow("● PAGAMENTO CONFIRMADO", COR.menta),
-      titulo("Sua conta está pronta"),
-      paragrafo(
-        `Obrigado! A conta da ${forte(imobiliaria)} já está ativa no plano ${forte(plano)} — sem período de teste, direto ao produto completo.`,
-      ),
-      botao("Entrar na minha conta", link),
-      dados([
-        { rotulo: "Usuário", valor: login, mono: true },
-        { rotulo: "Senha", valor: senha, mono: true },
-        { rotulo: "Plano", valor: plano },
-        { rotulo: "Valor", valor: valorRotulo },
-        ...(proximaCobranca ? [{ rotulo: "Próxima cobrança", valor: proximaCobranca }] : []),
-      ]),
-      aviso(
-        "No primeiro acesso vamos pedir que você troque esta senha — ela é temporária e veio por e-mail.",
-      ),
-      divisor(),
-      paragrafo("Por onde começar:"),
-      itens([
-        "Cadastre seus imóveis com fotos, valores e atributos",
-        "Monte a vitrine arrastando os blocos, do seu jeito",
-        "Acompanhe visitas e leads de cada imóvel em tempo real",
-      ]),
-      botao("Ver minha vitrine", `${base}/vitrine/${slug}`, { tom: "escuro" }),
-      aviso(
-        "A cobrança é mensal e automática. Para cancelar ou trocar o cartão, é só responder este e-mail.",
-        COR.menta,
-      ),
-    ].join(""),
-    rodape: "Bem-vindo à Domus.",
   });
 
   return { subject, body, html };

@@ -1,14 +1,67 @@
 import { useEffect, useMemo, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { api } from "../api";
-import { BtnAtivar, BtnDesativar, BtnEditar, BtnNovo } from "../components/ActionIcons";
-import { Avatar, Chip, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
+import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
+import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
+import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 
 const FORM_EMPTY = { nome: "", login: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
 
+/* ─── Sufixo de tenant no login ───────────────────────────────────────────────
+   A tela de login é uma só para todos os clientes, então o login precisa ser
+   único no sistema inteiro — não dentro da imobiliária. "richard" da Centro e
+   "richard" da Casa Nobre colidiriam. Todo login novo sai como
+   `richard-imobiliaria-centro`, e o campo mostra o sufixo colado ao lado para
+   ninguém descobrir isso só na hora de entrar.
+
+   Quem digita mexe na BASE; o sufixo é do sistema. Guardamos a base no estado e
+   remontamos o login inteiro no envio — assim editar um usuário não empilha
+   sufixo em cima de sufixo.
+
+   Logins anteriores a esta regra (o `admin` do seed, por exemplo) não são
+   renomeados: reescrever o login de alguém durante uma edição de cargo tiraria
+   a pessoa do ar sem aviso. Eles aparecem inteiros, sem sufixo, e continuam
+   valendo. ────────────────────────────────────────────────────────────────── */
+
+function separarLogin(login, slug) {
+  const sufixo = `-${slug}`;
+  if (slug && login.endsWith(sufixo) && login.length > sufixo.length) {
+    return { base: login.slice(0, -sufixo.length), temSufixo: true };
+  }
+  return { base: login, temSufixo: false };
+}
+
+function juntarLogin(base, slug, temSufixo) {
+  const limpa = base.trim();
+  if (!temSufixo || !slug) return limpa;
+  // Alguém que digita o sufixo à mão não pode acabar com ele duas vezes.
+  if (limpa.endsWith(`-${slug}`)) return limpa;
+  return `${limpa}-${slug}`;
+}
+
+/* O login vira parte de um identificador único e é digitado na tela de acesso:
+   espaço, acento e maiúscula só rendem erro de digitação na hora de entrar. */
+function normalizarBaseLogin(valor) {
+  return valor
+    .toLowerCase()
+    // NFD separa "é" em "e" + acento, e a faixa abaixo remove só o acento. Sem
+    // esse passo o filtro seguinte comeria a letra junto: "josé" viraria "jos".
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9._-]/g, "");
+}
+
 export function UsuariosPage({ session }) {
   const tenantSlug = session?.tenant?.slug;
+  /* Ninguém se desativa. Seria o único caminho para um tenant ficar sem
+     administrador nenhum — o próprio se derruba, perde o acesso e não sobra
+     quem reative. E, mesmo quando há outro admin, o efeito imediato é a pessoa
+     se trancar para fora no meio do trabalho. A API recusa também: esconder o
+     botão resolve o engano, não o pedido feito na mão. */
+  const meuId = session?.usuario?.id;
+  const { confirm, modal: confirmModal } = useConfirm();
+  const showToast = useOutletContext()?.showToast;
   const [usuarios, setUsuarios] = useState([]);
   const [cargos, setCargos] = useState([]);
   const [view, setView] = useState("list"); // "list" | "form"
@@ -44,16 +97,29 @@ export function UsuariosPage({ session }) {
     });
   }, [usuarios, search, statusFilter]);
 
+  // Lista vazia por FALTA DE CADASTRO ou por filtro? A resposta muda o texto e
+  // decide se convidar a cadastrar faz sentido.
+  const filtrando = Boolean(search) || statusFilter !== "all";
+
   function abrirCriar() {
     setEditando(null);
-    setForm(FORM_EMPTY);
+    // Usuário novo sempre nasce com o sufixo do tenant.
+    setForm({ ...FORM_EMPTY, comSufixo: true });
     setError("");
     setView("form");
   }
 
   function abrirEditar(u) {
+    const { base, temSufixo } = separarLogin(u.login, tenantSlug);
     setEditando(u);
-    setForm({ nome: u.nome, login: u.login, cargoCodigo: String(u.cargoCodigo), ativo: u.ativo, forcaAlterarSenha: u.forcaAlterarSenha });
+    setForm({
+      nome: u.nome,
+      login: base,
+      comSufixo: temSufixo,
+      cargoCodigo: String(u.cargoCodigo),
+      ativo: u.ativo,
+      forcaAlterarSenha: u.forcaAlterarSenha,
+    });
     setError("");
     setView("form");
   }
@@ -65,6 +131,12 @@ export function UsuariosPage({ session }) {
       setError("Selecione o cargo do usuário.");
       return;
     }
+    if (!form.login.trim()) {
+      setError("Informe o login do usuário.");
+      return;
+    }
+    // O que vai para a API é sempre o login completo; o campo mostra só a base.
+    const loginFinal = juntarLogin(form.login, tenantSlug, form.comSufixo);
     setLoading(true);
     setError("");
     try {
@@ -73,7 +145,7 @@ export function UsuariosPage({ session }) {
         // status e a flag de forçar troca de senha.
         const payload = {
           nome: form.nome,
-          login: form.login,
+          login: loginFinal,
           cargoCodigo: Number(form.cargoCodigo),
           ativo: form.ativo,
           forcaAlterarSenha: form.forcaAlterarSenha,
@@ -84,7 +156,7 @@ export function UsuariosPage({ session }) {
         // Novo usuário: sem senha; ele define a própria no primeiro acesso.
         const created = await api.createUsuario(tenantSlug, {
           nome: form.nome,
-          login: form.login,
+          login: loginFinal,
           cargoCodigo: Number(form.cargoCodigo),
           ativo: form.ativo,
         });
@@ -108,7 +180,29 @@ export function UsuariosPage({ session }) {
         setUsuarios((prev) => prev.map((x) => x.id === updated.id ? updated : x));
       }
     } catch (err) {
-      alert(err.message);
+      showToast ? showToast(err.message, "error") : alert(err.message);
+    }
+  }
+
+  /* Excluir apaga a linha e não tem desfazer. A confirmação diz o nome e o
+     login que vão sumir, e lembra que parar aqui já resolve o acesso — quem
+     chega neste botão acabou de desativar a pessoa, então "deixar inativo" é a
+     saída que ele ainda tem. */
+  async function excluir(u) {
+    const ok = await confirm(
+      `Excluir ${u.nome} definitivamente? O cadastro e o login "${u.login}" são apagados, sem como recuperar. ` +
+      "Sem acesso a pessoa já está: deixá-la inativa preserva o histórico e permite reativar depois.",
+      "Excluir definitivamente",
+    );
+    if (!ok) return;
+    try {
+      await api.excluirUsuario(tenantSlug, u.id);
+      setUsuarios((prev) => prev.filter((x) => x.id !== u.id));
+      showToast?.(`${u.nome} foi excluído.`);
+    } catch (err) {
+      // Recusa por histórico ou por ser o último gestor volta explicada pela
+      // API; o toast repassa a frase dela em vez de inventar outra.
+      showToast ? showToast(err.message, "error") : alert(err.message);
     }
   }
 
@@ -119,30 +213,80 @@ export function UsuariosPage({ session }) {
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
           <input
+            data-tour="usuario-nome"
             placeholder="Nome completo"
             value={form.nome}
             onChange={(e) => setForm((p) => ({ ...p, nome: e.target.value }))}
             required disabled={loading}
           />
-          <input
-            placeholder="Login"
-            value={form.login}
-            onChange={(e) => setForm((p) => ({ ...p, login: e.target.value }))}
-            required disabled={loading}
-          />
-          <SelectCustom
-            value={form.cargoCodigo}
-            placeholder="Selecione o cargo"
-            disabled={loading}
-            options={cargos.map((c) => ({ value: String(c.id), label: c.descricao }))}
-            onChange={(v) => setForm((p) => ({ ...p, cargoCodigo: v }))}
-          />
+          {/* Campo composto: a pessoa digita a base e vê o sufixo do tenant
+              colado, para o login final não ser surpresa na tela de entrada. */}
+          <div data-tour="usuario-login">
+            <div style={{ display: "flex", alignItems: "stretch" }}>
+              <input
+                placeholder="Login"
+                value={form.login}
+                onChange={(e) => setForm((p) => ({ ...p, login: normalizarBaseLogin(e.target.value) }))}
+                required disabled={loading}
+                style={form.comSufixo ? {
+                  borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", minWidth: 0,
+                } : undefined}
+                aria-describedby={form.comSufixo ? "usu-login-sufixo" : undefined}
+              />
+              {form.comSufixo ? (
+                <span
+                  id="usu-login-sufixo"
+                  style={{
+                    display: "flex", alignItems: "center", flexShrink: 0,
+                    padding: "14px 16px", borderRadius: "0 12px 12px 0",
+                    border: "1px solid var(--glass-border)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "var(--text-muted)", fontSize: "14px", whiteSpace: "nowrap",
+                  }}
+                >
+                  -{tenantSlug}
+                </span>
+              ) : null}
+            </div>
+            <p style={{ margin: "6px 2px 0", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+              {form.comSufixo ? (
+                <>
+                  O login de entrada será{" "}
+                  <strong style={{ color: "var(--text-main)" }}>
+                    {(form.login.trim() || "seu.login")}-{tenantSlug}
+                  </strong>
+                  .
+                </>
+              ) : (
+                <>
+                  Login anterior ao padrão com sufixo. Mantivemos como está para não tirar esta
+                  pessoa do ar — ele continua válido na tela de acesso.
+                </>
+              )}
+            </p>
+          </div>
+          {/* Invólucro só para o tour ter onde ancorar o holofote: o combo em si
+              é um botão, e destacar apenas ele deixaria o rótulo de fora. */}
+          <div data-tour="usuario-cargo">
+            <SelectCustom
+              value={form.cargoCodigo}
+              placeholder="Selecione o cargo"
+              disabled={loading}
+              options={cargos.map((c) => ({ value: String(c.id), label: c.descricao }))}
+              onChange={(v) => setForm((p) => ({ ...p, cargoCodigo: v }))}
+            />
+          </div>
 
           <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "center" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-              <input type="checkbox" checked={form.ativo} onChange={(e) => setForm((p) => ({ ...p, ativo: e.target.checked }))} disabled={loading} />
-              Usuário ativo
-            </label>
+            {/* Mesma regra da lista: desmarcar aqui seria desativar a si mesmo
+                pela porta dos fundos. Editando o próprio cadastro, o campo
+                simplesmente não existe. */}
+            {editando?.id === meuId ? null : (
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+                <input type="checkbox" checked={form.ativo} onChange={(e) => setForm((p) => ({ ...p, ativo: e.target.checked }))} disabled={loading} />
+                Usuário ativo
+              </label>
+            )}
             {/* Forçar troca só faz sentido na edição; novos usuários já definem
                 a senha no primeiro acesso (força troca é sempre true). */}
             {editando && (
@@ -154,13 +298,13 @@ export function UsuariosPage({ session }) {
           </div>
 
           {!editando && (
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+            <p data-tour="usuario-senha" style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
               O usuário não recebe senha aqui. No primeiro acesso, ele informa o login e
               define a própria senha na tela seguinte.
             </p>
           )}
 
-          <div className="actions" style={{ marginTop: "24px" }}>
+          <div className="actions" data-tour="usuario-salvar" style={{ marginTop: "24px" }}>
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               {editando ? "Salvar Alterações" : "Criar Usuário"}
             </button>
@@ -175,12 +319,15 @@ export function UsuariosPage({ session }) {
 
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      {confirmModal}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-        <header>
+        <header data-tour="usuarios-cabecalho">
           <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Usuários</h1>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>Quem tem acesso ao painel e com qual cargo.</p>
         </header>
-        <BtnNovo onClick={abrirCriar} label="Novo Usuário" />
+        <span data-tour="usuarios-novo">
+          <BtnNovo onClick={abrirCriar} label="Novo Usuário" />
+        </span>
       </div>
 
       {initialLoading ? <SkeletonStats count={4} /> : (
@@ -204,11 +351,11 @@ export function UsuariosPage({ session }) {
       {initialLoading ? (
         <SkeletonListRows count={5} />
       ) : visiveis.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>
-            {search || statusFilter !== "all" ? "Nenhum usuário encontrado com estes filtros." : "Nenhum usuário cadastrado."}
-          </p>
-        </div>
+        <EmptyState
+          mensagem={filtrando ? "Nenhum usuário encontrado com estes filtros." : "Nenhum usuário cadastrado."}
+          acaoLabel={filtrando ? undefined : "Cadastrar o primeiro usuário"}
+          onAcao={filtrando ? undefined : abrirCriar}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {visiveis.map((u) => (
@@ -217,11 +364,14 @@ export function UsuariosPage({ session }) {
               padding: "14px 18px", opacity: u.ativo ? 1 : 0.6,
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0, flex: 1 }}>
-                <Avatar name={u.nome} seed={u.login || u.nome} size={42} />
+                <Avatar name={u.nome} size={42} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: "600", fontSize: "15px" }}>{u.nome}</span>
                     <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>@{u.login}</span>
+                    {/* Sem isto a linha do próprio usuário parece apenas ter
+                        perdido um botão; a marca explica a falta. */}
+                    {u.id === meuId ? <Chip color="#6366f1">você</Chip> : null}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
                     {u.cargo?.descricao ? <Chip color="#a78bfa">{u.cargo.descricao}</Chip> : null}
@@ -232,10 +382,22 @@ export function UsuariosPage({ session }) {
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <StatusPill active={u.ativo} />
                 <BtnEditar onClick={() => abrirEditar(u)} />
-                {u.ativo
-                  ? <BtnDesativar onClick={() => toggleAtivo(u)} />
-                  : <BtnAtivar onClick={() => toggleAtivo(u)} />
-                }
+                {/* Nada de ação destrutiva na própria linha — nem a
+                    reversível, nem a definitiva. */}
+                {u.id === meuId ? null : u.ativo ? (
+                  <BtnDesativar onClick={() => toggleAtivo(u)} />
+                ) : (
+                  <>
+                    <BtnAtivar onClick={() => toggleAtivo(u)} />
+                    {/* A lixeira só existe para quem já está inativo. Desativar
+                        vira degrau obrigatório do excluir: a pessoa perde o
+                        acesso primeiro, dá tempo de perceber que ainda precisa
+                        dela, e só depois a linha pode ser apagada. Some também
+                        o risco de a lixeira estar a um pixel da desativação e
+                        levar um clique que era para a outra. */}
+                    <BtnExcluir onClick={() => excluir(u)} />
+                  </>
+                )}
               </div>
             </div>
           ))}

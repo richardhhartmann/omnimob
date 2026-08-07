@@ -153,30 +153,31 @@ export default function App() {
         element={adminSession ? comEntrada(<SuperAdminPage session={adminSession} onLogout={handleAdminLogout} />) : <Navigate to="/admin/login" replace />}
       />
 
-      {/* Raiz: landing da Domus para visitantes; dashboard para tenant logado */}
+      {/* Raiz + painel: UM layout só, de propósito.
+          Havia duas rotas de layout — uma para "/" e outra para o resto —, e
+          cada uma montava o seu próprio <AdminLayout>. Ir do Início para
+          qualquer outra tela trocava de branch, e o React desmontava o painel
+          inteiro e montava outro: sidebar recolhida voltava, o badge de leads
+          refazia a busca, toasts sumiam no meio e o tour guiado morria na
+          primeira troca de página (ele vive dentro do layout).
+          É o mesmo motivo do invólucro sempre presente em `comEntrada`, uma
+          camada acima — mudar o tipo do elemento naquela posição remonta tudo.
+
+          Visitante continua caindo onde caía: landing na raiz, login no resto. */}
       <Route
         element={
           session && canAccessTenantPanel ? (
-            comEntrada(<AdminLayout session={session} onLogout={handleLogout} />)
+            comEntrada(<AdminLayout session={session} onLogout={handleLogout} onSessionUpdate={handleSessionUpdate} />)
           ) : session ? (
             <Navigate to={defaultPublicPath} replace />
-          ) : (
+          ) : location.pathname === "/" ? (
             <DomusLandingPage />
+          ) : (
+            <Navigate to="/login" replace />
           )
         }
       >
         <Route path="/" element={<DashboardPage session={session} />} />
-      </Route>
-
-      <Route
-        element={
-          session && canAccessTenantPanel ? (
-            <AdminLayout session={session} onLogout={handleLogout} />
-          ) : (
-            <Navigate to={session ? defaultPublicPath : "/login"} replace />
-          )
-        }
-      >
         <Route path="/imoveis" element={
           cargo?.gerenciarImoveis
             ? <ImovelListPage session={session} />

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
-import { planoInfo } from "../utils/planos";
+import { planoInfo, PLANOS } from "../utils/planos";
+import { useConfirm } from "../components/ConfirmModal";
+import { IconeCelular, IconeCheck, IconeEnvelope, IconeTelefone, IconeX } from "../components/Icones.jsx";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -155,9 +157,9 @@ function BrandPreview({ form }) {
       {(form.email || form.whatsapp || form.telefone) && (
         <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
           <span style={{ fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: "2px" }}>Contato</span>
-          {form.email && <span style={{ fontSize: "12px" }}>✉ {form.email}</span>}
-          {form.whatsapp && <span style={{ fontSize: "12px" }}>📱 {form.whatsapp}</span>}
-          {form.telefone && <span style={{ fontSize: "12px" }}>☎ {form.telefone}</span>}
+          {form.email && <span style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}><IconeEnvelope size={12} /> {form.email}</span>}
+          {form.whatsapp && <span style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}><IconeCelular size={12} /> {form.whatsapp}</span>}
+          {form.telefone && <span style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}><IconeTelefone size={12} /> {form.telefone}</span>}
         </div>
       )}
 
@@ -185,6 +187,44 @@ const EMPTY = {
   logoUrl: "", primaryColor: "#6366f1", secondaryColor: "#d4af37",
   autoGerarIA: true,
 };
+
+/* ─── Rever o tour ────────────────────────────────────────────────────────────
+   Apaga o progresso deste usuário e recarrega. O recarregar não é preguiça: o
+   tour é decidido na montagem do AdminLayout, que fica ACIMA desta tela — sem
+   remontar, o convite só apareceria no próximo login. */
+function ReverTour({ tenantSlug }) {
+  const [estado, setEstado] = useState("parado"); // parado | indo | erro
+
+  async function reiniciar() {
+    if (!tenantSlug || estado === "indo") return;
+    setEstado("indo");
+    try {
+      await api.reiniciarTutorial(tenantSlug);
+      window.location.assign("/");
+    } catch {
+      setEstado("erro");
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+      <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6, flex: 1, minWidth: "220px" }}>
+        {estado === "erro"
+          ? "Não consegui reiniciar agora. Tente de novo em instantes."
+          : "Refaz a apresentação das telas do painel, do começo."}
+      </p>
+      <button
+        type="button"
+        className="button-secondary"
+        onClick={reiniciar}
+        disabled={estado === "indo"}
+        style={{ width: "auto", padding: "9px 18px", flexShrink: 0 }}
+      >
+        {estado === "indo" ? "Reiniciando…" : "Rever o tour"}
+      </button>
+    </div>
+  );
+}
 
 // ─── Abas ─────────────────────────────────────────────────────────────────────
 
@@ -241,6 +281,18 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   const [form, setForm] = useState(EMPTY);
   const [plano, setPlano] = useState(session?.tenant?.plano || "BASICO");
   const [loading, setLoading] = useState(true);
+
+  /* ── Situação da cobrança ──────────────────────────────────────────────────
+     `emTrial` sai de `statusPagamento === "TRIAL"` no servidor, e não do plano:
+     um tenant em teste roda com `plano = "PREMIUM"` (o teste libera o produto
+     inteiro), então olhar só o plano diria "cliente Premium" para quem ainda
+     não pagou nada. Daí a aba precisar das duas informações.
+     ──────────────────────────────────────────────────────────────────────── */
+  const [cobranca, setCobranca] = useState(null); // { emTrial, precos, ... }
+  const [trocandoPlano, setTrocandoPlano] = useState("");
+  const [planoMsg, setPlanoMsg] = useState(null);  // { tipo, texto }
+  const { confirm, modal: confirmModal } = useConfirm();
+  const podeTrocarPlano = Boolean(session?.usuario?.cargo?.gerenciarUsuarios);
   const [saveStatus, setSaveStatus] = useState("idle");
   const [cepLoading, setCepLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -285,6 +337,51 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
       setSearchParams(next, { replace: true });
     }
   }, []);
+
+  useEffect(() => {
+    if (!tenantSlug) return;
+    api.getTrialStatus(tenantSlug).then(setCobranca).catch(() => setCobranca(null));
+  }, [tenantSlug]);
+
+  /* Troca de plano de cliente pagante. O aviso sobre a cobrança está no texto da
+     confirmação porque é a única hora em que a pessoa ainda pode desistir — e é
+     verdade que o produto muda agora e a fatura não. */
+  async function trocarPlano(destino) {
+    const de = planoInfo(plano);
+    const para = planoInfo(destino);
+    const subindo = para.nivel > de.nivel;
+    const ok = await confirm(
+      `Trocar do plano ${de.nome} para o ${para.nome}? ` +
+      (subindo
+        ? `Os recursos do ${para.nome} passam a valer imediatamente. `
+        : `Os recursos exclusivos do ${de.nome} deixam de aparecer imediatamente. `) +
+      "O valor da próxima fatura é ajustado pelo nosso time — a cobrança não muda sozinha aqui.",
+      subindo ? "Fazer upgrade" : "Fazer downgrade",
+      // Downgrade tira recurso de quem está usando; upgrade não é perigo nenhum.
+      subindo ? "primary" : "danger",
+    );
+    if (!ok) return;
+
+    setTrocandoPlano(destino);
+    setPlanoMsg(null);
+    try {
+      await api.trocarPlano(tenantSlug, destino);
+      setPlano(destino);
+      // A sessão carrega o plano e é ela que libera recursos nas outras telas;
+      // sem sincronizar, o painel só mudaria no próximo login.
+      if (onSessionUpdate && session?.tenant) {
+        onSessionUpdate({ ...session, tenant: { ...session.tenant, plano: destino } });
+      }
+      setPlanoMsg({
+        tipo: "success",
+        texto: `Plano alterado para ${para.nome}. Vamos ajustar a cobrança e confirmar por e-mail.`,
+      });
+    } catch (err) {
+      setPlanoMsg({ tipo: "error", texto: err.message || "Não foi possível trocar o plano." });
+    } finally {
+      setTrocandoPlano("");
+    }
+  }
 
   // Carrega status das redes sociais
   useEffect(() => {
@@ -362,11 +459,26 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           cep: form.cep.replace(/\D/g, ""),
         });
         setSaveStatus("saved");
-        // Sincroniza a sessão local para a sidebar do admin refletir logo/nome/slogan na hora.
+        /* Sincroniza a sessão local para o painel refletir a identidade na hora.
+
+           AS CORES PRECISAM ESTAR AQUI. O painel lê `session.tenant.primaryColor`
+           para pintar o ladrilho da marca, o avatar do perfil e as iniciais das
+           listas (via `--tenant-primary`, no AdminLayout). Enquanto elas ficavam
+           de fora desta lista, salvar uma cor nova gravava no banco e não mudava
+           nada na tela — a sessão continuava com a cor velha até o próximo
+           login, e parecia que o salvamento não tinha funcionado. */
         if (onSessionUpdate && session?.tenant) {
           onSessionUpdate({
             ...session,
-            tenant: { ...session.tenant, name: form.name, slogan: form.slogan, logoUrl: form.logoUrl, autoGerarIA: form.autoGerarIA },
+            tenant: {
+              ...session.tenant,
+              name: form.name,
+              slogan: form.slogan,
+              logoUrl: form.logoUrl,
+              primaryColor: form.primaryColor,
+              secondaryColor: form.secondaryColor,
+              autoGerarIA: form.autoGerarIA,
+            },
           });
         }
         debounceRef.current = setTimeout(() => setSaveStatus("idle"), 3000);
@@ -457,9 +569,10 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
 
   return (
     <div className="main-content" style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "24px" }}>
+      {confirmModal}
 
       {/* ── Cabeçalho ─── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+      <div data-tour="config-cabecalho" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
         <div>
           <h2 style={{ margin: "0 0 4px 0", fontSize: "24px", fontWeight: "700" }}>Configurações</h2>
           <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
@@ -559,6 +672,16 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               </Campo>
             </div>
           </Secao>
+
+          {/* Fica no Perfil porque é uma preferência de QUEM está logado, não
+              da imobiliária: o reinício vale só para o próprio usuário. */}
+          <Secao cor="#818cf8" titulo="Tour guiado" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+            </svg>
+          }>
+            <ReverTour tenantSlug={tenantSlug} />
+          </Secao>
           </>)}
 
           {tab === "aparencia" && (
@@ -647,7 +770,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                 color: socialMsg.type === "success" ? "#6ee7b7" : "#fca5a5",
                 display: "flex", alignItems: "flex-start", gap: "10px",
               }}>
-                <span style={{ marginTop: "1px" }}>{socialMsg.type === "success" ? "✓" : "✗"}</span>
+                <span style={{ marginTop: "2px", display: "flex" }}>{socialMsg.type === "success" ? <IconeCheck size={13} /> : <IconeX size={13} />}</span>
                 <span>{socialMsg.text}</span>
                 <button type="button" onClick={() => setSocialMsg(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.6, fontSize: "14px", flexShrink: 0 }}>✕</button>
               </div>
@@ -726,12 +849,16 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           }>
             {(() => {
               const atual = planoInfo(plano);
+              const emTrial = Boolean(cobranca?.emTrial);
               return (
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                     <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>Seu plano atual:</span>
+                    {/* Em teste o selo precisa dizer as duas coisas: o produto é
+                        o Premium inteiro, mas ninguém pagou por ele ainda. Só
+                        "Premium" faria a pessoa achar que já é cliente. */}
                     <span style={{ fontSize: "13px", fontWeight: 700, color: atual.cor, background: `${atual.cor}22`, border: `1px solid ${atual.cor}55`, padding: "4px 12px", borderRadius: "999px" }}>
-                      {atual.nome}
+                      {emTrial ? `${atual.nome} · Teste` : atual.nome}
                     </span>
                   </div>
 
@@ -741,24 +868,116 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                     </p>
                   )}
 
-                  {/* Toggle: auto-gerar IA (só faz sentido no Premium) */}
-                  <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", cursor: atual.ia ? "pointer" : "not-allowed", opacity: atual.ia ? 1 : 0.55 }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(form.autoGerarIA)}
-                      onChange={(e) => set("autoGerarIA", e.target.checked)}
-                      disabled={!atual.ia}
-                      style={{ marginTop: "2px" }}
-                    />
-                    <span style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                      <span style={{ fontSize: "13px", fontWeight: 600 }}>Preencher imóvel por IA automaticamente</span>
-                      <span style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.5 }}>
-                        Ao lançar a primeira foto no cadastro, a IA já preenche título, descrição, tipo e demais campos.
-                        {!atual.ia && <> Disponível no plano <strong style={{ color: "#d4af37" }}>Premium</strong>.</>}
-                        {atual.ia && !form.autoGerarIA && <> Desativado — nada é preenchido sozinho, mas o botão "Gerar com IA" continua disponível.</>}
+                  {emTrial && (
+                    <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6, padding: "12px 14px", borderRadius: "12px", background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.22)" }}>
+                      Você está testando o <strong style={{ color: "#d4af37" }}>{atual.nome}</strong> sem
+                      pagar nada — os recursos são os mesmos que a assinatura desse plano entrega.
+                      Para assinar (ou trocar de plano), use o botão de teste no menu lateral{cobranca?.diasRestantes != null ? ` (faltam ${cobranca.diasRestantes} dia${cobranca.diasRestantes === 1 ? "" : "s"})` : ""}.
+                    </p>
+                  )}
+
+                  {/* Toggle de IA: só existe para quem tem IA. Antes ele
+                      aparecia desabilitado a 55% para todo mundo, e um controle
+                      que a pessoa nunca vai poder mexer é ruído — a mensagem de
+                      "disponível no Premium" já é dada pelos cartões de plano
+                      logo abaixo, onde ela pode fazer algo a respeito. */}
+                  {atual.ia && (
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", opacity: 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.autoGerarIA)}
+                        onChange={(e) => set("autoGerarIA", e.target.checked)}
+                        style={{ marginTop: "2px" }}
+                      />
+                      <span style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 600 }}>Preencher imóvel por IA automaticamente</span>
+                        <span style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                          Ao lançar a primeira foto no cadastro, a IA já preenche título, descrição, tipo e demais campos.
+                          {!form.autoGerarIA && <> Desativado — nada é preenchido sozinho, mas o botão "Gerar com IA" continua disponível.</>}
+                        </span>
                       </span>
-                    </span>
-                  </label>
+                    </label>
+                  )}
+
+                  {/* Upgrade / downgrade: só para quem já é cliente. Em teste a
+                      troca de plano não existe — o que existe é assinar. */}
+                  {cobranca && !emTrial && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "4px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                      <div>
+                        <div style={{ fontSize: "13px", fontWeight: 600 }}>Mudar de plano</div>
+                        <p style={{ margin: "5px 0 0", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                          A mudança vale na hora dentro do painel. O valor da próxima fatura é
+                          ajustado pelo nosso time — nada é cobrado por esta tela.
+                        </p>
+                      </div>
+
+                      {planoMsg && (
+                        <p style={{
+                          margin: 0, fontSize: "12.5px", lineHeight: 1.6, padding: "10px 13px", borderRadius: "10px",
+                          color: planoMsg.tipo === "error" ? "#fca5a5" : "#6ee7b7",
+                          background: planoMsg.tipo === "error" ? "rgba(239,68,68,0.10)" : "rgba(16,185,129,0.10)",
+                          border: `1px solid ${planoMsg.tipo === "error" ? "rgba(239,68,68,0.28)" : "rgba(16,185,129,0.28)"}`,
+                        }}>
+                          {planoMsg.texto}
+                        </p>
+                      )}
+
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: "10px" }}>
+                        {PLANOS.map((p) => {
+                          const ehAtual = p.key === atual.key;
+                          const subindo = p.nivel > atual.nivel;
+                          const preco = cobranca?.precos?.[p.key]?.rotulo;
+                          const ocupado = Boolean(trocandoPlano);
+                          return (
+                            <div
+                              key={p.key}
+                              style={{
+                                display: "flex", flexDirection: "column", gap: "7px",
+                                padding: "14px 16px", borderRadius: "12px",
+                                background: ehAtual ? `${p.cor}14` : "rgba(255,255,255,0.02)",
+                                border: `1px solid ${ehAtual ? `${p.cor}66` : "rgba(255,255,255,0.08)"}`,
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                <span style={{ fontSize: "13.5px", fontWeight: 700, color: p.cor }}>{p.nome}</span>
+                                {ehAtual && (
+                                  <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: "999px" }}>
+                                    Atual
+                                  </span>
+                                )}
+                              </div>
+                              {preco && <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)" }}>{preco}</span>}
+                              <span style={{ fontSize: "11.5px", color: "var(--text-muted)", lineHeight: 1.55, flex: 1 }}>
+                                {p.descricao}
+                              </span>
+                              {!ehAtual && (
+                                <button
+                                  type="button"
+                                  disabled={ocupado || !podeTrocarPlano}
+                                  title={podeTrocarPlano ? undefined : "Só quem gerencia usuários pode trocar o plano."}
+                                  onClick={() => trocarPlano(p.key)}
+                                  style={{
+                                    width: "100%", marginTop: "4px", padding: "8px 12px", borderRadius: "9px",
+                                    border: subindo ? "none" : "1px solid rgba(255,255,255,0.14)",
+                                    background: subindo ? p.cor : "transparent",
+                                    color: subindo ? "#0c0f1a" : "var(--text-muted)",
+                                    fontSize: "12.5px", fontWeight: 600,
+                                    cursor: ocupado || !podeTrocarPlano ? "not-allowed" : "pointer",
+                                    opacity: ocupado || !podeTrocarPlano ? 0.55 : 1,
+                                    boxShadow: "none", transform: "none",
+                                  }}
+                                >
+                                  {trocandoPlano === p.key
+                                    ? "Trocando…"
+                                    : subindo ? "Fazer upgrade" : "Fazer downgrade"}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               );
             })()}

@@ -1,12 +1,19 @@
 import { createPortal } from "react-dom";
+import { IconeLapis, IconeMouse, IconeRedimensionar } from "../Icones.jsx";
+
+/* Ícone desenhado, não emoji: estes cinco cartões ficam lado a lado, e um 🖱️
+   colorido do sistema ao lado de um ⠿ monocromático da fonte lia como duas
+   linguagens diferentes na mesma lista. Os que não têm desenho — o grip de seis
+   pontos e o atalho ⌘Z — continuam texto, porque é isso que eles são: o glifo
+   que aparece no próprio editor e uma tecla. */
 
 export function OnboardingOverlay({ onDismiss }) {
   const tips = [
-    { icon: "🖱️", title: "Clique para selecionar", desc: "Clique em qualquer bloco do canvas para editá-lo. Os controles de estilo aparecem no painel direito." },
-    { icon: "⠿", title: "Arraste para mover", desc: "Arraste pelo ícone de seis pontos no topo de cada bloco para reposicioná-lo livremente." },
-    { icon: "↘", title: "Redimensione", desc: "O triângulo no canto inferior direito de cada bloco permite ajustar largura e altura." },
-    { icon: "✏️", title: "Edição inline", desc: "Clique diretamente no texto do canvas para editar. Selecione palavras para mudar cor e fonte." },
-    { icon: "⌘Z", title: "Desfazer / Refazer", desc: "Ctrl+Z desfaz e Ctrl+Y (ou Ctrl+Shift+Z) refaz qualquer ação no editor." },
+    { Icone: IconeMouse, title: "Clique para selecionar", desc: "Clique em qualquer bloco do canvas para editá-lo. Os controles de estilo aparecem no painel direito." },
+    { texto: "⠿", title: "Arraste para mover", desc: "Arraste pelo ícone de seis pontos no topo de cada bloco para reposicioná-lo livremente." },
+    { Icone: IconeRedimensionar, title: "Redimensione", desc: "O triângulo no canto inferior direito de cada bloco permite ajustar largura e altura." },
+    { Icone: IconeLapis, title: "Edição inline", desc: "Clique diretamente no texto do canvas para editar. Selecione palavras para mudar cor e fonte." },
+    { texto: "⌘Z", title: "Desfazer / Refazer", desc: "Ctrl+Z desfaz e Ctrl+Y (ou Ctrl+Shift+Z) refaz qualquer ação no editor." },
   ];
 
   return createPortal(
@@ -24,9 +31,11 @@ export function OnboardingOverlay({ onDismiss }) {
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "32px" }}>
-          {tips.map(({ icon, title, desc }) => (
+          {tips.map(({ Icone, texto, title, desc }) => (
             <div key={title} style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
-              <span style={{ fontSize: "22px", flexShrink: 0, width: "32px", textAlign: "center" }}>{icon}</span>
+              <span style={{ fontSize: "18px", flexShrink: 0, width: "32px", display: "flex", alignItems: "center", justifyContent: "center", color: "#a5b4fc" }}>
+                {Icone ? <Icone size={21} /> : texto}
+              </span>
               <div>
                 <strong style={{ fontSize: "14px", display: "block", marginBottom: "3px", color: "#fff" }}>{title}</strong>
                 <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.55)", lineHeight: "1.5" }}>{desc}</span>

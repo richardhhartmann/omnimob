@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { PLANOS } from "../utils/planos";
 import { carregarStripe, stripeConfigurado, APARENCIA_STRIPE } from "../utils/stripe";
+import { IconeCheck } from "./Icones.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Aviso de teste no painel + fluxo de assinatura.
@@ -9,10 +10,11 @@ import { carregarStripe, stripeConfigurado, APARENCIA_STRIPE } from "../utils/st
    O botão mostra os dias que faltam e, no hover, troca para "Assine já". Clicar
    abre três passos: o que se perde → escolher plano → pagamento.
 
-   O inventário de perdas vem do servidor e conta SÓ o que o cliente criou; os
-   imóveis de demonstração que vieram junto com o teste ficam de fora. Inflar
-   esse número com dado de exemplo seria mentir para pressionar — e a primeira
-   pessoa que conferir descobre.
+   O inventário de perdas vem do servidor e conta SÓ o que o cliente criou.
+   Hoje isso é o inventário inteiro — o ambiente de teste nasce vazio, sem
+   imóveis de demonstração —, mas o filtro fica: inflar esse número com dado
+   que não é dele seria mentir para pressionar, e a primeira pessoa que
+   conferir descobre.
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* Rótulos de reserva: valem só quando o provedor não está conectado. Com o
@@ -141,6 +143,10 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   const planosOfertaveis = temProvedor ? PLANOS.filter((p) => precosVivos[p.key]) : PLANOS;
   const precoDe = (chave) => precosVivos[chave]?.rotulo || PRECOS_RESERVA[chave];
   const nomeDoPlano = (chave) => PLANOS.find((p) => p.key === chave)?.nome || chave;
+  /* O plano em que o teste está rodando. Deixou de ser sempre o Premium — vem
+     da escolha feita na landing —, então tanto o texto quanto a etiqueta "SEU
+     TESTE" no cartão precisam perguntar em vez de assumir. */
+  const planoDoTeste = PLANOS.find((p) => p.key === situacao.plano) || null;
 
   /* O que o plano assinado entrega além do núcleo. Sai de utils/planos.js, a
      mesma fonte que libera os recursos no produto — se um dia mudar lá, esta
@@ -283,9 +289,12 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                 <span className="tv-eyebrow">● ESCOLHA O PLANO</span>
                 <h2 id="tv-titulo" className="tv-titulo">Qual plano combina com a sua imobiliária?</h2>
                 <p className="tv-texto">
-                  Durante o teste você usou o <strong>Premium</strong>, com tudo liberado — inclusive
-                  IA e publicação em redes. Se escolher um plano menor, esses recursos deixam de
-                  aparecer.
+                  {planoDoTeste
+                    ? <>Você testou o <strong>{planoDoTeste.nome}</strong>. Manter esse plano é seguir
+                        com exatamente o que você já conhece — subir libera mais, descer tira
+                        recursos que você vinha usando.</>
+                    : <>Escolha o plano que combina com a sua rotina. Subir libera mais recursos;
+                        descer tira o que você vinha usando no teste.</>}
                 </p>
 
                 <div className="tv-planos">
@@ -298,7 +307,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                     >
                       <span className="tv-plano__topo">
                         <span className="tv-plano__nome">{p.nome}</span>
-                        {p.key === "PREMIUM" ? <span className="tv-plano__tag">SEU TESTE</span> : null}
+                        {p.key === situacao.plano ? <span className="tv-plano__tag">SEU TESTE</span> : null}
                       </span>
                       <span className="tv-plano__preco">{precoDe(p.key)}</span>
                       <span className="tv-plano__desc">{p.descricao}</span>
@@ -377,7 +386,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
 
             {passo === 4 && concluido ? (
               <div className="tv-festa">
-                <span className="tv-festa__selo" aria-hidden="true">✓</span>
+                <span className="tv-festa__selo" aria-hidden="true"><IconeCheck size={26} /></span>
                 <span className="tv-eyebrow tv-eyebrow--menta">● ASSINATURA CONFIRMADA</span>
                 <h2 id="tv-titulo" className="tv-titulo">Bem-vindo à Domus de verdade</h2>
                 <p className="tv-texto">
@@ -526,7 +535,7 @@ const CSS = `
 .tv-perdas li {
   position: relative; padding-left: 18px; font-size: 13px; color: #e2e8f0; line-height: 1.5;
 }
-.tv-perdas li::before { content: "✕"; position: absolute; left: 0; color: #f87171; font-size: 10px; }
+.tv-perdas li::before { color: #f87171; content: ""; position: absolute; left: 0; top: 0.4em; width: 10px; height: 10px; background-color: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'%3E%3Cline x1='5.5' y1='5.5' x2='18.5' y2='18.5'/%3E%3Cline x1='18.5' y1='5.5' x2='5.5' y2='18.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'%3E%3Cline x1='5.5' y1='5.5' x2='18.5' y2='18.5'/%3E%3Cline x1='18.5' y1='5.5' x2='5.5' y2='18.5'/%3E%3C/svg%3E") center / contain no-repeat; }
 
 .tv-planos { display: grid; gap: 8px; margin-bottom: 18px; }
 .ds-shell .tv-plano, .tv-plano {
@@ -570,7 +579,7 @@ const CSS = `
 .tv-festa .tv-texto, .tv-festa .tv-titulo { text-align: center; }
 .tv-festa__selo {
   width: 58px; height: 58px; border-radius: 999px; display: grid; place-items: center;
-  margin-bottom: 14px; font-size: 26px; color: #34d399;
+  margin-bottom: 14px; color: #34d399;
   background: rgba(16,185,129,0.14); border: 1px solid rgba(16,185,129,0.45);
   animation: tvSelo 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -601,7 +610,7 @@ const CSS = `
   position: relative; padding-left: 20px; font-size: 12.5px; line-height: 1.55; color: #cbd5e1;
 }
 .tv-ganhos li::before {
-  content: "✓"; position: absolute; left: 0; color: #34d399; font-size: 11px; font-weight: 700;
+  color: #34d399; content: ""; position: absolute; left: 0; top: 0.36em; width: 11px; height: 11px; background-color: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 12.5 9.5 18 20 6.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 12.5 9.5 18 20 6.5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .ds-shell .tv-btn, .tv-btn {
   width: auto; padding: 10px 18px; border-radius: 999px; cursor: pointer;

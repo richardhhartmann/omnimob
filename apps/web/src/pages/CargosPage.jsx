@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
-import { Avatar, SearchInput, StatCard, StatGrid } from "../components/adminUi";
+import { Avatar, EmptyState, SearchInput, StatCard, StatGrid } from "../components/adminUi";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { useConfirm } from "../components/ConfirmModal";
 
@@ -145,13 +145,14 @@ export function CargosPage({ session, onSessionUpdate }) {
         <form className="grid" onSubmit={handleSubmit}>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
             <input
+              data-tour="cargo-nome"
               placeholder="Nome do cargo (ex: Corretor, Gerente)"
               value={form.descricao}
               onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))}
               required disabled={loading}
               style={{ flex: 1 }}
             />
-            <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px", flexShrink: 0 }}>
+            <button type="submit" data-tour="cargo-salvar" disabled={loading} style={{ width: "auto", padding: "10px 20px", flexShrink: 0 }}>
               {editando ? "Salvar nome" : "Criar Cargo"}
             </button>
             <button type="button" className="button-secondary" onClick={() => setView("list")} disabled={loading} style={{ width: "auto", padding: "10px 16px", flexShrink: 0 }}>
@@ -168,7 +169,7 @@ export function CargosPage({ session, onSessionUpdate }) {
                 </span>
               )}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px" }}>
+            <div data-tour="cargo-permissoes" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px" }}>
               {PERMISSOES.map(({ key, label }) => {
                 const locked = LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario;
                 const checked = locked ? true : Boolean(form[key]);
@@ -214,11 +215,13 @@ export function CargosPage({ session, onSessionUpdate }) {
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-        <header>
+        <header data-tour="cargos-cabecalho">
           <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Cargos e Permissões</h1>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>Defina o que cada cargo pode fazer no painel.</p>
         </header>
-        <BtnNovo onClick={abrirCriar} label="Novo Cargo" />
+        <span data-tour="cargos-novo">
+          <BtnNovo onClick={abrirCriar} label="Novo Cargo" />
+        </span>
       </div>
 
       {initialLoading ? <SkeletonStats count={3} /> : (
@@ -236,18 +239,18 @@ export function CargosPage({ session, onSessionUpdate }) {
       {initialLoading ? (
         <SkeletonListRows count={4} />
       ) : visiveis.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>
-            {search ? "Nenhum cargo encontrado." : "Nenhum cargo cadastrado."}
-          </p>
-        </div>
+        <EmptyState
+          mensagem={search ? "Nenhum cargo encontrado." : "Nenhum cargo cadastrado."}
+          acaoLabel={search ? undefined : "Cadastrar o primeiro cargo"}
+          onAcao={search ? undefined : abrirCriar}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {visiveis.map((c) => (
             <div key={c.id} className="glass-panel" style={{ padding: "16px 20px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <Avatar name={c.descricao} seed={c.descricao + c.id} size={38} />
+                  <Avatar name={c.descricao} size={38} />
                   <div>
                     <div style={{ fontWeight: "600", fontSize: "15px" }}>{c.descricao}</div>
                     <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>

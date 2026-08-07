@@ -11,6 +11,7 @@ import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
 import { comodidadesAtivas } from "../utils/comodidades";
 import { tipoContratoInfo } from "../utils/tiposContrato";
 import { loadShowcaseFonts, setCachedTenant } from "../utils/showcaseFonts";
+import { IconeEstrela } from "../components/Icones.jsx";
 
 // Elemento interno (sem min-height) usado para medir a altura REAL de cada bloco.
 const SECTION_INNER_SEL = {
@@ -423,7 +424,7 @@ export function ShowcasePage() {
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
                             {visiveis.map((c) => (
                               <span key={c.key} title={c.label} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>
-                                <span style={{ fontSize: "13px", lineHeight: 1 }}>{c.icon}</span>{c.label}
+                                <c.Icone size={13} />{c.label}
                               </span>
                             ))}
                             {restantes > 0 && (
@@ -467,7 +468,9 @@ export function ShowcasePage() {
           <article className="widget-card" style={{ ...mergeBlockWrapperStyle(widget), height: "100%", boxSizing: "border-box" }}>
             {widget.type === "testimonial" ? (
               <div style={{ textAlign: "center", padding: "16px" }}>
-                <div className="widget-testimonial-stars">★★★★★</div>
+                <div className="widget-testimonial-stars" aria-label="5 de 5 estrelas">
+                              {[0, 1, 2, 3, 4].map((n) => <IconeEstrela key={n} size={13} />)}
+                            </div>
                 <div className="widget-testimonial-content" dangerouslySetInnerHTML={{ __html: widget.content }} />
                 <h3 style={{ fontSize: "16px", fontWeight: "600", color: "var(--accent)", margin: 0 }} dangerouslySetInnerHTML={{ __html: widget.title }} />
               </div>

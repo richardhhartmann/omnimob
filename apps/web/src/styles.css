@@ -1,9 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --bg-gradient-1: #111117;
-  --bg-gradient-2: #161d2e;
-  --bg-gradient-3: #1e2d45;
+  /* Fundo do painel da imobiliária.
+     Era um gradiente azul-noite (#111117 → #161d2e → #1e2d45) que destoava da
+     landing: o produto abria numa cor e a página de venda em outra. Agora parte
+     do mesmo #0a0a0b da landing (`--bg` do domusKit) e vai só até um azul
+     quase imperceptível no canto — o suficiente para a tela não ficar chapada,
+     longe de virar uma segunda identidade. */
+  --bg-gradient-1: #0a0a0b;
+  --bg-gradient-2: #0b0c11;
+  --bg-gradient-3: #0e1018;
   --glass-bg: rgba(255, 255, 255, 0.03);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-highlight: rgba(255, 255, 255, 0.15);
@@ -24,8 +30,15 @@
 body {
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   color: var(--text-main);
-  background-color: #111117;
-  background-image: linear-gradient(135deg, #111117 0%, #161d2e 50%, #1e2d45 100%);
+  /* Pelas variáveis, não pelos hexes: os mesmos três valores estavam escritos
+     aqui e no `:root`, e mudar a paleta exigia acertar os dois. */
+  background-color: var(--bg-gradient-1);
+  background-image: linear-gradient(
+    135deg,
+    var(--bg-gradient-1) 0%,
+    var(--bg-gradient-2) 50%,
+    var(--bg-gradient-3) 100%
+  );
   background-attachment: fixed;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;

@@ -160,6 +160,63 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
   }
 });
 
+/* Troca de plano de quem JÁ É CLIENTE — o upgrade/downgrade das Configurações.
+
+   Rota separada de `/me/assinar` por uma razão concreta: aquela cria uma
+   assinatura NOVA no provedor (`POST /subscriptions`), o que para um tenant já
+   pagante significaria uma segunda cobrança mensal rodando em paralelo. Por
+   isso o trial é recusado aqui e o cliente pagante é recusado lá.
+
+   ATENÇÃO — O QUE ESTA ROTA NÃO FAZ: ela muda o que o cliente USA, não o que
+   ele PAGA. Ajustar a assinatura no Stripe exige o id dela, e o schema não o
+   guarda em lugar nenhum (`criarAssinatura` devolve `assinaturaId` e ninguém
+   persiste). Enquanto essa coluna não existir, o valor da próxima fatura é
+   acertado pelo time — e a resposta diz isso em `cobrancaAjustada: false` para
+   a tela não prometer o que não aconteceu. */
+tenantRouter.post(
+  "/me/plano",
+  requireAuth,
+  requireTenant,
+  requirePermissao("gerenciarUsuarios"),
+  async (req, res) => {
+    const { plano } = req.body || {};
+    if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
+      return res.status(400).json({ error: "Plano inválido." });
+    }
+
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: { id: true, plano: true, statusPagamento: true },
+      });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      // Em teste não se troca de plano: se assina. O caminho é o outro, e ele
+      // cobra — mandar o trial por aqui daria produto de graça.
+      if (tenant.statusPagamento === "TRIAL") {
+        return res.status(409).json({
+          error: "Sua conta ainda está em teste. Assine para escolher um plano.",
+          code: "EM_TRIAL",
+        });
+      }
+      if ((tenant.plano || "BASICO") === plano) {
+        return res.status(400).json({ error: "Este já é o seu plano atual." });
+      }
+
+      const atualizado = await prisma.tenant.update({
+        where: { id: tenant.id },
+        data: { plano },
+        select: { id: true, plano: true, statusPagamento: true, valorMensal: true, proximoVencimento: true },
+      });
+
+      return res.json({ tenant: atualizado, cobrancaAjustada: false });
+    } catch (err) {
+      console.error("[POST /tenants/me/plano]", err);
+      return res.status(500).json({ error: "Erro ao trocar o plano." });
+    }
+  },
+);
+
 tenantRouter.post(
   "/me/assinar",
   requireAuth,

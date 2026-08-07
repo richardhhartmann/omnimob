@@ -9,18 +9,14 @@ import {
   emailConviteTrial,
   emailTrialNoAr,
   emailAvisoNovoTrial,
-  emailAssinaturaDireta,
 } from "../services/emailTemplates.js";
 import { interesseSchema, trialSchema } from "../validators/interesseValidators.js";
-import { precosDosPlanos, criarAssinatura } from "../services/pagamentoService.js";
-import { planoInfo } from "../middlewares/planoMiddleware.js";
+import { precosDosPlanos } from "../services/pagamentoService.js";
 import {
   criarTrial,
   assinarConvite,
   lerConvite,
   trialExistenteParaEmail,
-  assinarConviteAcesso,
-  fidelizarTrial,
 } from "../services/trialService.js";
 
 const { PropertyStatus, MetricEventType } = prismaPkg;
@@ -299,7 +295,7 @@ publicRouter.post("/trial", trialLimiter, async (req, res) => {
     return res.status(400).json({ error: "Dados inválidos.", details: parsed.error.flatten() });
   }
 
-  const { imobiliaria, email, telefone, website } = parsed.data;
+  const { imobiliaria, email, telefone, website, perfil, planoDesejado, migracao } = parsed.data;
 
   // Isca preenchida = robô. Responde como se tivesse dado certo e não faz nada.
   if (website) return res.json({ message: "Link enviado." });
@@ -324,7 +320,12 @@ publicRouter.post("/trial", trialLimiter, async (req, res) => {
       });
     }
 
-    const token = assinarConvite({ imobiliaria, email, telefone });
+    /* Perfil e migração viajam DENTRO do convite, e não numa tabela: entre
+       pedir o teste e confirmar o e-mail não existe registro nenhum — o tenant
+       só nasce no clique do link. Guardar isso em banco exigiria uma tabela de
+       convites pendentes (e a faxina dela) para um dado que só interessa se a
+       pessoa confirmar. No token, ele chega junto de quem confirmou. */
+    const token = assinarConvite({ imobiliaria, email, telefone, perfil, planoDesejado, migracao });
     const link = `${base}/comecar?token=${encodeURIComponent(token)}`;
 
     const modelo = emailConviteTrial({ imobiliaria, link });
@@ -369,10 +370,21 @@ publicRouter.post("/trial/confirmar", trialLimiter, async (req, res) => {
       });
     }
 
+    /* O TESTE NASCE NO PLANO ESCOLHIDO NA LANDING, não mais sempre no Premium.
+
+       Testar o produto inteiro e assinar um plano menor depois era a receita
+       para a pior conversa possível: a pessoa passa 14 dias usando IA e
+       publicação em redes, assina o Básico e descobre que perdeu as duas.
+       Testando o que vai contratar, o que ela vê é o que ela compra.
+
+       O `|| "PREMIUM"` cobre convites emitidos antes desta mudança, que estão
+       no e-mail de alguém e ainda valem 30 minutos — sem ele, o link deles
+       quebraria no meio do caminho. */
     const { tenant, login, senha, expiraEm, imoveis, aviso } = await criarTrial({
       imobiliaria: convite.imobiliaria,
       email: convite.email,
       telefone: convite.telefone || "",
+      plano: convite.planoDesejado || "PREMIUM",
     });
     if (aviso) console.warn("[trial]", aviso);
 
@@ -403,6 +415,11 @@ publicRouter.post("/trial/confirmar", trialLimiter, async (req, res) => {
         slug: tenant.slug,
         validade,
         base,
+        // Quem já opera e quer trazer a base é outro tipo de conversa: o aviso
+        // interno precisa dizer isso na primeira linha, não no rodapé.
+        perfil: convite.perfil,
+        planoDesejado: convite.planoDesejado,
+        migracao: convite.migracao,
       });
       await sendEmail({
         to: process.env.CONTATO_EMAIL,
@@ -443,165 +460,4 @@ publicRouter.get("/planos", async (_req, res) => {
     console.error("[planos] falha ao ler preços:", erro.message);
     return res.json({ precos: {} });
   }
-});
-
-/* ── Assinar direto pela landing ─────────────────────────────────────────────
-   Quem prefere fechar sem testar cai aqui. Diferente do teste, o tenant nasce
-   NO ATO DO PAGAMENTO: o cartão aprovado já é prova de identidade bem mais
-   forte que um clique em e-mail, e criar só depois deixaria uma janela em que
-   alguém pagou e não tem produto — se o e-mail cair no spam, é um cliente
-   cobrado e sem nada.
-
-   Ordem importa: cria o tenant, cobra, e se a cobrança falhar desfaz o tenant.
-   O contrário (cobrar antes) deixaria dinheiro preso sem dono. */
-publicRouter.post("/assinar", trialLimiter, async (req, res) => {
-  const parsed = trialSchema.safeParse(req.body || {});
-  const plano = String(req.body?.plano || "").toUpperCase();
-  const tokenPagamento = req.body?.tokenPagamento;
-
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Dados inválidos.", details: parsed.error.flatten() });
-  }
-  if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
-    return res.status(400).json({ error: "Escolha um plano." });
-  }
-  if (!tokenPagamento) {
-    return res.status(400).json({ error: "Dados de pagamento não recebidos." });
-  }
-
-  const { imobiliaria, email, telefone, website } = parsed.data;
-  // Fora do schema do teste: só interessa ao aviso interno, para o time saber
-  // se dá para chamar no WhatsApp.
-  const temWhatsapp = req.body?.temWhatsapp === true;
-  if (website) return res.json({ message: "Assinatura registrada." });
-
-  const jaTem = await trialExistenteParaEmail(email);
-  if (jaTem) {
-    return res.status(409).json({
-      error: "Já existe um ambiente para este e-mail. Entre nele para assinar por dentro.",
-      slug: jaTem.slug,
-    });
-  }
-
-  let criado = null;
-  try {
-    criado = await criarTrial({ imobiliaria, email, telefone, plano, emTeste: false });
-
-    const assinatura = await criarAssinatura({
-      tenant: criado.tenant,
-      plano,
-      tokenPagamento,
-    });
-
-    await fidelizarTrial(criado.tenant.id, {
-      plano,
-      valorMensal: assinatura.valorMensal,
-      proximoVencimento: assinatura.proximoVencimento,
-    });
-
-    const base = baseDoApp(req) || "";
-    const token = assinarConviteAcesso({
-      slug: criado.tenant.slug,
-      imobiliaria,
-      login: criado.login,
-      senha: criado.senha,
-      plano,
-    });
-    const link = `${base}/comecar?token=${encodeURIComponent(token)}`;
-    const info = planoInfo(plano);
-    const valorRotulo = assinatura.valorMensal
-      ? `R$ ${assinatura.valorMensal.toFixed(2).replace(".", ",")}/mês`
-      : "conforme contratado";
-    const proximaCobranca = assinatura.proximoVencimento
-      ? assinatura.proximoVencimento.toLocaleDateString("pt-BR")
-      : "";
-
-    const modelo = emailAssinaturaDireta({
-      imobiliaria, plano: info.nome, valorRotulo, proximaCobranca,
-      login: criado.login, senha: criado.senha, slug: criado.tenant.slug, link, base,
-    });
-    const envio = await sendEmail({
-      to: email, subject: modelo.subject, body: modelo.body, html: modelo.html,
-    });
-    if (envio.status !== "sent") {
-      console.warn(`[assinar] e-mail não entregue a ${email}. Link de acesso: ${link}`);
-    }
-
-    if (process.env.CONTATO_EMAIL) {
-      await sendEmail({
-        to: process.env.CONTATO_EMAIL,
-        subject: `Domus · NOVA ASSINATURA — ${imobiliaria} (${info.nome})`,
-        body: [
-          "Alguém assinou direto pela landing, sem passar pelo teste.",
-          "",
-          `Imobiliária: ${imobiliaria}`,
-          `E-mail:      ${email}`,
-          `Telefone:    ${telefone || "(não informou)"}${temWhatsapp ? " (tem WhatsApp)" : ""}`,
-          `Plano:       ${info.nome} — ${valorRotulo}`,
-          `Slug:        ${criado.tenant.slug}`,
-        ].join("\n"),
-        replyTo: email,
-      }).catch(() => {});
-    }
-
-    /* As credenciais voltam na resposta, e não só por e-mail. Quem pagou não pode
-       ficar sem entrar porque a mensagem não chegou — endereço digitado errado,
-       spam, provedor recusando. A tela mostra o acesso na hora. */
-    return res.status(201).json({
-      message: "Assinatura confirmada.",
-      email,
-      slug: criado.tenant.slug,
-      login: criado.login,
-      senha: criado.senha,
-      emailEntregue: envio.status === "sent",
-    });
-  } catch (erro) {
-    // Cobrança falhou: desfaz o tenant para não deixar ambiente órfão ocupando
-    // o slug e o e-mail de alguém que não chegou a virar cliente.
-    if (criado?.tenant?.id) {
-      await prisma.tenant
-        .delete({ where: { id: criado.tenant.id } })
-        .catch(() => {});
-    }
-    console.error("[assinar] falhou:", erro.code || "", erro.message);
-    if (erro.code === "RECUSADO" || erro.code === "PENDENTE") {
-      return res.status(402).json({ error: erro.message, code: erro.code });
-    }
-    if (erro.code === "PROVEDOR_NAO_CONFIGURADO" || erro.code === "PLANO_SOB_CONSULTA") {
-      return res.status(503).json({ error: erro.message, code: erro.code });
-    }
-    return res.status(500).json({ error: "Não foi possível concluir a assinatura." });
-  }
-});
-
-/* Link do e-mail de quem assinou: valida e devolve o que a tela de parabéns
-   mostra. Nada é criado aqui — o ambiente já existe desde o pagamento. */
-publicRouter.post("/assinatura/confirmar", async (req, res) => {
-  const token = typeof req.body?.token === "string" ? req.body.token : "";
-  if (!token) return res.status(400).json({ error: "Link inválido." });
-
-  let convite;
-  try {
-    convite = lerConvite(token, "assinatura");
-  } catch (erro) {
-    return res.status(400).json({ error: erro.message, code: erro.code });
-  }
-
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: convite.slug },
-    select: { name: true, slug: true, plano: true, valorMensal: true, proximoVencimento: true },
-  });
-  if (!tenant) return res.status(404).json({ error: "Ambiente não encontrado." });
-
-  return res.json({
-    assinou: true,
-    imobiliaria: tenant.name,
-    slug: tenant.slug,
-    login: convite.login,
-    senha: convite.senha,
-    plano: planoInfo(tenant.plano).nome,
-    planoChave: planoInfo(tenant.plano).chave,
-    valorMensal: tenant.valorMensal ? Number(tenant.valorMensal) : null,
-    proximaCobranca: tenant.proximoVencimento,
-  });
 });

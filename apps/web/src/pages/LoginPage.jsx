@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Alert, Button, DomusStyles, Eyebrow, Field, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/domusKit";
 
@@ -14,10 +14,32 @@ import { Alert, Button, DomusStyles, Eyebrow, Field, LogoLockup, Reveal, Scallop
 export function LoginPage({ onLogin }) {
   const [searchParams] = useSearchParams();
   const tenantFromShowcase = searchParams.get("tenant") || "";
-  const [form, setForm] = useState({ login: "", senha: "" });
+  const local = useLocation();
+  const navegar = useNavigate();
+  /* Quem acabou de assinar chega aqui vindo do modal da landing, com o acesso
+     no state do roteador. Preencher os campos evita copiar e colar de uma tela
+     que ele acabou de fechar — e a senha é temporária mesmo, trocada logo em
+     seguida. Só vale na montagem: depois disso os campos são de quem digita. */
+  const recebidas = local.state?.credenciais || null;
+  const [form, setForm] = useState({
+    login: recebidas?.login || "",
+    senha: recebidas?.senha || "",
+  });
+  // Guardado à parte porque a limpeza logo abaixo apaga `recebidas` no
+  // re-render, e o aviso da tela precisa continuar de pé. `origem` diz de qual
+  // fluxo o acesso veio — assinatura (padrão) ou liberação do teste grátis.
+  const [origem] = useState(recebidas ? local.state?.origem || "assinatura" : null);
+  const veioDeAcessoPronto = Boolean(origem);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { saindo, sair } = useSaidaDeAuth();
+
+  /* Limpa o state assim que ele é lido: sem isso a senha ficaria no
+     history.state do navegador e voltaria a cada F5 ou passo para trás. */
+  useEffect(() => {
+    if (!recebidas) return;
+    navegar(local.pathname + local.search, { replace: true, state: null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Quando o backend exige definir senha (1º acesso ou troca obrigatória),
   // guardamos o login/senha atual e trocamos para a tela de nova senha.
@@ -65,13 +87,23 @@ export function LoginPage({ onLogin }) {
 
   return (
     <AuthShell
-      eyebrow={tenantFromShowcase ? `VITRINE · ${tenantFromShowcase.toUpperCase()}` : "ACESSO DO CLIENTE"}
+      eyebrow={
+        veioDeAcessoPronto
+          ? origem === "teste"
+            ? "TESTE LIBERADO"
+            : "ASSINATURA CONFIRMADA"
+          : tenantFromShowcase
+            ? `VITRINE · ${tenantFromShowcase.toUpperCase()}`
+            : "ACESSO DO CLIENTE"
+      }
       strong="Entrar no"
       soft="painel da sua imobiliária."
       descricao={
-        tenantFromShowcase
-          ? `Você está entrando no ambiente do tenant ${tenantFromShowcase}. Use as credenciais dessa imobiliária.`
-          : ""
+        veioDeAcessoPronto
+          ? "Já preenchemos seu acesso. É só entrar — na sequência vamos pedir que você troque a senha temporária."
+          : tenantFromShowcase
+            ? `Você está entrando no ambiente do tenant ${tenantFromShowcase}. Use as credenciais dessa imobiliária.`
+            : ""
       }
       onSubmit={handleSubmit}
       error={error}

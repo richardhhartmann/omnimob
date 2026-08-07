@@ -24,9 +24,27 @@ usuarioRouter.get("/", async (req, res) => {
   }
 });
 
+/* O login é único no sistema INTEIRO, não por tenant: a tela de acesso é a
+   mesma para todos os clientes, e sem o sufixo o "joao" da primeira imobiliária
+   impediria o "joao" da segunda de existir. Por isso todo login novo sai como
+   `joao-slug-da-imobiliaria`.
+
+   A composição também é feita no painel (que mostra o sufixo ao lado do campo),
+   mas a regra vive aqui: um cadastro por fora da tela não pode furá-la. Idempo-
+   tente de propósito — se o cliente já mandou o sufixo, não empilhamos outro. */
+function comSufixoDoTenant(login, slug) {
+  const limpo = String(login).trim();
+  if (!slug) return limpo;
+  const sufixo = `-${slug}`;
+  return limpo.endsWith(sufixo) ? limpo : `${limpo}${sufixo}`.slice(0, 60);
+}
+
 usuarioRouter.post("/", async (req, res) => {
   try {
-    const { nome, login, senha, cargoCodigo } = req.body;
+    const { nome, senha, cargoCodigo } = req.body;
+    // Só na criação. Aplicar isto na edição renomearia logins anteriores à
+    // regra (o `admin` do seed, por exemplo) e tiraria a pessoa do ar.
+    const login = comSufixoDoTenant(req.body.login || "", req.tenant.slug);
     if (!nome || !login || !cargoCodigo) {
       return res.status(400).json({ error: "Nome, login e cargo são obrigatórios." });
     }
@@ -63,6 +81,13 @@ usuarioRouter.put("/:id", async (req, res) => {
     // A senha NÃO pode ser alterada diretamente pelo painel. Para forçar uma
     // troca, use a flag forcaAlterarSenha (o usuário define a nova no acesso).
     const { nome, login, cargoCodigo, ativo, forcaAlterarSenha } = req.body;
+
+    // Desativar a si mesmo é a única forma de um tenant ficar sem ninguém que
+    // consiga entrar. O painel já esconde o campo; aqui é a trava de verdade.
+    if (ativo === false && current.id === req.authUserId) {
+      return res.status(400).json({ error: "Você não pode desativar o seu próprio usuário." });
+    }
+
     const data = {};
     if (nome !== undefined) data.nome = nome;
     if (login !== undefined) data.login = login;
@@ -83,16 +108,89 @@ usuarioRouter.put("/:id", async (req, res) => {
   }
 });
 
+/* DESATIVAR — o caminho reversível, e o que o painel oferece primeiro.
+   Mantido em DELETE /:id por já ser o contrato usado pelo front. */
 usuarioRouter.delete("/:id", async (req, res) => {
   try {
     const current = await prisma.usuario.findFirst({
       where: { id: req.params.id, tenantId: req.tenant.id },
     });
     if (!current) return res.status(404).json({ error: "Usuário não encontrado." });
+    if (current.id === req.authUserId) {
+      return res.status(400).json({ error: "Você não pode desativar o seu próprio usuário." });
+    }
     await prisma.usuario.update({ where: { id: req.params.id }, data: { ativo: false } });
     return res.status(204).send();
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erro ao desativar usuário." });
+  }
+});
+
+/* EXCLUIR de vez — apaga a linha. Rota própria, e não um parâmetro do DELETE
+   acima, porque as duas ações têm consequências diferentes demais para
+   dependerem de alguém lembrar de mandar uma flag.
+
+   Três recusas, todas por motivo concreto:
+
+   1. Você mesmo. Mesma regra da desativação — sem volta, e ainda pior.
+
+   2. O último acesso de gestão. Apagar o único usuário que administra o tenant
+      deixa a imobiliária sem ninguém capaz de criar outro. É o tipo de porta
+      que só se descobre trancada do lado de fora.
+
+   3. Histórico. `Venda.usuario` é onDelete: Restrict de propósito — venda
+      registrada guarda QUEM vendeu, e apagar o corretor faria a comissão dele
+      apontar para o vazio. Aqui o banco recusaria de qualquer forma (P2003);
+      checar antes é só para devolver uma frase que explica em vez de um 500. */
+usuarioRouter.delete("/:id/permanente", async (req, res) => {
+  try {
+    const alvo = await prisma.usuario.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+      include: { cargo: { select: { gerenciarUsuarios: true } } },
+    });
+    if (!alvo) return res.status(404).json({ error: "Usuário não encontrado." });
+
+    if (alvo.id === req.authUserId) {
+      return res.status(400).json({ error: "Você não pode excluir o seu próprio usuário." });
+    }
+
+    if (alvo.cargo?.gerenciarUsuarios) {
+      const outrosGestores = await prisma.usuario.count({
+        where: {
+          tenantId: req.tenant.id,
+          ativo: true,
+          id: { not: alvo.id },
+          cargo: { gerenciarUsuarios: true },
+        },
+      });
+      if (outrosGestores === 0) {
+        return res.status(400).json({
+          error: "Este é o único usuário que pode gerenciar a equipe. Promova outra pessoa antes de excluí-lo.",
+        });
+      }
+    }
+
+    const vendas = await prisma.venda.count({ where: { usuarioId: alvo.id } });
+    if (vendas > 0) {
+      return res.status(409).json({
+        error: `Este usuário tem ${vendas} ${vendas === 1 ? "venda registrada" : "vendas registradas"} no histórico e não pode ser excluído. Desative-o: ele perde o acesso e o histórico continua de pé.`,
+        code: "TEM_HISTORICO",
+      });
+    }
+
+    await prisma.usuario.delete({ where: { id: alvo.id } });
+    return res.status(204).send();
+  } catch (err) {
+    // Rede de segurança para qualquer vínculo que venha a existir depois desta
+    // rota ter sido escrita: melhor a frase certa que um 500 sem explicação.
+    if (err.code === "P2003") {
+      return res.status(409).json({
+        error: "Este usuário tem registros vinculados e não pode ser excluído. Desative-o em vez disso.",
+        code: "TEM_HISTORICO",
+      });
+    }
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao excluir usuário." });
   }
 });

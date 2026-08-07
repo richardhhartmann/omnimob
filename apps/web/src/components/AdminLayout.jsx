@@ -3,6 +3,11 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { TrialAviso } from "./TrialAviso";
 import { BoasVindasModal } from "./BoasVindasModal";
+import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
+import { TourDeTela } from "./TourDeTela";
+import { AjudaModal } from "./AjudaModal";
+import { corDeTextoPara } from "./adminUi";
+import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   House,
@@ -21,6 +26,7 @@ import {
   CheckCircle,
   XCircle,
   WarningCircle,
+  Question,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -70,7 +76,11 @@ function SideTooltip({ label, collapsed, children }) {
 }
 
 // ── Item de navegação ──────────────────────────────────────────────────────────
-function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge }) {
+/* `tourId` vira `data-tour` no elemento. É o gancho que o tour guiado usa para
+   achar o item — nomeado de propósito, em vez de seletor estrutural: um
+   `.ds-nav > div:nth-child(3) a` quebraria calado no dia em que um grupo novo
+   entrar no meio do menu. */
+function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge, tourId }) {
   const cls = `ds-item${active ? " is-active" : ""}`;
 
   const content = (
@@ -87,11 +97,11 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
   );
 
   const el = href ? (
-    <Link to={href} className={cls} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}>
+    <Link to={href} className={cls} data-tour={tourId} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}>
       {content}
     </Link>
   ) : (
-    <button type="button" className={cls} onClick={onClick}>
+    <button type="button" className={cls} data-tour={tourId} onClick={onClick}>
       {content}
     </button>
   );
@@ -107,7 +117,7 @@ const TOAST_META = {
 };
 
 // ── Layout principal ───────────────────────────────────────────────────────────
-export function AdminLayout({ session, onLogout }) {
+export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const location  = useLocation();
   const navigate  = useNavigate();
   const tenantSlug = session?.tenant?.slug  || "";
@@ -116,6 +126,16 @@ export function AdminLayout({ session, onLogout }) {
   const userName    = session?.usuario?.nome || "";
   const userRole    = session?.usuario?.cargo?.descricao || "Operador";
   const cargo       = session?.usuario?.cargo;
+
+  /* A cor da imobiliária, publicada uma vez para tudo que fica embaixo do
+     shell: o ladrilho da marca, o avatar do perfil e as iniciais das listas de
+     leads, clientes, usuários e cargos. Como variável CSS e não como prop
+     porque o `<Outlet/>` está a três níveis daqui — passar a cor de mão em mão
+     até cada linha de lista seria plumbing para uma coisa que a cascata já
+     sabe fazer. Ela acompanha a troca em Configurações: aquela tela chama
+     `onSessionUpdate`, e a sessão é a fonte lida aqui. */
+  const corPrimaria = session?.tenant?.primaryColor || "#4f46e5";
+  const tintaPrimaria = corDeTextoPara(corPrimaria);
 
   // ── Colapso ──────────────────────────────────────────────────────────────────
   const [collapsed, setCollapsed] = useState(() => {
@@ -128,6 +148,20 @@ export function AdminLayout({ session, onLogout }) {
       return next;
     });
   }
+
+  // ── Fila de modais de entrada ─────────────────────────────────────────────────
+  // O tour só entra depois que o aviso de conta se resolve (ver o JSX abaixo).
+  const [contaResolvida, setContaResolvida] = useState(false);
+  const marcarContaResolvida = useCallback(() => setContaResolvida(true), []);
+  // Enquanto o tour global ocupa a tela, os tours de tela esperam a vez.
+  const [tourGlobalAtivo, setTourGlobalAtivo] = useState(false);
+
+  // ── Ajuda ─────────────────────────────────────────────────────────────────────
+  /* `pedidoTour` é um contador que o TourDeTela observa: incrementar reabre o
+     tour da tela atual mesmo que ela já tenha sido concluída. Contador e não
+     flag porque pedir "rever" duas vezes seguidas tem que funcionar as duas. */
+  const [ajudaAberta, setAjudaAberta] = useState(false);
+  const [pedidoTour, setPedidoTour] = useState(0);
 
   // ── Toast ─────────────────────────────────────────────────────────────────────
   const [toasts, setToasts] = useState([]);
@@ -155,6 +189,16 @@ export function AdminLayout({ session, onLogout }) {
   // Apenas o editor da vitrine (/vitrine/:slug/editar) — não confundir com
   // /imoveis/editar, que é o formulário de imóvel.
   const isShowcaseEditor = p.startsWith("/vitrine/") && p.endsWith("/editar");
+
+  /* Esta tela tem tour? A resposta decide se o modal de ajuda oferece "rever o
+     tour" ou explica que aqui não existe um. Vem da mesma fonte que o TourDeTela
+     consulta — nada de uma segunda lista de rotas para desencontrar da primeira. */
+  const tourDaTela = useMemo(() => {
+    const tela = telaDaRota(p);
+    if (!tela) return null;
+    const roteiro = montarTourDeTela(tela, { plano: session?.tenant?.plano });
+    return roteiro ? { chave: tela, titulo: roteiro.titulo } : null;
+  }, [p, session?.tenant?.plano]);
 
   // ── Badge de novos leads ──────────────────────────────────────────────────────
   const [leadsBadge, setLeadsBadge] = useState(0);
@@ -226,12 +270,51 @@ export function AdminLayout({ session, onLogout }) {
     <Tooltip.Provider>
       <style>{CSS}</style>
 
-      {/* Recebe quem acabou de assinar, uma vez só, já dentro do produto. */}
-      <BoasVindasModal tenantSlug={tenantSlug} />
+      {/* Fila de dois: primeiro o aviso da CONTA (assinou / está em teste),
+          depois o convite ao tour, que é da PESSOA. O segundo espera o
+          primeiro se resolver — inclusive quando ele decide não aparecer. */}
+      <BoasVindasModal
+        tenantSlug={tenantSlug}
+        aoResolver={marcarContaResolvida}
+        /* A ficha preenchida ali dentro traz cores e logo. Sem repassar a
+           sessão adiante, o painel só mostraria a identidade nova no próximo
+           login — logo depois de a pessoa acabar de escolhê-la. */
+        aoAtualizarTenant={(campos) =>
+          onSessionUpdate?.({ ...session, tenant: { ...session.tenant, ...campos } })}
+      />
 
-      <div className="ds-shell">
+      {/* Vale para todo mundo: dono, corretor, tenant pagante e tenant em
+          teste. O tour é sobre onde ficam as telas — pergunta que independe
+          de quem pagou a conta. */}
+      <PrimeiroAcessoTour
+        session={session}
+        pronto={contaResolvida}
+        aoMudarEstado={setTourGlobalAtivo}
+      />
+
+      {/* Tours de tela: abrem só quando a pessoa entra na página por vontade
+          própria, e ficam quietos enquanto o global estiver na frente. */}
+      <TourDeTela
+        session={session}
+        globalAtivo={tourGlobalAtivo}
+        pronto={contaResolvida}
+        pedido={pedidoTour}
+      />
+
+      <AjudaModal
+        open={ajudaAberta}
+        onClose={() => setAjudaAberta(false)}
+        tourDaTela={tourDaTela}
+        aoReverTour={() => setPedidoTour((n) => n + 1)}
+        contexto={{ rota: p, tenantSlug, usuario: session?.usuario?.login || userName }}
+      />
+
+      <div
+        className="ds-shell"
+        style={{ "--tenant-primary": corPrimaria, "--tenant-primary-ink": tintaPrimaria }}
+      >
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-        <aside className={`ds-side${c ? " is-collapsed" : ""}`}>
+        <aside className={`ds-side${c ? " is-collapsed" : ""}`} data-tour="sidebar">
 
           {/* Header */}
           <div className="ds-head">
@@ -268,6 +351,7 @@ export function AdminLayout({ session, onLogout }) {
                     external={item.external}
                     badge={item.badge}
                     collapsed={c}
+                    tourId={`nav-${item.key}`}
                   />
                 ))}
               </div>
@@ -287,6 +371,16 @@ export function AdminLayout({ session, onLogout }) {
               </div>
             </SideTooltip>
 
+            {/* Ajuda mora no rodapé, junto das ações que são sobre o sistema e
+                não sobre o trabalho — recolher menu, sair, perfil. E fica acima
+                delas porque é a única que alguém procura com pressa. */}
+            <SideTooltip label="Ajuda" collapsed={c}>
+              <button type="button" className="ds-item ds-item--ajuda" data-tour="ajuda" onClick={() => setAjudaAberta(true)}>
+                <span className="ds-item__icon"><Question size={16} /></span>
+                {!c ? <span className="ds-item__label">Ajuda</span> : null}
+              </button>
+            </SideTooltip>
+
             <SideTooltip label="Expandir menu" collapsed={c}>
               <button type="button" className="ds-item" onClick={toggleCollapsed}>
                 <span className="ds-item__icon">{c ? <CaretRight size={16} /> : <CaretLeft size={16} />}</span>
@@ -296,7 +390,7 @@ export function AdminLayout({ session, onLogout }) {
 
             <NavItem Icon={SignOut} label="Encerrar Sessão" onClick={onLogout} collapsed={c} />
 
-            <div className="ds-profile">
+            <div className="ds-profile" data-tour="perfil">
               <div className="ds-avatar">{userInitial}</div>
               {!c ? (
                 <div className="ds-profile__text">
@@ -342,7 +436,11 @@ export function AdminLayout({ session, onLogout }) {
 
 const CSS = `
 .ds-shell {
-  --s-bg: #0c0f1a;
+  /* Acompanha o escurecimento do fundo: contra o novo #0a0a0b quase neutro, o
+     azul-noite que a sidebar tinha (#0c0f1a) deixava de ser sutil e passava a
+     ler como um painel de outra cor. Continua um degrau acima do conteúdo, para
+     as duas áreas não virarem uma chapa só. */
+  --s-bg: #0d0d12;
   --s-border: rgba(255,255,255,0.07);
   --s-sep: rgba(255,255,255,0.06);
   --s-text: #64748b;
@@ -350,12 +448,39 @@ const CSS = `
   --s-hover: rgba(255,255,255,0.05);
   --s-active: rgba(129,140,248,0.10);
   --s-accent: #818cf8;
-  --s-avatar: #4f46e5;
+  /* Vem do perfil do tenant (inline, logo acima no JSX). O #4f46e5 é só a rede
+     de segurança para quando a sessão ainda não trouxe a cor. */
+  --s-avatar: var(--tenant-primary, #4f46e5);
+  --s-avatar-ink: var(--tenant-primary-ink, #fff);
   --s-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   display: flex; min-height: 100vh;
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  position: relative;
 }
+
+/* Os detalhes da marca sobre o preto: dois halos roxos e um dourado, a mesma
+   receita da landing e do painel super-admin.
+
+   Posição fixa e não absoluta: o conteúdo rola, e um brilho que sobe junto com
+   a lista de imóveis lê como um elemento da página, não como iluminação do
+   ambiente. Fica preso à janela e o conteúdo passa por cima.
+
+   As opacidades são de um dígito de propósito — 0,10 no roxo e 0,05 no
+   dourado. Acima disso o fundo deixa de ser fundo e começa a competir com os
+   cartões de vidro, que são translúcidos e absorvem qualquer cor que venha por
+   baixo. */
+.ds-shell::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(880px 460px at 82% -6%, rgba(139,92,246,0.11), transparent 68%),
+    radial-gradient(560px 340px at 14% 2%, rgba(212,175,55,0.075), transparent 62%),
+    radial-gradient(700px 500px at 98% 92%, rgba(99,102,241,0.07), transparent 70%),
+    radial-gradient(420px 300px at 2% 96%, rgba(212,175,55,0.05), transparent 64%);
+}
+
+/* Acima da iluminação. A sidebar já tinha z-index próprio; o conteúdo não. */
+.ds-shell > main { position: relative; z-index: 1; }
 
 .ds-side {
   width: 240px; min-width: 240px;
@@ -378,7 +503,7 @@ const CSS = `
 .ds-mark {
   width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  background: var(--s-avatar); color: #fff; font-weight: 700; font-size: 13px;
+  background: var(--s-avatar); color: var(--s-avatar-ink); font-weight: 700; font-size: 13px;
 }
 .ds-mark.has-logo { background: transparent; }
 .ds-mark img { width: 100%; height: 100%; object-fit: contain; }
@@ -421,6 +546,11 @@ const CSS = `
 }
 .ds-side.is-collapsed .ds-item { justify-content: center; padding: 8px; gap: 0; }
 
+/* O dourado da marca só neste item: é o que faz o olho achá-lo no rodapé sem
+   precisar de um botão flutuante por cima do conteúdo. */
+.ds-shell .ds-item--ajuda:hover { color: #d4af37; background: rgba(212,175,55,0.09); }
+.ds-shell .ds-item--ajuda:hover .ds-item__icon { color: #d4af37; }
+
 .ds-item__icon { display: flex; flex-shrink: 0; position: relative; color: currentColor; }
 .ds-item.is-active .ds-item__icon { color: #fff; }
 .ds-item__label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
@@ -449,7 +579,7 @@ const CSS = `
 .ds-avatar {
   width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--s-avatar); color: #fff; font-size: 11px; font-weight: 700;
+  background: var(--s-avatar); color: var(--s-avatar-ink); font-size: 11px; font-weight: 700;
 }
 .ds-profile__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .ds-profile__name {

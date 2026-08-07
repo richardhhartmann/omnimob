@@ -11,6 +11,7 @@ import { SelectCustom } from "./SelectCustom.jsx";
 import { overlay360 } from "../utils/cloudinaryOverlay.js";
 import { spawnRipple } from "../utils/rippleDrop.js";
 import { shareWhatsapp } from "../utils/shareWhatsapp.js";
+import { IconeCheck, IconeX } from "./Icones.jsx";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -495,9 +496,12 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
   );
 }
 
-function Field({ label, children, hint, required, error }) {
+/* `tourId` vira `data-tour` no invólucro do campo — é o gancho do tour guiado.
+   Fica aqui, e não em cada <input>, porque o holofote precisa cobrir rótulo +
+   campo + mensagem de erro; só o input deixaria o nome do campo no escuro. */
+function Field({ label, children, hint, required, error, tourId }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+    <div data-tour={tourId} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
       <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         {label}
         {required && <span style={{ color: "#ef4444", marginLeft: "4px" }} title="Campo obrigatório">*</span>}
@@ -528,7 +532,7 @@ function SugestaoCard({ rotulo, texto, onAplicar }) {
             color: aplicado ? "#34d399" : "rgba(129,140,248,1)", fontSize: "12px", fontWeight: "600",
           }}
         >
-          {aplicado ? "✓ Aplicado" : "Aplicar"}
+          {aplicado ? <><IconeCheck size={12} /> Aplicado</> : "Aplicar"}
         </button>
       </div>
       <p style={{ margin: 0, fontSize: "13px", color: "var(--text)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
@@ -937,7 +941,7 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
                 display: "flex", alignItems: "center", justifyContent: "center",
                 opacity: 0, transition: "opacity 0.2s",
               }}
-            >×</button>
+            ><IconeX size={11} /></button>
           </div>
 
           {i === 0 && (
@@ -1024,6 +1028,7 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
             {[
               {
                 onClick: () => setView("PROPERTY"),
+                tourId: "imovel-menu-novo",
                 icon: <IconHome />,
                 title: "Novo Imóvel",
                 desc: "Cadastre propriedades, defina valores, envie fotos e gerencie as informações.",
@@ -1043,6 +1048,7 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
               <button
                 key={card.title}
                 onClick={card.onClick}
+                data-tour={card.tourId}
                 className="pg-follow"
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -2468,7 +2474,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   salva, nem nova). Havendo qualquer foto, o card "+" no fim da
                   grade passa a ser o ponto de adição. */}
               {images.length === 0 && existingImages.length === 0 && (
-                <div style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
+                <div data-tour="imovel-fotos" style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
                   <div style={{ color: "rgba(255,255,255,0.2)", marginBottom: "14px" }}>
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
@@ -2609,7 +2615,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               >
               <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "32px 0 16px 0" }} />
 
-              <Field label="Título do imóvel" required error={fieldErrors.title}>
+              <Field tourId="imovel-titulo" label="Título do imóvel" required error={fieldErrors.title}>
                 <div style={{ position: "relative", zIndex: 1 }}>
                   <AiFlareBadge active={aiFields.title} />
                   <div style={{
@@ -2655,7 +2661,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               </Field>
 
-              <Field label="Descrição" required error={fieldErrors.description}>
+              <Field tourId="imovel-descricao" label="Descrição" required error={fieldErrors.description}>
                 <div style={{ position: "relative", zIndex: 1 }}>
                   <AiFlareBadge active={aiFields.description} />
                   <div style={{
@@ -2704,11 +2710,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </div>
               </Field>
 
-              <Field label="Preço" required error={fieldErrors.price}>
+              <Field tourId="imovel-preco" label="Preço" required error={fieldErrors.price}>
                 <input style={withError("price")} placeholder="R$ 0,00" type="text" inputMode="numeric" value={form.price} onChange={(e) => set("price", formatCurrencyBRL(e.target.value))} disabled={disabled} />
               </Field>
 
-              <Field label="Tipo de imóvel" required error={fieldErrors.tipoImovelId}>
+              <Field tourId="imovel-tipo" label="Tipo de imóvel" required error={fieldErrors.tipoImovelId}>
                 <AiFlare active={aiFields.tipoImovelId}>
                   <SelectCustom
                     style={{ position: "relative", zIndex: 2 }}
@@ -2728,7 +2734,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </AiFlare>
               </Field>
 
-              <Field label="Tipo de contrato" required error={fieldErrors.tipoContrato}>
+              <Field tourId="imovel-contrato" label="Tipo de contrato" required error={fieldErrors.tipoContrato}>
                 <SelectCustom
                   id="tipo-contrato"
                   value={form.tipoContrato}
@@ -2745,7 +2751,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
               {tipoSelecionado && tipoSelecionado.atributos?.length > 0 ? (
                 <AiFlare active={aiFields.atributos} radius="13px">
-                  <div style={{ position: "relative", zIndex: 2, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
+                  <div data-tour="imovel-atributos" style={{ position: "relative", zIndex: 2, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
                     <AtributosSection atributos={tipoSelecionado.atributos} selecionados={form.atributosIds} onChange={(ids) => { set("atributosIds", ids); setAiFields((p) => ({ ...p, atributos: false })); }} disabled={disabled} />
                     <IaSkeleton active={gerandoCampo === "auto" && regeraCampo("atributos", form.atributosIds.length === 0)} radius="12px" />
                   </div>
@@ -2762,18 +2768,18 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
           {displayStep === 1 && (
             <>
-              <Field label="CEP" hint="Preencha o CEP para auto-completar o endereço.">
+              <Field tourId="imovel-cep" label="CEP" hint="Preencha o CEP para auto-completar o endereço.">
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   <input style={{ ...inputStyle, maxWidth: "160px" }} placeholder="00000-000" value={form.cep} onChange={(e) => set("cep", formatCep(e.target.value))} onBlur={handleCepBlur} maxLength={9} disabled={disabled || cepLoading} />
                   {cepLoading && <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>Consultando...</span>}
                 </div>
               </Field>
-              <Field label="Endereço" required error={fieldErrors.address}>
+              <Field tourId="imovel-endereco" label="Endereço" required error={fieldErrors.address}>
                 <ComSkeleton active={cepLoading}>
                   <input style={withError("address")} placeholder="Rua, número, complemento" value={form.address} onChange={(e) => set("address", e.target.value)} disabled={disabled} />
                 </ComSkeleton>
               </Field>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div data-tour="imovel-bairro-cidade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <Field label="Bairro" required error={fieldErrors.neighborhood}>
                   <ComSkeleton active={cepLoading}>
                     <input style={withError("neighborhood")} placeholder="Bairro" value={form.neighborhood} onChange={(e) => set("neighborhood", e.target.value)} disabled={disabled} />
@@ -2785,7 +2791,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   </ComSkeleton>
                 </Field>
               </div>
-              <Field label="Estado (UF)" required error={fieldErrors.state}>
+              <Field tourId="imovel-uf" label="Estado (UF)" required error={fieldErrors.state}>
                 <ComSkeleton active={cepLoading} style={{ maxWidth: "100px" }}>
                   <input style={{ ...withError("state"), maxWidth: "100px", textTransform: "uppercase" }} placeholder="GO" maxLength={2} value={form.state} onChange={(e) => set("state", e.target.value.toUpperCase())} disabled={disabled} />
                 </ComSkeleton>
@@ -2824,6 +2830,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                           type="checkbox" checked={checked} onChange={() => toggleComodidade(c.key)} disabled={disabled}
                           style={{ accentColor: "var(--primary, #6366f1)", width: "14px", height: "14px", flexShrink: 0 }}
                         />
+                        {/* O ícone acompanha o estado: aceso quando marcado,
+                            apagado quando não — o mesmo sinal que a borda dá. */}
+                        <c.Icone size={15} style={{ flexShrink: 0, color: checked ? "#a5b4fc" : "var(--text-muted)" }} />
                         {c.label}
                       </label>
                     );
@@ -2837,7 +2846,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
 
           {displayStep === 2 && (
             <>
-              <Field label="Finalidade">
+              <Field tourId="imovel-finalidade" label="Finalidade">
                 <AiFlare active={aiFields.finalidade}>
                   <SelectCustom
                     style={{ position: "relative", zIndex: 2 }}
@@ -2853,7 +2862,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   />
                 </AiFlare>
               </Field>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+              <div data-tour="imovel-quantidades" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
                 {form.finalidade === "COMERCIAL" ? (
                   <>
                     <Field label="Salas" error={fieldErrors.salas}><input style={withError("salas")} type="number" min="0" placeholder="0" value={form.salas} onChange={(e) => set("salas", e.target.value)} disabled={disabled} /></Field>
@@ -2873,7 +2882,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   Selecione o tipo de imóvel na etapa "Identificação" para ver os campos de área corretos.
                 </div>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(areaFields.length, 3)}, 1fr)`, gap: "16px" }}>
+              <div data-tour="imovel-areas" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(areaFields.length, 3)}, 1fr)`, gap: "16px" }}>
                 {areaFields.map((field, idx) => (
                   <Field key={field} label={`${AREA_FIELDS[field]} (m²)`} required={idx === 0} error={fieldErrors[field]}>
                     <input style={withError(field)} type="number" min="0" step="0.01" placeholder="0,00" value={form[field]} onChange={(e) => set(field, e.target.value)} disabled={disabled} />
@@ -3160,12 +3169,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                 </button>
               )}
               {displayStep < 2 ? (
-                <button type="button" onClick={handleNext} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <button data-tour="imovel-continuar" type="button" onClick={handleNext} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   Continuar
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
                 </button>
               ) : (
-                <button type="button" onClick={handleSubmit} disabled={disabled}>
+                <button data-tour="imovel-salvar" type="button" onClick={handleSubmit} disabled={disabled}>
                   {isEditing ? "Salvar alterações" : canPublish ? "Publicar imóvel" : "Cadastrar imóvel"}
                 </button>
               )}

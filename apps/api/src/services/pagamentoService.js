@@ -184,6 +184,46 @@ export async function cancelarAssinatura(assinaturaId) {
   });
 }
 
+/* ─── Limpeza por slug ────────────────────────────────────────────────────────
+ * Cancela IMEDIATAMENTE toda assinatura ativa marcada com este slug. É o que o
+ * script `npm run stripe:limpar -- --slug=…` faz, extraído para cá porque agora
+ * a exclusão de tenant no painel precisa do mesmo comportamento — e disparar um
+ * `npm run` de dentro de uma rota HTTP seria frágil (cwd, PATH, spawn no
+ * Windows) e lento, para chamar um código que já mora neste processo.
+ *
+ * O casamento é por `metadata.slug`, gravado por `criarAssinatura`. Não temos o
+ * id da assinatura em coluna nenhuma (ver o cabeçalho deste arquivo), então a
+ * varredura é a forma disponível de achar o que é daquele tenant.
+ *
+ * `ensaio: true` só relata. É o padrão do script, e continua sendo o padrão
+ * aqui: cancelar é irreversível.
+ *
+ * @returns {{ configurado, ensaio, encontradas, canceladas, falhas }}
+ */
+export async function cancelarAssinaturasDoSlug(slug, { ensaio = false } = {}) {
+  const vazio = { configurado: false, ensaio, encontradas: 0, canceladas: [], falhas: [] };
+  if (!pagamentoConfigurado() || !slug) return vazio;
+
+  const lista = await stripe("/subscriptions?limit=100&status=active", { method: "GET" });
+  const alvos = (lista?.data || []).filter((s) => s.metadata?.slug === slug);
+
+  const resultado = { configurado: true, ensaio, encontradas: alvos.length, canceladas: [], falhas: [] };
+  if (ensaio) return resultado;
+
+  for (const assinatura of alvos) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await stripe(`/subscriptions/${assinatura.id}`, { method: "DELETE" });
+      resultado.canceladas.push(assinatura.id);
+    } catch (erro) {
+      // Uma falha não pode abortar as outras: o objetivo é deixar o mínimo
+      // possível de cobrança viva para um tenant que não existe mais.
+      resultado.falhas.push({ id: assinatura.id, motivo: erro.message });
+    }
+  }
+  return resultado;
+}
+
 /* ── Preços vindos do Stripe ─────────────────────────────────────────────────
    O valor exibido no painel é lido do próprio Stripe, não fixado no código.
    Assim, mudar o preço lá dentro (ou pôr R$ 1 para testar) reflete na hora, e

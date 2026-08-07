@@ -8,6 +8,7 @@ import { planoLiberaRedes } from "../utils/planos.js";
 import { tipoContratoInfo } from "../utils/tiposContrato.js";
 import { SelectCustom } from "./SelectCustom.jsx";
 import { SkeletonCards } from "./Skeleton";
+import { EmptyState } from "./adminUi.jsx";
 
 // ─── Selo do tipo de contrato ────────────────────────────────────────────────
 
@@ -238,7 +239,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
     <section className="main-content" style={{ animation: "fadeIn 0.4s ease-out", display: "flex", flexDirection: "column", gap: "24px" }}>
       {confirmModal}
       <div className="glass-panel" style={{ padding: "24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
+        <div data-tour="portfolio-cabecalho" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
           <div>
             <h2 style={{ fontSize: "24px", fontWeight: "700", margin: 0 }}>Portfólio Ativo</h2>
             <p style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>
@@ -279,7 +280,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", padding: "16px", background: "rgba(255,255,255,0.03)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)" }}>
+        <div data-tour="portfolio-filtros" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", padding: "16px", background: "rgba(255,255,255,0.03)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)" }}>
           <input
             placeholder="Buscar por termo ou descrição..."
             value={searchTerm}
@@ -323,15 +324,18 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
       {loading ? (
         <SkeletonCards count={6} />
       ) : filteredProperties.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: "center", padding: "64px 24px" }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "16px" }}>
-            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <p style={{ color: "var(--text-muted)", fontSize: "16px" }}>Nenhum imóvel encontrado com estes filtros.</p>
-          <button onClick={() => { setSearchTerm(""); setTypeFilter(""); setMinPriceFilter(""); setMaxPriceFilter(""); setBedroomsFilter(""); setCityFilter(""); }} className="button-secondary" style={{ marginTop: "16px" }}>
-            Limpar Filtros
-          </button>
-        </div>
+        /* Carteira vazia e busca sem resultado são a mesma tela hoje, e não
+           deveriam ser: "cadastre o primeiro imóvel" para quem tem quarenta e
+           filtrou por bairro seria conselho errado. O texto passa a distinguir,
+           e só o vazio de verdade convida a cadastrar. */
+        <EmptyState
+          padding="64px 24px"
+          mensagem={properties.length === 0
+            ? "Nenhum imóvel cadastrado."
+            : "Nenhum imóvel encontrado com estes filtros."}
+          acaoLabel={properties.length === 0 ? "Cadastrar o primeiro imóvel" : undefined}
+          onAcao={properties.length === 0 ? () => navigate("/imoveis/novo") : undefined}
+        />
       ) : null}
 
       {/* ── Grade ─── */}

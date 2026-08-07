@@ -16,6 +16,7 @@ import { OnboardingOverlay } from "../components/builder/OnboardingOverlay";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { comodidadesAtivas } from "../utils/comodidades";
+import { IconeCheck, IconeLink } from "../components/Icones.jsx";
 
 const PRESET_THEMES = {
   CLASSICO:    { primaryColor: "#6366f1", secondaryColor: "#d4af37" },
@@ -1530,7 +1531,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "0 0 14px" }}>
                           {visiveis.map((c) => (
                             <span key={c.key} title={c.label} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>
-                              <span style={{ fontSize: "13px", lineHeight: 1 }}>{c.icon}</span>{c.label}
+                              <c.Icone size={13} />{c.label}
                             </span>
                           ))}
                           {restantes > 0 && (
@@ -1841,12 +1842,12 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         : null}
 
       {/* ── Top Bar ── */}
-      <div className="showcase-editor-topbar" style={{ padding: "10px 20px" }}>
+      <div data-tour="vitrine-topbar" className="showcase-editor-topbar" style={{ padding: "10px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div>
             <strong style={{ fontSize: "15px", display: "block", color: "#fff" }}>Editor de Vitrine</strong>
             <span className="editor-status" style={{ color: success ? "#4ade80" : "var(--text-muted)", transition: "color 0.3s" }}>
-              {loadingInitial ? "Carregando..." : saving ? "Salvando..." : success ? "✓ Salvo" : "Pronto"}
+              {loadingInitial ? "Carregando..." : saving ? "Salvando..." : success ? "Salvo" : "Pronto"}
             </span>
           </div>
         </div>
@@ -1865,7 +1866,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
 
           {/* Desktop / Mobile toggle */}
-          <span className="editor-mode-group" style={{ border: "none", padding: 0 }}>
+          <span data-tour="vitrine-modo" className="editor-mode-group" style={{ border: "none", padding: 0 }}>
             <button type="button" className={previewMode === "desktop" ? "active" : ""} onClick={() => setPreviewMode("desktop")}
               style={{ borderRadius: "8px 0 0 8px", opacity: previewMode === "mobile" ? 0.45 : 1, transition: "opacity 0.2s" }}
               title="Edição Desktop">
@@ -1937,7 +1938,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             Cores
           </button>
-          <button type="button" className="button-secondary" onClick={resetLayoutOnly} title="Restaura posições e tamanhos para o padrão">
+          <button data-tour="vitrine-posicoes" type="button" className="button-secondary" onClick={resetLayoutOnly} title="Restaura posições e tamanhos para o padrão">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "5px" }}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             Posições
           </button>
@@ -1948,14 +1949,16 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
 
           {/* Histórico */}
-          <button type="button" className="button-secondary" onClick={() => setShowHistory(true)} title="Histórico de versões salvas">
+          <button data-tour="vitrine-historico" type="button" className="button-secondary" onClick={() => setShowHistory(true)} title="Histórico de versões salvas">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "5px" }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             Histórico
           </button>
 
           {/* Copiar link */}
           <button type="button" className="button-secondary" onClick={() => { navigator.clipboard.writeText(window.location.origin + "/vitrine/" + tenantSlug); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }} title="Copiar link da vitrine" style={{ color: linkCopied ? "#4ade80" : undefined, transition: "color 0.3s" }}>
-            {linkCopied ? "✓ Link copiado!" : "🔗 Copiar Link"}
+            {linkCopied
+                  ? <><IconeCheck size={13} /> Link copiado!</>
+                  : <><IconeLink size={13} /> Copiar Link</>}
           </button>
 
           <Link className="link-button" to={`/vitrine/${tenantSlug}`} target="_blank" style={{ padding: "8px 14px" }}>
@@ -1996,6 +1999,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
               >
                 <div
                   className="showcase-container showcase-builder-canvas builder-canvas-anim"
+                  data-tour="vitrine-canvas"
                   ref={canvasRef}
                   onClick={(e) => { if (e.target === canvasRef.current) setActiveBlock(null); }}
                   style={{
@@ -2121,7 +2125,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             {dragState.template.preview}
           </div>
           <div style={{ fontSize: "10px", color: "var(--accent)", marginTop: "10px", fontWeight: "700", textAlign: "center", letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.85 }}>
-            ↓ Solte no canvas
+            Solte no canvas
           </div>
         </div>
       ) : null}

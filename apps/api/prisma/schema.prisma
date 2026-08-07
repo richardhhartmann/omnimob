@@ -105,6 +105,7 @@ model Tenant {
   leads        PropertyLead[]
   clientes     Cliente[]
   vendas       Venda[]
+  chamados     Chamado[]
 
   @@map("tb_tenants")
 }
@@ -162,9 +163,97 @@ model Usuario {
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   cargo   Cargo   @relation(fields: [cargoCodigo], references: [id])
   vendas  Venda[]
+  tutorial UsuarioTutorial[]
+  chamados Chamado[]
 
   @@index([tenantId, ativo])
   @@map("tb_usuario")
+}
+
+// ─── Tutorial guiado ─────────────────────────────────────────────────────────
+
+/* O que cada usuário fez com o tour de primeiro acesso, uma linha por etapa.
+   FINALIZADO = percorreu até o fim · PULADO = saiu no meio (com o passo onde
+   parou) · EM_ANDAMENTO = abriu e não concluiu.
+
+   "Não fez" é a AUSÊNCIA de linha, não um valor. Gravar PENDENTE para todo
+   mundo exigiria semear linhas na criação do usuário e de novo a cada etapa
+   nova do tour — um backfill por release, e um usuário sem linha viraria
+   "sem dados" em vez de "não fez". Quem lê monta a matriz completa cruzando
+   com o fluxo declarado; é o que faz `GET /api/tutorial`. */
+enum TutorialStatus {
+  EM_ANDAMENTO
+  FINALIZADO
+  PULADO
+}
+
+/* ── Chamados de suporte ────────────────────────────────────────────────────
+   Abertos pelo botão de Ajuda dentro do painel da imobiliária e lidos pelo
+   super-admin.
+
+   `numero` é inteiro e sequencial, e não cuid como o resto do schema, porque
+   este é o único id que uma PESSOA precisa dizer em voz alta: "o chamado 214".
+   Um cuid num telefonema não funciona.
+
+   O usuário é opcional e vem com o nome copiado ao lado: quem abriu pode ser
+   desligado da imobiliária depois, e o histórico do suporte não pode virar
+   "aberto por (ninguém)". Já o tenant cascateia — apagada a imobiliária, os
+   chamados dela não têm mais a quem responder.
+   ────────────────────────────────────────────────────────────────────────── */
+model Chamado {
+  numero       Int               @id @default(autoincrement()) @map("cha_numero")
+  tenantId     String            @map("tenant_id")
+  usuarioId    String?           @map("usu_id")
+  usuarioNome  String            @default("") @map("cha_usu_nome")
+  titulo       String            @map("cha_titulo")
+  descricao    String            @map("cha_descricao")
+  categoria    String            @default("duvida") @map("cha_categoria")
+  prioridade   ChamadoPrioridade @default(MEDIA) @map("cha_prioridade")
+  resolvido    Boolean           @default(false) @map("cha_resolvido")
+  resolvidoEm  DateTime?         @map("cha_resolvido_em")
+  // URLs no Cloudinary, na ordem em que foram enviadas. Array em vez de tabela
+  // filha: print de tela não tem atributo nenhum além do endereço.
+  prints       String[]          @map("cha_prints")
+  // Em que tela a pessoa estava. Poupa a primeira pergunta de todo atendimento.
+  rota         String            @default("") @map("cha_rota")
+  criadoEm     DateTime          @default(now()) @map("created_at")
+  atualizadoEm DateTime          @updatedAt @map("updated_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, criadoEm])
+  @@index([resolvido, prioridade])
+  @@map("tb_chamado")
+}
+
+enum ChamadoPrioridade {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+model UsuarioTutorial {
+  id          String         @id @default(cuid()) @map("tut_id")
+  tenantId    String         @map("tenant_id")
+  usuarioId   String         @map("usu_id")
+  // Chave da etapa no fluxo declarado em apps/web/src/utils/tourFluxo.js
+  // ("boas-vindas", "inicio", "imoveis"…). Texto livre de propósito: uma etapa
+  // nova não pode exigir migração de enum.
+  etapa       String         @map("tut_etapa")
+  status      TutorialStatus @default(EM_ANDAMENTO) @map("tut_status")
+  // Em que passo a pessoa estava ao pular — é o que diz ONDE ela desistiu.
+  passoParou  Int?           @map("tut_passo_parou")
+  totalPassos Int?           @map("tut_total_passos")
+  criadoEm    DateTime       @default(now()) @map("created_at")
+  atualizadoEm DateTime      @updatedAt @map("updated_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, etapa])
+  @@index([tenantId, usuarioId])
+  @@map("tb_usuario_tutorial")
 }
 
 // ─── Cliente ─────────────────────────────────────────────────────────────────

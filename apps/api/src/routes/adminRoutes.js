@@ -6,6 +6,7 @@ import { prisma } from "../db.js";
 import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
 import { provisionTenant } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial } from "../services/trialService.js";
+import { cancelarAssinaturasDoSlug } from "../services/pagamentoService.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
 
@@ -125,10 +126,42 @@ adminRouter.put("/tenants/:id", async (req, res) => {
   }
 });
 
+/* Excluir o tenant é excluir também a cobrança dele.
+
+   A ORDEM IMPORTA: cancela no Stripe ANTES de apagar a linha. Depois de
+   `tenant.delete()` o slug já não existe, e o slug é justamente a chave que
+   casa a assinatura lá (fica em `metadata.slug`) — invertendo, sobraria uma
+   assinatura ativa cobrando todo mês por um ambiente que não existe mais, e
+   sem nada no nosso lado apontando para ela.
+
+   Falha no Stripe NÃO impede a exclusão: o pedido do administrador é apagar o
+   tenant, e travar isso porque uma API de terceiro caiu deixaria o painel
+   refém. O que sobra vai no corpo da resposta (`stripe`), para a tela poder
+   avisar que aquela assinatura precisa de um cancelamento manual — silenciar
+   seria pior que falhar. */
 adminRouter.delete("/tenants/:id", async (req, res) => {
   try {
-    await prisma.tenant.delete({ where: { id: req.params.id } });
-    res.status(204).end();
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, slug: true },
+    });
+    if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+    let stripeResultado = { configurado: false, encontradas: 0, canceladas: [], falhas: [] };
+    try {
+      stripeResultado = await cancelarAssinaturasDoSlug(tenant.slug);
+    } catch (erro) {
+      console.error(`[DELETE /admin/tenants] Stripe falhou para "${tenant.slug}":`, erro.message);
+      stripeResultado = { configurado: true, encontradas: null, canceladas: [], falhas: [{ motivo: erro.message }] };
+    }
+
+    await prisma.tenant.delete({ where: { id: tenant.id } });
+
+    return res.json({
+      excluido: true,
+      slug: tenant.slug,
+      stripe: stripeResultado,
+    });
   } catch (err) {
     console.error("[DELETE /admin/tenants/:id]", err);
     res.status(500).json({ error: "Erro ao excluir tenant.", detail: err.message });
@@ -154,6 +187,130 @@ adminRouter.post("/trials/faxina", async (req, res) => {
   } catch (err) {
     console.error("[POST /admin/trials/faxina]", err);
     res.status(500).json({ error: "Erro na faxina de trials.", detail: err.message });
+  }
+});
+
+/* ── Chamados ────────────────────────────────────────────────────────────────
+   A caixa de entrada do suporte. Diferente do lado da imobiliária, aqui vêm
+   TODOS os tenants — é a tela em que se decide o que atender primeiro.
+
+   A ordenação é por não-resolvido primeiro e depois por data: prioridade alta
+   de um chamado já fechado não pode empurrar para baixo uma dúvida aberta. */
+adminRouter.get("/chamados", async (req, res) => {
+  try {
+    const { resolvido, tenantId } = req.query;
+    const where = {};
+    if (resolvido === "true") where.resolvido = true;
+    if (resolvido === "false") where.resolvido = false;
+    if (tenantId) where.tenantId = String(tenantId);
+
+    const chamados = await prisma.chamado.findMany({
+      where,
+      orderBy: [{ resolvido: "asc" }, { criadoEm: "desc" }],
+      take: 300,
+      include: { tenant: { select: { name: true, slug: true } } },
+    });
+
+    res.json(
+      chamados.map((c) => ({
+        numero: c.numero,
+        titulo: c.titulo,
+        descricao: c.descricao,
+        categoria: c.categoria,
+        prioridade: c.prioridade,
+        resolvido: c.resolvido,
+        resolvidoEm: c.resolvidoEm,
+        prints: c.prints,
+        rota: c.rota,
+        criadoEm: c.criadoEm,
+        usuario: c.usuarioNome || "—",
+        tenantId: c.tenantId,
+        tenantNome: c.tenant?.name || "—",
+        tenantSlug: c.tenant?.slug || "",
+      })),
+    );
+  } catch (err) {
+    console.error("[GET /admin/chamados]", err);
+    res.status(500).json({ error: "Erro ao listar chamados." });
+  }
+});
+
+/* Marcar resolvido e/ou repriorizar. `resolvidoEm` é derivado, nunca recebido:
+   é o servidor que sabe quando o clique aconteceu, e deixar a data vir do
+   cliente permitiria um histórico que não bate com os fatos. */
+adminRouter.patch("/chamados/:numero", async (req, res) => {
+  const numero = Number(req.params.numero);
+  if (!Number.isInteger(numero)) return res.status(400).json({ error: "Número inválido." });
+
+  try {
+    const data = {};
+    if ("resolvido" in (req.body || {})) {
+      data.resolvido = Boolean(req.body.resolvido);
+      data.resolvidoEm = data.resolvido ? new Date() : null;
+    }
+    if (req.body?.prioridade && ["BAIXA", "MEDIA", "ALTA", "URGENTE"].includes(req.body.prioridade)) {
+      data.prioridade = req.body.prioridade;
+    }
+    if (!Object.keys(data).length) return res.status(400).json({ error: "Nada para atualizar." });
+
+    const c = await prisma.chamado.update({ where: { numero }, data });
+    res.json({ numero: c.numero, resolvido: c.resolvido, prioridade: c.prioridade, resolvidoEm: c.resolvidoEm });
+  } catch (err) {
+    console.error("[PATCH /admin/chamados/:numero]", err);
+    res.status(500).json({ error: "Erro ao atualizar o chamado." });
+  }
+});
+
+/* ── Progresso dos tutoriais ─────────────────────────────────────────────────
+   Devolve o PROGRESSO BRUTO, por usuário: as etapas registradas e o status de
+   cada uma. Quem transforma isso em porcentagem é a tela.
+
+   Isso não é preguiça — é onde a informação existe. O denominador (quantas
+   etapas ESTE usuário deveria ver) depende do fluxo declarado em
+   `utils/tourFluxo.js` e das permissões do cargo dele, e o fluxo mora no front
+   justamente porque depende das rotas do painel. Calcular a porcentagem aqui
+   exigiria uma segunda cópia dessa lista, fadada a divergir da primeira no dia
+   em que uma etapa nova entrar. Por isso mandamos junto o cargo inteiro: é o
+   que a tela precisa para montar o fluxo daquele usuário. */
+adminRouter.get("/tutoriais", async (_req, res) => {
+  try {
+    const tenants = await prisma.tenant.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        usuarios: {
+          where: { ativo: true },
+          orderBy: { nome: "asc" },
+          select: {
+            id: true,
+            nome: true,
+            login: true,
+            cargo: true,
+            tutorial: { select: { etapa: true, status: true, passoParou: true, totalPassos: true, atualizadoEm: true } },
+          },
+        },
+      },
+    });
+
+    res.json(
+      tenants.map((t) => ({
+        id: t.id,
+        nome: t.name,
+        slug: t.slug,
+        usuarios: t.usuarios.map((u) => ({
+          id: u.id,
+          nome: u.nome,
+          login: u.login,
+          cargo: u.cargo,
+          etapas: u.tutorial,
+        })),
+      })),
+    );
+  } catch (err) {
+    console.error("[GET /admin/tutoriais]", err);
+    res.status(500).json({ error: "Erro ao carregar o progresso dos tutoriais." });
   }
 });
 

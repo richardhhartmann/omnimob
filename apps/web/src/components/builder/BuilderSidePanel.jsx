@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IconeLua, IconeSol } from "../Icones.jsx";
 
 function SectionTitle({ children }) {
   return (
@@ -117,7 +118,7 @@ function PagePanel({
       <SectionTitle>Aparência</SectionTitle>
 
       <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
-        {[["dark", "🌙 Dark"], ["light", "☀️ Light"]].map(([mode, label]) => {
+        {[["dark", "Dark", IconeLua], ["light", "Light", IconeSol]].map(([mode, label, Icone]) => {
           const active = (mode === "dark" && !isLightMode) || (mode === "light" && isLightMode);
           return (
             <button key={mode} type="button" onClick={() => setAppearanceMode(mode)}
@@ -129,7 +130,9 @@ function PagePanel({
                 color: active ? "#fff" : "var(--text-muted)",
               }}
             >
-              {label}
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                <Icone size={13} />{label}
+              </span>
             </button>
           );
         })}
@@ -491,7 +494,7 @@ export function BuilderSidePanel({
   }
 
   return (
-    <div style={{
+    <div data-tour="vitrine-painel" style={{
       width: "272px",
       flexShrink: 0,
       background: "rgba(10, 15, 28, 0.97)",

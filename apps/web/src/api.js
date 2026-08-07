@@ -216,6 +216,23 @@ export const api = {
   desativarUsuario: (tenantSlug, id) =>
     request(`/api/usuarios/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
 
+  // Apaga a linha. Sem volta — ver a confirmação em UsuariosPage.
+  excluirUsuario: (tenantSlug, id) =>
+    request(`/api/usuarios/${id}/permanente`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  // ─── Tutorial guiado ─────────────────────────────────────────────────────
+  getTutorial: (tenantSlug) =>
+    request("/api/tutorial", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  marcarTutorial: (tenantSlug, payload) =>
+    request("/api/tutorial/marcar", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  pularTutorialTodo: (tenantSlug, payload) =>
+    request("/api/tutorial/pular-tudo", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
+
+  reiniciarTutorial: (tenantSlug) =>
+    request("/api/tutorial/reiniciar", { method: "POST", headers: { "x-tenant-slug": tenantSlug } }),
+
   // ─── Cargos ──────────────────────────────────────────────────────────────
   listCargos: (tenantSlug) =>
     request("/api/cargos", { headers: { "x-tenant-slug": tenantSlug } }),
@@ -246,6 +263,10 @@ export const api = {
 
   desativarCliente: (tenantSlug, id) =>
     request(`/api/clientes/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  // Apaga a linha. Sem volta — ver a confirmação em ClientesPage.
+  excluirCliente: (tenantSlug, id) =>
+    request(`/api/clientes/${id}/permanente`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
 
   // ─── Tipos e atributos ───────────────────────────────────────────────────
   createTipoImovel: (tenantSlug, payload) =>
@@ -377,6 +398,15 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  // Upgrade/downgrade de quem já é cliente. Muda o que o tenant USA; o valor da
+  // próxima fatura ainda é acertado pelo time (ver a rota /me/plano).
+  trocarPlano: (tenantSlug, plano) =>
+    request("/api/tenants/me/plano", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ plano }),
+    }),
+
   // Interesse comercial pela própria Domus (landing), antes de existir tenant.
   enviarInteresseDomus: (payload = {}) =>
     request("/public/interesse", {
@@ -395,13 +425,16 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  // Assinatura direta pela landing: cria a conta já paga, sem passar pelo teste.
-  assinarDireto: (payload = {}) =>
-    request("/public/assinar", { method: "POST", body: JSON.stringify(payload) }),
+  // ─── Chamados de suporte (lado da imobiliária) ───────────────────────────
+  abrirChamado: (tenantSlug, payload) =>
+    request("/api/chamados", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
 
-  // Link do e-mail de quem assinou direto: devolve o acesso e o plano.
-  confirmarAssinaturaDireta: (payload = {}) =>
-    request("/public/assinatura/confirmar", { method: "POST", body: JSON.stringify(payload) }),
+  listarChamados: (tenantSlug) =>
+    request("/api/chamados", { headers: { "x-tenant-slug": tenantSlug } }),
 
   // Teste grátis, etapa 2: o token do e-mail vira um tenant de verdade.
   confirmarTrialDomus: (payload = {}) =>
@@ -433,4 +466,19 @@ export const adminApi = {
   createTenant: (payload) => adminRequest("/api/admin/tenants", { method: "POST", body: JSON.stringify(payload) }),
   updateTenant: (id, payload) => adminRequest(`/api/admin/tenants/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteTenant: (id) => adminRequest(`/api/admin/tenants/${id}`, { method: "DELETE" }),
+
+  // Caixa de entrada do suporte — todos os tenants.
+  listChamados: (filtros = {}) => {
+    const q = new URLSearchParams();
+    if (filtros.resolvido != null) q.set("resolvido", String(filtros.resolvido));
+    if (filtros.tenantId) q.set("tenantId", filtros.tenantId);
+    const sufixo = q.toString() ? `?${q}` : "";
+    return adminRequest(`/api/admin/chamados${sufixo}`);
+  },
+  atualizarChamado: (numero, payload) =>
+    adminRequest(`/api/admin/chamados/${numero}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  // Progresso bruto dos tutoriais por tenant e usuário; a porcentagem é
+  // calculada na tela, que é quem conhece o fluxo.
+  listTutoriais: () => adminRequest("/api/admin/tutoriais"),
 };

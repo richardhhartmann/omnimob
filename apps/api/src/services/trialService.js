@@ -7,7 +7,14 @@ import { emailTrialExpirado } from "./emailTemplates.js";
 /**
  * ─── Trial Service ───────────────────────────────────────────────────────────
  * Auto-atendimento do teste grátis: alguém preenche nome + e-mail na landing e
- * sai com um tenant funcionando, já povoado com imóveis de demonstração.
+ * sai com um tenant funcionando, pronto para receber os imóveis dele.
+ *
+ * SEM IMÓVEIS DE EXEMPLO. O ambiente nasce vazio, para teste e para quem paga.
+ * A vitrine de demonstração parecia hospitalidade e cobrava caro: o cliente
+ * abria a própria página pública e via anúncio que não é dele, precisava fazer
+ * faxina antes de usar, e corria o risco de um "Apartamento 2 quartos com
+ * varanda" fictício ficar no ar para o cliente final dele. Quem entra agora
+ * cadastra o primeiro imóvel — que é justamente o que o tour guiado ensina.
  *
  * DECISÃO CENTRAL: o trial NÃO é um ambiente à parte. Ele nasce como um tenant
  * de verdade, no mesmo lugar onde tenants pagantes vivem, e só se distingue
@@ -47,13 +54,6 @@ const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
 
 export function assinarConvite(dados, proposito = "trial") {
   return jwt.sign({ ...dados, proposito }, JWT_SECRET, { expiresIn: VALIDADE_CONVITE });
-}
-
-/* Convite de quem já pagou. Vale mais tempo que o do teste: o tenant já existe
-   e a cobrança já passou, então o link é só a porta de entrada — expirar em 30
-   minutos deixaria um cliente pagante trancado do lado de fora. */
-export function assinarConviteAcesso(dados) {
-  return jwt.sign({ ...dados, proposito: "assinatura" }, JWT_SECRET, { expiresIn: "7d" });
 }
 
 /** @throws {Error} com `.code` "CONVITE_INVALIDO" | "CONVITE_EXPIRADO" */
@@ -132,150 +132,21 @@ export function senhaTemporaria(tamanho = 10) {
   return saida;
 }
 
-// ─── Dados de demonstração ───────────────────────────────────────────────────
-
-/* Sem leads de mentira: lead é contato de pessoa real, e encher a tela com
-   nomes inventados confunde quem está avaliando — e ainda faz o painel prometer
-   um interessado que não existe. Por isso também não populamos `leadCount` nem
-   eventos de LEAD: contador sem registro por trás é pior que zero.
-
-   Uma vitrine vazia não demonstra nada: quem entra precisa ver o produto
-   funcionando em segundos, não uma tela pedindo cadastro. As fotos vivem no
-   Cloudinary da própria Domus (pasta domus/demo), com f_auto/q_auto para o
-   formato e a compressão saírem do provedor — o demo não depende de terceiro. */
-const IMOVEIS_DEMO = [
-  {
-    tipo: "Apartamento",
-    title: "Apartamento 2 quartos com varanda",
-    description:
-      "Apartamento de 78 m² com 2 quartos, sendo 1 suíte, varanda integrada à sala e 1 vaga coberta. " +
-      "Prédio com portaria 24h, elevador e área de lazer completa, a poucos metros do metrô.",
-    price: 420000,
-    address: "Rua Direita, 250", neighborhood: "Centro", city: "São Paulo", state: "SP", cep: "01001000",
-    bedrooms: 2, suites: 1, parkingSpots: 1, squareFootage: 78,
-    views: 142,
-    fotos: [
-      "https://res.cloudinary.com/dpwuxmbli/image/upload/f_auto,q_auto,w_1600/domus/demo/demo-apto-varanda-1.jpg",
-      "https://res.cloudinary.com/dpwuxmbli/image/upload/f_auto,q_auto,w_1600/domus/demo/demo-apto-varanda-2.jpg",
-    ],
-  },
-  {
-    tipo: "Casa",
-    title: "Casa térrea com quintal e churrasqueira",
-    description:
-      "Casa térrea de 160 m² com 3 quartos, quintal espaçoso com churrasqueira e garagem coberta para 2 carros. " +
-      "Rua tranquila, próxima a escolas, mercado e transporte.",
-    price: 890000,
-    address: "Rua dos Pinheiros, 800", neighborhood: "Pinheiros", city: "São Paulo", state: "SP", cep: "05422000",
-    bedrooms: 3, suites: 1, parkingSpots: 2, squareFootage: 160,
-    views: 208,
-    fotos: [
-      "https://res.cloudinary.com/dpwuxmbli/image/upload/f_auto,q_auto,w_1600/domus/demo/demo-casa-quintal-1.jpg",
-      "https://res.cloudinary.com/dpwuxmbli/image/upload/f_auto,q_auto,w_1600/domus/demo/demo-casa-quintal-2.jpg",
-    ],
-  },
-  {
-    tipo: "Apartamento",
-    title: "Cobertura duplex com vista panorâmica",
-    description:
-      "Cobertura duplex de 240 m² com 4 suítes, terraço com piscina privativa e vista livre. " +
-      "Acabamento de alto padrão, 3 vagas e depósito.",
-    price: 2450000,
-    address: "Av. Brigadeiro Faria Lima, 3000", neighborhood: "Itaim Bibi", city: "São Paulo", state: "SP", cep: "04538133",
-    bedrooms: 4, suites: 4, parkingSpots: 3, squareFootage: 240,
-    views: 96,
-    fotos: [
-      "https://res.cloudinary.com/dpwuxmbli/image/upload/f_auto,q_auto,w_1600/domus/demo/demo-cobertura-1.jpg",
-      "https://res.cloudinary.com/dpwuxmbli/image/upload/f_auto,q_auto,w_1600/domus/demo/demo-cobertura-2.jpg",
-    ],
-  },
-  {
-    tipo: "Apartamento",
-    title: "Studio mobiliado pronto para morar",
-    description:
-      "Studio de 32 m² totalmente mobiliado, com cozinha integrada e prédio com coworking, lavanderia e academia. " +
-      "Ideal para investimento ou primeira moradia.",
-    price: 315000,
-    address: "Rua Augusta, 1500", neighborhood: "Consolação", city: "São Paulo", state: "SP", cep: "01304001",
-    bedrooms: 1, suites: 0, parkingSpots: 0, squareFootage: 32,
-    views: 63,
-    fotos: ["https://res.cloudinary.com/dpwuxmbli/image/upload/f_auto,q_auto,w_1600/domus/demo/demo-studio-1.jpg"],
-  },
-];
-
-
-/**
- * Povoa um tenant recém-criado com imóveis, fotos e métricas de visita.
- * Best-effort: se falhar, o trial continua de pé (só mais vazio), porque um
- * erro aqui não justifica negar o acesso a quem acabou de se cadastrar.
- */
-export async function semearDemonstracao(tenantId) {
-  const prisma = getGlobalPrisma();
-  const tipos = await prisma.tipoImovel.findMany({ select: { id: true, descricao: true } });
-  const idDoTipo = (descricao) => tipos.find((t) => t.descricao === descricao)?.id ?? null;
-
-  const criados = [];
-  for (const item of IMOVEIS_DEMO) {
-    // eslint-disable-next-line no-await-in-loop
-    const imovel = await prisma.property.create({
-      data: {
-        tenantId,
-        tipoImovelId: idDoTipo(item.tipo),
-        propertyType: item.tipo,
-        title: item.title,
-        description: item.description,
-        price: item.price,
-        cep: item.cep,
-        address: item.address,
-        neighborhood: item.neighborhood,
-        city: item.city,
-        state: item.state,
-        bedrooms: item.bedrooms,
-        suites: item.suites,
-        parkingSpots: item.parkingSpots,
-        squareFootage: item.squareFootage,
-        finalidade: "RESIDENCIAL",
-        tipoContrato: "VENDA",
-        status: "ACTIVE",
-        viewCount: item.views,
-        images: {
-          create: item.fotos.map((url, i) => ({ tenantId, url, position: i })),
-        },
-      },
-      select: { id: true },
-    });
-    criados.push(imovel.id);
-  }
-
-  // Métricas espalhadas nos últimos 30 dias, senão o gráfico sai como um pico
-  // único no dia de hoje e não parece um histórico de verdade.
-  const eventos = [];
-  const agora = Date.now();
-  criados.forEach((propertyId, indice) => {
-    const visitas = IMOVEIS_DEMO[indice].views;
-    for (let i = 0; i < visitas; i += 1) {
-      eventos.push({
-        tenantId, propertyId, type: "VIEW",
-        createdAt: new Date(agora - Math.floor(Math.random() * 30) * 86400000),
-      });
-    }
-  });
-  await prisma.propertyMetricEvent.createMany({ data: eventos });
-
-  return criados.length;
-}
-
 // ─── Criação do trial ────────────────────────────────────────────────────────
 
 /**
  * Cria o tenant de teste completo e devolve as credenciais de acesso.
+ *
+ * Todo tenant nasce em teste — não existe mais entrada pagando de cara. O
+ * parâmetro `emTeste` sumiu junto com aquele fluxo: um booleano que só recebia
+ * `true` é uma bifurcação que ninguém percorre e que engana quem lê depois.
+ *
  * @returns {{ tenant, login, senha, expiraEm, imoveis, aviso }}
  */
-export async function criarTrial({ imobiliaria, email, telefone = "", plano = "PREMIUM", emTeste = true }) {
+export async function criarTrial({ imobiliaria, email, telefone = "", plano = "PREMIUM" }) {
   const prisma = getGlobalPrisma();
   const slug = await gerarSlugUnico(imobiliaria);
-  // Quem já pagou não tem prazo de teste correndo contra ele.
-  const expiraEm = emTeste ? fimDoTrial() : null;
+  const expiraEm = fimDoTrial();
   const senha = senhaTemporaria();
   const login = `admin-${slug}`.slice(0, 60);
 
@@ -284,7 +155,9 @@ export async function criarTrial({ imobiliaria, email, telefone = "", plano = "P
     slug,
     email,
     whatsapp: telefone,
-    // No teste liberamos o produto inteiro; quem assina entra no plano que comprou.
+    // O plano vem da escolha feita na landing e vale durante todo o teste: a
+    // pessoa experimenta o que pretende contratar, não uma versão maior que ela
+    // vai perder ao assinar.
     plano,
     statusPagamento: "TRIAL", // vira EM_DIA só depois da cobrança passar
     proximoVencimento: expiraEm,
@@ -301,16 +174,11 @@ export async function criarTrial({ imobiliaria, email, telefone = "", plano = "P
     throw err;
   }
 
-  let imoveis = 0;
-  let aviso = null;
-  try {
-    imoveis = await semearDemonstracao(tenant.id);
-  } catch (erro) {
-    aviso = `Tenant criado, mas o povoamento de demonstração falhou: ${erro.message}`;
-    console.error("[trial] falha ao semear demonstração:", erro);
-  }
-
-  return { tenant, login, senha, expiraEm, imoveis, aviso };
+  /* `imoveis` e `aviso` continuam no retorno, sempre zerados, porque as rotas
+     que chamam isto ainda os repassam adiante. Tirá-los daqui seria mudar o
+     contrato em quatro lugares de uma vez; deixá-los explícitos deixa claro
+     que ninguém mais semeia nada. */
+  return { tenant, login, senha, expiraEm, imoveis: 0, aviso: null };
 }
 
 // ─── Faxina ──────────────────────────────────────────────────────────────────

@@ -486,7 +486,7 @@ export function PropertyInsightsPage({ session }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {comodidades.map((c) => (
               <span key={c.key} style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "13px", color: "var(--text)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", padding: "6px 12px", borderRadius: "10px" }}>
-                <span style={{ fontSize: "15px" }}>{c.icon}</span> {c.label}
+                <c.Icone size={15} /> {c.label}
               </span>
             ))}
           </div>

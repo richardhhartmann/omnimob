@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Buildings, GraduationCap, Lifebuoy } from "@phosphor-icons/react";
 import { adminApi } from "../api";
+import { AdminShell } from "../components/AdminShell";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
+import { AdminChamadosPage, CHAMADOS_CSS } from "./admin/AdminChamadosPage";
+import { AdminTutoriaisPage, TUTORIAIS_CSS } from "./admin/AdminTutoriaisPage";
 import {
   ACCENT_SOFT,
   Alert,
   Button,
-  DomusStyles,
   Eyebrow,
   Field,
-  LogoLockup,
   MINT,
   Reveal,
   StatValue,
@@ -78,7 +79,35 @@ function StatsGrid({ stats, pronto }) {
   );
 }
 
+/* Abas do painel. A ordem é a da rotina: primeiro quem são os clientes, depois
+   o que eles estão pedindo, depois se eles entenderam o produto. */
+const ABAS = [
+  {
+    chave: "tenants",
+    rotulo: "Tenants",
+    nota: "imobiliárias provisionadas, cobrança e provisionamento",
+    icone: <Buildings size={16} />,
+  },
+  {
+    chave: "chamados",
+    rotulo: "Chamados",
+    nota: "suporte aberto pelo botão de Ajuda dentro dos painéis",
+    icone: <Lifebuoy size={16} />,
+  },
+  {
+    chave: "tutoriais",
+    rotulo: "Tutoriais",
+    nota: "quanto do tour cada pessoa percorreu",
+    icone: <GraduationCap size={16} />,
+  },
+];
+
 export function SuperAdminPage({ session, onLogout }) {
+  const [aba, setAba] = useState("tenants");
+  // Contado pela aba de chamados quando ela carrega, e exibido no menu — é o
+  // único número do painel que pede ação imediata.
+  const [chamadosAbertos, setChamadosAbertos] = useState(0);
+
   const { confirm, modal: confirmModal } = useConfirm();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +133,15 @@ export function SuperAdminPage({ session, onLogout }) {
   }
 
   useEffect(() => { load(); }, []);
+
+  /* O contador do menu é buscado na entrada, não quando a aba de chamados
+     abre: um badge que só aparece depois de você clicar no item não avisa
+     nada. É uma requisição pequena, e só conta os abertos. */
+  useEffect(() => {
+    adminApi.listChamados({ resolvido: false })
+      .then((l) => setChamadosAbertos(l.length))
+      .catch(() => {});
+  }, []);
 
   const stats = useMemo(() => {
     const by = (s) => tenants.filter((t) => t.statusPagamento === s).length;
@@ -171,38 +209,51 @@ export function SuperAdminPage({ session, onLogout }) {
   }
 
   async function handleDelete(t) {
-    if (!await confirm(`Excluir o tenant "${t.name}"? Isso remove usuários, imóveis e leads. Esta ação é irreversível.`, "Excluir")) return;
+    const ok = await confirm(
+      `Excluir o tenant "${t.name}"? Isso remove usuários, imóveis, leads e chamados — e cancela ` +
+      "no Stripe qualquer assinatura ativa desta imobiliária. A ação é irreversível.",
+      "Excluir",
+    );
+    if (!ok) return;
     try {
-      await adminApi.deleteTenant(t.id);
+      const r = await adminApi.deleteTenant(t.id);
       await load();
+
+      /* O que sobrou no Stripe precisa ser dito. Uma assinatura que resistiu ao
+         cancelamento continua cobrando todo mês por um ambiente que não existe
+         mais, e depois da exclusão não há nada no painel apontando para ela —
+         se este aviso não aparecer, ninguém descobre até a fatura. */
+      const s = r?.stripe;
+      if (s?.falhas?.length) {
+        alert(
+          `Tenant excluído, mas ${s.falhas.length} assinatura(s) no Stripe NÃO foram canceladas:\n` +
+          `${s.falhas.map((f) => `· ${f.id || "?"}: ${f.motivo}`).join("\n")}\n\n` +
+          `Cancele à mão no painel do Stripe (slug "${r.slug}").`,
+        );
+      }
     } catch (err) {
       alert(err.message || "Erro ao excluir.");
     }
   }
 
+  const abas = ABAS.map((a) => (a.chave === "chamados" ? { ...a, badge: chamadosAbertos } : a));
+
   return (
-    <div className="dl-root dl-page sa-root">
-      <DomusStyles extra={CSS} />
+    <AdminShell
+      session={session}
+      onLogout={onLogout}
+      abas={abas}
+      aba={aba}
+      aoTrocarAba={setAba}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}`}
+    >
       {confirmModal}
 
-      {/* ── Topbar ── */}
-      <header className="sa-top">
-        <div className="dl-wrap sa-top__inner">
-          <Link to="/" className="dl-logo" aria-label="Domus — início">
-            <LogoLockup height={32} />
-          </Link>
-          <span className="dl-mono sa-top__tag">● SUPER-ADMIN</span>
+      {aba === "chamados" ? <AdminChamadosPage aoContarAbertos={setChamadosAbertos} /> : null}
+      {aba === "tutoriais" ? <AdminTutoriaisPage /> : null}
 
-          <div className="sa-top__actions">
-            <span className="dl-mono sa-top__user">{session?.nome || session?.email}</span>
-            <Button as="button" type="button" variant="ghost" className="dl-btn--sm" arrow={false} onClick={onLogout}>
-              Sair
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="dl-wrap sa-main">
+      {aba === "tenants" ? (
+        <>
         {/* ── Cabeçalho ── */}
         <Reveal className="sa-head">
           <Eyebrow>ADMINISTRAÇÃO DA PLATAFORMA</Eyebrow>
@@ -286,7 +337,8 @@ export function SuperAdminPage({ session, onLogout }) {
             );
           })}
         </div>
-      </main>
+        </>
+      ) : null}
 
       {/* ── Modal de cadastro/edição ── */}
       {modalOpen ? (
@@ -362,37 +414,13 @@ export function SuperAdminPage({ session, onLogout }) {
           </form>
         </div>
       ) : null}
-    </div>
+    </AdminShell>
   );
 }
 
+/* Só o que é DESTA aba. A moldura — fundo, topbar, sidebar — mora no
+   `AdminShell`, junto do JSX que a usa. */
 const CSS = `
-.sa-root { position: relative; }
-.sa-root::before {
-  content: ""; position: absolute; inset: 0 0 auto 0; height: 620px; pointer-events: none; z-index: 0;
-  background:
-    radial-gradient(820px 420px at 78% -8%, rgba(99,102,241,0.16), transparent 70%),
-    radial-gradient(560px 340px at 4% 6%, rgba(212,175,55,0.07), transparent 70%);
-}
-
-/* ── Topbar ── */
-.sa-top {
-  position: sticky; top: 0; z-index: 40;
-  background: rgba(10,10,11,0.72);
-  backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
-  border-bottom: 1px solid var(--line-soft);
-}
-.sa-top__inner { display: flex; align-items: center; gap: 16px; height: 66px; }
-.sa-top__tag {
-  color: var(--accent-soft); font-size: 9px; letter-spacing: 0.16em;
-  padding: 4px 10px; border-radius: 999px;
-  background: rgba(99,102,241,0.10); border: 1px solid rgba(99,102,241,0.22);
-}
-.sa-top__actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-.sa-top__user { color: var(--placeholder); font-size: 9.5px; letter-spacing: 0.08em; text-transform: none; }
-
-/* ── Conteúdo ── */
-.sa-main { padding-top: 44px; padding-bottom: 72px; }
 .sa-head { margin-bottom: 34px; }
 .sa-title { max-width: 22ch; }
 .sa-stats { margin-top: 4px; }
@@ -453,8 +481,6 @@ const CSS = `
   .sa-form-grid { grid-template-columns: 1fr; }
   .sa-row { align-items: flex-start; }
   .sa-row__actions { width: 100%; }
-  .sa-top__inner { height: auto; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; }
-  .sa-top__actions { width: 100%; justify-content: space-between; }
   .sa-meta { gap: 16px; }
 }
 `;

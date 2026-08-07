@@ -132,7 +132,7 @@ function HomePage({ session }) {
 
   return (
     <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-      <div style={{ marginBottom: "24px", padding: "32px 0px" }}>
+      <div data-tour="inicio-saudacao" style={{ marginBottom: "24px", padding: "32px 0px" }}>
         <h2 style={{ margin: "0 0 6px 0", fontSize: "26px", fontWeight: "700" }}>
           Olá, {primeiroNome}!
         </h2>
@@ -141,7 +141,7 @@ function HomePage({ session }) {
         </p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "20px" }}>
+      <div data-tour="inicio-atalhos" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "20px" }}>
         {cards.map((card) => (
           <button
             key={card.title}

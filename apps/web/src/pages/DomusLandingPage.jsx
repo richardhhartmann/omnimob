@@ -19,9 +19,9 @@ import {
 } from "@phosphor-icons/react";
 import { api } from "../api";
 import { DomusSplash } from "../components/DomusSplash";
-import { PlanoModal } from "../components/PlanoModal";
 import { TrialModal } from "../components/TrialModal";
 import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
+import { IconeCheck, IconeX } from "../components/Icones.jsx";
 import {
   ACCENT,
   ACCENT_SOFT,
@@ -331,6 +331,15 @@ const FAQ = [
     q: "Os dados da minha imobiliária ficam separados dos das outras?",
     a: "Ficam. A Domus é multi-tenant: cada imobiliária tem seus próprios imóveis, usuários, leads e vitrine, e toda requisição é filtrada pelo tenant de origem.",
   },
+  /* A pergunta que trava quem já opera. Ela existe na página porque agora
+     existe um caminho para ela: o teste pergunta o perfil logo na abertura e,
+     para quem já tem imobiliária, coleta o que precisa ser trazido. A resposta
+     promete acompanhamento humano — que é o que a Domus faz hoje —, e não uma
+     importação automática, que ainda não existe. */
+  {
+    q: "Já uso outro sistema. Dá para trazer meus imóveis e clientes?",
+    a: "Dá, e você não vai redigitar nada sozinho. Ao começar o teste, diga que já tem uma imobiliária: perguntamos qual sistema você usa hoje, o que precisa vir junto (imóveis e fotos, clientes, leads, equipe) e como os dados podem sair de lá. Um especialista responde no seu e-mail para conduzir a importação dentro do próprio período de teste — se você não souber como exportar, essa parte também é com a gente.",
+  },
 ];
 
 // ── Planos ──────────────────────────────────────────────────────────────────
@@ -596,7 +605,7 @@ function DashboardMockup() {
         Novo lead · Apto. Centro
       </div>
       <div className="dl-chip-float dl-chip-float--b dl-glass" aria-hidden="true">
-        <span style={{ color: MINT, fontWeight: 700 }}>✓</span>
+        <IconeCheck size={13} style={{ color: MINT, flexShrink: 0 }} />
         Vitrine publicada
       </div>
     </div>
@@ -982,9 +991,13 @@ export function DomusLandingPage() {
   const [faqAberto, setFaqAberto] = useState(0);
   const ano = new Date().getFullYear();
 
-  // `null` = modal fechado; string = aberto com aquele plano ("" = nenhum).
-  const [planoInteresse, setPlanoInteresse] = useState(null);
+  /* Uma porta só para a página inteira: o teste. `planoDesejado` guarda com
+     qual plano a pessoa se identificou quando ela chega pelos cartões — o teste
+     libera tudo de qualquer jeito, mas essa intenção é o que o time usa para
+     puxar a conversa depois. */
   const [trialAberto, setTrialAberto] = useState(false);
+  const [planoDesejado, setPlanoDesejado] = useState("");
+  const abrirTeste = (plano = "") => { setPlanoDesejado(plano); setTrialAberto(true); };
 
   // Valores vigentes no provedor; enquanto não chegam, valem os de reserva.
   const PLANS = usePrecosVigentes();
@@ -1022,14 +1035,12 @@ export function DomusLandingPage() {
 
       <DomusSplash />
 
-      <PlanoModal
-        aberto={planoInteresse !== null}
-        planoInicial={planoInteresse || ""}
+      <TrialModal
+        aberto={trialAberto}
         planos={PLANS}
-        aoFechar={() => setPlanoInteresse(null)}
+        planoDesejado={planoDesejado}
+        aoFechar={() => setTrialAberto(false)}
       />
-
-      <TrialModal aberto={trialAberto} aoFechar={() => setTrialAberto(false)} />
 
       <LandingHeader />
 
@@ -1086,7 +1097,7 @@ export function DomusLandingPage() {
 
               <Reveal delay={330}>
                 <div className="dl-btn-row">
-                  <Button as="button" type="button" variant="primary" onClick={() => setTrialAberto(true)}>
+                  <Button as="button" type="button" variant="primary" onClick={() => abrirTeste()}>
                     Testar grátis
                   </Button>
                   <Button href="#planos" variant="ghost" arrow={false}>Ver planos</Button>
@@ -1312,19 +1323,23 @@ export function DomusLandingPage() {
                 <ul className="dl-plan__list">
                   {p.linhas.map((l) => (
                     <li key={l.label} className={l.incluso ? "" : "is-off"}>
-                      <span aria-hidden="true">{l.incluso ? "✓" : "✕"}</span>
+                      <span aria-hidden="true">{l.incluso ? <IconeCheck size={12} /> : <IconeX size={11} />}</span>
                       {l.label}
                     </li>
                   ))}
                 </ul>
+                {/* Todo caminho da página leva ao teste — não existe mais
+                    "assinar sem testar". O plano escolhido aqui não muda o que
+                    o teste libera (ele libera tudo); vai junto como intenção,
+                    para o time saber com o que a pessoa se identificou. */}
                 <Button
                   as="button"
                   type="button"
                   variant={p.highlight ? "primary" : "outline"}
                   className="dl-btn--block"
-                  onClick={() => setPlanoInteresse(p.key)}
+                  onClick={() => abrirTeste(p.key)}
                 >
-                  Quero este plano
+                  Testar com este plano
                 </Button>
               </Reveal>
             ))}
@@ -1373,14 +1388,15 @@ export function DomusLandingPage() {
             <span className="dl-cta__grad">com processo?</span>
           </h2>
           <p className="dl-cta__sub">
-            Crie um ambiente de teste em segundos ou fale com a gente para escolher o plano certo.
+            Crie um ambiente de teste em segundos. Já tem uma imobiliária rodando? A gente traz a
+            sua base junto.
           </p>
+          {/* Um botão só. A dupla "Testar grátis / Assinar a Domus" oferecia
+              uma escolha que não existe mais — e ainda dividia a atenção no
+              exato ponto em que a página pede uma decisão. */}
           <div className="dl-btn-row dl-btn-row--center">
-            <Button as="button" type="button" variant="dark" onClick={() => setTrialAberto(true)}>
+            <Button as="button" type="button" variant="dark" onClick={() => abrirTeste()}>
               Testar grátis
-            </Button>
-            <Button as="button" type="button" variant="light" arrow={false} onClick={() => setPlanoInteresse("")}>
-              Assinar a Domus
             </Button>
           </div>
           <p className="dl-mono dl-cta__note">DOMUS · IMÓVEIS · VITRINE · LEADS · IA · GESTÃO DE IMOBILIÁRIAS</p>
@@ -2134,6 +2150,23 @@ const CSS = `
   100% { opacity: 0; scale: 1.5; }
 }
 .dl-ed__legenda { margin: 0; }
+
+/* Fase única. As quatro animações do mock — blocos, ponteiro, anel do clique e
+   aviso de salvo — são independentes e só se encaixam se partirem no mesmo
+   instante: cada uma começa a contar no quadro em que nasce. Num primeiro
+   carregamento ocupado (splash de abertura, névoa em WebGL, fontes) elas não
+   nascem no mesmo quadro, e o desencontro fica para sempre — o ponteiro passa a
+   arrastar o vazio. Num F5, com a página em cache e sem splash, o quadro é o
+   mesmo para todas e o problema não aparece.
+   Presas em pausa até o bloco entrar em cena, todas soltam no mesmo recálculo de
+   estilo, num momento calmo — e a demonstração ainda começa sempre do princípio,
+   em vez de a pessoa pegar o laço no meio. */
+.dl-ed:not(.is-visible) .dl-ed__bloco,
+.dl-ed:not(.is-visible) .dl-ed__ponteiro,
+.dl-ed:not(.is-visible) .dl-ed__ponteiro::after,
+.dl-ed:not(.is-visible) .dl-ed__salvo {
+  animation-play-state: paused;
+}
 
 /* Posições de partida + keyframes dos blocos e do ponteiro, calculados. */
 ${editorCSS()}

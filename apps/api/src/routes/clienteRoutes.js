@@ -103,6 +103,7 @@ clienteRouter.put("/:id", async (req, res) => {
   }
 });
 
+/* DESATIVAR — o caminho reversível, e o que o painel oferece primeiro. */
 clienteRouter.delete("/:id", async (req, res) => {
   try {
     const current = await prisma.cliente.findFirst({
@@ -114,5 +115,48 @@ clienteRouter.delete("/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erro ao desativar cliente." });
+  }
+});
+
+/* EXCLUIR de vez — apaga a linha. Rota própria pelo mesmo motivo da de
+   usuários: as duas ações têm consequências diferentes demais para dependerem
+   de alguém lembrar de mandar uma flag.
+
+   A recusa por histórico é a que importa aqui. `Venda.cliente` é
+   onDelete: Restrict de propósito: venda registrada guarda QUEM comprou, e
+   apagar o cliente deixaria o negócio fechado sem contraparte. O banco já
+   recusaria (P2003) — checar antes é só para devolver uma frase que explica
+   em vez de um 500.
+
+   Não existe aqui o equivalente ao "último gestor": cliente não dá acesso a
+   nada, então ficar sem nenhum não tranca ninguém do lado de fora. */
+clienteRouter.delete("/:id/permanente", async (req, res) => {
+  try {
+    const alvo = await prisma.cliente.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+      select: { id: true },
+    });
+    if (!alvo) return res.status(404).json({ error: "Cliente não encontrado." });
+
+    const vendas = await prisma.venda.count({ where: { clienteId: alvo.id } });
+    if (vendas > 0) {
+      return res.status(409).json({
+        error: `Este cliente tem ${vendas} ${vendas === 1 ? "venda registrada" : "vendas registradas"} no histórico e não pode ser excluído. Deixe-o inativo: some das listagens e o histórico continua de pé.`,
+        code: "TEM_HISTORICO",
+      });
+    }
+
+    await prisma.cliente.delete({ where: { id: alvo.id } });
+    return res.status(204).send();
+  } catch (err) {
+    // Rede para qualquer vínculo criado depois desta rota ter sido escrita.
+    if (err.code === "P2003") {
+      return res.status(409).json({
+        error: "Este cliente tem registros vinculados e não pode ser excluído. Deixe-o inativo em vez disso.",
+        code: "TEM_HISTORICO",
+      });
+    }
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao excluir cliente." });
   }
 });

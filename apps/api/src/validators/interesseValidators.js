@@ -24,6 +24,20 @@ export const interesseSchema = z.object({
   website: z.string().max(200).optional(),
 });
 
+/* O que a imobiliária quer trazer de onde ela está hoje.
+
+   Tudo opcional de propósito: o formulário deixa pular a etapa inteira, e um
+   campo obrigatório aqui custaria testes de gente que só não sabe responder
+   ainda. Os limites de tamanho existem porque isto viaja dentro do JWT do
+   convite — texto solto sem teto viraria um link de e-mail quilométrico. */
+const migracaoSchema = z.object({
+  sistemaAtual: z.string().trim().max(120).optional().default(""),
+  itens: z.array(z.enum(["imoveis", "clientes", "leads", "usuarios"])).max(8).optional().default([]),
+  volume: z.string().trim().max(40).optional().default(""),
+  formato: z.enum(["planilha", "exportacao", "api", "nao_sei"]).optional(),
+  observacao: z.string().trim().max(500).optional().default(""),
+});
+
 // Teste grátis: só o essencial para criar o tenant e mandar o acesso. Telefone
 // é opcional aqui — pedir menos aumenta quem chega até o fim.
 export const trialSchema = z.object({
@@ -31,4 +45,12 @@ export const trialSchema = z.object({
   email: z.string().trim().email("E-mail inválido.").max(160),
   telefone: z.string().trim().max(30).optional().default(""),
   website: z.string().max(200).optional(),
+  /* "nova" = está abrindo a imobiliária agora; "existente" = já opera e quer
+     migrar. Só isso muda o roteiro do time do outro lado. O default cobre
+     chamadas antigas, que não mandavam o campo. */
+  perfil: z.enum(["nova", "existente"]).optional().default("nova"),
+  // Com qual plano a pessoa se identificou nos cartões. Não muda o teste, que
+  // libera tudo — é intenção de compra, não contrato.
+  planoDesejado: z.enum(PLANOS_VALIDOS).optional(),
+  migracao: migracaoSchema.optional(),
 });

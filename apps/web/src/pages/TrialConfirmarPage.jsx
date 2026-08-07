@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { DomusStyles, LOGO_LOCKUP_HEADER_SRC } from "../styles/domusKit";
 import { MODAL_CSS } from "../components/modalCSS";
+import { IconeCheck } from "../components/Icones.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Destino do link mágico do teste grátis.
@@ -25,29 +26,20 @@ export function TrialConfirmarPage() {
   useEffect(() => {
     if (!token || jaPediu.current) return;
     jaPediu.current = true;
-    /* O mesmo link serve aos dois fluxos. Tentamos primeiro o de assinatura
-       (não cria nada, só lê) e, se o token não for desse propósito, caímos no
-       de teste, que é o que cria o ambiente. A ordem importa: começar pelo que
-       cria faria um token de assinatura disparar a criação de um segundo
-       ambiente. */
+    /* Um fluxo só. Havia aqui uma tentativa anterior contra o endpoint de
+       assinatura direta, porque o mesmo link servia aos dois caminhos; com a
+       assinatura sem teste enterrada, aquilo virou uma requisição que falhava
+       sempre antes da que interessa. */
     api
-      .confirmarAssinaturaDireta({ token })
+      .confirmarTrialDomus({ token })
       .then((resposta) => {
         setDados(resposta);
         setEstado("pronto");
       })
-      .catch(() =>
-        api
-          .confirmarTrialDomus({ token })
-          .then((resposta) => {
-            setDados(resposta);
-            setEstado("pronto");
-          })
-          .catch((e) => {
-            setErro(e.message || "Não foi possível concluir.");
-            setEstado("erro");
-          }),
-      );
+      .catch((e) => {
+        setErro(e.message || "Não foi possível concluir.");
+        setEstado("erro");
+      });
   }, [token]);
 
   async function copiarAcesso() {
@@ -80,8 +72,7 @@ Vitrine: ${window.location.origin}/vitrine/${dados.slug}`;
             <span className="tc-girando" aria-hidden="true" />
             <h1 className="pm-titulo">Preparando seu ambiente…</h1>
             <p className="pm-sub">
-              Criando a imobiliária, subindo a vitrine e povoando com imóveis de exemplo. Leva alguns
-              segundos.
+              Criando a imobiliária, o seu acesso e a vitrine pública. Leva alguns segundos.
             </p>
           </div>
         ) : null}
@@ -99,49 +90,12 @@ Vitrine: ${window.location.origin}/vitrine/${dados.slug}`;
 
         {estado === "pronto" && dados ? (
           <div className="tm-pronto">
-            <span className="pm-feito__marca" aria-hidden="true">✓</span>
-            <h1 className="pm-titulo">
-              {dados.assinou ? "Bem-vindo à Domus" : "Seu ambiente está no ar"}
-            </h1>
+            <span className="pm-feito__marca" aria-hidden="true"><IconeCheck size={24} /></span>
+            <h1 className="pm-titulo">Seu ambiente está no ar</h1>
             <p className="pm-sub">
-              {dados.assinou ? (
-                <>
-                  Obrigado por assinar! A conta da <strong>{dados.imobiliaria}</strong> está ativa no
-                  plano <strong>{dados.plano}</strong> — produto completo, sem prazo de teste
-                  correndo.
-                </>
-              ) : (
-                <>
-                  Criamos a <strong>{dados.imobiliaria}</strong> com {dados.imoveis} imóveis de
-                  exemplo, para você ver a plataforma funcionando sem cadastrar nada.
-                </>
-              )}
+              Criamos a <strong>{dados.imobiliaria}</strong> com o seu plano liberado e a vitrine
+              já no ar, esperando o seu primeiro imóvel.
             </p>
-
-            {dados.assinou ? (
-              <div className="tm-acesso tc-plano">
-                <div className="tm-linha">
-                  <span className="tm-chave dl-mono">PLANO</span>
-                  <code className="tm-valor">{dados.plano}</code>
-                </div>
-                {dados.valorMensal ? (
-                  <div className="tm-linha">
-                    <span className="tm-chave dl-mono">VALOR</span>
-                    <code className="tm-valor">
-                      R$ {Number(dados.valorMensal).toFixed(2).replace(".", ",")}/mês
-                    </code>
-                  </div>
-                ) : null}
-                {dados.proximaCobranca ? (
-                  <div className="tm-linha">
-                    <span className="tm-chave dl-mono">PRÓXIMA</span>
-                    <code className="tm-valor">
-                      {new Date(dados.proximaCobranca).toLocaleDateString("pt-BR")}
-                    </code>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
 
             <div className="tm-acesso">
               <div className="tm-linha">
@@ -159,24 +113,25 @@ Vitrine: ${window.location.origin}/vitrine/${dados.slug}`;
             </div>
 
             <p className="tm-aviso">
-              {dados.assinou ? (
-                <>
-                  No primeiro acesso vamos pedir que você troque esta senha. A cobrança é mensal e
-                  automática.
-                </>
-              ) : (
-                <>
-                  Anote a senha antes de fechar — ela não aparece de novo. Também enviamos por
-                  e-mail. O teste vale até <strong>{validade}</strong>.
-                </>
-              )}
+              Anote a senha antes de fechar — ela não aparece de novo. Também enviamos por
+              e-mail. O teste vale até <strong>{validade}</strong>.
             </p>
 
             <div className="pm-acoes tm-acoes">
               <button type="button" className="pm-botao" onClick={copiarAcesso}>
                 {copiado ? "Copiado!" : "Copiar acesso"}
               </button>
-              <Link className="pm-botao pm-botao--primario tc-link" to="/login">
+              {/* Leva o acesso no state do roteador: o login já preenche os
+                  campos e limpa o state em seguida, então a senha temporária
+                  não fica presa no history do navegador. */}
+              <Link
+                className="pm-botao pm-botao--primario tc-link"
+                to="/login"
+                state={{
+                  credenciais: { login: dados.login, senha: dados.senha },
+                  origem: "teste",
+                }}
+              >
                 Entrar no painel
               </Link>
             </div>
@@ -233,7 +188,6 @@ const CSS = `${MODAL_CSS}
   background: rgba(212,175,55,0.09); border: 1px solid rgba(212,175,55,0.24);
 }
 .tm-acoes { width: 100%; justify-content: center; }
-.tc-plano { margin-bottom: 4px; }
 
 @media (prefers-reduced-motion: reduce) { .tc-girando { animation-duration: 2.4s; } }
 `;

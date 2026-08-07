@@ -38,3 +38,43 @@ export function formatCep(value) {
   const d = onlyDigits(value).slice(0, 8);
   return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
 }
+
+// CNPJ: 00.000.000/0000-00
+export function formatCnpj(value) {
+  const d = onlyDigits(value).slice(0, 14);
+  if (d.length > 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  if (d.length > 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  if (d.length > 5) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length > 2) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  return d;
+}
+
+/* CRECI: NÚMERO-CATEGORIA/UF — "12345-J/SP".
+
+   A máscara é PROGRESSIVA e não impõe nada que a pessoa não tenha digitado:
+   os separadores aparecem conforme as partes chegam.
+
+     "12345"      → 12345
+     "12345j"     → 12345-J
+     "12345jsp"   → 12345-J/SP
+
+   Isso importa para o apagar funcionar. Uma máscara que emendasse o "-J"
+   sozinho assim que houvesse dígitos prenderia o cursor: a pessoa apaga o J, a
+   máscara recoloca, e o campo nunca volta a só números.
+
+   O número aceita até seis dígitos porque o comprimento varia entre as
+   regionais. A categoria é uma letra só (J de jurídica, F de física) e a UF são
+   as duas seguintes — quem digita "12345JSP" ou "12345-J/SP" chega no mesmo
+   lugar. */
+export function formatCreci(value) {
+  const bruto = String(value ?? "").toUpperCase();
+  const numero = (bruto.match(/\d+/g) || []).join("").slice(0, 6);
+  const letras = (bruto.match(/[A-Z]+/g) || []).join("");
+
+  if (!numero) return letras.slice(0, 1);
+
+  let saida = numero;
+  if (letras.length >= 1) saida += `-${letras.slice(0, 1)}`;
+  if (letras.length >= 2) saida += `/${letras.slice(1, 3)}`;
+  return saida;
+}

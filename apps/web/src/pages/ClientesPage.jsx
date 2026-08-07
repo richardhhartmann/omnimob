@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { BtnAtivar, BtnDesativar, BtnEditar, BtnNovo } from "../components/ActionIcons";
-import { Avatar, Chip, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
+import { useOutletContext } from "react-router-dom";
+import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
+import { useConfirm } from "../components/ConfirmModal";
+import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { formatCep, formatCpf, formatPhone, formatRg, onlyDigits } from "../utils/masks";
 
@@ -32,6 +34,8 @@ const IconMegafone = () => (
 
 export function ClientesPage({ session }) {
   const tenantSlug = session?.tenant?.slug;
+  const { confirm, modal: confirmModal } = useConfirm();
+  const showToast = useOutletContext()?.showToast;
   const [clientes, setClientes] = useState([]);
   const [view, setView] = useState("list");
   const [editando, setEditando] = useState(null);
@@ -119,7 +123,27 @@ export function ClientesPage({ session }) {
         setClientes((prev) => prev.map((x) => x.id === updated.id ? updated : x));
       }
     } catch (err) {
-      alert(err.message);
+      showToast ? showToast(err.message, "error") : alert(err.message);
+    }
+  }
+
+  /* Excluir apaga a linha e não tem desfazer. A confirmação nomeia quem vai
+     sumir e lembra que parar aqui já resolve: quem chega neste botão acabou de
+     desativar a pessoa, então "deixar inativa" é a saída que ele ainda tem. */
+  async function excluir(c) {
+    const ok = await confirm(
+      `Excluir ${c.nome} definitivamente? O cadastro é apagado, com contato, endereço e histórico de divulgação, sem como recuperar. ` +
+      "Deixá-lo inativo já tira o cliente das listagens e preserva os dados.",
+      "Excluir definitivamente",
+    );
+    if (!ok) return;
+    try {
+      await api.excluirCliente(tenantSlug, c.id);
+      setClientes((prev) => prev.filter((x) => x.id !== c.id));
+      showToast?.(`${c.nome} foi excluído.`);
+    } catch (err) {
+      // Recusa por histórico de vendas volta explicada pela API.
+      showToast ? showToast(err.message, "error") : alert(err.message);
     }
   }
 
@@ -170,6 +194,12 @@ export function ClientesPage({ session }) {
     return passaStatus && passaDivulgacao;
   }), [clientes, statusFilter, soDivulgacao]);
 
+  /* Vazio por falta de cadastro ou por filtro? Só o primeiro caso merece o
+     convite a cadastrar — com a busca preenchida, "o primeiro cliente" pode ser
+     o quadragésimo. A busca conta aqui apesar de ser feita no servidor: para
+     quem olha a tela, ela filtra igual. */
+  const filtrando = Boolean(search) || statusFilter !== "all" || soDivulgacao;
+
   if (view === "form") {
     return (
       <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
@@ -180,9 +210,9 @@ export function ClientesPage({ session }) {
           <div style={{ marginBottom: "4px", fontSize: "11px", fontWeight: "600", opacity: 0.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Dados Pessoais
           </div>
-          <input placeholder="Nome completo *" value={form.nome} onChange={(e) => setField("nome", e.target.value)} required disabled={loading} />
+          <input data-tour="cliente-nome" placeholder="Nome completo *" value={form.nome} onChange={(e) => setField("nome", e.target.value)} required disabled={loading} />
           <div className="grid grid-2">
-            <input placeholder="CPF" inputMode="numeric" value={form.cpf} onChange={(e) => setField("cpf", formatCpf(e.target.value))} disabled={loading} />
+            <input data-tour="cliente-cpf" placeholder="CPF" inputMode="numeric" value={form.cpf} onChange={(e) => setField("cpf", formatCpf(e.target.value))} disabled={loading} />
             <input placeholder="RG" value={form.rg} onChange={(e) => setField("rg", formatRg(e.target.value))} disabled={loading} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -193,10 +223,10 @@ export function ClientesPage({ session }) {
           <div style={{ marginTop: "8px", marginBottom: "4px", fontSize: "11px", fontWeight: "600", opacity: 0.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Contato
           </div>
-          <input type="email" placeholder="E-mail" value={form.email} onChange={(e) => setField("email", e.target.value)} disabled={loading} />
+          <input data-tour="cliente-email" type="email" placeholder="E-mail" value={form.email} onChange={(e) => setField("email", e.target.value)} disabled={loading} />
           <div className="grid grid-2">
             <input placeholder="Telefone" inputMode="tel" value={form.telefone} onChange={(e) => setField("telefone", formatPhone(e.target.value))} disabled={loading} />
-            <input placeholder="WhatsApp" inputMode="tel" value={form.whatsapp} onChange={(e) => setField("whatsapp", formatPhone(e.target.value))} disabled={loading} />
+            <input data-tour="cliente-whatsapp" placeholder="WhatsApp" inputMode="tel" value={form.whatsapp} onChange={(e) => setField("whatsapp", formatPhone(e.target.value))} disabled={loading} />
           </div>
 
           <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "12px 14px", borderRadius: "10px", background: "rgba(37,211,102,0.06)", border: "1px solid rgba(37,211,102,0.25)", cursor: form.whatsapp ? "pointer" : "not-allowed", opacity: form.whatsapp ? 1 : 0.6, marginTop: "4px" }}>
@@ -266,12 +296,15 @@ export function ClientesPage({ session }) {
 
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      {confirmModal}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-        <header>
+        <header data-tour="clientes-cabecalho">
           <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Clientes</h1>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>Sua base de clientes e contatos.</p>
         </header>
-        <BtnNovo onClick={abrirCriar} label="Novo Cliente" />
+        <span data-tour="clientes-novo">
+          <BtnNovo onClick={abrirCriar} label="Novo Cliente" />
+        </span>
       </div>
 
       {initialLoading ? <SkeletonStats count={4} /> : (
@@ -310,11 +343,11 @@ export function ClientesPage({ session }) {
       {initialLoading ? (
         <SkeletonListRows count={5} />
       ) : visiveis.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>
-            {search || statusFilter !== "all" || soDivulgacao ? "Nenhum cliente encontrado com estes filtros." : "Nenhum cliente cadastrado."}
-          </p>
-        </div>
+        <EmptyState
+          mensagem={filtrando ? "Nenhum cliente encontrado com estes filtros." : "Nenhum cliente cadastrado."}
+          acaoLabel={filtrando ? undefined : "Cadastrar o primeiro cliente"}
+          onAcao={filtrando ? undefined : abrirCriar}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {visiveis.map((c) => {
@@ -326,7 +359,7 @@ export function ClientesPage({ session }) {
                 padding: "14px 18px", opacity: c.ativo ? 1 : 0.6,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0, flex: 1 }}>
-                  <Avatar name={c.nome} seed={c.nome + c.id} size={42} />
+                  <Avatar name={c.nome} size={42} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                       <span style={{ fontWeight: "600", fontSize: "15px" }}>{c.nome}</span>
@@ -344,10 +377,18 @@ export function ClientesPage({ session }) {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <StatusPill active={c.ativo} />
                   <BtnEditar onClick={() => abrirEditar(c)} />
-                  {c.ativo
-                    ? <BtnDesativar onClick={() => toggleAtivo(c)} />
-                    : <BtnAtivar onClick={() => toggleAtivo(c)} />
-                  }
+                  {/* Mesma regra da tela de Usuários: a lixeira só existe para
+                      quem já está inativo. Desativar vira degrau obrigatório do
+                      excluir, e as duas ações nunca ficam lado a lado para
+                      levar um clique trocado. */}
+                  {c.ativo ? (
+                    <BtnDesativar onClick={() => toggleAtivo(c)} />
+                  ) : (
+                    <>
+                      <BtnAtivar onClick={() => toggleAtivo(c)} />
+                      <BtnExcluir onClick={() => excluir(c)} />
+                    </>
+                  )}
                 </div>
               </div>
             );

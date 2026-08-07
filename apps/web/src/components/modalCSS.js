@@ -1,7 +1,9 @@
-/* Folha comum dos modais da landing (PlanoModal e TrialModal).
-   Fica em módulo próprio porque cada modal só existe no DOM quando está
-   aberto: se estas regras morassem dentro de um deles, o outro abriria sem
-   estilo nenhum. */
+/* Folha comum das telas de entrada: o TrialModal da landing e a
+   TrialConfirmarPage, destino do link do e-mail.
+
+   Fica em módulo próprio porque o modal só existe no DOM quando está aberto —
+   se as regras morassem dentro dele, a página de confirmação, que reaproveita
+   as mesmas peças (.pm-caixa, .pm-titulo, .pm-botao), abriria sem estilo. */
 
 export const MODAL_CSS = `
 .pm-veu {
@@ -75,11 +77,15 @@ export const MODAL_CSS = `
 }
 .pm-resumo__desc { font-size: 12.5px; line-height: 1.65; color: var(--default); }
 .pm-resumo__lista { display: grid; gap: 5px; margin-top: 10px; }
+/* A margem acima só existe para afastar a lista da descrição do plano. Quando
+   a lista é o primeiro filho da caixa (o convite ao teste, que não tem
+   descrição), ela virava um vão morto encostado na borda de cima. */
+.pm-resumo__lista:first-child { margin-top: 0; }
 .pm-resumo__lista li {
   font-size: 12px; color: var(--subtle); padding-left: 17px; position: relative; line-height: 1.5;
 }
 .pm-resumo__lista li::before {
-  content: "✓"; position: absolute; left: 0; color: var(--mint); font-size: 10px;
+  color: var(--mint); content: ""; position: absolute; left: 0; top: 0.36em; width: 11px; height: 11px; background-color: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 12.5 9.5 18 20 6.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 12.5 9.5 18 20 6.5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .pm-resumo__nota { display: block; margin-top: 11px; color: var(--placeholder); font-size: 8.5px; }
 

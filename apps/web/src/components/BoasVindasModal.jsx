@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { PLANOS } from "../utils/planos";
+import { IconeCheck, IconeEstrela } from "./Icones.jsx";
+import { PerfilInicialPasso, PERFIL_INICIAL_CSS } from "./PerfilInicialPasso.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Boas-vindas de quem acabou de assinar, no primeiro acesso ao painel.
@@ -26,11 +28,70 @@ const chaveVisto = (slug, modo) => `domus_boas_vindas_${modo}_${slug}`;
 // Duração da saída. Precisa bater com a das animações no CSS.
 const SAIDA_MS = 260;
 
-export function BoasVindasModal({ tenantSlug }) {
+/* Chuva de festa de quem acabou de assinar. Assinar é o momento mais alto da
+   relação com o produto e merece ser comemorado — o teste ganha o dourado
+   sóbrio, este ganha confete.
+
+   A lista é fixa, não sorteada: um sorteio mudaria o enquadramento a cada
+   render (o modal re-renderiza ao fechar) e faria os emojis saltarem de lugar
+   no meio do voo. Escrito à mão, também dá para espalhar as saídas pela
+   largura em vez de torcer para o acaso não amontoar tudo num canto.
+
+   x     de onde sai, em % da largura da tela
+   dx    deriva lateral do arremesso, em px
+   alto  altura do pulo, em % da altura da tela
+   giro  rotação no percurso
+   ms    atraso — duas levadas, para a festa não acabar num piscar
+   tam   lado do desenho, em px */
+/* Formas desenhadas, não emoji. O confete de emoji dependia da fonte do
+   sistema — no Windows saía um 🎉 laranja-berrante que não tem nada a ver com o
+   roxo e o dourado da marca, e no Linux vinha um retângulo vazio. Cinco formas
+   simples em SVG resolvem, e ainda dá para pintá-las na cor certa. */
+function Confete({ forma, cor, tam }) {
+  const comum = { width: tam, height: tam, viewBox: "0 0 24 24", fill: cor, "aria-hidden": "true" };
+  if (forma === "circulo") return <svg {...comum}><circle cx="12" cy="12" r="7.5" /></svg>;
+  if (forma === "fita") return <svg {...comum}><rect x="4" y="8.5" width="16" height="7" rx="2.4" /></svg>;
+  if (forma === "estrela") {
+    return <svg {...comum}><path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.44l-5.81 3.06 1.11-6.47L2.6 9.45l6.5-.95z" /></svg>;
+  }
+  // faísca
+  return <svg {...comum}><path d="M12 1.5l2.6 7.9 7.9 2.6-7.9 2.6L12 22.5l-2.6-7.9L1.5 12l7.9-2.6z" /></svg>;
+}
+
+const CONFETES = [
+  { forma: "fita", cor: "#a78bfa", x: 6,  dx: 90,   alto: 76, giro: 260,  ms: 0,    tam: 30 },
+  { forma: "fita", cor: "#d4af37", x: 17, dx: 40,   alto: 88, giro: -200, ms: 90,   tam: 26 },
+  { forma: "faisca", cor: "#e5c158", x: 27, dx: -30,  alto: 70, giro: 160,  ms: 220,  tam: 22 },
+  { forma: "estrela", cor: "#d4af37", x: 38, dx: 25,   alto: 94, giro: -300, ms: 40,   tam: 32 },
+  { forma: "circulo", cor: "#8b5cf6", x: 49, dx: -55,  alto: 82, giro: 120,  ms: 300,  tam: 27 },
+  { forma: "fita", cor: "#a78bfa", x: 60, dx: -80,  alto: 90, giro: -240, ms: 150,  tam: 29 },
+  { forma: "faisca", cor: "#a78bfa", x: 71, dx: 35,   alto: 66, giro: 340,  ms: 260,  tam: 23 },
+  { forma: "fita", cor: "#d4af37", x: 82, dx: -45,  alto: 84, giro: 210,  ms: 60,   tam: 28 },
+  { forma: "estrela", cor: "#e5c158", x: 92, dx: -95,  alto: 72, giro: -170, ms: 190,  tam: 26 },
+  { forma: "faisca", cor: "#e5c158", x: 12, dx: 60,   alto: 62, giro: -280, ms: 340,  tam: 20 },
+  // Segunda levada, meio segundo depois.
+  { forma: "circulo", cor: "#8b5cf6", x: 22, dx: 70,   alto: 80, giro: 190,  ms: 620,  tam: 25 },
+  { forma: "fita", cor: "#a78bfa", x: 34, dx: -40,  alto: 92, giro: -230, ms: 780,  tam: 28 },
+  { forma: "faisca", cor: "#a78bfa", x: 45, dx: 50,   alto: 68, giro: 310,  ms: 700,  tam: 21 },
+  { forma: "estrela", cor: "#d4af37", x: 56, dx: -65,  alto: 86, giro: -150, ms: 860,  tam: 30 },
+  { forma: "fita", cor: "#d4af37", x: 67, dx: 30,   alto: 74, giro: 250,  ms: 660,  tam: 24 },
+  { forma: "faisca", cor: "#e5c158", x: 78, dx: -25,  alto: 90, giro: -320, ms: 820,  tam: 22 },
+  { forma: "fita", cor: "#a78bfa", x: 88, dx: 75,   alto: 78, giro: 180,  ms: 740,  tam: 27 },
+  { forma: "circulo", cor: "#8b5cf6", x: 3,  dx: 110,  alto: 64, giro: -210, ms: 900,  tam: 23 },
+];
+
+/* `aoResolver` avisa quem está na fila que este modal já terminou o que tinha
+   para fazer — mostrou e foi fechado, ou nem chegou a aparecer. Sem esse aviso,
+   o tour de primeiro acesso subiria por cima deste no acesso de quem acabou de
+   assinar (ou de abrir o teste), com dois modais disputando a mesma tela. */
+export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
   const [dados, setDados] = useState(null);
   const [modo, setModo] = useState(null); // "assinante" | "teste"
   const [aberto, setAberto] = useState(false);
   const [saindo, setSaindo] = useState(false);
+  /* "boas-vindas" → "perfil". O segundo passo é a ficha da imobiliária, que
+     alimenta a vitrine; ver PerfilInicialPasso. */
+  const [passo, setPasso] = useState("boas-vindas");
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -39,9 +100,9 @@ export function BoasVindasModal({ tenantSlug }) {
       .getTrialStatus(tenantSlug)
       .then((r) => {
         const qual = r?.assinaturaAtiva ? "assinante" : r?.emTrial ? "teste" : null;
-        if (!qual) return;
+        if (!qual) { aoResolver?.(); return; }
         try {
-          if (localStorage.getItem(chaveVisto(tenantSlug, qual))) return;
+          if (localStorage.getItem(chaveVisto(tenantSlug, qual))) { aoResolver?.(); return; }
         } catch {
           /* navegador sem storage: mostra, e no pior caso mostra de novo */
         }
@@ -49,17 +110,19 @@ export function BoasVindasModal({ tenantSlug }) {
         setModo(qual);
         setAberto(true);
       })
-      .catch(() => {});
+      .catch(() => { aoResolver?.(); });
   }, [tenantSlug]);
 
   useEffect(() => {
     if (!aberto) return undefined;
     function aoTeclar(e) {
-      if (e.key === "Escape") fechar();
+      // No passo do perfil o Esc não fecha: há texto digitado em jogo, e as
+      // saídas explícitas ("Preencher depois") continuam à mão.
+      if (e.key === "Escape" && passo !== "perfil") fechar();
     }
     document.addEventListener("keydown", aoTeclar);
     return () => document.removeEventListener("keydown", aoTeclar);
-  }, [aberto]);
+  }, [aberto, passo]);
 
   if (!aberto || !dados) return null;
 
@@ -73,7 +136,7 @@ export function BoasVindasModal({ tenantSlug }) {
     /* Desmonta só depois da animação. Tirar do DOM na hora cortaria o
        fechamento pela metade — o elemento sumiria antes de terminar. */
     setSaindo(true);
-    setTimeout(() => setAberto(false), SAIDA_MS);
+    setTimeout(() => { setAberto(false); aoResolver?.(); }, SAIDA_MS);
   }
 
   const info = PLANOS.find((p) => p.key === dados.plano);
@@ -96,17 +159,38 @@ export function BoasVindasModal({ tenantSlug }) {
       : dias === 0
         ? "menos de um dia"
         : `${dias} ${dias === 1 ? "dia" : "dias"}`;
-  const demo = dados.inventario?.imoveis ? null : "com imóveis de exemplo já cadastrados";
 
   return (
-    <div
-      className={`bv-veu${saindo ? " is-saindo" : ""}`}
-      onMouseDown={(e) => e.target === e.currentTarget && fechar()}
-    >
-      <style>{CSS}</style>
+    /* O FUNDO NÃO FECHA NADA, em passo nenhum.
+
+       Ele fechava, e no segundo passo isso apagava a ficha inteira que a pessoa
+       tinha acabado de digitar — um clique fora por engano custando dez campos.
+       Condicionar ao passo resolveria o caso grave e deixaria a armadilha de pé
+       para o dia em que alguém acrescentasse outro formulário aqui. Tirar de vez
+       é mais simples e não custa nada: sair continua sendo o botão, que está
+       sempre visível. */
+    <div className={`bv-veu${saindo ? " is-saindo" : ""}`}>
+      <style>{`${CSS}
+${PERFIL_INICIAL_CSS}`}</style>
       <div className={`bv-caixa${saindo ? " is-saindo" : ""}`} role="dialog" aria-modal="true" aria-labelledby="bv-titulo">
-        <span className={`bv-selo${ehTeste ? " bv-selo--teste" : ""}`} aria-hidden="true">
-          {ehTeste ? "★" : "✓"}
+        {passo === "perfil" ? (
+          <>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 2 DE 2</span>
+            <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">A ficha da sua imobiliária</h2>
+            <p className="bv-texto bv-texto--fraco bv-texto--perfil">
+              É o que a sua vitrine mostra para quem chega de fora. Já trouxemos o que você
+              informou ao pedir o teste — confira e complete o que faltar.
+            </p>
+            <PerfilInicialPasso
+              tenantSlug={tenantSlug}
+              aoConcluir={(campos) => { aoAtualizarTenant?.(campos); fechar(); }}
+              aoPular={fechar}
+            />
+          </>
+        ) : (
+        <>
+        <span className={`bv-selo${ehTeste ? " bv-selo--teste" : " bv-selo--festa"}`} aria-hidden="true">
+          {ehTeste ? <IconeEstrela size={24} /> : <IconeCheck size={26} />}
         </span>
         <span className={`bv-eyebrow${ehTeste ? " bv-eyebrow--teste" : ""}`}>
           {ehTeste ? "● TESTE GRÁTIS" : "● ASSINATURA ATIVA"}
@@ -120,9 +204,9 @@ export function BoasVindasModal({ tenantSlug }) {
         {ehTeste ? (
           <>
             <p className="bv-texto">
-              Este é um ambiente de <strong>demonstração completo</strong>, com a plataforma inteira
-              liberada {demo || "e imóveis de exemplo para você explorar"}. Mexa à vontade: cadastre,
-              apague, monte a vitrine do seu jeito.
+              Seu ambiente está no <strong>plano {info?.nome || dados.plano}</strong>, limpo e só
+              seu — sem anúncio de mentira para apagar depois. Mexa à vontade: cadastre, apague,
+              monte a vitrine do seu jeito.
             </p>
 
             {prazo ? (
@@ -181,10 +265,34 @@ export function BoasVindasModal({ tenantSlug }) {
           </>
         )}
 
-        <button type="button" className="bv-botao" onClick={fechar}>
-          {ehTeste ? "Começar a explorar" : "Começar a usar"}
+        <button type="button" className="bv-botao" onClick={() => setPasso("perfil")}>
+          Continuar
         </button>
+        </>
+        )}
       </div>
+
+      {/* Depois da caixa no DOM, então voa por cima dela. Sem eventos: é
+          enfeite, e não pode roubar o clique do botão que está embaixo.
+          Some sozinho quando as animações terminam — nada em laço. */}
+      {ehTeste ? null : (
+        <div className="bv-confete" aria-hidden="true">
+          {CONFETES.map((c, i) => (
+            <span
+              key={i}
+              style={{
+                left: `${c.x}%`,
+                "--dx": `${c.dx}px`,
+                "--alto": `${c.alto}vh`,
+                "--giro": `${c.giro}deg`,
+                "--atraso": `${c.ms}ms`,
+              }}
+            >
+              <Confete forma={c.forma} cor={c.cor} tam={c.tam} />
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -203,6 +311,7 @@ const CSS = `
 
 .bv-caixa {
   width: min(500px, 100%); max-height: calc(100vh - 48px); overflow-y: auto;
+  transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   background: #141821; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px;
   padding: 30px 30px 26px; text-align: center;
   display: grid; justify-items: center;
@@ -235,6 +344,59 @@ const CSS = `
 
 .bv-selo--teste { color: #d4af37; background: rgba(212,175,55,0.14); border-color: rgba(212,175,55,0.45); }
 
+/* Assinante: o selo entra e ainda dá dois pulinhos, no compasso da primeira
+   levada de confete. A animação é encadeada (pop, depois pulo) em vez de uma
+   só com muitos passos — assim cada trecho tem a sua curva. */
+.bv-selo--festa {
+  position: relative; /* âncora do anel abaixo */
+  animation:
+    bvSelo 0.5s cubic-bezier(0.22, 1, 0.36, 1) both,
+    bvPulo 0.62s cubic-bezier(0.3, 0.9, 0.4, 1) 0.5s 2 both;
+}
+@keyframes bvPulo {
+  0%, 100% { transform: translateY(0) scale(1); }
+  28% { transform: translateY(-13px) scale(1.06); }
+  55% { transform: translateY(0) scale(0.94); }
+  74% { transform: translateY(-4px) scale(1.02); }
+}
+
+/* Anel de festa saindo do selo, uma vez só: dá o "estouro" no instante em que
+   o confete parte, sem custar mais um elemento no JSX. */
+.bv-selo--festa::after {
+  content: ""; position: absolute; inset: 0; border-radius: 999px;
+  border: 2px solid rgba(52,211,153,0.75); pointer-events: none;
+  animation: bvAnel 0.9s ease-out 0.22s both;
+}
+@keyframes bvAnel {
+  from { opacity: 0.9; scale: 1; }
+  to { opacity: 0; scale: 2.4; }
+}
+
+/* Confete: cada emoji é arremessado do rodapé numa parábola — sobe girando,
+   deriva para o lado e cai apagando. O fill "both" segura o quadro final, que
+   é invisível: a camada fica no DOM sem nada aparecendo depois que passa. */
+.bv-confete {
+  position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 2;
+}
+.bv-confete span {
+  position: absolute; bottom: -60px; display: block; line-height: 1;
+  will-change: transform, opacity;
+  animation: bvConfete 2.7s cubic-bezier(0.15, 0.72, 0.4, 1) var(--atraso) both;
+}
+@keyframes bvConfete {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.4); }
+  9% { opacity: 1; }
+  46% {
+    transform: translate3d(calc(var(--dx) * 0.65), calc(var(--alto) * -1), 0)
+               rotate(var(--giro)) scale(1);
+  }
+  72% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx), 14vh, 0) rotate(calc(var(--giro) * 1.9)) scale(0.82);
+  }
+}
+
 /* O prazo em destaque: é a informação que a pessoa vai querer lembrar. */
 .bv-prazo {
   width: 100%; margin: 2px 0 16px; padding: 14px 16px; border-radius: 12px;
@@ -256,6 +418,14 @@ const CSS = `
   margin: 0 0 10px; font-size: 21px; font-weight: 700; letter-spacing: -0.02em;
   color: #f1f5f9; line-height: 1.28;
 }
+
+/* Passo do perfil: a caixa cresce para caber a grade de dois campos por linha,
+   e o conteúdo desencosta do centro — formulário centralizado é ilegível. */
+.bv-caixa:has(.pi-corpo), .bv-caixa:has(.pi-carregando) {
+  width: min(680px, 100%); justify-items: stretch; text-align: left;
+}
+.bv-titulo--perfil, .bv-texto--perfil { text-align: left; width: 100%; }
+.bv-texto--perfil { margin-bottom: 18px; }
 .bv-texto { margin: 0 0 14px; font-size: 13.5px; line-height: 1.68; color: #94a3b8; }
 .bv-texto strong { color: #f1f5f9; font-weight: 600; }
 .bv-texto--fraco { font-size: 12.5px; color: #64748b; }
@@ -282,7 +452,10 @@ const CSS = `
 .bv-botao:active { scale: 1; }
 
 @media (prefers-reduced-motion: reduce) {
-  .bv-veu, .bv-caixa, .bv-selo { animation: none; }
+  .bv-veu, .bv-caixa, .bv-selo, .bv-selo--festa { animation: none; }
+  /* Festa é justamente o tipo de movimento que quem pediu menos não quer:
+     sai inteira, não fica uma versão parada dela na tela. */
+  .bv-confete, .bv-selo--festa::after { display: none; }
   /* Sem percurso, mas ainda com esmaecimento: sumir de estalo desorienta. */
   .bv-veu.is-saindo, .bv-caixa.is-saindo { animation: bvVeuSai 160ms ease both; }
 }
