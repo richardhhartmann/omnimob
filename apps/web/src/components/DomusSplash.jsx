@@ -123,13 +123,15 @@ const ALVO = ".dl-header__tipo";
 function calcularVoo(palco) {
   const alvo = document.querySelector(ALVO);
   if (!palco || !alvo) return null;
-  /* Empilhado, a marca não preenche mais a caixa do palco: o símbolo fica no
-     meio dela e a palavra desce para fora, embaixo. Mapear caixa → logo do
-     cabeçalho, que é o que este cálculo faz, mandaria o conjunto para um lugar
-     que não corresponde ao que se vê. No celular a marca termina onde ela está,
-     centralizada, e só esmaece — que é justamente o fecho que a versão em
-     coluna pede. */
-  if (window.matchMedia(EMPILHADO).matches) return null;
+  /* A conta mapeia a CAIXA do palco no logo do cabeçalho, e ela vale nos dois
+     formatos porque a caixa é sempre a mesma: o empilhamento do celular é feito
+     só por transform (o palco desliza, a palavra desce, o SVG amplia), e
+     transform não mexe em layout.
+
+     O que o celular precisa é desmanchar esse empilhamento na saída, senão o
+     conjunto viajaria em coluna até um logo que é deitado. Quem faz isso é o
+     bloco "Celular: desmonte na saída" no CSS, no mesmo tempo e na mesma curva
+     deste voo — a marca se deita e pousa no cabeçalho num movimento só. */
   const a = alvo.getBoundingClientRect();
   const p = palco.getBoundingClientRect();
   if (!a.width || !p.width) return null;
@@ -446,6 +448,41 @@ body.ds-com-splash-saindo .dl-header {
 @keyframes ds-palavra {
   from { transform: translate(0, 0); }
   to   { transform: translate(${PALAVRA_DX}px, ${PALAVRA_DY}px); }
+}
+
+/* ── Celular: desmonte na saída ─────────────────────────────────────────────
+   O voo até o cabeçalho existia só no desktop. No celular a marca esmaecia
+   parada, e a abertura terminava sem o fecho que dá sentido a ela: a tipografia
+   animava, mas não ia parar em lugar nenhum.
+
+   Ela vai agora, e o caminho é o mesmo — o que muda é que primeiro ela precisa
+   se deitar. As três peças do empilhamento (o palco subido, a palavra embaixo,
+   o SVG ampliado) voltam ao arranjo deitado exatamente enquanto o conjunto
+   viaja, na mesma duração e na mesma curva do .ds-voar: um movimento só, em que
+   a marca se recompõe no caminho até o cabeçalho.
+
+   Por que animação e não simplesmente apagar as do empilhamento: elas têm fill
+   "both" e seguram o transform final. Tirá-las devolveria o valor de partida no
+   mesmo quadro, sem percurso. Com o "from" escrito à mão, o percurso existe. */
+@media ${EMPILHADO} {
+  .ds-overlay.is-saindo .ds-stage {
+    animation: ds-palco-deita ${SAIDA_MS - 80}ms cubic-bezier(0.6, 0, 0.2, 1) both;
+  }
+  .ds-overlay.is-saindo .ds-palavra {
+    animation: ds-palavra-deita ${SAIDA_MS - 80}ms cubic-bezier(0.6, 0, 0.2, 1) both;
+  }
+  .ds-overlay.is-saindo .ds-svg {
+    transform: scale(1);
+    transition: transform ${SAIDA_MS - 80}ms cubic-bezier(0.6, 0, 0.2, 1);
+  }
+}
+@keyframes ds-palco-deita {
+  from { transform: translate(39.94%, ${PALCO_SUBIDA}); }
+  to   { transform: translate(0, 0); }
+}
+@keyframes ds-palavra-deita {
+  from { transform: translate(${PALAVRA_DX}px, ${PALAVRA_DY}px); }
+  to   { transform: translate(0, 0); }
 }
 
 /* Sem movimento: o lockup já aparece montado e o overlay só desaparece. */

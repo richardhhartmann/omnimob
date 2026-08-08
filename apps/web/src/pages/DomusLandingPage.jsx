@@ -38,6 +38,7 @@ import {
   Reveal,
   Scallop,
   StatValue,
+  reduzirMovimento,
   useReveal,
 } from "../styles/domusKit";
 
@@ -113,7 +114,7 @@ const JORNADA = [
 // parte do produto de que está falando.
 const RECURSOS = [
   { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar.", tela: "imoveis", url: "domus.app / imóveis", legenda: "PAINEL WEB · IMÓVEIS" },
-  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "suaimobiliaria.domus.app", legenda: "VITRINE PÚBLICA · AO VIVO" },
+  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "domus.app / vitrine / editar", legenda: "PAINEL WEB · EDITOR DE VITRINE" },
   { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel.", tela: "metricas", url: "domus.app / métricas", legenda: "PAINEL WEB · MÉTRICAS" },
   { Icon: Megaphone, title: "Publicação em redes", desc: "Divulgue imóveis no Facebook, Instagram e WhatsApp com legenda pronta em poucos cliques.", tela: "redes", url: "domus.app / publicações", legenda: "PAINEL WEB · PUBLICAÇÕES" },
   { Icon: UsersThree, title: "Usuários e permissões", desc: "Crie cargos com permissões granulares para corretores, marketing, gerência e mais.", tela: "usuarios", url: "domus.app / usuários", legenda: "PAINEL WEB · EQUIPE" },
@@ -122,6 +123,127 @@ const RECURSOS = [
 
 // De quantos em quantos milissegundos o carrossel avança sozinho.
 const RECURSO_INTERVALO = 3000;
+
+/* Quantos cartões distintos existem em cada esteira da tela "imóveis". A lista
+   é renderizada duas vezes seguidas e o percurso da animação é exatamente uma
+   cópia, então o laço fecha sem emenda (ver .dl-esteira no CSS). */
+const ESTEIRA_CARTOES = 6;
+
+/* ── Silhuetas de imóvel ─────────────────────────────────────────────────────
+   Um desenho por cartão, para a esteira parecer um acervo de anúncios
+   diferentes em vez do mesmo retângulo doze vezes. São volumes chapados no
+   mesmo idioma das outras silhuetas da página — uma cor só para a massa, as
+   janelas em recorte escuro, sem contorno e sem detalhe. De longe o que precisa
+   aparecer é "outro imóvel", não a ilustração.
+
+   Todas no mesmo viewBox de 24 × 18 e assentadas na linha de base y=17, para as
+   seis parecerem plantadas no mesmo chão quando passam lado a lado. */
+const ESTEIRA_SILHUETAS = [
+  // Casa térrea
+  <>
+    <path className="dl-esteira__vulto" d="M12 2.4 22.4 10.2 20 10.2 20 17 4 17 4 10.2 1.6 10.2Z" />
+    <rect className="dl-esteira__vao" x="10.6" y="12.8" width="2.8" height="4.2" />
+    <rect className="dl-esteira__vao" x="5.8" y="11.6" width="2.6" height="2.6" />
+  </>,
+  // Prédio alto
+  <>
+    <rect className="dl-esteira__vulto" x="7" y="1.6" width="10" height="15.4" />
+    {[3.2, 6, 8.8, 11.6].map((y) => (
+      <g key={y}>
+        <rect className="dl-esteira__vao" x="8.6" y={y} width="2.8" height="1.8" />
+        <rect className="dl-esteira__vao" x="12.6" y={y} width="2.8" height="1.8" />
+      </g>
+    ))}
+    <rect className="dl-esteira__vao" x="10.6" y="14.4" width="2.8" height="2.6" />
+  </>,
+  // Duas torres
+  <>
+    <rect className="dl-esteira__vulto" x="2.4" y="4.6" width="8" height="12.4" />
+    <rect className="dl-esteira__vulto" x="12.4" y="8" width="9.2" height="9" />
+    {[6.2, 8.8, 11.4].map((y) => (
+      <g key={y}>
+        <rect className="dl-esteira__vao" x="3.9" y={y} width="2.2" height="1.6" />
+        <rect className="dl-esteira__vao" x="7.1" y={y} width="2.2" height="1.6" />
+      </g>
+    ))}
+    {[9.6, 12.4].map((y) => (
+      <g key={y}>
+        <rect className="dl-esteira__vao" x="13.9" y={y} width="2.4" height="1.8" />
+        <rect className="dl-esteira__vao" x="17.4" y={y} width="2.4" height="1.8" />
+      </g>
+    ))}
+  </>,
+  /* Sobrado. A faixa escura entre os andares e as janelas em dois níveis são o
+     que o separam da casa térrea: só o telhado mais baixo não bastava — de
+     longe os dois viravam o mesmo desenho. */
+  <>
+    <path className="dl-esteira__vulto" d="M12 2.2 21.6 7.4 2.4 7.4Z" />
+    <rect className="dl-esteira__vulto" x="4" y="7.4" width="16" height="9.6" />
+    <rect className="dl-esteira__vao" x="4" y="11.8" width="16" height="0.9" />
+    <rect className="dl-esteira__vao" x="6.2" y="8.7" width="2.6" height="2.3" />
+    <rect className="dl-esteira__vao" x="15.2" y="8.7" width="2.6" height="2.3" />
+    <rect className="dl-esteira__vao" x="6.2" y="13.5" width="2.6" height="2.3" />
+    <rect className="dl-esteira__vao" x="13.6" y="13" width="2.8" height="4" />
+  </>,
+  // Prédio escalonado, com a cobertura recuada
+  <>
+    <rect className="dl-esteira__vulto" x="2.6" y="9.4" width="18.8" height="7.6" />
+    <rect className="dl-esteira__vulto" x="8" y="2.6" width="8.4" height="6.8" />
+    <rect className="dl-esteira__vao" x="9.4" y="4.4" width="2.2" height="1.8" />
+    <rect className="dl-esteira__vao" x="12.8" y="4.4" width="2.2" height="1.8" />
+    {[4.2, 8, 11.8, 15.6, 18.6].map((x) => (
+      <rect key={x} className="dl-esteira__vao" x={x} y="11.2" width="2.2" height="1.8" />
+    ))}
+  </>,
+  // Casa com garagem
+  <>
+    <path className="dl-esteira__vulto" d="M8.6 2.6 16.6 8.2 0.6 8.2 15.2 8.2 15.2 17 2 17 2 8.2Z" />
+    <rect className="dl-esteira__vulto" x="15.2" y="11.4" width="6.4" height="5.6" />
+    <rect className="dl-esteira__vao" x="3.4" y="9.6" width="2.4" height="2.2" />
+    <rect className="dl-esteira__vao" x="7.2" y="12.4" width="2.6" height="4.6" />
+    <rect className="dl-esteira__vao" x="16.4" y="13" width="4" height="4" />
+  </>,
+];
+
+/* Que desenho vai em cada cartão, fila por fila (uma linha por esteira, uma
+   coluna por cartão da cópia). Escrita à mão, e não sorteada por aritmética:
+   com seis desenhos e seis cartões, toda conta modular dá a mesma roda girando,
+   só começando em outro ponto — e três filas girando a mesma roda se parecem
+   quando o movimento as alinha. */
+const ESTEIRA_ORDEM = [
+  [0, 4, 1, 5, 2, 3],
+  [5, 1, 3, 0, 4, 2],
+  [2, 3, 5, 1, 0, 4],
+];
+
+// Inclinação do degradê de cada foto. Só para dois cartões vizinhos não terem
+// exatamente a mesma luz — mais uma pista de que são anúncios diferentes.
+const ESTEIRA_GIROS = ["135deg", "108deg", "158deg", "122deg"];
+
+/* Blocos da vitrine no mock do editor (tela "vitrine"). O arranjo repete o
+   padrão do editor de verdade: cabeçalho e título ocupando a linha inteira,
+   destaques ao lado dos imóveis, widgets e rodapé fechando embaixo. `sel` é o
+   bloco selecionado — o que aparece com contorno e alças de redimensionar. */
+const BUILDER_BLOCOS = [
+  { id: "cab", nome: "CABEÇALHO" },
+  { id: "tit", nome: "TÍTULO" },
+  { id: "des", nome: "DESTAQUES" },
+  { id: "imo", nome: "IMÓVEIS", sel: true },
+  { id: "wid", nome: "WIDGETS" },
+  { id: "rod", nome: "RODAPÉ" },
+];
+
+/* Imobiliárias do mock de multi-tenant. Cada uma com a própria cor, a própria
+   vitrine e a própria parede: é a leitura que uma lista de linhas não dá — ali
+   os tenants pareceriam apenas mais registros da mesma tabela, que é o oposto
+   do que a célula precisa dizer (e é o que a célula vizinha, de usuários, já
+   faz com o mesmo desenho). */
+const TENANTS = [
+  { slug: "imobiliaria-centro", cor: ACCENT_SOFT },
+  { slug: "casa-nobre", cor: GOLD },
+  { slug: "alto-padrao", cor: MINT },
+  { slug: "vista-mar", cor: ROSE },
+];
 
 /* Marca do WhatsApp, o glifo oficial — o mesmo caminho já usado nos previews de
    publicação do cadastro (WA_ICON em PropertyForm). O do Phosphor é desenho
@@ -183,16 +305,30 @@ const REDES = [
 // Sem rótulo dentro: os blocos são só volumes, como as miniaturas do mockup.
 const EDITOR_BLOCOS = ["header", "titulo", "destaques", "imoveis", "widgets", "rodape"];
 
-/* Quantas silhuetas cada bloco tem por dentro. O arranjo delas (grade, coluna,
-   fila) fica no CSS de cada modificador — aqui só a contagem, porque é o que
-   muda de bloco para bloco:
+/* O miolo de cada bloco: quantas silhuetas ele tem e quantas peças vão DENTRO
+   de cada silhueta. O arranjo (fila, coluna, grade) fica no CSS de cada
+   modificador — aqui só as contagens, porque é o que muda de bloco para bloco.
+
+   As peças existem porque metade dos blocos não se explicava: cabeçalho, título
+   e rodapé já tinham forma própria (marca + menu, chamada + apoio, links), mas
+   destaques, imóveis e widgets eram o mesmo retângulo liso repetido. Onde
+   deveria estar escrito "aqui vai uma grade de imóveis" estava escrito só "aqui
+   vai alguma coisa".
+
      header    marca + três itens de menu
-     titulo    uma chamada e uma linha de apoio
-     destaques três cartões lado a lado
-     imoveis   grade de seis cartões de imóvel
-     widgets   dois painéis
-     rodape    três links */
-const EDITOR_MIOLO = { header: 4, titulo: 2, destaques: 3, imoveis: 6, widgets: 2, rodape: 3 };
+     titulo    sobretítulo, chamada e linha de apoio
+     destaques três cartões, cada um com selo e duas linhas
+     imoveis   seis cartões de imóvel, cada um com foto e legenda
+     widgets   dois painéis, cada um com texto e botão
+     rodape    régua fina + três links */
+const EDITOR_MIOLO = {
+  header: { itens: 4, pecas: 0 },
+  titulo: { itens: 3, pecas: 0 },
+  destaques: { itens: 3, pecas: 3 },
+  imoveis: { itens: 6, pecas: 2 },
+  widgets: { itens: 2, pecas: 3 },
+  rodape: { itens: 4, pecas: 0 },
+};
 
 // Peso de altura de cada bloco; a altura da linha é a do bloco mais alto dela.
 const EDITOR_PESO = { header: 1, titulo: 0.8, destaques: 1.5, imoveis: 1.5, widgets: 1.5, rodape: 0.7 };
@@ -353,6 +489,32 @@ const FAIXA = [
   { kind: "text", title: "Cada imobiliária isolada", desc: "Dados, usuários e vitrine separados por tenant, do banco à requisição." },
 ];
 
+// Velocidade da faixa quando ela anda sozinha no celular, em pixels por
+// segundo. Bate com a esteira de CSS do desktop (60 s para uma lista).
+const FAIXA_VELOCIDADE = 34;
+
+/* Quantas cópias da lista ficam no trilho. Três, e não duas, por causa da
+   rolagem livre do celular.
+
+   O laço da rolagem funciona assim: como as cópias são idênticas, deslocar a
+   posição em uma cópia inteira não muda nada do que se vê — muda só quanto
+   ainda há para rolar de cada lado, que volta a ser uma lista inteira. Com duas
+   cópias esse deslocamento sempre joga o dedo colado numa das pontas do trilho,
+   e ponta de trilho é parede: não há para onde rolar nem evento de rolagem que
+   avise. Com três, a posição vive na cópia do meio, com uma lista de sobra dos
+   dois lados, e a parede nunca chega. */
+const FAIXA_COPIAS = 3;
+
+/* Distância de uma cópia, medida nos cartões — e não em scrollWidth dividido
+   pelo número de cópias, que erraria por uma fração de vão (o trilho tem um vão
+   a menos que os cartões) e daria um pulinho a cada volta. */
+function faixaVolta(caixa) {
+  const cartoes = caixa.firstElementChild?.children;
+  const primeiro = cartoes?.[0];
+  const seguinte = cartoes?.[FAIXA.length];
+  return primeiro && seguinte ? seguinte.offsetLeft - primeiro.offsetLeft : 0;
+}
+
 const FAQ = [
   {
     q: "Preciso de alguém técnico para montar a vitrine?",
@@ -482,6 +644,25 @@ function usePrecosVigentes() {
       }),
     [precos],
   );
+}
+
+/* Consulta de mídia como estado. Existe porque três peças desta página mudam de
+   comportamento (e não só de aparência) conforme o formato da tela — recursos,
+   faixa e planos —, e cada uma tinha a mesma dúzia de linhas copiada. Girar o
+   aparelho conta como mudança, daí o listener em vez de uma leitura só na
+   montagem. */
+function useMedia(consulta) {
+  const [bate, setBate] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(consulta).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(consulta);
+    const aoMudar = (e) => setBate(e.matches);
+    setBate(mq.matches);
+    mq.addEventListener("change", aoMudar);
+    return () => mq.removeEventListener("change", aoMudar);
+  }, [consulta]);
+  return bate;
 }
 
 /* Cabeçalho fixo + menu em tela cheia, no modelo do Header do Contable: a
@@ -693,20 +874,70 @@ function DashboardMockup() {
    capturas reais —, montadas com as mesmas peças (`dl-skel`, cartões, chips)
    para as seis telas parecerem o mesmo produto. */
 function Tela({ tipo }) {
+  /* A célula fala do EDITOR de vitrine, e o que estava aqui era uma vitrine
+     pronta — banner e cartões, a página publicada, não a ferramenta que a monta.
+     Este é um recorte do editor de verdade: barra com desfazer/refazer e o par
+     desktop/mobile, painel lateral com abas e tema de cores, e a tela com os
+     blocos, um deles selecionado. Continua tudo em silhueta, como os outros
+     mocks — o que interessa é reconhecer a ferramenta, não ler o conteúdo. */
   if (tipo === "vitrine") {
     return (
-      <>
-        <div className="dl-browser__banner" />
-        <div className="dl-skel" style={{ width: "38%", height: "11px" }} />
-        <div className="dl-browser__mini">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="dl-browser__minicard">
-              <div className="dl-browser__minithumb" />
-              <div className="dl-skel" style={{ width: "80%" }} />
-            </div>
-          ))}
+      <div className="dl-builder">
+        <div className="dl-builder__barra">
+          <span className="dl-builder__acoes">
+            <i /><i />
+          </span>
+          <span className="dl-builder__modos">
+            <i className="is-on" /><i />
+          </span>
+          <span className="dl-mono dl-builder__salvo">● SALVO</span>
         </div>
-      </>
+
+        <div className="dl-builder__corpo">
+          <aside className="dl-builder__painel">
+            <span className="dl-builder__abas">
+              <i className="is-on" /><i />
+            </span>
+            <span className="dl-skel dl-builder__rot" />
+            <span className="dl-builder__cores">
+              {/* Quatro amostras, não cinco: a quinta não cabia na largura do
+                  painel e escapava por fora dele. */}
+              {[ACCENT, GOLD, MINT, "#0ea5e9"].map((cor, i) => (
+                <i key={cor} className={i === 0 ? "is-on" : ""} style={{ background: cor }} />
+              ))}
+            </span>
+            <span className="dl-skel dl-builder__rot" style={{ width: "46%" }} />
+            {[68, 40].map((v) => (
+              <span key={v} className="dl-builder__slider">
+                <i style={{ width: `${v}%` }} />
+              </span>
+            ))}
+            {/* Os campos de dados da imobiliária fecham o painel por baixo — é o
+                que ele tem no editor de verdade, e é o que impede a coluna de
+                terminar no meio quando a moldura estica. */}
+            <span className="dl-builder__campos">
+              <i /><i />
+            </span>
+          </aside>
+
+          <div className="dl-builder__tela">
+            {BUILDER_BLOCOS.map((b) => (
+              <span
+                key={b.id}
+                className={`dl-builder__bloco${b.sel ? " is-sel" : ""}`}
+                style={{ gridArea: b.id }}
+              >
+                <em className="dl-mono">{b.nome}</em>
+                {b.sel
+                  ? ["no", "ne", "so", "se"].map((quina) => (
+                      <i key={quina} className={`dl-builder__alca dl-builder__alca--${quina}`} />
+                    ))
+                  : null}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -811,41 +1042,84 @@ function Tela({ tipo }) {
     );
   }
 
+  /* Multi-tenant não é uma lista — era assim que ela estava, e assim ela era a
+     mesma tela da célula de usuários, que é uma lista de verdade. Aqui cada
+     imobiliária é um ambiente fechado: quadro próprio, cor própria, vitrine
+     própria, e uma parede tracejada separando um do outro. */
   if (tipo === "tenants") {
     return (
-      <div className="dl-browser__rows">
-        {["Imobiliária Centro", "Casa Nobre", "Alto Padrão", "Vista Mar", "Recanto Sul", "Novo Lar"].map(
-          (nome, i) => (
-            <div key={nome} className="dl-browser__linha">
-              <span className="dl-browser__av" />
-              <span className="dl-browser__lin">
-                <span className="dl-skel" style={{ width: `${76 - (i % 4) * 11}%` }} />
-                <span className="dl-skel" style={{ width: "34%", opacity: 0.55 }} />
+      <>
+        <div className="dl-browser__chips">
+          <span className="dl-mono dl-browser__chip dl-browser__chip--ok">● 4 TENANTS ATIVOS</span>
+          <span className="dl-mono dl-browser__chip">BANCO · USUÁRIOS · VITRINE</span>
+        </div>
+        <div className="dl-tenants">
+          {TENANTS.map((t) => (
+            <div key={t.slug} className="dl-tenants__box" style={{ "--t": t.cor }}>
+              <span className="dl-tenants__topo">
+                <i className="dl-tenants__marca" />
+                <span className="dl-skel" style={{ width: "56%" }} />
               </span>
-              <span className="dl-mono dl-browser__chip dl-browser__chip--ok">● ISOLADO</span>
+              <span className="dl-tenants__vitrine">
+                <i /><i /><i /><i /><i /><i />
+              </span>
+              <span className="dl-mono dl-tenants__selo">
+                <ShieldCheck size={9} weight="fill" />
+                ISOLADO
+              </span>
             </div>
-          ),
-        )}
-      </div>
+          ))}
+        </div>
+      </>
     );
   }
 
-  // imoveis (padrão)
+  /* imoveis (padrão): a grade da vitrine em três esteiras que correm sozinhas,
+     alternando o sentido a cada linha. A grade parada mostrava seis imóveis; a
+     esteira mostra acervo, que é o que a célula promete. */
   return (
     <>
       <div className="dl-skel" style={{ width: "42%", height: "13px" }} />
-      <div className="dl-browser__grid">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="dl-browser__card">
-            <div className="dl-browser__thumb" />
-            <div className="dl-skel" style={{ width: "72%" }} />
-            <div className="dl-skel" style={{ width: "40%", opacity: 0.6 }} />
+      <div className="dl-esteira">
+        {[0, 1, 2].map((linha) => (
+          <div
+            key={linha}
+            className={`dl-esteira__linha${linha === 1 ? " dl-esteira__linha--dir" : ""}`}
+          >
+            {Array.from({ length: ESTEIRA_CARTOES * 2 }, (_, i) => {
+              /* Tudo que varia de cartão para cartão sai do índice DENTRO da
+                 cópia, e não do índice absoluto. O laço avança exatamente uma
+                 cópia, então na virada o cartão `n` assume o lugar do cartão
+                 `n + ESTEIRA_CARTOES`: se os dois tivessem desenhos diferentes,
+                 a emenda que a geometria fecha ao pixel voltaria a aparecer —
+                 agora pela troca do anúncio, no meio da tela. */
+              const n = i % ESTEIRA_CARTOES;
+              const desenho = ESTEIRA_ORDEM[linha][n];
+              return (
+                <span key={i} className="dl-esteira__card">
+                  <span
+                    className="dl-esteira__foto"
+                    style={{ "--giro": ESTEIRA_GIROS[(linha + n) % ESTEIRA_GIROS.length] }}
+                  >
+                    <svg viewBox="0 0 24 18" aria-hidden="true">{ESTEIRA_SILHUETAS[desenho]}</svg>
+                  </span>
+                  <span className="dl-skel" style={{ width: `${74 - (n % 3) * 11}%` }} />
+                  <span className="dl-skel" style={{ width: "42%", opacity: 0.55 }} />
+                </span>
+              );
+            })}
           </div>
         ))}
       </div>
     </>
   );
 }
+
+/* Telas que ocupam a moldura inteira em vez de ficarem ancoradas no topo. Elas
+   são quadros — as esteiras do acervo, o editor, os ambientes dos tenants —, e
+   quadro que termina no meio da moldura deixa um vão morto embaixo. As outras
+   são listas: elas acabam onde o conteúdo acaba, e é assim que devem acabar. */
+const TELAS_CHEIAS = new Set(["imoveis", "vitrine", "tenants"]);
 
 // Mock do painel dentro de uma moldura de navegador (seção de recursos).
 function BrowserMock({ recurso, indice }) {
@@ -862,7 +1136,12 @@ function BrowserMock({ recurso, indice }) {
         <div className="dl-browser__body">
           {/* A chave troca com o recurso: o React remonta o bloco e a animação
               de entrada roda de novo a cada mudança. */}
-          <div className="dl-browser__tela" key={indice} id="dl-tela-recurso" role="tabpanel">
+          <div
+            className={`dl-browser__tela${TELAS_CHEIAS.has(recurso.tela) ? " is-cheia" : ""}`}
+            key={indice}
+            id="dl-tela-recurso"
+            role="tabpanel"
+          >
             <Tela tipo={recurso.tela} />
           </div>
         </div>
@@ -880,16 +1159,7 @@ function Recursos() {
   const [manual, setManual] = useState(false);
   const botoes = useRef([]);
 
-  const [emMobile, setEmMobile] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 860px)").matches
-  );
-
-  useEffect(() => {
-    const consulta = window.matchMedia("(max-width: 860px)");
-    const aoMudar = (e) => setEmMobile(e.matches);
-    consulta.addEventListener("change", aoMudar);
-    return () => consulta.removeEventListener("change", aoMudar);
-  }, []);
+  const emMobile = useMedia("(max-width: 860px)");
 
   function selecionar(i) {
     setAtivo(i);
@@ -1104,18 +1374,31 @@ function EditorAoVivo() {
   const [fugas, setFugas] = useState({});
   const areaRef = useRef(null);
   const relogio = useRef(0);
+  /* Espelho do `saindo` para ler dentro dos handlers sem depender do estado
+     daquele render — e, principalmente, para o adiarVolta poder se calar
+     enquanto o fechamento está em curso. Ver a trava dentro dele. */
+  const saindoRef = useRef(false);
 
   // Apaga o texto e, só quando ele tiver sumido, devolve o bloco ao laço.
   function fechar() {
     clearTimeout(relogio.current);
+    saindoRef.current = true;
     setSaindo(true);
     relogio.current = setTimeout(() => {
+      saindoRef.current = false;
       setAberto(null);
       setSaindo(false);
     }, EDITOR_SAIDA);
   }
 
+  /* Fechar leva dois tempos, e no meio deles o bloco AINDA está aberto — o que
+     significa que o onPointerMove da tela continua ligado. Sem a trava abaixo,
+     qualquer tremida do mouse nesses milissegundos caía aqui, e o relógio que
+     este clearTimeout cancelava era justamente o que devolveria o bloco ao laço.
+     O resultado era um bloco aberto para sempre e sem texto: `saindo` já tinha
+     apagado a explicação, e o segundo tempo do fechamento nunca chegava. */
   function adiarVolta() {
+    if (saindoRef.current) return;
     clearTimeout(relogio.current);
     relogio.current = setTimeout(fechar, EDITOR_ESPERA);
   }
@@ -1161,6 +1444,7 @@ function EditorAoVivo() {
       fechar();
       return;
     }
+    saindoRef.current = false;
     setSaindo(false);
     setFugas(calcularFugas(id));
     setAberto(id);
@@ -1207,12 +1491,19 @@ function EditorAoVivo() {
               aria-expanded={aberto === id}
               aria-label={EDITOR_INFO[id].nome}
             >
-              {Array.from({ length: EDITOR_MIOLO[id] }, (_, k) => (
-                <i key={k} aria-hidden="true" />
-              ))}
-              {/* Fora do fluxo de propósito: cada bloco arruma as silhuetas com
-                  o próprio flex/grid, e um filho a mais viraria mais uma
-                  silhueta torta no meio delas. */}
+              {/* O desenho vive num embrulho só dele, e não solto no bloco: é o
+                  embrulho que carrega o arranjo daquele tipo de bloco, e é ele
+                  que recua inteiro quando a explicação abre — em vez de as
+                  silhuetas terem de ser apagadas uma a uma. */}
+              <span className="dl-ed__miolo" aria-hidden="true">
+                {Array.from({ length: EDITOR_MIOLO[id].itens }, (_, k) => (
+                  <i key={k}>
+                    {Array.from({ length: EDITOR_MIOLO[id].pecas }, (_, p) => (
+                      <span key={p} />
+                    ))}
+                  </i>
+                ))}
+              </span>
               <span className="dl-ed__info">
                 <b>{EDITOR_INFO[id].nome}</b>
                 <em>{EDITOR_INFO[id].texto}</em>
@@ -1252,16 +1543,28 @@ const INTERVALO_PLANO = 5000;
             que faz a escada existir: o fundo neutro dele é a referência de onde
             a progressão começa
      tinta  reserva estática para quem pede movimento reduzido, onde as ondas
-            não rodam */
+            não rodam
+     realce cor das peças de interface que acompanham o plano (etiqueta, ponto do
+            carrossel, botão "ver todos os recursos"). Nulo no Básico, e não por
+            falta: ele é o degrau neutro da escada, então fica com o lilás do
+            tema — a cor de destaque começa a existir a partir do Profissional.
+            É separada de `cor` porque aquela é a do NEON, que pode ser mais
+            saturada do que se lê bem em texto de 8 px */
 const FLARE = {
-  BASICO: { cor: "#3882f8b4", onda: null, tinta: null },
-  PROFISSIONAL: { cor: "#a855f7", onda: 0x5331b6, tinta: "rgba(83,49,182,0.22)" },
-  PREMIUM: { cor: "#f0c24b", onda: 0xa0732e, tinta: "rgba(160,115,46,0.22)" },
+  BASICO: { cor: "#3882f8b4", onda: null, tinta: null, realce: null },
+  PROFISSIONAL: { cor: "#a855f7", onda: 0x5331b6, tinta: "rgba(83,49,182,0.22)", realce: "#a855f7" },
+  PREMIUM: { cor: "#f0c24b", onda: 0xa0732e, tinta: "rgba(160,115,46,0.22)", realce: "#f0c24b" },
 };
+
+// A cor de realce de um plano, com o lilás do tema como piso (Básico).
+function realceDoPlano(chave) {
+  return FLARE[chave]?.realce || "var(--accent-soft)";
+}
 
 // Primeira cor de onda da escala: o efeito nasce nela, então a primeira
 // aparição já entra na cor certa em vez de atravessar meio espectro até ela.
 const ONDA_INICIAL = FLARE.PROFISSIONAL.onda;
+
 
 function Planos({ planos, aoTestar }) {
   const [caixaRef, visivel] = useReveal();
@@ -1273,9 +1576,7 @@ function Planos({ planos, aoTestar }) {
   const atualRef = useRef(0);
   atualRef.current = atual;
 
-  const [emCarrossel, setEmCarrossel] = useState(
-    () => typeof window !== "undefined" && window.matchMedia(CARROSSEL).matches,
-  );
+  const emCarrossel = useMedia(CARROSSEL);
 
   /* Cartão sob o mouse. É o que rege o fundo no desktop, onde não existe
      "cartão em foco": lá os três estão à vista ao mesmo tempo, e quem escolhe
@@ -1373,13 +1674,6 @@ function Planos({ planos, aoTestar }) {
   // desfaria justamente a comparação.
   const [abertos, setAbertos] = useState({});
 
-  useEffect(() => {
-    const consulta = window.matchMedia(CARROSSEL);
-    const aoMudar = (e) => setEmCarrossel(e.matches);
-    consulta.addEventListener("change", aoMudar);
-    return () => consulta.removeEventListener("change", aoMudar);
-  }, []);
-
   /* Centraliza o cartão no trilho. A conta sai de getBoundingClientRect, e não
      de offsetLeft, porque offsetLeft é medido a partir do primeiro ancestral
      posicionado — que aqui não é o trilho. */
@@ -1436,7 +1730,13 @@ function Planos({ planos, aoTestar }) {
   }, [emCarrossel]);
 
   return (
-    <div className="dl-plans-caixa" ref={caixaRef}>
+    <div
+      className="dl-plans-caixa"
+      ref={caixaRef}
+      /* Os pontos do carrossel vivem FORA dos cartões, então a cor do plano em
+         foco precisa descer por aqui — de dentro do cartão ela não alcançaria. */
+      style={{ "--realce": realceDoPlano(planos[atual]?.key) }}
+    >
       {/* Camada do fundo: fica atrás do conteúdo da seção inteira (z-index -1
           dentro do .dl-wrap, que é quem cria o contexto de empilhamento) e
           extravasa o respiro lateral para o clarão não terminar numa quina.
@@ -1445,7 +1745,11 @@ function Planos({ planos, aoTestar }) {
         className={`dl-plans-onda${ondaAtual ? " is-on" : ""}`}
         ref={ondaRef}
         aria-hidden="true"
-        style={{ "--tinta": FLARE[planos[atual]?.key]?.tinta || "transparent" }}
+        // A reserva estática segue o MESMO plano que rege as ondas, e não o
+        // cartão em foco: no desktop quem manda é o mouse, e amarrada ao índice
+        // do carrossel ela ficava presa no primeiro plano — ou seja, em nada,
+        // já que o Básico é o degrau neutro da escala.
+        style={{ "--tinta": FLARE[planoDaOnda?.key]?.tinta || "transparent" }}
       />
 
       <div
@@ -1464,7 +1768,10 @@ function Planos({ planos, aoTestar }) {
             key={p.key}
             className={`dl-plan${p.highlight ? " is-highlight" : ""}${i === atual ? " is-atual" : ""}`}
             delay={i * 110}
-            style={{ "--flare": FLARE[p.key]?.cor || "var(--accent-soft)" }}
+            style={{
+              "--flare": FLARE[p.key]?.cor || "var(--accent-soft)",
+              "--realce": realceDoPlano(p.key),
+            }}
             // Só o desktop usa: é daqui que sai a cor do fundo da seção quando
             // não há carrossel. A saída só limpa se o índice ainda for o dele,
             // senão o mouse passando de um cartão para o vizinho apagaria o
@@ -1565,6 +1872,134 @@ function Planos({ planos, aoTestar }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/* ── Faixa horizontal ────────────────────────────────────────────────────────
+   No desktop ela é uma esteira de CSS: gira sozinha e para quando o mouse
+   encosta. No celular não existe mouse, e uma faixa que passa sozinha sem poder
+   ser segurada é a pior peça de qualquer landing — o cartão que interessou some
+   antes de acabar de ser lido, e não há como trazê-lo de volta.
+
+   Então lá a faixa vira uma área rolável de verdade e o avanço passa a ser
+   escrito em scrollLeft, quadro a quadro, em vez de sair de um transform. É essa
+   troca que permite as duas coisas ao mesmo tempo: enquanto ninguém toca, o laço
+   empurra; ao primeiro gesto ele desliga de vez e sobra a rolagem nativa, com a
+   inércia que o sistema já dá.
+
+   O laço, porém, não pode desligar junto: a faixa é infinita nos dois modos. Nos
+   dois casos ele é a mesma volta de uma cópia da lista (ver FAIXA_COPIAS) — o
+   que muda é só quem escreve a posição, o relógio ou o dedo.
+   ────────────────────────────────────────────────────────────────────────── */
+function FaixaCorrida() {
+  const caixaRef = useRef(null);
+  const [solta, setSolta] = useState(false);
+  const emMobile = useMedia(CARROSSEL);
+
+  useEffect(() => {
+    const caixa = caixaRef.current;
+    if (!caixa || !emMobile || solta || reduzirMovimento()) return undefined;
+
+    let quadro = 0;
+    let antes = 0;
+    let pos = caixa.scrollLeft;
+
+    const passo = (agora) => {
+      // Teto no delta: uma aba em segundo plano volta com centenas de
+      // milissegundos acumulados, e sem o teto a faixa daria um salto na volta.
+      const dt = antes ? Math.min(agora - antes, 64) : 0;
+      antes = agora;
+
+      // Mesma cópia do meio que a rolagem livre usa, para o dedo já pegar a
+      // faixa num ponto de onde dá para ir aos dois lados.
+      const volta = faixaVolta(caixa);
+      if (volta) {
+        if (pos >= volta * 2) pos -= volta;
+        else if (pos < volta) pos += volta;
+      }
+      pos += (FAIXA_VELOCIDADE * dt) / 1000;
+      caixa.scrollLeft = pos;
+
+      quadro = requestAnimationFrame(passo);
+    };
+
+    quadro = requestAnimationFrame(passo);
+    return () => cancelAnimationFrame(quadro);
+  }, [emMobile, solta]);
+
+  /* Qualquer gesto de rolagem entrega o controle, e não o devolve mais. O sinal
+     não pode ser o evento de scroll: o próprio laço rola a caixa, e ele se
+     desligaria no primeiro quadro. */
+  useEffect(() => {
+    const caixa = caixaRef.current;
+    if (!caixa || !emMobile || solta) return undefined;
+    const assumir = () => setSolta(true);
+    const gestos = ["pointerdown", "touchstart", "wheel"];
+    gestos.forEach((g) => caixa.addEventListener(g, assumir, { passive: true }));
+    return () => gestos.forEach((g) => caixa.removeEventListener(g, assumir));
+  }, [emMobile, solta]);
+
+  /* O laço, agora com o dedo no comando: a posição é trazida de volta para a
+     cópia do meio sempre que sai dela, e o último cartão volta a ser seguido
+     pelo primeiro.
+
+     QUANDO enrolar é o detalhe que decide se isto fica bom ou irritante:
+     escrever em scrollLeft no meio de um impulso CANCELA o impulso, e o
+     movimento morre na mão de quem acabou de arrastar. Por isso a regra normal é
+     esperar a rolagem assentar — parada, a troca de cópia não se vê nem se
+     sente, porque as duas mostram a mesma coisa. Só perto das pontas de verdade
+     a volta é imediata: perder o impulso é ruim, bater na parede é pior. */
+  useEffect(() => {
+    const caixa = caixaRef.current;
+    if (!caixa || !emMobile || !solta) return undefined;
+
+    let repouso = 0;
+    const enrolar = () => {
+      const volta = faixaVolta(caixa);
+      if (!volta) return;
+      if (caixa.scrollLeft >= volta * 2) caixa.scrollLeft -= volta;
+      else if (caixa.scrollLeft < volta) caixa.scrollLeft += volta;
+    };
+
+    const aoRolar = () => {
+      const volta = faixaVolta(caixa);
+      if (volta && (caixa.scrollLeft < volta * 0.5 || caixa.scrollLeft > volta * 2.5)) enrolar();
+      clearTimeout(repouso);
+      repouso = setTimeout(enrolar, 140);
+    };
+
+    caixa.addEventListener("scroll", aoRolar, { passive: true });
+    return () => {
+      caixa.removeEventListener("scroll", aoRolar);
+      clearTimeout(repouso);
+    };
+  }, [emMobile, solta]);
+
+  return (
+    // O Reveal não repassa ref, então o embrulho fica com ele e a caixa rolável
+    // fica um nível abaixo — que é onde a máscara e o recorte já viviam.
+    <Reveal className="dl-marquee-wrap">
+      <div className="dl-marquee" ref={caixaRef}>
+        <div className="dl-marquee__track">
+          {Array.from({ length: FAIXA_COPIAS }, () => FAIXA).flat().map((c, i) => (
+            <div key={`${c.kind}-${i}`} className={`dl-fcard ${c.kind === "stat" ? `dl-fcard--${c.tone}` : ""}`}>
+              {c.kind === "stat" ? (
+                <>
+                  <strong className="dl-fcard__value">{c.value}</strong>
+                  <span className="dl-fcard__label">{c.label}</span>
+                </>
+              ) : (
+                <>
+                  <span className="dl-fcard__quote" aria-hidden="true">”</span>
+                  <h3 className="dl-fcard__title">{c.title}</h3>
+                  <p className="dl-fcard__desc">{c.desc}</p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Reveal>
   );
 }
 
@@ -1863,26 +2298,7 @@ export function DomusLandingPage() {
           </SectionHead>
         </div>
 
-        <Reveal className="dl-marquee">
-          <div className="dl-marquee__track">
-            {[...FAIXA, ...FAIXA].map((c, i) => (
-              <div key={`${c.kind}-${i}`} className={`dl-fcard ${c.kind === "stat" ? `dl-fcard--${c.tone}` : ""}`}>
-                {c.kind === "stat" ? (
-                  <>
-                    <strong className="dl-fcard__value">{c.value}</strong>
-                    <span className="dl-fcard__label">{c.label}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="dl-fcard__quote" aria-hidden="true">”</span>
-                    <h3 className="dl-fcard__title">{c.title}</h3>
-                    <p className="dl-fcard__desc">{c.desc}</p>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        </Reveal>
+        <FaixaCorrida />
       </section>
 
       {/* ── Planos ── */}
@@ -2133,8 +2549,11 @@ const CSS = `
 }
 .dl-head__desc { font-size: 14px; line-height: 1.78; color: var(--subtle); padding-bottom: 6px; }
 
-/* ── Seções ── */
-.dl-section { padding: clamp(64px, 8vw, 112px) 0; border-top: 1px solid var(--line-soft); }
+/* ── Seções ──
+   O respiro é uma variável porque a camada de cor dos planos precisa saber dele:
+   ela nasce dentro do .dl-wrap, que só começa DEPOIS do respiro, e sem o valor
+   não teria como alcançar as bordas da seção. */
+.dl-section { --pad-sec: clamp(64px, 8vw, 112px); padding: var(--pad-sec) 0; border-top: 1px solid var(--line-soft); }
 .dl-section--alt { background: var(--bg-alt); }
 .dl-section--tight { padding-bottom: clamp(48px, 6vw, 80px); }
 
@@ -2449,37 +2868,169 @@ const CSS = `
   font-size: 9px; color: var(--placeholder); letter-spacing: 0.05em;
 }
 .dl-browser__body { padding: 18px; display: grid; gap: 14px; }
-.dl-browser__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.dl-browser__card {
-  border-radius: 11px; border: 1px solid var(--line); background: var(--surface);
-  padding: 11px; display: grid; gap: 7px;
-}
-.dl-browser__thumb {
-  height: 56px; border-radius: 8px;
-  background: linear-gradient(135deg, rgba(99,102,241,0.38), rgba(212,175,55,0.24));
-}
 
-/* ── Telas do mock (uma por recurso) ── */
-.dl-browser__body { flex: 1; align-content: start; }
+/* ── Esteiras de imóveis (tela "imóveis") ──
+   Três filas de cartões correndo sozinhas, em sentidos alternados. A grade
+   parada que estava aqui mostrava seis imóveis; a esteira mostra acervo, que é
+   o que a célula promete.
+
+   Cada fila continua com a largura da moldura (é item de uma coluna de flex, e
+   portanto esticado nela): é isso que deixa a largura do cartão sair de uma
+   porcentagem — três por tela, sempre —, e o que passa disso simplesmente
+   transborda para os lados, onde o pai recorta.
+
+   O percurso é uma cópia inteira da lista, e não "-50%": a lista tem
+   ESTEIRA_CARTOES × 2 cartões, então meia lista são 6 cartões, que medem
+   6 × (largura + vão) = 2 × (100% + vão). Com -50% o laço erraria por um vão e
+   daria um pulo por volta. */
+.dl-esteira {
+  --vao: 9px;
+  display: flex; flex-direction: column; gap: var(--vao); overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+/* As três filas dividem a altura em partes iguais, seja qual for a moldura: a
+   base zerada faz o reparto sair só do que sobra, e não do conteúdo de cada uma
+   (que é igual nas três, mas depende da altura da foto — daí a circularidade). */
+.dl-esteira__linha {
+  display: flex; gap: var(--vao); flex: 1 1 0; min-height: 0;
+  animation: dlEsteira 26s linear infinite;
+}
+/* A do meio corre ao contrário. Durações diferentes de propósito: iguais, as
+   três filas andariam em bloco e a alternância de sentido viraria um zigue-zague
+   marcado em vez de movimento. */
+.dl-esteira__linha--dir { animation-direction: reverse; animation-duration: 33s; }
+.dl-esteira__linha:last-child { animation-duration: 29s; }
+@keyframes dlEsteira {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-2 * (100% + var(--vao)))); }
+}
+.dl-esteira__card {
+  flex: 0 0 calc((100% - var(--vao) * 2) / 3);
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 8px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+/* A foto é quem cede ou toma altura quando a moldura muda; as legendas embaixo
+   têm tamanho de texto e não deveriam esticar junto. O piso é o que segura o
+   cartão de pé caso a fila não esteja sendo esticada por ninguém. */
+.dl-esteira__foto {
+  display: grid; place-items: center; overflow: hidden;
+  flex: 1; min-height: 26px; border-radius: 6px;
+  background: linear-gradient(var(--giro, 135deg), rgba(99,102,241,0.38), rgba(212,175,55,0.24));
+}
+/* A silhueta é um selo no meio da foto, não a foto inteira: ela sugere o que o
+   anúncio é sem virar ilustração. O teto em pixels impede que ela engorde junto
+   com o cartão quando a moldura estica. */
+.dl-esteira__foto svg { width: 42%; max-width: 40px; height: auto; display: block; }
+.dl-esteira__vulto { fill: rgba(255,255,255,0.26); }
+.dl-esteira__vao { fill: rgba(10,10,11,0.36); }
+.dl-esteira__card .dl-skel { flex: 0 0 auto; height: 5px; }
+
+/* ── Telas do mock (uma por recurso) ──
+   Coluna de flex, e não grade: a moldura tem altura fixa e o miolo dela precisa
+   poder ser esticado ou não, tela a tela. Numa grade com align-content: start
+   toda tela ficava colada no topo — o que serve às listas e deixava um vão morto
+   embaixo dos quadros (ver TELAS_CHEIAS). */
+.dl-browser__body { flex: 1; display: flex; flex-direction: column; }
 .dl-browser__tela { display: grid; gap: 14px; align-content: start; animation: dlTela 0.42s var(--ease-out) both; }
+.dl-browser__tela.is-cheia { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* O quadro é sempre o último filho — o que vem antes é o rótulo ou os chips. */
+.dl-browser__tela.is-cheia > :last-child { flex: 1; min-height: 0; }
 @keyframes dlTela {
   from { opacity: 0; transform: translateY(9px); }
   to { opacity: 1; transform: none; }
 }
 
-.dl-browser__banner {
-  height: 76px; border-radius: 10px;
-  background: linear-gradient(135deg, rgba(99,102,241,0.42), rgba(212,175,55,0.30));
+/* ── Editor de vitrine (tela "vitrine") ──
+   Barra de ferramentas, painel lateral e tela com os blocos: as três partes do
+   editor de verdade, na ordem em que elas aparecem lá. O que estava aqui antes
+   era uma vitrine publicada — o resultado, não a ferramenta —, e a célula fala
+   justamente da ferramenta. */
+.dl-builder { display: flex; flex-direction: column; gap: 10px; }
+.dl-builder__barra {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 9px; border-bottom: 1px solid var(--line);
 }
-.dl-browser__mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
-.dl-browser__minicard {
-  border-radius: 9px; border: 1px solid var(--line); background: var(--surface);
-  padding: 8px; display: grid; gap: 6px;
+.dl-builder__acoes { display: flex; gap: 4px; }
+.dl-builder__acoes i { width: 18px; height: 14px; border-radius: 4px; background: rgba(255,255,255,0.10); }
+/* Par desktop/mobile: um segmentado, com o lado ativo aceso. */
+.dl-builder__modos { display: flex; gap: 3px; padding: 2px; border-radius: 6px; background: rgba(255,255,255,0.05); }
+.dl-builder__modos i { width: 22px; height: 10px; border-radius: 4px; background: rgba(255,255,255,0.10); }
+.dl-builder__modos i.is-on { background: rgba(255,255,255,0.34); }
+.dl-builder__salvo { margin-left: auto; font-size: 8px; color: var(--mint); }
+
+.dl-builder__corpo { display: grid; grid-template-columns: 86px 1fr; gap: 10px; flex: 1; min-height: 0; }
+.dl-builder__painel {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 9px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line);
 }
-.dl-browser__minithumb {
-  height: 32px; border-radius: 6px;
-  background: linear-gradient(135deg, rgba(99,102,241,0.34), rgba(212,175,55,0.20));
+.dl-builder__abas { display: flex; gap: 4px; }
+.dl-builder__abas i { flex: 1; height: 11px; border-radius: 4px; background: rgba(255,255,255,0.08); }
+.dl-builder__abas i.is-on { background: rgba(129,140,248,0.45); }
+.dl-builder__rot { width: 62%; height: 4px; }
+.dl-builder__cores { display: flex; gap: 4px; }
+/* Podem encolher, mas não crescer, e continuam redondas ao encolher (aspect-
+   ratio no lugar de uma altura fixa). O painel é estreito e fica mais estreito
+   ainda no celular: com largura fixa, a última amostra escapava por fora dele em
+   vez de a fila se ajustar. */
+.dl-builder__cores i {
+  flex: 0 1 11px; aspect-ratio: 1 / 1; min-width: 0;
+  border-radius: 999px; box-shadow: 0 0 0 1px rgba(255,255,255,0.16);
 }
+.dl-builder__cores i.is-on { box-shadow: 0 0 0 1.5px #fff; }
+.dl-builder__slider { display: block; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.10); }
+.dl-builder__slider i { display: block; height: 100%; border-radius: 999px; background: var(--accent-soft); }
+.dl-builder__campos { display: flex; flex-direction: column; gap: 5px; margin-top: auto; }
+.dl-builder__campos i { height: 16px; border-radius: 5px; background: rgba(255,255,255,0.06); }
+
+/* A tela repete o arranjo padrão do editor: linha cheia em cima e embaixo,
+   destaques dividindo a do meio com os imóveis.
+
+   As linhas são proporcionais, e não fixas em pixels: a moldura estica com a
+   altura disponível, e com alturas fixas a linha do meio comia toda a sobra
+   enquanto cabeçalho, widgets e rodapé continuavam três lascas no topo e no pé.
+   Em fração elas crescem juntas e o desenho continua sendo uma página. */
+.dl-builder__tela {
+  display: grid; gap: 5px; padding: 6px;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas: "cab cab" "tit tit" "des imo" "wid wid" "rod rod";
+  grid-template-rows: 0.45fr 0.55fr 2.4fr 0.85fr 0.4fr;
+  min-height: 170px;
+  border-radius: 10px; background: rgba(0,0,0,0.32); border: 1px solid var(--line);
+}
+.dl-builder__bloco {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  border-radius: 5px; overflow: hidden;
+  background: linear-gradient(135deg, rgba(99,102,241,0.32), rgba(212,175,55,0.20));
+}
+.dl-builder__bloco em {
+  font-style: normal; font-size: 7px; letter-spacing: 0.14em;
+  color: rgba(255,255,255,0.66); white-space: nowrap; overflow: hidden;
+}
+/* O selecionado é o que conta a história — sem ele isto seria um wireframe
+   qualquer. Contorno tracejado, alças nas quinas e um pulso lento, como o bloco
+   em foco no editor. O overflow volta a visível porque as alças ficam metade
+   para fora da caixa. */
+.dl-builder__bloco.is-sel {
+  overflow: visible;
+  background: linear-gradient(135deg, rgba(99,102,241,0.50), rgba(212,175,55,0.30));
+  outline: 1px dashed rgba(129,140,248,0.9); outline-offset: 1px;
+  animation: dlBuilderSel 3.2s ease-in-out infinite;
+}
+@keyframes dlBuilderSel {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(129,140,248,0.45); }
+  55%, 99% { box-shadow: 0 0 0 6px rgba(129,140,248,0); }
+}
+.dl-builder__alca {
+  position: absolute; width: 5px; height: 5px; border-radius: 999px;
+  background: #fff; box-shadow: 0 0 0 1px rgba(99,102,241,0.9);
+}
+.dl-builder__alca--no { top: -2.5px; left: -2.5px; }
+.dl-builder__alca--ne { top: -2.5px; right: -2.5px; }
+.dl-builder__alca--so { bottom: -2.5px; left: -2.5px; }
+.dl-builder__alca--se { bottom: -2.5px; right: -2.5px; }
 
 .dl-browser__kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .dl-browser__kpi {
@@ -2588,6 +3139,52 @@ const CSS = `
 }
 .dl-browser__chip--ok { color: var(--mint); border-color: rgba(20,184,166,0.28); }
 
+/* ── Tenants (tela "multi-tenant seguro") ──
+   Quatro ambientes fechados, cada um na própria cor e no próprio quadro, com uma
+   parede tracejada correndo entre eles. A tela anterior era a mesma lista de
+   linhas da célula de usuários: mesmo desenho, mesma leitura — os tenants
+   pareciam registros de uma tabela, que é o contrário de "isolados".
+
+   A parede é do contêiner, e não de cada quadro: ela precisa passar POR ENTRE os
+   quatro, no vão da grade, e não em volta de cada um (isso a borda já faz). */
+.dl-tenants {
+  position: relative; display: grid;
+  grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px;
+}
+.dl-tenants::before,
+.dl-tenants::after { content: ""; position: absolute; pointer-events: none; z-index: 0; }
+.dl-tenants::before { left: 50%; top: -3px; bottom: -3px; border-left: 1px dashed rgba(255,255,255,0.11); }
+.dl-tenants::after { top: 50%; left: -3px; right: -3px; border-top: 1px dashed rgba(255,255,255,0.11); }
+
+.dl-tenants__box {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; border-radius: 11px;
+  background: var(--surface); border: 1px solid var(--line);
+  /* A faixa lateral na cor do tenant é o que faz os quatro quadros pararem de
+     ser o mesmo quadro repetido quatro vezes. */
+  border-left: 2px solid var(--t);
+}
+.dl-tenants__topo { display: flex; align-items: center; gap: 7px; }
+.dl-tenants__marca {
+  width: 15px; height: 15px; border-radius: 5px; flex: 0 0 auto;
+  background: var(--t); opacity: 0.85;
+}
+/* A vitrine é quem absorve a altura que sobra no quadro; a marca em cima e o
+   selo embaixo ficam do tamanho que têm. */
+.dl-tenants__vitrine {
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+  gap: 5px; flex: 1; min-height: 34px;
+}
+.dl-tenants__vitrine i {
+  display: block; border-radius: 5px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--t) 34%, transparent), rgba(255,255,255,0.05));
+}
+.dl-tenants__selo {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 7.5px; color: var(--t); opacity: 0.9;
+}
+
 /* ── Editor ── */
 .dl-editor { display: grid; grid-template-columns: 1fr 0.85fr; gap: 48px; align-items: center; }
 /* ── Editor ao vivo ──
@@ -2689,8 +3286,19 @@ const CSS = `
   transform: translate(var(--fuga-x, 0px), var(--fuga-y, 0px));
   opacity: 0.5;
 }
-/* As silhuetas somem para o texto ocupar o lugar delas. */
-.dl-ed__bloco.is-aberto > i { opacity: 0; transition: opacity 0.2s ease; }
+/* ── O desenho ao abrir ──
+   Antes as silhuetas eram apagadas e o bloco aberto ficava só com o texto — logo
+   ele, que é o único lugar da demonstração onde dá tempo de olhar o desenho com
+   calma. Agora o miolo recua para a faixa de baixo e vira a ilustração do que o
+   texto está explicando: quem lê "grade de imóveis" vê a grade de imóveis ali
+   embaixo, maior do que ela jamais aparece no laço.
+
+   A geometria é sempre numérica (top/height em %, e não inset zerado) porque é
+   o que permite transicionar: de "auto" para 38% não há percurso nenhum. */
+.dl-ed__bloco.is-aberto .dl-ed__miolo {
+  top: 62%; height: 38%; opacity: 0.66;
+  border-top: 1px solid rgba(255,255,255,0.12);
+}
 
 .dl-ed__info {
   position: absolute; inset: 0; z-index: 1;
@@ -2701,6 +3309,8 @@ const CSS = `
      começar a encolher (a espera correspondente está no .dl-ed__bloco). */
   transition: opacity 0.18s ease;
 }
+/* Cede a faixa de baixo para o desenho e se centra no que sobra. */
+.dl-ed__bloco.is-aberto .dl-ed__info { bottom: 38%; }
 /* Aparecer é o contrário: espera o bloco crescer para então escrever nele. */
 .dl-ed__bloco.is-aberto .dl-ed__info { opacity: 1; transition: opacity 0.26s ease 0.22s; }
 /* Primeiro tempo do fechamento: o bloco ainda está aberto, e só o texto sai. O
@@ -2718,43 +3328,101 @@ const CSS = `
   color: var(--subtle); max-width: 46ch;
 }
 
-/* Miolo: silhuetas de uma cor só, sem texto, insinuando o que cada bloco é —
-   mesma ideia das linhas do mockup do hero. Como os blocos mudam de tamanho o
-   tempo todo (linha inteira ou meia linha), o arranjo é sempre proporcional. */
-.dl-ed__bloco i { display: block; border-radius: 3px; background: rgba(255,255,255,0.125); }
+/* ── Miolo dos blocos ──
+   Silhuetas de uma cor só, sem texto, insinuando o que cada bloco é — mesma
+   ideia das linhas do mockup do hero. Como os blocos mudam de tamanho o tempo
+   todo (linha inteira ou meia linha), o arranjo é sempre proporcional.
 
-/* Marca à esquerda, itens de menu empurrados para a direita pelo margin auto. */
-.dl-ed__bloco--header { display: flex; align-items: center; gap: 5px; padding: 0 9px; }
-.dl-ed__bloco--header i { width: 15px; height: 4px; border-radius: 999px; }
-.dl-ed__bloco--header i:first-child {
+   Duas camadas de contraste: a silhueta que tem PEÇAS dentro (um cartão, um
+   painel) recua para superfície e quem desenha são as peças. Sem esse recuo o
+   cartão seria uma mancha clara, e o que estivesse dentro dele desapareceria no
+   próprio fundo.
+
+   Todos os seletores daqui para baixo passam por .dl-ed__miolo de propósito: o
+   peso de duas classes deixa as regras de tipo (i, span) fora de qualquer
+   disputa com o que editorCSS() escreve nos blocos, que é geometria. */
+.dl-ed__miolo {
+  position: absolute; left: 0; right: 0; top: 0; height: 100%;
+  transition: top 0.42s var(--ease-out), height 0.42s var(--ease-out), opacity 0.3s ease;
+}
+.dl-ed__miolo i { display: block; border-radius: 3px; background: rgba(255,255,255,0.125); }
+.dl-ed__miolo span { display: block; border-radius: 999px; background: rgba(255,255,255,0.30); }
+
+/* Cabeçalho: marca à esquerda, menu empurrado para a direita pelo margin auto. */
+.dl-ed__bloco--header .dl-ed__miolo {
+  display: flex; align-items: center; gap: 6px; padding: 0 9px;
+}
+.dl-ed__bloco--header .dl-ed__miolo i { width: 15px; height: 4px; border-radius: 999px; }
+.dl-ed__bloco--header .dl-ed__miolo i:first-child {
   width: 13px; height: 13px; border-radius: 4px; margin-right: auto;
 }
 
-.dl-ed__bloco--titulo {
+/* Título: sobretítulo curto, a chamada e a linha de apoio — a abertura da
+   página, na mesma hierarquia com que ela aparece na vitrine. */
+.dl-ed__bloco--titulo .dl-ed__miolo {
   display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 0 11px;
 }
-.dl-ed__bloco--titulo i { width: 52%; height: 5px; border-radius: 999px; }
-.dl-ed__bloco--titulo i:last-child { width: 30%; height: 4px; opacity: 0.72; }
+.dl-ed__bloco--titulo .dl-ed__miolo i { width: 52%; height: 6px; border-radius: 999px; }
+.dl-ed__bloco--titulo .dl-ed__miolo i:first-child { width: 16%; height: 3px; opacity: 0.6; }
+.dl-ed__bloco--titulo .dl-ed__miolo i:last-child { width: 30%; height: 4px; opacity: 0.72; }
 
-.dl-ed__bloco--destaques {
+/* Destaques: três cartões, cada um com um selo e duas linhas. */
+.dl-ed__bloco--destaques .dl-ed__miolo {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 7px;
 }
-.dl-ed__bloco--destaques i { border-radius: 4px; }
+.dl-ed__bloco--destaques .dl-ed__miolo i {
+  border-radius: 5px; background: rgba(255,255,255,0.09);
+  display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 6px;
+}
+.dl-ed__bloco--destaques .dl-ed__miolo span { width: 78%; height: 3px; }
+.dl-ed__bloco--destaques .dl-ed__miolo span:first-child {
+  width: 9px; height: 9px; border-radius: 3px; margin-bottom: 2px;
+}
+.dl-ed__bloco--destaques .dl-ed__miolo span:last-child { width: 48%; opacity: 0.7; }
 
-.dl-ed__bloco--imoveis {
+/* Imóveis: a grade da vitrine. Cada cartão tem a foto e a legenda embaixo — é a
+   silhueta que mais precisava de miolo, porque "grade de retângulos" é o que
+   qualquer bloco parece de longe. */
+.dl-ed__bloco--imoveis .dl-ed__miolo {
   display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
   gap: 5px; padding: 6px;
 }
+.dl-ed__bloco--imoveis .dl-ed__miolo i {
+  border-radius: 4px; background: rgba(255,255,255,0.09);
+  display: flex; flex-direction: column; gap: 3px; padding: 3px; min-height: 0;
+}
+.dl-ed__bloco--imoveis .dl-ed__miolo span:first-child {
+  flex: 1; min-height: 5px; border-radius: 3px;
+}
+.dl-ed__bloco--imoveis .dl-ed__miolo span:last-child { flex: 0 0 auto; width: 66%; height: 3px; }
 
-.dl-ed__bloco--widgets {
+/* Widgets: painéis livres. O botão é a peça que faz o painel virar convite, e
+   não mais um bloco de texto qualquer. */
+.dl-ed__bloco--widgets .dl-ed__miolo {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; padding: 7px;
 }
-.dl-ed__bloco--widgets i { border-radius: 4px; }
-
-.dl-ed__bloco--rodape {
-  display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 9px;
+.dl-ed__bloco--widgets .dl-ed__miolo i {
+  border-radius: 5px; background: rgba(255,255,255,0.09);
+  display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 7px;
 }
-.dl-ed__bloco--rodape i { width: 20px; height: 4px; border-radius: 999px; }
+.dl-ed__bloco--widgets .dl-ed__miolo span { width: 82%; height: 3px; }
+.dl-ed__bloco--widgets .dl-ed__miolo span:nth-child(2) { width: 58%; opacity: 0.7; }
+.dl-ed__bloco--widgets .dl-ed__miolo span:last-child {
+  width: 30px; max-width: 62%; height: 7px; margin-top: 3px;
+  background: rgba(255,255,255,0.42);
+}
+
+/* Rodapé: a régua que fecha a página e, embaixo dela, os links. A régua é o que
+   o separa do cabeçalho — sem ela os dois eram a mesma fila de pílulas. */
+.dl-ed__bloco--rodape .dl-ed__miolo {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: center; align-content: center; gap: 6px; padding: 0 10px;
+}
+.dl-ed__bloco--rodape .dl-ed__miolo i { width: 20px; height: 4px; border-radius: 999px; }
+.dl-ed__bloco--rodape .dl-ed__miolo i:first-child {
+  flex: 0 0 100%; width: auto; height: 1px;
+  border-radius: 0; opacity: 0.5; margin-bottom: 3px;
+}
 
 /* Ponteiro desenhado em CSS: um losango com a ponta no canto superior
    esquerdo, que é o ponto que a animação leva até o centro do bloco. */
@@ -2827,9 +3495,20 @@ ${editorCSS()}
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
 }
-.dl-marquee__track { display: flex; gap: 14px; width: max-content; animation: dlMarquee 60s linear infinite; }
+.dl-marquee__track {
+  --vao: 14px;
+  display: flex; gap: var(--vao); width: max-content;
+  animation: dlMarquee 60s linear infinite;
+}
 .dl-marquee:hover .dl-marquee__track { animation-play-state: paused; }
-@keyframes dlMarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+/* O percurso é UMA cópia da lista, e não metade do trilho: com três cópias no
+   trilho (ver FAIXA_COPIAS) a metade cai no meio de um cartão. A correção de um
+   terço de vão fecha a conta — o trilho tem um vão a menos que os cartões, e sem
+   ela o laço erraria por alguns pixels a cada volta. */
+@keyframes dlMarquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-100% / 3 - var(--vao) / 3)); }
+}
 .dl-fcard {
   flex: 0 0 auto; width: 268px; min-height: 168px; padding: 22px 24px;
   border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
@@ -2855,9 +3534,38 @@ ${editorCSS()}
 }
 .dl-plan:last-child { border-right: 0; }
 .dl-plan.is-highlight { background: var(--surface); }
+/* ── Etiqueta "mais popular" ──
+   Virou uma pastilha na cor do plano (--realce, o mesmo roxo do neon do cartão),
+   com o fundo em movimento em vez de chapado.
+
+   O movimento é um degradê largo atravessando a pastilha, e NÃO as ondas do
+   Vanta, que era a ideia original. Elas não servem aqui, e a razão é do próprio
+   efeito: o WAVES monta a malha da onda em função do tamanho do elemento, então
+   numa caixa pequena a fase quase não varia de um vértice para o outro e a
+   superfície sai plana — um contexto WebGL a mais para entregar exatamente uma
+   cor sólida. Medido: liso a 104 × 17, liso a 320 × 190 e ainda liso a 900 × 520.
+   As ondas da seção só têm relevo porque a camada delas é a seção inteira. */
 .dl-plan__tag {
-  position: absolute; top: 14px; right: 18px; font-size: 8.5px; letter-spacing: 0.13em;
-  color: var(--accent-soft);
+  position: absolute; top: 12px; right: 14px; z-index: 3;
+  display: inline-flex; align-items: center;
+  padding: 4px 9px; border-radius: 999px;
+  font-size: 8.5px; letter-spacing: 0.13em; line-height: 1;
+  color: #fff;
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--realce) 74%, #000) 0%,
+    var(--realce) 24%,
+    color-mix(in srgb, var(--realce) 62%, #fff) 46%,
+    var(--realce) 68%,
+    color-mix(in srgb, var(--realce) 74%, #000) 100%
+  );
+  background-size: 320% 100%;
+  box-shadow: 0 5px 16px -7px color-mix(in srgb, var(--realce) 85%, transparent);
+  animation: dlTagOnda 7s linear infinite;
+}
+@keyframes dlTagOnda {
+  from { background-position: 0% 50%; }
+  to { background-position: -320% 50%; }
 }
 .dl-plan__name { font-size: 26px; font-weight: 700; letter-spacing: -0.035em; color: var(--strong); }
 .dl-plan__desc { font-size: 13px; line-height: 1.7; color: var(--subtle); margin-top: 8px; min-height: 66px; }
@@ -2922,14 +3630,26 @@ ${editorCSS()}
 
    Fica atrás de tudo pelo z-index negativo, que aqui não escapa da seção
    porque o .dl-wrap tem z-index 1 e portanto cria o próprio contexto. */
+/* O deslocamento vertical é o respiro da seção, e não um número redondo: a
+   camada é filha do .dl-wrap, que começa no fim do respiro de cima e termina no
+   começo do de baixo. Com os -70px que estavam aqui, tudo que passasse disso
+   ficava de fora — e, num respiro de 112px, sobravam duas faixas de --bg-alt sem
+   cor nenhuma exatamente onde a seção encosta nas vizinhas, que é onde a emenda
+   se vê.
+
+   A máscara também abriu. Os raios agora passam da metade da caixa (128% e 104%
+   contra os 72% e 68% anteriores), então o miolo opaco alcança as quatro bordas
+   e a queda para transparente sobra só para as quinas — antes ela terminava bem
+   dentro da seção, e era ela, não o tamanho da camada, que apagava a cor antes
+   da hora. */
 .dl-plans-onda {
   position: absolute; z-index: -1; pointer-events: none;
-  top: -70px; bottom: -70px;
+  top: calc(-1 * var(--pad-sec)); bottom: calc(-1 * var(--pad-sec));
   left: calc(50% - 50vw); right: calc(50% - 50vw);
   opacity: 0; transition: opacity 0.9s ease;
-  background: radial-gradient(70% 62% at 50% 48%, var(--tinta, transparent), transparent 72%);
-  -webkit-mask-image: radial-gradient(72% 68% at 50% 50%, #000 34%, transparent 100%);
-  mask-image: radial-gradient(72% 68% at 50% 50%, #000 34%, transparent 100%);
+  background: radial-gradient(78% 74% at 50% 48%, var(--tinta, transparent), transparent 74%);
+  -webkit-mask-image: radial-gradient(128% 104% at 50% 50%, #000 44%, transparent 100%);
+  mask-image: radial-gradient(128% 104% at 50% 50%, #000 44%, transparent 100%);
 }
 .dl-plans-onda.is-on { opacity: 0.5; }
 
@@ -2957,7 +3677,11 @@ ${editorCSS()}
   background: rgba(255,255,255,0.24);
   transition: width 0.35s var(--ease-out), background 0.35s ease;
 }
-.dl-plans__ponto.is-on::before { width: 20px; background: var(--accent-soft); }
+/* O ponto aceso sai na cor do plano em foco — o --realce desce do
+   .dl-plans-caixa, porque aqui já se está fora dos cartões. A transição de
+   background que o ::before já tinha faz a cor deslizar de um plano para o
+   outro em vez de trocar de estalo. */
+.dl-plans__ponto.is-on::before { width: 20px; background: var(--realce, var(--accent-soft)); }
 
 /* ── FAQ ── */
 .dl-faq { border-top: 1px solid var(--line); }
@@ -3139,8 +3863,18 @@ ${editorCSS()}
     padding: 10px 0; background: var(--bg);
   }
   /* Preso no topo, o painel não pode comer a tela inteira: o que sobra é para
-     as abas, que são o conteúdo desta seção. */
-  .dl-browser { max-height: min(468px, 42vh); }
+     as abas, que são o conteúdo desta seção.
+
+     Altura FIXA, e não um teto: cada recurso tem uma tela de altura diferente,
+     então com teto o painel grudado mudava de tamanho a cada troca. Isso
+     empurrava tudo que vem embaixo, o que mexia na rolagem, o que trocava o
+     recurso de novo — o tremor entre as células ao rolar. Com altura fixa a
+     troca de tela não move um pixel do que está em volta.
+
+     O "flex: 0 0 auto" é o que faz a altura valer: como item de uma coluna de
+     flex, a medida da moldura vinha do flex-basis, e uma altura declarada ao
+     lado de "flex: 1" é simplesmente ignorada no eixo principal. */
+  .dl-browser { flex: 0 0 auto; height: min(468px, 42vh); max-height: none; }
 }
 
 @media (max-width: 640px) {
@@ -3179,9 +3913,16 @@ ${editorCSS()}
      menor que "Ver planos" e o texto vazaria do botão. */
   .dl-hero__copy .dl-btn-row > :last-child { width: calc(var(--acao) / 2); min-width: max-content; }
   .dl-browser__body { padding: 14px; gap: 11px; }
-  .dl-browser__thumb { height: 44px; }
-  .dl-browser__banner { height: 60px; }
   .dl-browser__chart { height: 74px; }
+  .dl-esteira { --vao: 7px; }
+  .dl-esteira__card { padding: 6px; gap: 4px; }
+  .dl-esteira__foto { min-height: 20px; }
+  .dl-esteira__foto svg { max-width: 28px; }
+  .dl-builder__corpo { grid-template-columns: 70px 1fr; gap: 8px; }
+  .dl-builder__tela { min-height: 132px; }
+  .dl-tenants { gap: 9px; }
+  .dl-tenants__box { padding: 8px; gap: 6px; }
+  .dl-tenants__vitrine { min-height: 26px; gap: 4px; }
   .dl-hero__shapes { display: none; }
   .dl-def { padding: 22px 20px; }
   .dl-journey { grid-template-columns: 1fr; }
@@ -3274,10 +4015,24 @@ ${editorCSS()}
      um e meio cortado, e a máscara recua para não comer o que aparece. */
   .dl-fcard { width: 224px; min-height: 150px; padding: 18px 20px; }
   .dl-fcard__value { font-size: 32px; }
+  /* ── Faixa rolável ──
+     Aqui a faixa deixa de ser uma esteira de CSS e vira área de rolagem: quem
+     empurra passa a ser o laço em scrollLeft do FaixaCorrida, que para de vez ao
+     primeiro toque e devolve a faixa para o dedo. Sem isto os dois brigariam —
+     o transform continuaria correndo por baixo da rolagem.
+
+     O eixo vertical precisa ser declarado junto: com um dos eixos em "auto" e o
+     outro em "visible", o "visible" vira "auto" sozinho e sobra uma barra de
+     rolagem vertical dentro da faixa. */
   .dl-marquee {
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; -ms-overflow-style: none;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
     mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
   }
+  .dl-marquee::-webkit-scrollbar { display: none; }
+  .dl-marquee__track { animation: none; }
 
   /* A barra do mock do editor não comporta URL e aviso lado a lado; some a
      URL, que é enfeite, e fica o aviso, que é a história da seção. */
@@ -3338,14 +4093,13 @@ ${editorCSS()}
     position: relative; z-index: 1;
   }
 
-  /* Na tela estreita a seção é mais alta e a marca de cor precisa subir junto,
-     senão ela morre antes do título. A máscara também abre, porque aqui a
-     camada é quase quadrada e a elipse padrão deixaria os cantos vazios. */
+  /* Na tela estreita a seção é bem mais alta que larga, então a mancha de cor
+     precisa esticar na vertical — a elipse do desktop morreria antes do título.
+     O alcance até as bordas da seção continua vindo do --pad-sec herdado. */
   .dl-plans-onda {
-    top: -48px; bottom: -30px;
-    background: radial-gradient(115% 70% at 50% 45%, var(--tinta, transparent), transparent 72%);
-    -webkit-mask-image: radial-gradient(112% 74% at 50% 46%, #000 40%, transparent 100%);
-    mask-image: radial-gradient(112% 74% at 50% 46%, #000 40%, transparent 100%);
+    background: radial-gradient(125% 62% at 50% 46%, var(--tinta, transparent), transparent 74%);
+    -webkit-mask-image: radial-gradient(150% 96% at 50% 48%, #000 46%, transparent 100%);
+    mask-image: radial-gradient(150% 96% at 50% 48%, #000 46%, transparent 100%);
   }
   .dl-plan {
     flex: 0 0 var(--dl-cartao); scroll-snap-align: center;
@@ -3441,8 +4195,13 @@ ${editorCSS()}
     width: 100%; margin: 0 0 18px; padding: 9px 0;
     display: inline-flex; align-items: center; justify-content: center; gap: 7px;
     background: none; border: 0; border-radius: 0; box-shadow: none; transform: none;
-    font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-soft);
+    font-family: inherit; font-size: 12.5px; font-weight: 600;
+    /* Cada cartão pinta o seu, então o botão acompanha o plano que está sendo
+       lido — e no Básico o --realce é o próprio lilás do tema, que é a cor que
+       ele já tinha. */
+    color: var(--realce, var(--accent-soft));
     cursor: pointer;
+    transition: color 0.3s ease;
   }
   .dl-root .dl-plan__mais:hover,
   .dl-root .dl-plan__mais:active {
@@ -3470,6 +4229,10 @@ ${editorCSS()}
 
 @media (prefers-reduced-motion: reduce) {
   .dl-marquee__track, .dl-stage__float, .dl-chip-float, .dl-pulse { animation: none; }
+  /* As esteiras de imóveis param na primeira cópia, que já é uma grade cheia; o
+     bloco selecionado do editor fica só com o contorno, sem o pulso; e a
+     etiqueta do plano fica com o degradê parado, que já é a cor dela. */
+  .dl-esteira__linha, .dl-builder__bloco.is-sel, .dl-plan__tag { animation: none; }
   /* As ondas do fundo nem chegam a ser criadas (ver o efeito em Planos); no
      lugar delas fica a mancha de cor estática da própria camada. O flare do
      cartão já é sombra parada, então não há o que desligar nele. */
