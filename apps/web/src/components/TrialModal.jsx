@@ -312,8 +312,12 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
   return (
     <div className="pm-veu">
       <style>{CSS}</style>
+      {/* No celular a caixa é a tela inteira, e no passo do perfil ela vira
+          coluna flexível para os dois cartões dividirem entre si toda a altura
+          que sobra (ver .tm-caixa--perfil). Nos outros passos ela segue sendo
+          um bloco que rola. */}
       <div
-        className="pm-caixa dl-glass"
+        className={`pm-caixa dl-glass${!enviado && passo === "perfil" ? " tm-caixa--perfil" : ""}`}
         ref={caixaRef}
         role="dialog"
         aria-modal="true"
@@ -777,20 +781,38 @@ const CSS = `${MODAL_CSS}
 }
 
 @media (max-width: 560px) {
-  /* ── Escolha do perfil ──
-     Empilhados, os dois cartões passavam de uma tela inteira só para fazer uma
-     pergunta de um clique. O ícone sai da linha própria e vai para o lado do
-     título, e a seta pendurada embaixo some: o cartão inteiro já é o botão, a
-     seta era enfeite ocupando uma faixa de altura só dela. */
+  /* ── Escolha do perfil, em tela cheia ──
+     O modal ocupa a tela inteira no celular (ver modalCSS). O passo do perfil é
+     o único que não tem formulário nenhum: são duas portas, e nada mais. Então
+     as duas portas tomam tudo o que sobra abaixo do texto de abertura, em
+     partes iguais — o primeiro cartão vai até a metade da altura, o segundo até
+     o pé do modal, e o alvo de toque passa a ser metade de tela cada.
+
+     Antes os cartões vinham comprimidos (ícone ao lado do título, seta
+     escondida) porque empilhados eles passavam de uma tela. Com a tela toda o
+     problema se inverteu — agora sobra altura —, então some a compressão e vale
+     o arranjo em coluna do desktop, que tem a seta ancorada na última linha
+     (o "1fr" do texto empurra ela para o rodapé do cartão). */
+  .tm-caixa--perfil { display: flex; flex-direction: column; }
+  /* flex-basis 0 nas duas: sem isso a altura do conteúdo entraria na conta e o
+     cartão de texto mais longo ficaria maior que o outro. */
+  .tm-escolha { flex: 1 1 0; margin-top: 16px; grid-template-rows: 1fr 1fr; }
+  /* Dentro do cartão alto, NENHUMA linha vira 1fr: a linha elástica engoliria
+     sozinha toda a sobra e abriria um vão de 60px no meio do texto. As quatro
+     linhas ficam no tamanho do conteúdo e o bloco todo se centra — a sobra vai
+     para as pontas, onde ela lê como respiro em vez de buraco.
+
+     E o conteúdo cresce junto com o cartão: um botão de meia tela com ícone e
+     título de tamanho de cartãozinho pareceria um cartão pequeno esticado. */
   .dl-root .tm-opcao {
-    grid-template-rows: auto auto; grid-template-columns: auto 1fr;
-    gap: 6px 12px; padding: 14px 16px;
+    grid-template-rows: repeat(4, auto); align-content: center;
+    gap: 10px; padding: 18px;
   }
-  .tm-opcao__icone { width: 34px; height: 34px; border-radius: 10px; grid-row: span 2; align-self: start; }
-  .tm-opcao__icone svg { width: 18px; height: 18px; }
-  .tm-opcao__titulo { align-self: end; }
-  .tm-opcao__texto { font-size: 12px; line-height: 1.5; }
-  .tm-opcao__seta { display: none; }
+  .tm-opcao__icone { width: 48px; height: 48px; border-radius: 14px; }
+  .tm-opcao__icone svg { width: 25px; height: 25px; }
+  .tm-opcao__titulo { font-size: 17px; }
+  .tm-opcao__texto { font-size: 13px; line-height: 1.6; }
+  .tm-opcao__seta { font-size: 17px; }
   .tm-rodape { margin-top: 14px; font-size: 11px; }
 
   /* ── Endereço da vitrine ──

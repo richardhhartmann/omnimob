@@ -272,6 +272,14 @@ export function DomusSplash() {
 
 const CSS = `
 .ds-overlay {
+  /* Largura do palco: é ela que dimensiona a marca E o brilho de fundo, para os
+     dois crescerem juntos em vez de o segundo ficar num tamanho fixo. */
+  --ds-palco: min(1040px, 92vw);
+  /* Diâmetro do brilho quando a marca está montada, e a fração dele que o
+     brilho ocupa enquanto ainda é só o símbolo (ver ds-brilho). */
+  --ds-brilho: calc(var(--ds-palco) * 1.45);
+  --ds-brilho-ini: 0.48;
+
   position: fixed; inset: 0; z-index: 2000; /* acima do cabeçalho fixo (1000) */
   display: grid; place-items: center;
   overflow: hidden;
@@ -283,11 +291,22 @@ const CSS = `
 .ds-overlay.is-saindo { background-color: transparent; pointer-events: none; }
 .ds-overlay.is-saindo::before { animation: ds-apagar 380ms ease both; }
 
-/* Brilho quente atrás da marca, só para o fundo não ser um preto chapado. */
+/* Brilho quente atrás da marca, só para o fundo não ser um preto chapado.
+
+   Ele acompanha a marca em vez de ter tamanho próprio: nasce do tamanho do
+   símbolo sozinho e abre até cobrir o lockup inteiro, no mesmo instante (1,43 s)
+   e na mesma curva em que o D sai do vão e a palavra se monta. Antes era um
+   círculo fixo de 900px — menor que o lockup terminado (1040px), então a marca
+   acabava a abertura maior que o próprio brilho.
+
+   Fica centralizado na tela e não precisa se mover: o palco entra deslocado
+   justamente para o símbolo cair no centro, e termina com o lockup no mesmo
+   centro. Só o diâmetro muda. */
 .ds-overlay::before {
-  content: ""; position: absolute; width: 900px; height: 900px; max-width: 150vw;
+  content: ""; position: absolute;
+  width: var(--ds-brilho); height: var(--ds-brilho);
   background: radial-gradient(closest-side, rgba(212,175,55,0.13), transparent 70%);
-  animation: ds-brilho 2.2s ease-out both;
+  animation: ds-brilho 2.5s ease-out both;
 }
 
 /* Cabeçalho: sumido durante todo o roteiro, aparece só quando o lockup pousa.
@@ -325,7 +344,7 @@ body.ds-com-splash-saindo .dl-header {
    ampliado e encolhe até o lockup, como era antes. */
 .ds-stage {
   --ds-zoom: 1;
-  position: relative; width: min(1040px, 92vw);
+  position: relative; width: var(--ds-palco);
   transform-origin: 10.06% 50%;
   animation: ds-palco 0.67s cubic-bezier(0.16, 1, 0.3, 1) 1.43s both;
 }
@@ -377,9 +396,18 @@ body.ds-com-splash-saindo .dl-header {
   animation: ds-letra 0.55s cubic-bezier(0.16, 1, 0.3, 1) calc(1.92s + var(--atraso)) both;
 }
 
+/* 0 → 0,45 s acende junto com o símbolo; segura enquanto o traço do D é
+   desenhado (o desenho não muda de área nesse trecho, então o brilho também
+   não); 1,43 s → 2,50 s abre até o tamanho cheio, terminando junto com a última
+   letra da cascata. */
 @keyframes ds-brilho {
-  from { opacity: 0; transform: scale(0.7); }
-  to   { opacity: 1; transform: scale(1); }
+  0%    { opacity: 0; transform: scale(calc(var(--ds-brilho-ini) * 0.72)); }
+  18%   { opacity: 1; transform: scale(var(--ds-brilho-ini)); }
+  57.2% {
+    opacity: 1; transform: scale(var(--ds-brilho-ini));
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  100%  { opacity: 1; transform: scale(1); }
 }
 @keyframes ds-apagar {
   to { opacity: 0; }
@@ -440,6 +468,12 @@ body.ds-com-splash-saindo .dl-header {
   .ds-svg { transform: scale(${ESCALA_COLUNA}); transform-origin: ${ORIGEM_COLUNA}; }
   .ds-stage { animation-name: ds-palco-coluna; }
   .ds-palavra { animation: ds-palavra 0.67s cubic-bezier(0.16, 1, 0.3, 1) 1.43s both; }
+  /* Em coluna a marca é quase quadrada (≈0,86 × 0,59 da largura do palco) em vez
+     de uma faixa deitada, e o desenho todo já entra ampliado em ${ESCALA_COLUNA}× —
+     o brilho fecha um pouco e parte de mais perto, senão viraria um véu chapado
+     do tamanho da tela. Também termina centrado: o palco sobe o que a coluna
+     cresceu para baixo, e o conjunto para no meio da tela. */
+  .ds-overlay { --ds-brilho: calc(var(--ds-palco) * 1.15); --ds-brilho-ini: 0.62; }
 }
 @keyframes ds-palco-coluna {
   from { transform: translate(39.94%, 0) scale(var(--ds-zoom)); }

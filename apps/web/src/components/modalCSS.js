@@ -146,19 +146,51 @@ export const MODAL_CSS = `
 .pm-feito .pm-botao { margin-top: 10px; }
 
 @media (max-width: 560px) {
-  /* ── Modal no celular ──
-     A caixa deixa de ser um cartão flutuando no meio da tela e passa a ocupá-la
-     quase inteira: com 24px de véu de cada lado sobravam 296px de conteúdo para
-     um formulário de cadastro, e cada campo ficava mais estreito que o texto
-     que ele guarda. O véu encolhe, a caixa cresce e o que não couber rola
-     dentro dela — a rolagem fica na caixa, e não na página atrás. */
-  .pm-veu { padding: 12px; align-items: start; }
-  .pm-caixa {
-    padding: 26px 18px 22px; border-radius: 18px;
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
-    margin-top: 12px;
+  /* ── Modal no celular: tela cheia ──
+     A caixa deixa de ser um cartão flutuando no meio da tela e passa a SER a
+     tela. Não é só ganho de largura (com 24px de véu de cada lado sobravam
+     296px para um formulário de cadastro, e cada campo ficava mais estreito que
+     o texto que ele guarda): sem bordas nem cantos, o modal para de parecer uma
+     janelinha por cima do site e vira a etapa em que a pessoa está — que é o
+     que ele de fato é, já que não dá para fazer mais nada enquanto ele está
+     aberto.
+
+     O véu vira bloco simples e ganha altura em dvh: sendo position fixed,
+     ele mediria a viewport GRANDE em boa parte dos navegadores de celular, e o
+     pé da caixa ficaria debaixo da barra do navegador. A caixa toma 100% dessa
+     altura definida e rola por dentro — a rolagem fica nela, nunca na página
+     atrás.
+
+     Tudo isto é escrito a partir do véu, e não solto no .pm-caixa: a
+     TrialConfirmarPage usa a mesma caixa FORA de qualquer véu, no meio de uma
+     página com logo em cima e respiro em volta. Lá ela continua sendo um
+     cartão — só o respiro lateral encolhe, que é o que vale para as duas. */
+  .pm-caixa { padding: 26px 18px 22px; border-radius: 18px; }
+
+  .pm-veu {
+    display: block; padding: 0; overflow: hidden;
+    height: 100vh; height: 100dvh;
   }
+  .pm-veu .pm-caixa {
+    width: 100%; height: 100%; max-height: none; margin-top: 0;
+    border-radius: 0;
+    overflow-y: auto;
+    padding: calc(26px + env(safe-area-inset-top)) 18px calc(22px + env(safe-area-inset-bottom));
+  }
+  /* Encostada nas quatro bordas, a moldura do vidro não delimita mais nada —
+     vira um fio claro grudado na borda da tela, e a sombra projetada não tem
+     para onde cair.
+
+     O vidro também escurece. Como cartão, ele era uma placa opaca por cima de
+     um véu translúcido: a landing aparecia em volta, nunca atrás do texto. Em
+     tela cheia é o contrário — todo o conteúdo do modal passa a ficar por cima
+     da landing borrada, e com os 5% de branco originais dava para ler a página
+     de trás debaixo dos campos. */
+  .pm-veu .pm-caixa.dl-glass {
+    border: none; box-shadow: none;
+    background: rgba(12,12,15,0.6);
+  }
+  .pm-veu .pm-fechar { top: calc(14px + env(safe-area-inset-top)); right: 14px; }
   /* O ✕ é um quadrado no canto de cima; sem esta reserva o texto de abertura
      passa por baixo dele. */
   .pm-eyebrow, .pm-titulo { padding-right: 42px; }

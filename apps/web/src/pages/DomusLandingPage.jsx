@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import FOG from "vanta/dist/vanta.fog.min";
 import WAVES from "vanta/dist/vanta.waves.min";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Buildings,
@@ -1556,6 +1556,90 @@ const FLARE = {
   PREMIUM: { cor: "#f0c24b", onda: 0xa0732e, tinta: "rgba(160,115,46,0.22)", realce: "#f0c24b" },
 };
 
+/* ── Lista de recursos do cartão, que abre e fecha ───────────────────────────
+   O botão "Ver todos os recursos" trocava as duas listas de um quadro para o
+   outro: o cartão saltava de altura e o texto aparecia já no lugar novo, sem
+   nada ligando um estado ao outro.
+
+   Aqui ele abre. O molde é o mesmo do FaqItem — painel de altura animada com
+   overflow escondido — com uma diferença que muda a implementação: no FAQ o
+   conteúdo é SEMPRE o mesmo, então basta uma altura medida. Aqui as duas listas
+   são diferentes de verdade (o resumo tem as linhas "Tudo do Plano X", que a
+   comparação descarta, e para no teto de quatro), então não há um conteúdo só
+   para medir — há dois, e o painel viaja de um tamanho ao outro.
+
+   Daí as duas ficarem montadas ao mesmo tempo, empilhadas na mesma célula de
+   grade: é o que permite medir as duas a qualquer momento e, de quebra, faz a
+   troca ser um cruzamento em vez de um corte seco. Quem sai apaga rápido; quem
+   entra acende logo atrás, com as linhas escalonadas, enquanto o painel cresce.
+
+   A medida é feita em useLayoutEffect, antes da primeira pintura: com useEffect
+   o cartão apareceria por um quadro na altura da grade (a da lista completa,
+   que é a mais alta) e desabaria em seguida. Como a altura sai de `auto` para
+   pixels, esse primeiro ajuste não anima — que é justamente o certo, porque
+   ninguém abriu nada ainda.
+   ────────────────────────────────────────────────────────────────────────── */
+function PlanoRecursos({ id, plano, resumido, emCarrossel }) {
+  const completaRef = useRef(null);
+  const resumoRef = useRef(null);
+  const [alturas, setAlturas] = useState(null);
+
+  useLayoutEffect(() => {
+    // Fora do carrossel não existe o botão: a lista completa fica solta, sem
+    // altura escrita, e volta a ser o item flexível que empurra o botão de
+    // teste para o pé do cartão.
+    if (!emCarrossel) {
+      setAlturas(null);
+      return undefined;
+    }
+    const medir = () =>
+      setAlturas({
+        completa: completaRef.current?.offsetHeight || 0,
+        resumo: resumoRef.current?.offsetHeight || 0,
+      });
+    medir();
+    /* As linhas refluem quando o cartão muda de largura (girar o aparelho) e
+       quando a fonte termina de carregar. Sem remedir, um cartão aberto ficaria
+       cortado ou com sobra embaixo — o mesmo motivo do FaqItem. */
+    const observer = new ResizeObserver(medir);
+    if (completaRef.current) observer.observe(completaRef.current);
+    if (resumoRef.current) observer.observe(resumoRef.current);
+    return () => observer.disconnect();
+  }, [emCarrossel]);
+
+  const altura = alturas ? (resumido ? alturas.resumo : alturas.completa) : null;
+
+  return (
+    <div
+      className={`dl-plan__recursos${resumido ? " is-resumido" : ""}`}
+      id={id}
+      style={altura ? { height: `${altura}px` } : undefined}
+    >
+      <ul className="dl-plan__list" ref={completaRef} aria-hidden={resumido || undefined}>
+        {plano.linhas.map((l, i) => (
+          <li key={l.label} className={l.incluso ? "" : "is-off"} style={{ "--i": i }}>
+            <span aria-hidden="true">{l.incluso ? <IconeCheck size={12} /> : <IconeX size={11} />}</span>
+            {l.label}
+          </li>
+        ))}
+      </ul>
+
+      {/* O resumo só existe no carrossel: no desktop os três planos aparecem
+          lado a lado e é a tabela inteira que permite comparar de relance. */}
+      {emCarrossel ? (
+        <ul className="dl-plan__list dl-plan__list--resumo" ref={resumoRef} aria-hidden={!resumido || undefined}>
+          {plano.resumo.map((l) => (
+            <li key={l.label} className={l.heranca ? "is-heranca" : ""}>
+              <span aria-hidden="true"><IconeCheck size={12} /></span>
+              {l.label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 // A cor de realce de um plano, com o lilás do tema como piso (Básico).
 function realceDoPlano(chave) {
   return FLARE[chave]?.realce || "var(--accent-soft)";
@@ -1640,8 +1724,26 @@ function Planos({ planos, aoTestar }) {
     /* O WAVES mede o elemento uma vez e só remede no resize da janela. Como a
        camada acompanha a altura da seção — que muda quando alguém abre a
        tabela de um plano —, sem isto o canvas ficaria com a altura antiga e as
-       ondas terminariam no meio do fundo. */
-    const observador = new ResizeObserver(() => efeito.resize());
+       ondas terminariam no meio do fundo.
+
+       Remedir sozinho, porém, faz o fundo piscar. O resize() do Vanta chama
+       setSize no renderer, que realoca o buffer do WebGL — e buffer realocado
+       nasce transparente. O retorno do ResizeObserver é entregue DEPOIS dos
+       requestAnimationFrame do quadro e ANTES da pintura, então quem vai para
+       a tela naquele quadro é o buffer vazio. Uma remedida = um quadro em
+       branco; e como a tabela dos planos abre em 0,42s mudando de altura a
+       cada quadro, viravam dezenas deles seguidos.
+
+       Redesenhar aqui mesmo, ainda dentro do retorno de chamada, devolve a
+       imagem ao buffer antes da pintura e o quadro em branco deixa de existir.
+       Tem de ser o render direto: animationLoop() agenda o próprio rAF, e o
+       laço passaria a rodar duas vezes por quadro. */
+    const observador = new ResizeObserver(() => {
+      efeito.resize();
+      if (efeito.renderer && efeito.scene && efeito.camera) {
+        efeito.renderer.render(efeito.scene, efeito.camera);
+      }
+    });
     observador.observe(el);
 
     let quadro = requestAnimationFrame(function passo() {
@@ -1799,25 +1901,13 @@ function Planos({ planos, aoTestar }) {
             </div>
             <span className="dl-mono dl-plan__nota">{p.nota}</span>
 
-            {resumido ? (
-              <ul className="dl-plan__list dl-plan__list--resumo" id={`plano-lista-${p.key}`}>
-                {p.resumo.map((l) => (
-                  <li key={l.label} className={l.heranca ? "is-heranca" : ""}>
-                    <span aria-hidden="true"><IconeCheck size={12} /></span>
-                    {l.label}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <ul className="dl-plan__list" id={`plano-lista-${p.key}`}>
-                {p.linhas.map((l) => (
-                  <li key={l.label} className={l.incluso ? "" : "is-off"}>
-                    <span aria-hidden="true">{l.incluso ? <IconeCheck size={12} /> : <IconeX size={11} />}</span>
-                    {l.label}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <PlanoRecursos
+              id={`plano-lista-${p.key}`}
+              plano={p}
+              resumido={resumido}
+              emCarrossel={emCarrossel}
+            />
+
 
             {emCarrossel ? (
               <button
@@ -3574,7 +3664,11 @@ ${editorCSS()}
 .dl-plan__price span { font-size: 13px; color: var(--subtle); }
 .dl-plan__nota { color: var(--placeholder); font-size: 9px; margin-top: 6px; display: block; }
 /* Respiro maior antes do botão: separa a lista do CTA sem precisar de régua. */
-.dl-plan__list { display: grid; gap: 11px; margin: 22px 0 38px; flex: 1; }
+/* O painel guarda o respiro e o esticão; a lista, só o desenho das linhas.
+   Trocado de lugar porque no celular são DUAS listas dentro do mesmo painel, e
+   margem em cada uma delas entraria duas vezes na conta da altura. */
+.dl-plan__recursos { display: flex; flex-direction: column; flex: 1; margin: 22px 0 38px; }
+.dl-plan__list { display: grid; gap: 11px; flex: 1; }
 .dl-plan__list li { display: flex; gap: 10px; font-size: 13px; line-height: 1.55; color: var(--default); }
 .dl-plan__list li span { color: var(--mint); font-weight: 700; flex: 0 0 auto; }
 .dl-plan__list li.is-off { color: var(--placeholder); }
@@ -4188,9 +4282,67 @@ ${editorCSS()}
      A tabela de dez linhas era quase toda a altura do plano, e ela nem compara
      nada aqui: um cartão por vez, com sete linhas iguais em todos. Fica o que
      este plano acrescenta ao anterior; a tabela inteira continua a um toque. */
-  .dl-plan__list { margin: 16px 0 8px; gap: 9px; }
+  .dl-plan__list { gap: 9px; }
   .dl-plan__list--resumo li.is-heranca { color: var(--strong); font-weight: 600; }
   .dl-plan__list--resumo li.is-heranca span { color: var(--accent-soft); }
+
+  /* ── Abrir e fechar a lista ──
+     Quem cresce é o painel, com a altura escrita pelo JS (PlanoRecursos) e
+     transição na altura. As duas listas moram na MESMA célula da grade e se
+     cruzam lá dentro: sem isso, a que sai empurraria a que entra para baixo
+     antes de desaparecer, e o painel animaria a altura das duas somadas. */
+  .dl-plan__recursos {
+    display: grid; flex: none; margin: 16px 0 8px;
+    overflow: hidden;
+    transition: height 0.42s var(--ease-out);
+  }
+  .dl-plan__recursos > .dl-plan__list {
+    grid-area: 1 / 1;
+    /* No topo da célula, e não esticadas: esticada, cada lista passaria a ter a
+       altura do painel — que é exatamente a altura que se quer medir a partir
+       delas. A medida viraria a própria resposta. */
+    align-self: start; flex: none;
+  }
+  /* A lista escondida continua no DOM (é dela que sai a medida da outra ponta
+     da animação), mas não pega toque nem seleção. */
+  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo),
+  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
+    pointer-events: none;
+  }
+
+  /* O resumo entra e sai inteiro: são quatro linhas, e escaloná-las seria mais
+     enfeite do que leitura. */
+  .dl-plan__list--resumo {
+    transition: opacity 0.24s ease 0.12s, transform 0.34s var(--ease-out) 0.12s;
+  }
+  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
+    opacity: 0; transform: translateY(-5px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+  }
+
+  /* A tabela completa entra linha a linha, de cima para baixo, acompanhando o
+     painel que desce.
+
+     A cascata inteira cabe DENTRO dos 0,42s do painel: a última das dez linhas
+     fecha em 0,07 + 9×0,016 + 0,24 ≈ 0,45s. Com passo maior ela terminava por
+     volta dos 0,58s, e as últimas linhas acendiam num painel que já tinha
+     parado de crescer — o movimento acabava duas vezes.
+
+     E os 0,07s de espera na largada são curtos de propósito: eles existem para
+     não cruzar com o resumo apagando (0,12s), mas alongá-los abria um vão em
+     que o painel crescia vazio.
+
+     Fechar não escalona: o painel sobe em 0,42s, e linhas saindo em cascata
+     seriam recortadas pela borda dele no meio do próprio desaparecimento. */
+  .dl-plan__recursos > .dl-plan__list:not(.dl-plan__list--resumo) li {
+    transition:
+      opacity 0.24s ease calc(0.07s + var(--i, 0) * 16ms),
+      transform 0.32s var(--ease-out) calc(0.07s + var(--i, 0) * 16ms);
+  }
+  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo) li {
+    opacity: 0; transform: translateY(-6px);
+    transition: opacity 0.14s ease, transform 0.14s ease;
+  }
   .dl-root .dl-plan__mais {
     width: 100%; margin: 0 0 18px; padding: 9px 0;
     display: inline-flex; align-items: center; justify-content: center; gap: 7px;
@@ -4248,5 +4400,17 @@ ${editorCSS()}
   .dl-menu, .dl-menu__side { transition: none; }
   .dl-menu__links a { transform: none; transition: color 0.3s ease; transition-delay: 0s; }
   .dl-faq__panel, .dl-faq__a, .dl-faq__toggle, .dl-faq__bar { transition: none; }
+  /* A lista de recursos troca de estado sem percurso: o painel salta para a
+     altura nova e as linhas aparecem postas. Nenhum atraso pode sobrar, senão
+     as últimas linhas da tabela ficariam invisíveis por meio segundo depois do
+     toque — que é o oposto do que se pede aqui.
+
+     Com o prefixo .dl-root porque as regras da cascata escalonada são mais
+     específicas que o nome da classe sozinho, e sem ele este bloco perderia
+     para elas mesmo vindo por último. */
+  .dl-root .dl-plan__recursos,
+  .dl-root .dl-plan__recursos > .dl-plan__list,
+  .dl-root .dl-plan__recursos > .dl-plan__list li,
+  .dl-root .dl-plan__mais svg { transition: none; }
 }
 `;
