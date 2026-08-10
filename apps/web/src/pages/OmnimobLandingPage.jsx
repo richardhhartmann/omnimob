@@ -19,7 +19,7 @@ import {
   ChatCircleText,
 } from "@phosphor-icons/react";
 import { api } from "../api";
-import { DomusSplash } from "../components/DomusSplash";
+import { OmnimobSplash } from "../components/OmnimobSplash";
 import { TrialModal } from "../components/TrialModal";
 import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
 import { IconeCheck, IconeX } from "../components/Icones.jsx";
@@ -30,7 +30,7 @@ import {
   MINT,
   ROSE,
   Button,
-  DomusStyles,
+  OmnimobStyles,
   Eyebrow,
   LOGO_LOCKUP_HEADER_SRC,
   LOGO_SRC,
@@ -40,13 +40,13 @@ import {
   StatValue,
   reduzirMovimento,
   useReveal,
-} from "../styles/domusKit";
+} from "../styles/omnimobKit";
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Landing pública da Domus.
+   Landing pública da Omnimob.
 
    Os tokens e as primitivas (botões, vidro, reveal, contagem, eyebrow, grids
-   de hairline) vêm de `styles/domusKit.jsx` — aqui ficam só os blocos
+   de hairline) vêm de `styles/omnimobKit.jsx` — aqui ficam só os blocos
    exclusivos desta página: nav, hero com mockup isométrico, jornada, editor,
    marquee, planos, FAQ, CTA clara e footer.
    ──────────────────────────────────────────────────────────────────────────── */
@@ -113,12 +113,12 @@ const JORNADA = [
 // `tela`, `url` e `legenda` alimentam o mock ao lado: cada recurso mostra a
 // parte do produto de que está falando.
 const RECURSOS = [
-  { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar.", tela: "imoveis", url: "domus.app / imóveis", legenda: "PAINEL WEB · IMÓVEIS" },
-  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "domus.app / vitrine / editar", legenda: "PAINEL WEB · EDITOR DE VITRINE" },
-  { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel.", tela: "metricas", url: "domus.app / métricas", legenda: "PAINEL WEB · MÉTRICAS" },
-  { Icon: Megaphone, title: "Publicação em redes", desc: "Divulgue imóveis no Facebook, Instagram e WhatsApp com legenda pronta em poucos cliques.", tela: "redes", url: "domus.app / publicações", legenda: "PAINEL WEB · PUBLICAÇÕES" },
-  { Icon: UsersThree, title: "Usuários e permissões", desc: "Crie cargos com permissões granulares para corretores, marketing, gerência e mais.", tela: "usuarios", url: "domus.app / usuários", legenda: "PAINEL WEB · EQUIPE" },
-  { Icon: ShieldCheck, title: "Multi-tenant seguro", desc: "Cada imobiliária com seus próprios dados, usuários e vitrine — isolados e seguros.", tela: "tenants", url: "domus.app / admin", legenda: "SUPER-ADMIN · TENANTS" },
+  { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar.", tela: "imoveis", url: "omnimob.app / imóveis", legenda: "PAINEL WEB · IMÓVEIS" },
+  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "omnimob.app / vitrine / editar", legenda: "PAINEL WEB · EDITOR DE VITRINE" },
+  { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel.", tela: "metricas", url: "omnimob.app / métricas", legenda: "PAINEL WEB · MÉTRICAS" },
+  { Icon: Megaphone, title: "Publicação em redes", desc: "Divulgue imóveis no Facebook, Instagram e WhatsApp com legenda pronta em poucos cliques.", tela: "redes", url: "omnimob.app / publicações", legenda: "PAINEL WEB · PUBLICAÇÕES" },
+  { Icon: UsersThree, title: "Usuários e permissões", desc: "Crie cargos com permissões granulares para corretores, marketing, gerência e mais.", tela: "usuarios", url: "omnimob.app / usuários", legenda: "PAINEL WEB · EQUIPE" },
+  { Icon: ShieldCheck, title: "Multi-tenant seguro", desc: "Cada imobiliária com seus próprios dados, usuários e vitrine — isolados e seguros.", tela: "tenants", url: "omnimob.app / admin", legenda: "SUPER-ADMIN · TENANTS" },
 ];
 
 // De quantos em quantos milissegundos o carrossel avança sozinho.
@@ -538,12 +538,12 @@ const FAQ = [
   },
   {
     q: "Os dados da minha imobiliária ficam separados dos das outras?",
-    a: "Ficam. A Domus é multi-tenant: cada imobiliária tem seus próprios imóveis, usuários, leads e vitrine, e toda requisição é filtrada pelo tenant de origem.",
+    a: "Ficam. A Omnimob é multi-tenant: cada imobiliária tem seus próprios imóveis, usuários, leads e vitrine, e toda requisição é filtrada pelo tenant de origem.",
   },
   /* A pergunta que trava quem já opera. Ela existe na página porque agora
      existe um caminho para ela: o teste pergunta o perfil logo na abertura e,
      para quem já tem imobiliária, coleta o que precisa ser trazido. A resposta
-     promete acompanhamento humano — que é o que a Domus faz hoje —, e não uma
+     promete acompanhamento humano — que é o que a Omnimob faz hoje —, e não uma
      importação automática, que ainda não existe. */
   {
     q: "Já uso outro sistema. Dá para trazer meus imóveis e clientes?",
@@ -733,7 +733,7 @@ function LandingHeader() {
             </div>
             <div className="dl-menu__block">
               <span className="dl-mono dl-menu__side-label">E-mail</span>
-              <a href="mailto:contato@domus.com" onClick={fechar} tabIndex={aberto ? 0 : -1}>contato@domus.com</a>
+              <a href="mailto:contato@omnimob.app" onClick={fechar} tabIndex={aberto ? 0 : -1}>contato@omnimob.app</a>
             </div>
             <div className="dl-menu__block">
               <span className="dl-mono dl-menu__side-label">Social</span>
@@ -747,7 +747,7 @@ function LandingHeader() {
       </div>
 
       <header className={`dl-header${rolou ? " is-scrolled" : ""}${aberto ? " is-menu-open" : ""}`}>
-        <Link to="/" className="dl-header__logo" onClick={fechar} aria-label="Domus — início">
+        <Link to="/" className="dl-header__logo" onClick={fechar} aria-label="Omnimob — início">
           {/* Arte própria do cabeçalho. Sem `height`: aqui o tamanho vem do
               CSS, para encolher junto com a barra ao rolar. */}
           <LogoLockup src={LOGO_LOCKUP_HEADER_SRC} className="dl-header__tipo" />
@@ -815,7 +815,7 @@ function DashboardMockup() {
             <span className="dl-dot" style={{ background: "#f87171" }} />
             <span className="dl-dot" style={{ background: "#fbbf24" }} />
             <span className="dl-dot" style={{ background: "#4ade80" }} />
-            <span className="dl-mono dl-mockup__url">domus.app / painel</span>
+            <span className="dl-mono dl-mockup__url">omnimob.app / painel</span>
           </div>
 
           <div className="dl-mockup__body">
@@ -1466,7 +1466,7 @@ function EditorAoVivo() {
         <span className="dl-dot" style={{ background: "#f87171" }} />
         <span className="dl-dot" style={{ background: "#fbbf24" }} />
         <span className="dl-dot" style={{ background: "#4ade80" }} />
-        <span className="dl-ed__url dl-mono">domus.app / vitrine / editar</span>
+        <span className="dl-ed__url dl-mono">omnimob.app / vitrine / editar</span>
         {/* Pisca uma vez por movimento, logo depois de soltar o bloco. */}
         <span className="dl-ed__salvo dl-mono" aria-hidden="true">
           <i className="dl-ed__ponto" />
@@ -1535,7 +1535,7 @@ const CARROSSEL = "(max-width: 640px)";
 const INTERVALO_PLANO = 5000;
 
 /* Cor de cada plano no carrossel. Uma escala que sobe junto com os planos: azul
-   é o tom de entrada, roxo é a cor da marca e dourado é o que a Domus já usa
+   é o tom de entrada, roxo é a cor da marca e dourado é o que a Omnimob já usa
    para o que é topo de linha.
 
      cor    contorno neon do cartão em foco
@@ -2118,7 +2118,7 @@ function StatsGrid() {
 
 // ── Página ──────────────────────────────────────────────────────────────────
 
-export function DomusLandingPage() {
+export function OmnimobLandingPage() {
   // -1 = todas fechadas. A lista abre inteira à vista, e quem escolhe o que
   // ler é o visitante — com uma já aberta, a primeira pergunta ganhava um
   // destaque que ela não tem sobre as outras.
@@ -2165,9 +2165,9 @@ export function DomusLandingPage() {
 
   return (
     <div className="dl-root">
-      <DomusStyles extra={CSS} />
+      <OmnimobStyles extra={CSS} />
 
-      <DomusSplash />
+      <OmnimobSplash />
 
       <TrialModal
         aberto={trialAberto}
@@ -2275,7 +2275,7 @@ export function DomusLandingPage() {
           ser refeito de lá para baixo (ver "Zebra do celular" no CSS). */}
       <section className="dl-section dl-section--alt" id="numeros">
         <div className="dl-wrap">
-          <SectionHead eyebrow="NÚMEROS DA DOMUS" strong="A plataforma completa" soft="para quem vive de vender imóveis.">
+          <SectionHead eyebrow="NÚMEROS DA OMNIMOB" strong="A plataforma completa" soft="para quem vive de vender imóveis.">
             Uma base só, pensada para imobiliárias brasileiras: imóveis, vitrine, leads, equipe e divulgação
             no mesmo painel.
           </SectionHead>
@@ -2302,7 +2302,7 @@ export function DomusLandingPage() {
 
           <Reveal className="dl-callout">
             <p>
-              Com a Domus, cada imóvel entra uma vez e aparece em todo lugar — na vitrine da sua imobiliária,
+              Com a Omnimob, cada imóvel entra uma vez e aparece em todo lugar — na vitrine da sua imobiliária,
               no post pronto para as redes e no painel de quem precisa acompanhar.
             </p>
             <p style={{ color: ACCENT_SOFT }}>
@@ -2357,7 +2357,7 @@ export function DomusLandingPage() {
       <section className="dl-section dl-section--alt" id="integracoes">
         <div className="dl-wrap">
           <SectionHead eyebrow="CANAIS E INTEGRAÇÕES" strong="Conectada aos canais" soft="onde seu cliente já está.">
-            A Domus liga o cadastro do imóvel aos canais que realmente trazem cliente, com a IA cuidando do
+            A Omnimob liga o cadastro do imóvel aos canais que realmente trazem cliente, com a IA cuidando do
             conteúdo dentro da própria plataforma.
           </SectionHead>
 
@@ -2383,7 +2383,7 @@ export function DomusLandingPage() {
       {/* ── Faixa de destaques ── */}
       <section className="dl-section dl-section--tight" id="porque">
         <div className="dl-wrap">
-          <SectionHead eyebrow="POR QUE DOMUS" strong="O que muda no dia a dia" soft="de quem usa.">
+          <SectionHead eyebrow="POR QUE OMNIMOB" strong="O que muda no dia a dia" soft="de quem usa.">
             Detalhes pequenos que aparecem toda semana na rotina da imobiliária.
           </SectionHead>
         </div>
@@ -2405,7 +2405,7 @@ export function DomusLandingPage() {
       {/* ── FAQ ── */}
       <section id="faq" className="dl-section">
         <div className="dl-wrap">
-          <SectionHead eyebrow="PERGUNTAS FREQUENTES" strong="Tudo sobre a Domus," soft="direto ao ponto.">
+          <SectionHead eyebrow="PERGUNTAS FREQUENTES" strong="Tudo sobre a Omnimob," soft="direto ao ponto.">
             As dúvidas que mais aparecem antes de começar.
           </SectionHead>
 
@@ -2432,7 +2432,7 @@ export function DomusLandingPage() {
               seção clara, a única em que os vazados do PNG (as janelas e o
               miolo do "D") têm fundo para aparecer. */}
           <span className="dl-cta__brand">
-            <img src={LOGO_SRC} alt="Domus" />
+            <img src={LOGO_SRC} alt="Omnimob" />
           </span>
           <Eyebrow tone={ACCENT_SOFT}>PRÓXIMO PASSO</Eyebrow>
           <h2 className="dl-cta__title">
@@ -2444,7 +2444,7 @@ export function DomusLandingPage() {
             Crie um ambiente de teste em segundos. Já tem uma imobiliária rodando? A gente traz a
             sua base junto.
           </p>
-          {/* Um botão só. A dupla "Testar grátis / Assinar a Domus" oferecia
+          {/* Um botão só. A dupla "Testar grátis / Assinar a Omnimob" oferecia
               uma escolha que não existe mais — e ainda dividia a atenção no
               exato ponto em que a página pede uma decisão. */}
           <div className="dl-btn-row dl-btn-row--center">
@@ -2452,7 +2452,7 @@ export function DomusLandingPage() {
               Testar grátis
             </Button>
           </div>
-          <p className="dl-mono dl-cta__note">DOMUS · IMÓVEIS · VITRINE · LEADS · IA · GESTÃO DE IMOBILIÁRIAS</p>
+          <p className="dl-mono dl-cta__note">OMNIMOB · IMÓVEIS · VITRINE · LEADS · IA · GESTÃO DE IMOBILIÁRIAS</p>
         </Reveal>
       </section>
 
@@ -2460,7 +2460,7 @@ export function DomusLandingPage() {
       <footer className="dl-footer">
         <div className="dl-wrap dl-footer__inner">
           <div className="dl-footer__brand">
-            <Link to="/" className="dl-footer__logo" aria-label="Domus — início">
+            <Link to="/" className="dl-footer__logo" aria-label="Omnimob — início">
               <LogoLockup height={40} />
             </Link>
             <p>
@@ -2485,12 +2485,12 @@ export function DomusLandingPage() {
             <div>
               <span className="dl-mono">CONTATO</span>
               <a href="https://wa.me/" target="_blank" rel="noreferrer">WhatsApp</a>
-              <a href="mailto:contato@domus.com">contato@domus.com</a>
+              <a href="mailto:contato@omnimob.app">contato@omnimob.app</a>
             </div>
           </div>
         </div>
         <div className="dl-wrap dl-footer__bottom dl-mono">
-          <span>© {ano} DOMUS</span>
+          <span>© {ano} OMNIMOB</span>
           <span>FEITO PARA IMOBILIÁRIAS BRASILEIRAS</span>
         </div>
       </footer>

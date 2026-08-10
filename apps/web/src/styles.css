@@ -4,7 +4,7 @@
   /* Fundo do painel da imobiliária.
      Era um gradiente azul-noite (#111117 → #161d2e → #1e2d45) que destoava da
      landing: o produto abria numa cor e a página de venda em outra. Agora parte
-     do mesmo #0a0a0b da landing (`--bg` do domusKit) e vai só até um azul
+     do mesmo #0a0a0b da landing (`--bg` do omnimobKit) e vai só até um azul
      quase imperceptível no canto — o suficiente para a tela não ficar chapada,
      longe de virar uma segunda identidade. */
   --bg-gradient-1: #0a0a0b;

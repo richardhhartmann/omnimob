@@ -1,8 +1,8 @@
-# Domus — Contexto para Claude
+# Omnimob — Contexto para Claude
 
 ## O que é o projeto
 
-**Domus** é uma plataforma SaaS multi-tenant de gestão imobiliária, escrita inteiramente em Português. Cada **tenant** é uma imobiliária; cada imobiliária tem seus próprios usuários, imóveis, leads e uma página pública de vitrine personalizável.
+**Omnimob** é uma plataforma SaaS multi-tenant de gestão imobiliária, escrita inteiramente em Português. Cada **tenant** é uma imobiliária; cada imobiliária tem seus próprios usuários, imóveis, leads e uma página pública de vitrine personalizável.
 
 O produto tem duas faces:
 - **Painel admin** — gestão de imóveis, leads, métricas, publicações sociais
@@ -13,7 +13,7 @@ O produto tem duas faces:
 ## Monorepo
 
 ```
-domus/
+omnimob/
 ├── apps/
 │   ├── api/    ← Express + Prisma + PostgreSQL (porta 4000)
 │   └── web/    ← React + Vite (porta 5173)
@@ -68,11 +68,19 @@ domus/
 DATABASE_URL=postgresql://...supabase...
 DIRECT_URL=postgresql://...supabase...
 PORT=4000
-JWT_SECRET=domus-dev-secret
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+JWT_SECRET=omnimob-dev-secret
+APP_URL=https://omnimob.app          # base p/ links de e-mail (trial, avisos)
+FRONTEND_URL=https://omnimob.app     # fallback de redirect do OAuth Meta
+META_CALLBACK_URL=https://api.omnimob.app/api/social/oauth/callback
+ALLOWED_ORIGINS=https://omnimob.app,http://localhost:5173,http://localhost:3000
 GEMINI_API_KEY=...          # Google AI Studio
 GEMINI_MODEL=gemini-2.5-flash
 ```
+
+**Ambientes:**
+- **Front (produção):** `https://omnimob.app` (Vercel)
+- **API (produção):** `https://api.omnimob.app` (Render — registrar CNAME `api` apontando para o serviço; copie estas envs para o dashboard do Render)
+- **Dev local:** web em `5173`, API em `4000` — o `.env` local já mantém `localhost` no CORS, e o frontend só usa a API de produção quando `VITE_API_URL` está setado
 
 ---
 

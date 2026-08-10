@@ -19,7 +19,7 @@ import { UsuariosPage } from "./pages/UsuariosPage";
 import { clearSession, loadSession, saveSession } from "./session";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { SuperAdminPage } from "./pages/SuperAdminPage";
-import { DomusLandingPage } from "./pages/DomusLandingPage";
+import { OmnimobLandingPage } from "./pages/OmnimobLandingPage";
 import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
 
 export default function App() {
@@ -143,7 +143,7 @@ export default function App() {
       <Route path="/vitrine/:tenantSlug" element={<ShowcasePage />} />
       <Route path="/vitrine/:tenantSlug/imovel/:propertyId" element={<ShowcasePropertyPage />} />
 
-      {/* Painel super-admin da Domus (sessão independente do tenant) */}
+      {/* Painel super-admin da Omnimob (sessão independente do tenant) */}
       <Route
         path="/admin/login"
         element={adminSession ? <Navigate to="/admin" replace /> : <AdminLoginPage onLogin={handleAdminLogin} />}
@@ -171,7 +171,7 @@ export default function App() {
           ) : session ? (
             <Navigate to={defaultPublicPath} replace />
           ) : location.pathname === "/" ? (
-            <DomusLandingPage />
+            <OmnimobLandingPage />
           ) : (
             <Navigate to="/login" replace />
           )

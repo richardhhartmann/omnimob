@@ -1,6 +1,6 @@
 /**
  * ─── Layout dos e-mails ──────────────────────────────────────────────────────
- * Corpo padrão para toda mensagem que a Domus manda, no mesmo visual da landing:
+ * Corpo padrão para toda mensagem que a Omnimob manda, no mesmo visual da landing:
  * fundo quase preto, cartão em superfície escura com borda de hairline, dourado
  * como acento e o lockup no topo.
  *
@@ -14,7 +14,7 @@
  * e passe para `layoutEmail`.
  */
 
-// Paleta espelhada de apps/web/src/styles/domusKit.jsx
+// Paleta espelhada de apps/web/src/styles/omnimobKit.jsx
 const COR = {
   fundo: "#0a0a0b",
   superficie: "#141416",
@@ -167,7 +167,7 @@ export function layoutEmail({ conteudo, preheader = "", rodape = "" }) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="supported-color-schemes" content="dark">
-<title>Domus</title>
+<title>Omnimob</title>
 </head>
 <body style="margin:0;padding:0;background:${COR.fundo};">
   <!-- Preheader: visível na lista de mensagens, invisível no corpo aberto. -->
@@ -185,7 +185,7 @@ export function layoutEmail({ conteudo, preheader = "", rodape = "" }) {
 
           <tr>
             <td align="center" style="padding:0 0 26px;">
-              <img src="${LOCKUP}" width="150" alt="Domus"
+              <img src="${LOCKUP}" width="150" alt="Omnimob"
                    style="display:block;width:150px;max-width:60%;height:auto;border:0;">
             </td>
           </tr>
@@ -199,7 +199,7 @@ export function layoutEmail({ conteudo, preheader = "", rodape = "" }) {
           <tr>
             <td align="center" style="padding:22px 12px 0;">
               <p style="margin:0 0 6px;font-family:${FONTE};font-size:12px;line-height:1.6;color:${COR.apagado};">
-                ${rodape || "Domus — gestão imobiliária e vitrine digital."}
+                ${rodape || "Omnimob — gestão imobiliária e vitrine digital."}
               </p>
               <p style="margin:0;font-family:${MONO};font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;color:#55555f;">
                 IMÓVEIS · VITRINE · LEADS · IA

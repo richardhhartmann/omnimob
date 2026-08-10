@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Button, DomusStyles, LogoLockup } from "../styles/domusKit";
+import { Button, OmnimobStyles, LogoLockup } from "../styles/omnimobKit";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Casca do painel super-admin — topbar + sidebar de abas + conteúdo.
@@ -21,11 +21,11 @@ export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, chi
 
   return (
     <div className="dl-root dl-page sa-root">
-      <DomusStyles extra={`${SHELL_CSS}\n${css || ""}`} />
+      <OmnimobStyles extra={`${SHELL_CSS}\n${css || ""}`} />
 
       <header className="sa-top">
         <div className="as-top__inner">
-          <Link to="/" className="dl-logo" aria-label="Domus — início">
+          <Link to="/" className="dl-logo" aria-label="Omnimob — início">
             <LogoLockup height={32} />
           </Link>
           <span className="dl-mono sa-top__tag">● SUPER-ADMIN</span>

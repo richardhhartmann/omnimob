@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
    Combo com design próprio — substitui o <select> nativo em todo o painel.
 
    Motivo: o navegador desenha a lista de opções do <select> por conta própria
-   (sempre clara, fora do tema escuro do Domus) e não aceita estilização das
+   (sempre clara, fora do tema escuro do Omnimob) e não aceita estilização das
    <option>. Aqui a lista é um listbox nosso, com o mesmo vocabulário visual
    dos inputs do painel.
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { Alert, Button, DomusStyles, Eyebrow, Field, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/domusKit";
+import { Alert, Button, OmnimobStyles, Eyebrow, Field, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/omnimobKit";
 
 /* Login do painel do tenant.
 
@@ -230,7 +230,7 @@ function DefinirSenhaCard({ alvo, onConcluir, onCancelar }) {
 function AuthShell({ eyebrow, strong, soft, descricao, error, nota, rodape, onSubmit, saindo, children }) {
   return (
     <div className={`dl-root dl-page lg-root${saindo ? " authx-out" : ""}`}>
-      <DomusStyles extra={CSS} />
+      <OmnimobStyles extra={CSS} />
 
       <div className="lg-shapes authx-shapes" aria-hidden="true">
         <Scallop size={160} color="#818cf8" style={{ position: "absolute", top: "14%", right: "9%", opacity: 0.28 }} />
@@ -240,7 +240,7 @@ function AuthShell({ eyebrow, strong, soft, descricao, error, nota, rodape, onSu
       </div>
 
       <Reveal as="form" className="lg-card dl-glass authx-card" onSubmit={onSubmit}>
-        <Link to="/" className="dl-logo lg-logo" aria-label="Domus — início">
+        <Link to="/" className="dl-logo lg-logo" aria-label="Omnimob — início">
           <LogoLockup height={44} />
         </Link>
 

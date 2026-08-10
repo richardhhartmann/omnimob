@@ -2382,7 +2382,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
           }}
         >
           <style>{`
-            @keyframes domus-drop-pulse {
+            @keyframes omnimob-drop-pulse {
               0%, 100% { transform: translateY(0) scale(1); }
               50% { transform: translateY(-7px) scale(1.06); }
             }
@@ -2391,7 +2391,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
             width: "76px", height: "76px", borderRadius: "50%",
             display: "flex", alignItems: "center", justifyContent: "center",
             background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.45)", color: "#a5b4fc",
-            animation: "domus-drop-pulse 1.2s ease-in-out infinite",
+            animation: "omnimob-drop-pulse 1.2s ease-in-out infinite",
           }}>
             <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
@@ -2592,7 +2592,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                   0% { background-position: 200% 0; }
                   100% { background-position: -200% 0; }
                 }
-                @keyframes domus-reveal {
+                @keyframes omnimob-reveal {
                   from { opacity: 0; transform: translateY(18px); }
                   to { opacity: 1; transform: translateY(0); }
                 }
@@ -2610,7 +2610,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
               <div
                 style={{
                   display: "flex", flexDirection: "column", gap: "20px",
-                  animation: (autoIA && !isEditing) ? "domus-reveal 0.55s cubic-bezier(.22,1,.36,1) both" : undefined,
+                  animation: (autoIA && !isEditing) ? "omnimob-reveal 0.55s cubic-bezier(.22,1,.36,1) both" : undefined,
                 }}
               >
               <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "32px 0 16px 0" }} />
@@ -3186,7 +3186,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
           <div
             style={{
               width: "300px", flexShrink: 0,
-              animation: (autoIA && !isEditing) ? "domus-reveal 0.55s cubic-bezier(.22,1,.36,1) both" : undefined,
+              animation: (autoIA && !isEditing) ? "omnimob-reveal 0.55s cubic-bezier(.22,1,.36,1) both" : undefined,
             }}
           >
             <PropertyPreviewCard form={form} previewItems={previewItems} cardRef={previewCardRef} />

@@ -84,7 +84,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
 
   /* O campo de cartão é um iframe servido pelo Stripe: o número digitado nunca
      entra nesta página nem chega à nossa API — só volta um id de método de
-     pagamento. É o que mantém a Domus fora do escopo pesado do PCI. */
+     pagamento. É o que mantém a Omnimob fora do escopo pesado do PCI. */
   useEffect(() => {
     if (passo !== 3 || !stripeConfigurado()) return undefined;
 
@@ -225,7 +225,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
         type="button"
         className={`tv-botao${restante.expirado ? " is-expirado" : ""}`}
         onClick={() => setAberto(true)}
-        title="Assinar a Domus"
+        title="Assinar a Omnimob"
       >
         <span className="tv-ponto" aria-hidden="true" />
         <span className="tv-rotulo">
@@ -340,7 +340,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                   <>
                     <p className="tv-texto">
                       Cobrança mensal automática, cancele quando quiser. O cartão é digitado num
-                      campo do próprio Stripe — os dados não passam pela Domus.
+                      campo do próprio Stripe — os dados não passam pela Omnimob.
                     </p>
                     <div className="tv-cartao" ref={cartaoRef} />
                     {!cartaoPronto && !falha ? (
@@ -351,7 +351,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                   <div className="tv-pagamento">
                     <p className="tv-texto">
                       O campo de cartão precisa ser o do provedor de pagamento, carregado dentro de
-                      um quadro isolado, para que o número nunca passe pelo servidor da Domus.
+                      um quadro isolado, para que o número nunca passe pelo servidor da Omnimob.
                     </p>
                     <p className="tv-texto tv-texto--fraco">
                       Enquanto o provedor não está conectado, seguimos pelo time: confirmamos o
@@ -376,7 +376,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                       {enviando ? "Processando…" : "Confirmar assinatura"}
                     </button>
                   ) : (
-                    <a className="tv-btn tv-btn--primario" href="mailto:contato@domus.com">
+                    <a className="tv-btn tv-btn--primario" href="mailto:contato@omnimob.app">
                       Falar com o time
                     </a>
                   )}
@@ -388,7 +388,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
               <div className="tv-festa">
                 <span className="tv-festa__selo" aria-hidden="true"><IconeCheck size={26} /></span>
                 <span className="tv-eyebrow tv-eyebrow--menta">● ASSINATURA CONFIRMADA</span>
-                <h2 id="tv-titulo" className="tv-titulo">Bem-vindo à Domus de verdade</h2>
+                <h2 id="tv-titulo" className="tv-titulo">Bem-vindo à Omnimob de verdade</h2>
                 <p className="tv-texto">
                   A {situacao?.nomeTenant || "sua imobiliária"} deixou de ser um teste. Tudo que você
                   montou continua exatamente onde estava — imóveis, fotos, leads, equipe e a vitrine.

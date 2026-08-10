@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { adminApi, setAdminToken } from "../api";
-import { Alert, Button, DomusStyles, Eyebrow, Field, GOLD, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/domusKit";
+import { Alert, Button, OmnimobStyles, Eyebrow, Field, GOLD, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/omnimobKit";
 
 /* Login do painel super-admin — mesma identidade da landing (fundo quase-preto,
    vidro sobre os blobs, micro-labels em mono, botão pill). */
@@ -31,7 +31,7 @@ export function AdminLoginPage({ onLogin }) {
 
   return (
     <div className={`dl-root dl-page dl-login${saindo ? " authx-out" : ""}`}>
-      <DomusStyles extra={CSS} />
+      <OmnimobStyles extra={CSS} />
 
       <div className="dl-login__shapes authx-shapes" aria-hidden="true">
         <Scallop size={168} color={GOLD} style={{ position: "absolute", top: "12%", right: "8%", opacity: 0.5 }} />
@@ -41,7 +41,7 @@ export function AdminLoginPage({ onLogin }) {
       </div>
 
       <Reveal className="dl-login__card dl-glass authx-card" as="form" onSubmit={handleSubmit}>
-        <Link to="/" className="dl-logo dl-login__logo" aria-label="Domus — início">
+        <Link to="/" className="dl-logo dl-login__logo" aria-label="Omnimob — início">
           <LogoLockup height={44} />
         </Link>
 
@@ -62,7 +62,7 @@ export function AdminLoginPage({ onLogin }) {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="username"
-              placeholder="super@domus.com"
+              placeholder="super@omnimob.app"
             />
           </Field>
 

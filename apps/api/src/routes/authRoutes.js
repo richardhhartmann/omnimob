@@ -6,7 +6,7 @@ import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { loginSchema } from "../validators/authValidators.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
 export const authRouter = Router();
 

@@ -6,7 +6,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
   const [isScrolled, setIsScrolled] = useState(false);
   const bs = blockStyles?.header || {};
   const primary = tenant?.primaryColor || "#6366f1";
-  const tenantName = tenant?.name || tenantSlug?.toUpperCase() || "Domus";
+  const tenantName = tenant?.name || tenantSlug?.toUpperCase() || "Omnimob";
   const initialLetter = tenantName.charAt(0).toUpperCase();
 
   useEffect(() => {

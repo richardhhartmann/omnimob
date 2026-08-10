@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API_URL = import.meta.env.VITE_API_URL || "https://api.omnimob.app";
 
 let authToken = null;
 let adminToken = null;
@@ -407,8 +407,8 @@ export const api = {
       body: JSON.stringify({ plano }),
     }),
 
-  // Interesse comercial pela própria Domus (landing), antes de existir tenant.
-  enviarInteresseDomus: (payload = {}) =>
+  // Interesse comercial pela própria Omnimob (landing), antes de existir tenant.
+  enviarInteresseOmnimob: (payload = {}) =>
     request("/public/interesse", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -421,11 +421,11 @@ export const api = {
   /* O endereço da vitrine (slug) que sai deste nome está livre? Consultado
      enquanto a pessoa digita, para o conflito aparecer com o nome ainda em
      aberto — e não depois do ambiente criado. */
-  verificarSlugDomus: (nome, { signal } = {}) =>
+  verificarSlugOmnimob: (nome, { signal } = {}) =>
     request(`/public/slug?nome=${encodeURIComponent(nome)}`, { signal }),
 
   // Teste grátis, etapa 1: dispara o link mágico de confirmação por e-mail.
-  criarTrialDomus: (payload = {}) =>
+  criarTrialOmnimob: (payload = {}) =>
     request("/public/trial", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -443,14 +443,14 @@ export const api = {
     request("/api/chamados", { headers: { "x-tenant-slug": tenantSlug } }),
 
   // Teste grátis, etapa 2: o token do e-mail vira um tenant de verdade.
-  confirmarTrialDomus: (payload = {}) =>
+  confirmarTrialOmnimob: (payload = {}) =>
     request("/public/trial/confirmar", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 };
 
-// ─── Super-admin (painel da Domus) — usa token próprio ─────────────────────────
+// ─── Super-admin (painel da Omnimob) — usa token próprio ─────────────────────────
 async function adminRequest(path, options = {}) {
   const { headers: customHeaders = {}, ...restOptions } = options;
   const headers = { "Content-Type": "application/json", ...customHeaders };

@@ -8,8 +8,8 @@ import { overlay360 } from "../utils/cloudinaryOverlay.js";
 
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
-const META_CALLBACK_URL = process.env.META_CALLBACK_URL || "http://localhost:4000/api/social/oauth/callback";
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const META_CALLBACK_URL = process.env.META_CALLBACK_URL || "https://api.omnimob.app/api/social/oauth/callback";
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://omnimob.app";
 const META_API_VERSION = "v19.0";
 const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 
@@ -101,7 +101,7 @@ async function fetchPostInsights(channel, externalRef, token) {
 }
 
 // Reconcilia as publicações PUBLISHED (FB/IG com ref real) de um conjunto: apaga da
-// Domus as que não existem mais na rede. Retorna a lista de canais removidos.
+// Omnimob as que não existem mais na rede. Retorna a lista de canais removidos.
 async function reconcilePublications(publications, token) {
   const removed = [];
   if (!token) return removed;
@@ -119,7 +119,7 @@ async function reconcilePublications(publications, token) {
 }
 
 // Remove UMA publicação: apaga o post na rede quando a API permite e some com o
-// registro na Domus. `tenant` precisa trazer facebookPageToken para posts do FB.
+// registro na Omnimob. `tenant` precisa trazer facebookPageToken para posts do FB.
 // Retorna { ok, deletedFromNetwork, note?, error? }.
 async function deleteOnePublication(publication, tenant) {
   const channel = publication.channel;

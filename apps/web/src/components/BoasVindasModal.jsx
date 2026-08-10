@@ -198,7 +198,7 @@ ${PERFIL_INICIAL_CSS}`}</style>
         <h2 id="bv-titulo" className="bv-titulo">
           {ehTeste
             ? `Bem-vindo ao seu teste, ${dados.nomeTenant}`
-            : `Bem-vindo à Domus, ${dados.nomeTenant}`}
+            : `Bem-vindo à Omnimob, ${dados.nomeTenant}`}
         </h2>
 
         {ehTeste ? (

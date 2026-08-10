@@ -8,9 +8,9 @@
    isso qualquer mexida em uma pede a mesma mexida na outra.
    ──────────────────────────────────────────────────────────────────────────── */
 
-// Nomes que a Domus guarda para si (rotas do produto e da marca).
+// Nomes que a Omnimob guarda para si (rotas do produto e da marca).
 export const SLUGS_RESERVADOS = new Set([
-  "admin", "api", "app", "www", "domus", "painel", "public", "static",
+  "admin", "api", "app", "www", "omnimob", "domus", "painel", "public", "static",
   "login", "vitrine", "suporte", "contato", "blog", "teste", "demo",
 ]);
 
@@ -30,7 +30,7 @@ export function slugify(texto) {
 export const MOTIVO_SLUG = {
   curto: "Nome curto demais. Use pelo menos duas letras.",
   invalido: "Use letras ou números no nome da imobiliária.",
-  reservado: "Este nome é reservado pela Domus. Escolha outro.",
+  reservado: "Este nome é reservado pela Omnimob. Escolha outro.",
   ocupado: "Este nome já está em uso por outra imobiliária. Escolha outro.",
 };
 

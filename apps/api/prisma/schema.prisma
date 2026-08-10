@@ -110,7 +110,7 @@ model Tenant {
   @@map("tb_tenants")
 }
 
-// ─── Super Admin (acesso ao painel da Domus, fora dos tenants) ────────────────
+// ─── Super Admin (acesso ao painel da Omnimob, fora dos tenants) ────────────────
 
 model SuperAdmin {
   id        String   @id @default(cuid())

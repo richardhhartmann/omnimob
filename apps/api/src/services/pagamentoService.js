@@ -9,7 +9,7 @@
  * ─── O NÚMERO DO CARTÃO NÃO PASSA POR AQUI ────────────────────────────────────
  * Este serviço recebe um PaymentMethod (`pm_...`) já criado pelo Stripe Elements
  * dentro do navegador, num iframe do próprio Stripe. Se o número do cartão
- * passasse por este servidor, a Domus entraria no escopo mais pesado do PCI-DSS
+ * passasse por este servidor, a Omnimob entraria no escopo mais pesado do PCI-DSS
  * (SAQ D): auditoria anual, varredura trimestral, segregação de rede. Inviável
  * para uma operação pequena — e, num vazamento, a responsabilidade é de quem
  * armazenou.

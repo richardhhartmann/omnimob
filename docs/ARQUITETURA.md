@@ -1,4 +1,4 @@
-# Arquitetura Domus — Visão × Realidade
+# Arquitetura Omnimob — Visão × Realidade
 
 Este documento cruza a **visão de arquitetura** (o alvo de longo prazo) com o
 **estado atual do código**, registra as decisões tomadas e o que ainda falta.

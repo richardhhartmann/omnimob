@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "../../api";
-import { Alert, Button, Eyebrow, Reveal } from "../../styles/domusKit";
+import { Alert, Button, Eyebrow, Reveal } from "../../styles/omnimobKit";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Caixa de entrada do suporte.

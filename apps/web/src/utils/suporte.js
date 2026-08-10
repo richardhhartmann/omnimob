@@ -18,7 +18,7 @@ const CHAVE_FILA = "domus_chamados_pendentes";
 const LIMITE_FILA = 20;
 
 /** E-mail de escape, oferecido quando nem a fila local funciona. */
-export const EMAIL_SUPORTE = "suporte@domus.app";
+export const EMAIL_SUPORTE = "suporte@omnimob.app";
 
 export const CATEGORIAS_CHAMADO = [
   { valor: "duvida",   rotulo: "Dúvida de uso",     dica: "Não sei como fazer alguma coisa", prioridade: "BAIXA" },

@@ -180,7 +180,7 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
 
         /* Espera a caixa PARAR de mudar antes de desenhar o holofote.
 
-           As telas do painel entram animadas (`step-pane`, `domus-reveal`,
+           As telas do painel entram animadas (`step-pane`, `omnimob-reveal`,
            `chicEntrance`), e medir no meio da animação devolve a posição de
            onde o elemento estava passando — um anel de 1px de altura, ou um
            retângulo no lugar errado. O laço de acompanhamento até corrige
@@ -817,7 +817,7 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
 /* ── Estilos ─────────────────────────────────────────────────────────────────
    Paleta ROXO + DOURADO, a da marca. O índigo #6366f1/#818cf8 que estava aqui
    é o acento do painel, mas sozinho e em bloco ele lê como azul — e o tour é
-   justamente a peça em que a Domus se apresenta. O violeta puxa para o roxo do
+   justamente a peça em que a Omnimob se apresenta. O violeta puxa para o roxo do
    símbolo e o dourado #d4af37 volta nos detalhes que a landing já usa assim:
    micro-label em mono, halo do holofote, fim da barra de progresso.
 

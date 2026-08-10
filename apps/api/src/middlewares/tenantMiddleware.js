@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../db.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
 export async function requireTenant(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "");

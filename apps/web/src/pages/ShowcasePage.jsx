@@ -150,7 +150,7 @@ export function ShowcasePage() {
     return <div style={{ minHeight: "100vh", background: "#0f172a" }} />;
   }
 
-  const tenantName = payload?.tenant?.name || tenantSlug?.toUpperCase() || "Domus";
+  const tenantName = payload?.tenant?.name || tenantSlug?.toUpperCase() || "Omnimob";
   const tenant = payload?.tenant || {};
   const showcaseConfig = normalizeShowcaseConfig(tenant.showcaseConfig);
   const layout = showcaseConfig.layout;

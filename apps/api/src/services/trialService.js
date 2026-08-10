@@ -50,7 +50,7 @@ export function fimDoTrial(inicio = new Date()) {
    `trialExistenteParaEmail`, que também serve de trava de abuso: um teste por
    e-mail. */
 const VALIDADE_CONVITE = "30m";
-const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
 export function assinarConvite(dados, proposito = "trial") {
   return jwt.sign({ ...dados, proposito }, JWT_SECRET, { expiresIn: VALIDADE_CONVITE });
@@ -85,7 +85,7 @@ export async function trialExistenteParaEmail(email) {
 // ─── Slug ────────────────────────────────────────────────────────────────────
 
 export const RESERVADOS = new Set([
-  "admin", "api", "app", "www", "domus", "painel", "public", "static",
+  "admin", "api", "app", "www", "omnimob", "domus", "painel", "public", "static",
   "login", "vitrine", "suporte", "contato", "blog", "teste", "demo",
 ]);
 
@@ -156,7 +156,7 @@ export async function verificarSlug(nome) {
 export const MOTIVO_SLUG = {
   curto: "Nome curto demais. Use pelo menos duas letras.",
   invalido: "Use letras ou números no nome da imobiliária.",
-  reservado: "Este nome é reservado pela Domus. Escolha outro.",
+  reservado: "Este nome é reservado pela Omnimob. Escolha outro.",
   ocupado: "Este nome já está em uso por outra imobiliária. Escolha outro.",
 };
 

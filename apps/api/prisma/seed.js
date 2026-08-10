@@ -878,7 +878,7 @@ async function seedVendas(tenants) {
 
 async function seedSuperAdmin() {
   console.log("→ Super-admin (base)...");
-  const email = process.env.SUPER_ADMIN_EMAIL || "super@domus.com";
+  const email = process.env.SUPER_ADMIN_EMAIL || "super@omnimob.app";
   const nome = process.env.SUPER_ADMIN_NOME || "Super Admin";
   const senhaPlain = process.env.SUPER_ADMIN_PASSWORD || "superadmin";
 
@@ -897,7 +897,7 @@ async function seedSuperAdmin() {
 }
 
 async function main() {
-  console.log(`\n🌱 Seed Domus — modo: ${SEED_DEV ? "DEV (base + exemplos)" : "BASE (apenas cargos/tipos/atributos)"}\n`);
+  console.log(`\n🌱 Seed Omnimob — modo: ${SEED_DEV ? "DEV (base + exemplos)" : "BASE (apenas cargos/tipos/atributos)"}\n`);
 
   // Dados base — sempre
   const cargos = await seedCargos();

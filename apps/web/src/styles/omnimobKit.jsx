@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Kit visual Domus — base compartilhada pelas telas que usam a identidade da
+   Kit visual Omnimob — base compartilhada pelas telas que usam a identidade da
    landing (landing pública, login super-admin e painel super-admin).
 
    Identidade inspirada no site da Kenlo: fundo quase-preto, tipografia Plus
@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
    Como usar numa página:
      <div className="dl-root dl-page">
-       <DomusStyles extra={CSS_DA_PAGINA} />
+       <OmnimobStyles extra={CSS_DA_PAGINA} />
        ...
      </div>
 
@@ -157,11 +157,11 @@ export function Eyebrow({ children, tone }) {
   );
 }
 
-/* Marca da Domus. Os arquivos vivem em `public/`, então os caminhos são
+/* Marca da Omnimob. Os arquivos vivem em `public/`, então os caminhos são
    absolutos e não passam pelo bundler — `/logo.png` é o mesmo do favicon.
 
    `LOCKUP` é o conjunto marca + tipografia num arquivo só. Atenção: nele o
-   texto "DOMUS" é branco, então ele só funciona sobre fundo escuro — em
+   texto "OMNIMOB" é branco, então ele só funciona sobre fundo escuro — em
    superfície clara use `LOGO_SRC` com um texto de verdade ao lado.
 
    O cabeçalho da landing usa uma arte própria (`_HEADER`), de mesma proporção,
@@ -201,7 +201,7 @@ export function LogoLockup({ src = LOGO_LOCKUP_SRC, height, className = "", styl
   return (
     <img
       src={src}
-      alt="Domus"
+      alt="Omnimob"
       className={`dl-lockup${className ? ` ${className}` : ""}`}
       style={height ? { height: `${height}px`, ...style } : style}
       {...rest}
@@ -209,9 +209,9 @@ export function LogoLockup({ src = LOGO_LOCKUP_SRC, height, className = "", styl
   );
 }
 
-// Marca + palavra "Domus". `as` deixa o chamador escolher entre <Link>, <a>
+// Marca + palavra "Omnimob". `as` deixa o chamador escolher entre <Link>, <a>
 // ou um <span> estático sem o kit precisar conhecer o react-router.
-export function Logo({ as: Tag = "span", size = 30, name = "Domus", className = "", children, ...rest }) {
+export function Logo({ as: Tag = "span", size = 30, name = "Omnimob", className = "", children, ...rest }) {
   return (
     <Tag className={`dl-logo${className ? ` ${className}` : ""}`} {...rest}>
       <LogoMark size={size} />
@@ -272,7 +272,7 @@ export function Scallop({ size = 130, color, petals = 12, style }) {
   );
 }
 
-export function DomusStyles({ extra }) {
+export function OmnimobStyles({ extra }) {
   return <style>{extra ? `${CORE_CSS}\n${extra}` : CORE_CSS}</style>;
 }
 

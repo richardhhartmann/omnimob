@@ -26,7 +26,7 @@ export function PrimeiroAcessoModal({ nome, tenantName, totalPassos, aoComecar, 
 
         <span className="pa-eyebrow">● PRIMEIRO ACESSO</span>
         <h2 id="pa-titulo" className="pa-titulo">
-          {primeiroNome ? `Bem-vindo, ${primeiroNome}` : "Bem-vindo à Domus"}
+          {primeiroNome ? `Bem-vindo, ${primeiroNome}` : "Bem-vindo à Omnimob"}
         </h2>
 
         <p className="pa-texto">

@@ -187,7 +187,7 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
 });
 
 /* ── Interesse comercial vindo da landing ────────────────────────────────────
-   Formulário público: quem clica em "Quero este plano" ou "Assinar Domus" cai
+   Formulário público: quem clica em "Quero este plano" ou "Assinar Omnimob" cai
    aqui. Não há tenant ainda — é alguém querendo virar um. O destino é só um
    e-mail para o time comercial; nada é gravado no banco (não existe modelo
    para isso e criar um pede migração).
@@ -271,7 +271,7 @@ const trialLimiter = rateLimit({
    FRONT (o host da API não serve: são origens diferentes neste projeto). A
    Origin só é aceita se estiver na lista do CORS: como ela vem no cabeçalho e
    cabeçalho se forja, aceitá-la de qualquer um deixaria um estranho fazer a
-   Domus enviar e-mail com link para o domínio dele.
+   Omnimob enviar e-mail com link para o domínio dele.
 
    Devolve null quando não há base confiável — melhor recusar o envio do que
    mandar um e-mail com "/comecar?token=..." solto, que não é clicável. */

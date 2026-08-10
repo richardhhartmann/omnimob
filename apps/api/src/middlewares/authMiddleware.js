@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
 export function requireAuth(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "");

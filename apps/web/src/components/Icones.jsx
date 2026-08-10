@@ -1,5 +1,5 @@
 /* ────────────────────────────────────────────────────────────────────────────
-   Ícones da Domus — SVG desenhado, no lugar de emoji.
+   Ícones da Omnimob — SVG desenhado, no lugar de emoji.
 
    POR QUE NÃO EMOJI: o glifo é do SISTEMA, não nosso. O 🏥 do Windows é um
    prédio vermelho chapado, o do macOS é outro desenho, o do Android é um

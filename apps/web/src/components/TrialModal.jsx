@@ -9,7 +9,7 @@ import { IconeEnvelope } from "./Icones.jsx";
 /* ────────────────────────────────────────────────────────────────────────────
    Teste grátis com auto-atendimento — a ÚNICA porta de entrada da landing.
 
-   Não existe mais "assinar sem testar": quem quer a Domus testa primeiro, e
+   Não existe mais "assinar sem testar": quem quer a Omnimob testa primeiro, e
    assina de dentro do painel. Isso simplifica a promessa da página (um botão,
    um caminho) e tira do ar o fluxo em que alguém digitava o cartão antes de
    ver o produto.
@@ -36,7 +36,7 @@ const VAZIO = { plano: "", imobiliaria: "", email: "", telefone: "", website: ""
 
 const MIGRACAO_VAZIA = { sistemaAtual: "", itens: [], volume: "", formato: "", observacao: "" };
 
-/* O que a imobiliária pode querer trazer. A lista espelha o que a Domus tem
+/* O que a imobiliária pode querer trazer. A lista espelha o que a Omnimob tem
    hoje: prometer importação de contrato ou financeiro seria vender módulo que
    ainda não existe. */
 const ITENS_MIGRACAO = [
@@ -56,7 +56,7 @@ const ESPERA_SLUG = 450;
 // Só o host: o endereço fica curto e não mente entre ambientes (em produção é
 // o domínio de verdade, em desenvolvimento é o localhost mesmo).
 const HOST_VITRINE =
-  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "domus.app/vitrine";
+  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "omnimob.app/vitrine";
 
 const SLUG_VAZIO = { valor: "", estado: "vazio", mensagem: "" };
 
@@ -155,7 +155,7 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
     const controle = new AbortController();
     const timer = setTimeout(() => {
       api
-        .verificarSlugDomus(bruto, { signal: controle.signal })
+        .verificarSlugOmnimob(bruto, { signal: controle.signal })
         .then((r) =>
           setSlug({
             valor: r.slug || valor,
@@ -266,7 +266,7 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
     setCriando(true);
     setFalha("");
     try {
-      await api.criarTrialDomus({
+      await api.criarTrialOmnimob({
         imobiliaria: form.imobiliaria.trim(),
         email: form.email.trim(),
         telefone: form.telefone.trim(),
@@ -370,7 +370,7 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                 </span>
                 <span className="tm-opcao__titulo">Estou abrindo agora</span>
                 <span className="tm-opcao__texto">
-                  Vou começar do zero com a Domus. Quero cadastrar meus primeiros imóveis e colocar
+                  Vou começar do zero com a Omnimob. Quero cadastrar meus primeiros imóveis e colocar
                   a vitrine no ar.
                 </span>
                 <span className="tm-opcao__seta" aria-hidden="true">→</span>
@@ -387,7 +387,7 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                 <span className="tm-opcao__titulo">Já tenho uma imobiliária</span>
                 <span className="tm-opcao__texto">
                   Já opero, com carteira e clientes em outro sistema ou em planilhas. Quero trazer
-                  isso para a Domus.
+                  isso para a Omnimob.
                 </span>
                 <span className="tm-opcao__seta" aria-hidden="true">→</span>
               </button>
@@ -511,7 +511,7 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
         ) : (
           <>
             <span className="dl-mono pm-eyebrow tm-eyebrow">● TESTE GRÁTIS POR 14 DIAS</span>
-            <h2 id="tm-titulo" className="pm-titulo">Veja a Domus funcionando com a sua cara.</h2>
+            <h2 id="tm-titulo" className="pm-titulo">Veja a Omnimob funcionando com a sua cara.</h2>
             <p className="pm-sub">
               Criamos um ambiente completo em segundos, com o plano que você escolher liberado e a
               sua vitrine já no ar. Sem cartão, sem instalar nada.

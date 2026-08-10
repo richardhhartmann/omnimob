@@ -73,7 +73,7 @@ const LETRAS = [
 /* ── Versão empilhada (telas pequenas) ───────────────────────────────────────
    No celular não cabe o lockup deitado: a 92vw o símbolo fica do tamanho de uma
    unha e a palavra encosta nas duas bordas. Abaixo deste ponto a marca se monta
-   em coluna — símbolo em cima, DOMUS embaixo, tudo centralizado — e o conjunto
+   em coluna — símbolo em cima, OMNIMOB embaixo, tudo centralizado — e o conjunto
    pode crescer, porque agora quem manda na largura é só a palavra.
 
    As medidas estão no espaço do viewBox (2485 × 603), o mesmo dos caminhos das
@@ -140,7 +140,7 @@ function calcularVoo(palco) {
 
 // ── Componente ──────────────────────────────────────────────────────────────
 
-export function DomusSplash() {
+export function OmnimobSplash() {
   // Já rodou nesta aba? Então nem monta — voltar do painel para a landing não
   // deve prender o usuário em 3 s de animação de novo.
   const [ativo, setAtivo] = useState(() => {
@@ -545,4 +545,4 @@ body.ds-com-splash-saindo .dl-header {
 }
 `;
 
-export default DomusSplash;
+export default OmnimobSplash;

@@ -18,7 +18,7 @@ import {
   Reveal,
   StatValue,
   useReveal,
-} from "../styles/domusKit";
+} from "../styles/omnimobKit";
 
 /* Painel super-admin — mesma identidade da landing: fundo quase-preto, topbar
    de vidro, grid de hairline com contagem progressiva, micro-labels em mono e
@@ -58,7 +58,7 @@ const EMPTY_FORM = {
 const ESPERA_SLUG = 450;
 const SLUG_VAZIO = { valor: "", estado: "vazio", mensagem: "" };
 const HOST_VITRINE =
-  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "domus.app/vitrine";
+  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "omnimob.app/vitrine";
 const SELO_SLUG = {
   vazio: "",
   checando: "verificando…",
@@ -209,7 +209,7 @@ export function SuperAdminPage({ session, onLogout }) {
     const controle = new AbortController();
     const timer = setTimeout(() => {
       api
-        .verificarSlugDomus(bruto, { signal: controle.signal })
+        .verificarSlugOmnimob(bruto, { signal: controle.signal })
         .then((r) =>
           setSlug({
             valor: r.slug || valor,
@@ -364,7 +364,7 @@ export function SuperAdminPage({ session, onLogout }) {
         <Reveal className="sa-head">
           <Eyebrow>ADMINISTRAÇÃO DA PLATAFORMA</Eyebrow>
           <h1 className="dl-h2 sa-title">
-            <span className="dl-h2__strong">Tenants da Domus</span>
+            <span className="dl-h2__strong">Tenants da Omnimob</span>
             <span className="dl-h2__soft">e situação de cobrança.</span>
           </h1>
         </Reveal>

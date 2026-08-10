@@ -1,4 +1,4 @@
-# Domus
+# Omnimob
 
 Plataforma web multi-tenant para gestao de imoveis com `Node.js + React`.
 

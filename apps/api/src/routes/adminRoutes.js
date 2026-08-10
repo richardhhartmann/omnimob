@@ -8,7 +8,7 @@ import { provisionTenant } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
 import { cancelarAssinaturasDoSlug } from "../services/pagamentoService.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
 const STATUS_VALIDOS = ["TRIAL", "EM_DIA", "ATRASADO", "CANCELADO"];
 
@@ -94,7 +94,7 @@ adminRouter.get("/tenants/:id", async (req, res) => {
   }
 });
 
-/* Provisionamento à mão, pelo painel da Domus. O endereço da vitrine não é
+/* Provisionamento à mão, pelo painel da Omnimob. O endereço da vitrine não é
    digitado: ele sai do nome, pela mesma regra do auto-atendimento da landing —
    duas portas de entrada que compusessem o slug de formas diferentes dariam
    endereços diferentes para o mesmo nome. O painel mostra o endereço enquanto

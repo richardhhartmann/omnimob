@@ -38,7 +38,7 @@ import {
    texto #64748b/#f1f5f9, ativo em indigo a 10%, avatar #4f46e5).
 
    IMPORTANTE: os estilos são escopados em `.ds-*` de propósito. O kit
-   (`styles/domusKit.jsx`) traz um reset em `.dl-root` que vazaria pelo
+   (`styles/omnimobKit.jsx`) traz um reset em `.dl-root` que vazaria pelo
    <Outlet/> e quebraria as telas internas do painel, que ainda vivem no
    styles.css global.
    ──────────────────────────────────────────────────────────────────────────── */
@@ -121,7 +121,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const location  = useLocation();
   const navigate  = useNavigate();
   const tenantSlug = session?.tenant?.slug  || "";
-  const tenantName = session?.tenant?.name  || "Domus";
+  const tenantName = session?.tenant?.name  || "Omnimob";
   const userInitial = session?.usuario?.nome?.charAt(0)?.toUpperCase() || "U";
   const userName    = session?.usuario?.nome || "";
   const userRole    = session?.usuario?.cargo?.descricao || "Operador";
@@ -361,7 +361,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
           {/* Rodapé */}
           <div className="ds-foot">
             {/* Só aparece enquanto o tenant estiver em teste; some ao assinar. */}
-            <SideTooltip label="Assinar a Domus" collapsed={c}>
+            <SideTooltip label="Assinar a Omnimob" collapsed={c}>
               <div>
                 <TrialAviso
                   tenantSlug={tenantSlug}

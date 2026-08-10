@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { DomusStyles, LOGO_LOCKUP_HEADER_SRC } from "../styles/domusKit";
+import { OmnimobStyles, LOGO_LOCKUP_HEADER_SRC } from "../styles/omnimobKit";
 import { MODAL_CSS } from "../components/modalCSS";
 import { IconeCheck } from "../components/Icones.jsx";
 
@@ -31,7 +31,7 @@ export function TrialConfirmarPage() {
        assinatura sem teste enterrada, aquilo virou uma requisição que falhava
        sempre antes da que interessa. */
     api
-      .confirmarTrialDomus({ token })
+      .confirmarTrialOmnimob({ token })
       .then((resposta) => {
         setDados(resposta);
         setEstado("pronto");
@@ -43,7 +43,7 @@ export function TrialConfirmarPage() {
   }, [token]);
 
   async function copiarAcesso() {
-    const texto = `Domus — acesso de teste
+    const texto = `Omnimob — acesso de teste
 Usuário: ${dados.login}
 Senha: ${dados.senha}
 Vitrine: ${window.location.origin}/vitrine/${dados.slug}`;
@@ -60,10 +60,10 @@ Vitrine: ${window.location.origin}/vitrine/${dados.slug}`;
 
   return (
     <div className="dl-root tc-pagina">
-      <DomusStyles extra={CSS} />
+      <OmnimobStyles extra={CSS} />
 
       <Link to="/" className="tc-marca">
-        <img src={LOGO_LOCKUP_HEADER_SRC} alt="Domus" />
+        <img src={LOGO_LOCKUP_HEADER_SRC} alt="Omnimob" />
       </Link>
 
       <div className="pm-caixa dl-glass tc-caixa">

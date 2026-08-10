@@ -29,10 +29,10 @@ const NOME_PLANO = { BASICO: "Básico", PROFISSIONAL: "Profissional", PREMIUM: "
 
 export function emailInteresseComercial({ imobiliaria, email, telefone, plano, temWhatsapp }) {
   const planoTexto = plano ? NOME_PLANO[plano] : "não escolheu (quer conversar)";
-  const subject = `Domus · novo interesse — ${imobiliaria}${plano ? ` (${NOME_PLANO[plano]})` : ""}`;
+  const subject = `Omnimob · novo interesse — ${imobiliaria}${plano ? ` (${NOME_PLANO[plano]})` : ""}`;
 
   const body = [
-    "Novo interesse pela Domus vindo da landing.",
+    "Novo interesse pela Omnimob vindo da landing.",
     "",
     `Imobiliária: ${imobiliaria}`,
     `E-mail:      ${email}`,
@@ -46,7 +46,7 @@ export function emailInteresseComercial({ imobiliaria, email, telefone, plano, t
     preheader: `${imobiliaria} pediu contato — plano ${planoTexto}.`,
     conteudo: [
       eyebrow("● NOVO INTERESSE"),
-      titulo("Alguém quer falar com a Domus"),
+      titulo("Alguém quer falar com a Omnimob"),
       paragrafo(`Veio do formulário da landing. Responder este e-mail já cai direto no interessado.`),
       dados([
         { rotulo: "Imobiliária", valor: imobiliaria },
@@ -62,7 +62,7 @@ export function emailInteresseComercial({ imobiliaria, email, telefone, plano, t
         )}.</span>`,
       ),
     ].join(""),
-    rodape: "Aviso interno da plataforma Domus.",
+    rodape: "Aviso interno da plataforma Omnimob.",
   });
 
   return { subject, body, html };
@@ -71,7 +71,7 @@ export function emailInteresseComercial({ imobiliaria, email, telefone, plano, t
 // ─── 2. Convite do teste grátis (link mágico) ────────────────────────────────
 
 export function emailConviteTrial({ imobiliaria, link }) {
-  const subject = "Confirme para liberar seu teste da Domus";
+  const subject = "Confirme para liberar seu teste da Omnimob";
 
   const body = [
     `Olá! Falta um passo para o ambiente da ${imobiliaria} entrar no ar.`,
@@ -110,7 +110,7 @@ export function emailConviteTrial({ imobiliaria, link }) {
 export function emailTrialNoAr({ imobiliaria, login, senha, slug, validade, base }) {
   const urlPainel = `${base}/login`;
   const urlVitrine = `${base}/vitrine/${slug}`;
-  const subject = "Seu teste da Domus está no ar";
+  const subject = "Seu teste da Omnimob está no ar";
 
   const body = [
     `O ambiente da ${imobiliaria} já está funcionando.`,
@@ -190,8 +190,8 @@ export function emailAvisoNovoTrial({
      contato tem urgência e roteiro próprios. */
   const jaOpera = perfil === "existente";
   const subject = jaOpera
-    ? `Domus · teste com MIGRAÇÃO — ${imobiliaria}`
-    : `Domus · novo teste grátis — ${imobiliaria}`;
+    ? `Omnimob · teste com MIGRAÇÃO — ${imobiliaria}`
+    : `Omnimob · novo teste grátis — ${imobiliaria}`;
 
   // `itensTexto` e não `itens`: este módulo importa um helper `itens()` do
   // layout, e a variável local o esconderia dentro desta função.
@@ -261,7 +261,7 @@ export function emailAvisoNovoTrial({
         `<span style="color:${COR.apagado};font-size:13px;">Responder este e-mail cai direto no interessado.</span>`,
       ),
     ].join(""),
-    rodape: "Aviso interno da plataforma Domus.",
+    rodape: "Aviso interno da plataforma Omnimob.",
   });
 
   return { subject, body, html };
@@ -272,7 +272,7 @@ export function emailAvisoNovoTrial({
 export function emailAssinaturaConfirmada({
   imobiliaria, plano, valorRotulo, proximaCobranca, inventario = {}, recursos = [], base, slug,
 }) {
-  const subject = `Assinatura confirmada — bem-vindo à Domus, ${imobiliaria}`;
+  const subject = `Assinatura confirmada — bem-vindo à Omnimob, ${imobiliaria}`;
 
   const mantidos = [
     inventario.imoveis ? `${inventario.imoveis} imóveis` : null,
@@ -307,7 +307,7 @@ export function emailAssinaturaConfirmada({
     preheader: `Plano ${plano} ativo. Nada do que você montou se perdeu.`,
     conteudo: [
       eyebrow("● ASSINATURA CONFIRMADA", COR.menta),
-      titulo("Bem-vindo à Domus de verdade"),
+      titulo("Bem-vindo à Omnimob de verdade"),
       paragrafo(
         `A ${forte(imobiliaria)} deixou de ser um teste. Tudo que você montou continua exatamente onde estava.`,
       ),
@@ -328,7 +328,7 @@ export function emailAssinaturaConfirmada({
         COR.menta,
       ),
     ].join(""),
-    rodape: "Obrigado por confiar na Domus.",
+    rodape: "Obrigado por confiar na Omnimob.",
   });
 
   return { subject, body, html };
