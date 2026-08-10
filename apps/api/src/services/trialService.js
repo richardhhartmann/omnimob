@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { getGlobalPrisma } from "./tenantRegistry.js";
-import { provisionTenant } from "./provisioningService.js";
+import { provisionTenant, senhaTemporaria } from "./provisioningService.js";
 import { sendEmail } from "./notificationService.js";
 import { emailTrialExpirado } from "./emailTemplates.js";
 
@@ -159,19 +159,6 @@ export const MOTIVO_SLUG = {
   reservado: "Este nome é reservado pela Domus. Escolha outro.",
   ocupado: "Este nome já está em uso por outra imobiliária. Escolha outro.",
 };
-
-// ─── Senha temporária ────────────────────────────────────────────────────────
-
-// Sem 0/O/1/l/I: a senha vai por e-mail e alguém vai digitar à mão.
-const ALFABETO = "abcdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-export function senhaTemporaria(tamanho = 10) {
-  let saida = "";
-  for (let i = 0; i < tamanho; i += 1) {
-    saida += ALFABETO[Math.floor(Math.random() * ALFABETO.length)];
-  }
-  return saida;
-}
 
 // ─── Criação do trial ────────────────────────────────────────────────────────
 

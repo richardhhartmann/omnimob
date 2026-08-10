@@ -16,13 +16,31 @@ import { getGlobalPrisma } from "./tenantRegistry.js";
 const CARGO_ADMIN = "Administrador";
 const STATUS_VALIDOS = ["TRIAL", "EM_DIA", "ATRASADO", "CANCELADO"];
 
+// Sem 0/O/1/l/I: a senha vai por e-mail (ou é ditada por telefone) e alguém vai
+// digitá-la à mão.
+const ALFABETO = "abcdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function senhaTemporaria(tamanho = 10) {
+  let saida = "";
+  for (let i = 0; i < tamanho; i += 1) {
+    saida += ALFABETO[Math.floor(Math.random() * ALFABETO.length)];
+  }
+  return saida;
+}
+
 export function slugValido(slug) {
   return typeof slug === "string" && /^[a-z0-9-]+$/.test(slug);
 }
 
 /**
  * Provisiona um novo tenant de ponta a ponta.
- * @returns {{ tenant: object, adminCreated: boolean, warning: string|null }}
+ *
+ * `adminLogin`/`adminSenha` são opcionais e existem para quem já tem um valor
+ * em mãos (o trial monta o login antes de chamar). Sem eles o acesso nasce
+ * assim mesmo — um tenant sem nenhum usuário é um ambiente em que ninguém
+ * consegue entrar, e o passo manual seguinte sempre acabaria sendo este.
+ *
+ * @returns {{ tenant, adminCreated: boolean, adminLogin: string, adminSenha: string, warning: string|null }}
  * @throws  {Error} com `.code`: "SLUG_INVALIDO" | "SLUG_EM_USO"
  */
 export async function provisionTenant(input = {}) {
@@ -77,38 +95,40 @@ export async function provisionTenant(input = {}) {
     },
   });
 
-  // 3. Cria o usuário administrador inicial (opcional).
+  // 3. Cria o usuário administrador inicial. O login sai do slug (que é único,
+  //    logo o login também é) e a senha é provisória por definição.
+  const login = String(adminLogin || `admin-${slug}`).slice(0, 60);
+  const senha = adminSenha || senhaTemporaria();
   let adminCreated = false;
   let warning = null;
-  if (adminLogin && adminSenha) {
-    const cargo = await prisma.cargo.findFirst({ where: { descricao: CARGO_ADMIN } });
-    if (!cargo) {
-      warning = `Tenant criado, mas cargo '${CARGO_ADMIN}' não existe (rode o seed base).`;
-    } else {
-      try {
-        const senhaHash = await bcrypt.hash(adminSenha, 10);
-        await prisma.usuario.create({
-          data: {
-            login: adminLogin,
-            nome: `Admin ${name}`,
-            senha: senhaHash,
-            tenantId: tenant.id,
-            cargoCodigo: cargo.id,
-            ativo: true,
-            /* A senha inicial é gerada por nós e trafega por e-mail — ou seja,
-               fica registrada na caixa de entrada de alguém. Obrigar a troca no
-               primeiro acesso encerra a validade dela ali mesmo. */
-            forcaAlterarSenha: true,
-          },
-        });
-        adminCreated = true;
-      } catch (e) {
-        warning = `Tenant criado, mas falha ao criar usuário admin: ${
-          e.code === "P2002" ? "login já existe" : e.message
-        }`;
-      }
+
+  const cargo = await prisma.cargo.findFirst({ where: { descricao: CARGO_ADMIN } });
+  if (!cargo) {
+    warning = `Tenant criado, mas cargo '${CARGO_ADMIN}' não existe (rode o seed base).`;
+  } else {
+    try {
+      const senhaHash = await bcrypt.hash(senha, 10);
+      await prisma.usuario.create({
+        data: {
+          login,
+          nome: `Admin ${name}`,
+          senha: senhaHash,
+          tenantId: tenant.id,
+          cargoCodigo: cargo.id,
+          ativo: true,
+          /* A senha inicial é gerada por nós e trafega por e-mail — ou seja,
+             fica registrada na caixa de entrada de alguém. Obrigar a troca no
+             primeiro acesso encerra a validade dela ali mesmo. */
+          forcaAlterarSenha: true,
+        },
+      });
+      adminCreated = true;
+    } catch (e) {
+      warning = `Tenant criado, mas falha ao criar usuário admin: ${
+        e.code === "P2002" ? "login já existe" : e.message
+      }`;
     }
   }
 
-  return { tenant, adminCreated, warning };
+  return { tenant, adminCreated, adminLogin: login, adminSenha: senha, warning };
 }

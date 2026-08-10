@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import { prisma } from "../db.js";
 import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
 import { provisionTenant } from "../services/provisioningService.js";
-import { limparTrials, fidelizarTrial } from "../services/trialService.js";
+import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
 import { cancelarAssinaturasDoSlug } from "../services/pagamentoService.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "domus-dev-secret";
@@ -94,10 +94,40 @@ adminRouter.get("/tenants/:id", async (req, res) => {
   }
 });
 
+/* Provisionamento à mão, pelo painel da Domus. O endereço da vitrine não é
+   digitado: ele sai do nome, pela mesma regra do auto-atendimento da landing —
+   duas portas de entrada que compusessem o slug de formas diferentes dariam
+   endereços diferentes para o mesmo nome. O painel mostra o endereço enquanto
+   se digita; esta conferência é a que vale.
+
+   O acesso inicial também nasce aqui, e não é mais opcional: um tenant sem
+   usuário é um ambiente onde ninguém entra. As credenciais voltam na resposta
+   porque é a única vez em que a senha existe em texto — depois disto só há o
+   hash, e ela vale só até o primeiro acesso, que obriga a troca. */
 adminRouter.post("/tenants", async (req, res) => {
   try {
-    const { tenant, warning } = await provisionTenant(req.body || {});
-    res.status(201).json({ id: tenant.id, slug: tenant.slug, warning });
+    const body = req.body || {};
+    const nome = String(body.name || "").trim();
+
+    const endereco = await verificarSlug(nome);
+    if (!endereco.disponivel) {
+      return res.status(endereco.motivo === "ocupado" ? 409 : 400).json({
+        error: MOTIVO_SLUG[endereco.motivo] || "Escolha outro nome para a imobiliária.",
+        motivo: endereco.motivo,
+      });
+    }
+
+    const { tenant, adminCreated, adminLogin, adminSenha, warning } = await provisionTenant({
+      ...body,
+      name: nome,
+      slug: endereco.slug,
+    });
+    res.status(201).json({
+      id: tenant.id,
+      slug: tenant.slug,
+      warning,
+      admin: adminCreated ? { login: adminLogin, senha: adminSenha } : null,
+    });
   } catch (err) {
     if (err.code === "SLUG_INVALIDO") return res.status(400).json({ error: err.message });
     if (err.code === "SLUG_EM_USO") return res.status(409).json({ error: err.message });

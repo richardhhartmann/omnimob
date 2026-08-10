@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Buildings, GraduationCap, Lifebuoy } from "@phosphor-icons/react";
-import { adminApi } from "../api";
+import { api, adminApi } from "../api";
 import { AdminShell } from "../components/AdminShell";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
+import { PLANOS } from "../utils/planos";
+import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { AdminChamadosPage, CHAMADOS_CSS } from "./admin/AdminChamadosPage";
 import { AdminTutoriaisPage, TUTORIAIS_CSS } from "./admin/AdminTutoriaisPage";
 import {
@@ -30,10 +32,39 @@ const STATUS_META = {
 };
 const STATUS_OPCOES = Object.keys(STATUS_META);
 
+/* O plano deixou de ser texto livre: escrever "Profissional" com acento, sem
+   acento ou abreviado gerava tenants que o `planoMiddleware` não reconhece e
+   que caem no Básico sem ninguém perceber. A lista é a mesma de `planos.js`, e
+   o resumo sai dos próprios flags do plano para não desencontrar da tabela. */
+const PLANO_OPCOES = PLANOS.map((p) => ({
+  value: p.key,
+  label: p.nome,
+  color: p.cor,
+  description:
+    [p.redes && "redes sociais", p.tour360 && "tour 360°", p.ia && "IA"].filter(Boolean).join(" · ") ||
+    "recursos essenciais",
+}));
+
 const EMPTY_FORM = {
   name: "", slug: "", email: "", whatsapp: "", plano: "",
   statusPagamento: "TRIAL", valorMensal: "", proximoVencimento: "",
-  adminLogin: "", adminSenha: "",
+};
+
+// ─── Endereço da vitrine ─────────────────────────────────────────────────────
+/* Mesmo comportamento do cadastro da landing (`TrialModal`): o slug nasce do
+   nome, não é digitado, e a disponibilidade aparece enquanto se escreve. Duas
+   portas de entrada que compusessem o endereço de formas diferentes dariam
+   endereços diferentes para o mesmo nome. */
+const ESPERA_SLUG = 450;
+const SLUG_VAZIO = { valor: "", estado: "vazio", mensagem: "" };
+const HOST_VITRINE =
+  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "domus.app/vitrine";
+const SELO_SLUG = {
+  vazio: "",
+  checando: "verificando…",
+  livre: "✓ disponível",
+  indisponivel: "✕ indisponível",
+  erro: "não verificado",
 };
 
 function fmtMoney(v) {
@@ -119,6 +150,13 @@ export function SuperAdminPage({ session, onLogout }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  /* Endereço derivado do nome. estado: "vazio" | "checando" | "livre" |
+     "indisponivel" | "erro" */
+  const [slug, setSlug] = useState(SLUG_VAZIO);
+  /* Credenciais do admin recém-criado. Só existem nesta resposta — depois disto
+     o banco guarda apenas o hash —, então o modal para no lugar e mostra o que
+     precisa ser repassado à imobiliária. */
+  const [criado, setCriado] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -143,6 +181,65 @@ export function SuperAdminPage({ session, onLogout }) {
       .catch(() => {});
   }, []);
 
+  /* O que dá para julgar sem rede (tamanho, caracteres, nomes reservados) é
+     julgado na hora; só o "esse já é de alguém" pergunta ao servidor, e espera
+     a digitação parar. A resposta anterior é abortada a cada tecla, então uma
+     consulta lenta nunca sobrescreve uma mais nova. Na edição não roda: o slug
+     de um tenant existente não muda, mesmo que o nome mude. */
+  const nomeDigitado = form.name;
+  useEffect(() => {
+    if (!modalOpen || editingId || criado) return undefined;
+
+    const bruto = nomeDigitado.trim();
+    const valor = slugify(bruto);
+
+    if (bruto.length < 2) {
+      setSlug({ valor, estado: "vazio", mensagem: "" });
+      return undefined;
+    }
+
+    const motivo = motivoLocal(bruto);
+    if (motivo) {
+      setSlug({ valor, estado: "indisponivel", mensagem: MOTIVO_SLUG[motivo] });
+      return undefined;
+    }
+
+    setSlug({ valor, estado: "checando", mensagem: "" });
+
+    const controle = new AbortController();
+    const timer = setTimeout(() => {
+      api
+        .verificarSlugDomus(bruto, { signal: controle.signal })
+        .then((r) =>
+          setSlug({
+            valor: r.slug || valor,
+            estado: r.disponivel ? "livre" : "indisponivel",
+            mensagem: r.mensagem || "",
+          }),
+        )
+        .catch((erro) => {
+          if (erro.name === "AbortError") return;
+          // Sem resposta não dá para afirmar nada, e travar o cadastro por causa
+          // de uma consulta que caiu seria pior: o servidor confere de novo no
+          // envio.
+          setSlug({ valor, estado: "erro", mensagem: "" });
+        });
+    }, ESPERA_SLUG);
+
+    return () => {
+      clearTimeout(timer);
+      controle.abort();
+    };
+  }, [modalOpen, editingId, criado, nomeDigitado]);
+
+  /* Planos fora da lista aparecem como estão: tenants criados antes do combo
+     têm o plano escrito à mão, e abrir o cadastro para mexer no vencimento não
+     pode trocar silenciosamente o plano de quem já paga. */
+  const planoOpcoes = useMemo(() => {
+    if (!form.plano || PLANO_OPCOES.some((o) => o.value === form.plano)) return PLANO_OPCOES;
+    return [...PLANO_OPCOES, { value: form.plano, label: form.plano, description: "valor atual, fora da lista" }];
+  }, [form.plano]);
+
   const stats = useMemo(() => {
     const by = (s) => tenants.filter((t) => t.statusPagamento === s).length;
     return { total: tenants.length, emDia: by("EM_DIA"), atrasado: by("ATRASADO"), trial: by("TRIAL") };
@@ -158,6 +255,8 @@ export function SuperAdminPage({ session, onLogout }) {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setFormError("");
+    setSlug(SLUG_VAZIO);
+    setCriado(null);
     setModalOpen(true);
   }
 
@@ -167,10 +266,16 @@ export function SuperAdminPage({ session, onLogout }) {
       name: t.name || "", slug: t.slug || "", email: t.email || "", whatsapp: t.whatsapp || "",
       plano: t.plano || "", statusPagamento: t.statusPagamento || "TRIAL",
       valorMensal: t.valorMensal ?? "", proximoVencimento: toDateInput(t.proximoVencimento),
-      adminLogin: "", adminSenha: "",
     });
     setFormError("");
+    setSlug(SLUG_VAZIO);
+    setCriado(null);
     setModalOpen(true);
+  }
+
+  function fecharModal() {
+    setModalOpen(false);
+    setCriado(null);
   }
 
   function setField(k, v) {
@@ -179,6 +284,9 @@ export function SuperAdminPage({ session, onLogout }) {
 
   async function handleSave(e) {
     e.preventDefault();
+    // O botão já fica desligado nestes casos; a trava aqui é para o Enter, que
+    // envia o formulário sem passar por ele.
+    if (!editingId && (slug.estado === "indisponivel" || slug.estado === "checando")) return;
     setSaving(true);
     setFormError("");
     try {
@@ -190,17 +298,15 @@ export function SuperAdminPage({ session, onLogout }) {
       };
       if (editingId) {
         await adminApi.updateTenant(editingId, payload);
+        setModalOpen(false);
+        await load();
       } else {
-        const createPayload = { ...payload, slug: form.slug };
-        if (form.adminLogin && form.adminSenha) {
-          createPayload.adminLogin = form.adminLogin;
-          createPayload.adminSenha = form.adminSenha;
-        }
-        const res = await adminApi.createTenant(createPayload);
-        if (res?.warning) alert(res.warning);
+        // O slug não vai no envio: quem o compõe é o servidor, a partir do nome.
+        const res = await adminApi.createTenant(payload);
+        // O modal não fecha — as credenciais do admin só existem nesta resposta.
+        setCriado({ slug: res.slug, admin: res.admin || null, warning: res.warning || "" });
+        await load();
       }
-      setModalOpen(false);
-      await load();
     } catch (err) {
       setFormError(err.message || "Erro ao salvar.");
     } finally {
@@ -342,75 +448,156 @@ export function SuperAdminPage({ session, onLogout }) {
 
       {/* ── Modal de cadastro/edição ── */}
       {modalOpen ? (
-        <div className="sa-modal" onClick={() => setModalOpen(false)}>
+        <div className="sa-modal" onClick={fecharModal}>
           <form className="sa-modal__card" onClick={(e) => e.stopPropagation()} onSubmit={handleSave}>
-            <div className="sa-modal__head">
-              <Eyebrow>{editingId ? "EDITAR" : "PROVISIONAR"}</Eyebrow>
-              <h2 className="sa-modal__title">{editingId ? "Editar tenant" : "Novo tenant"}</h2>
-            </div>
+            {criado ? (
+              /* Ambiente criado. A senha aparece uma vez só — daqui em diante o
+                 banco tem apenas o hash dela. */
+              <>
+                <div className="sa-modal__head">
+                  <Eyebrow>PROVISIONADO</Eyebrow>
+                  <h2 className="sa-modal__title">{form.name} está no ar</h2>
+                </div>
 
-            {formError ? <Alert tone="danger">{formError}</Alert> : null}
+                {criado.warning ? <Alert tone="danger">{criado.warning}</Alert> : null}
 
-            <div className="sa-form-grid">
-              <Field label="Nome *">
-                <input className="dl-input" required value={form.name} onChange={(e) => setField("name", e.target.value)} />
-              </Field>
-              <Field label="Slug *" hint={editingId ? "O slug não muda depois de criado." : undefined}>
-                <input
-                  className="dl-input"
-                  required
-                  value={form.slug}
-                  onChange={(e) => setField("slug", e.target.value.toLowerCase())}
-                  disabled={!!editingId}
-                  placeholder="ex: imobiliaria-x"
-                />
-              </Field>
-              <Field label="E-mail">
-                <input className="dl-input" type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} />
-              </Field>
-              <Field label="WhatsApp">
-                <input className="dl-input" value={form.whatsapp} onChange={(e) => setField("whatsapp", e.target.value)} placeholder="5511999999999" />
-              </Field>
-              <Field label="Plano">
-                <input className="dl-input" value={form.plano} onChange={(e) => setField("plano", e.target.value)} placeholder="Básico / Profissional…" />
-              </Field>
-              <Field label="Status pagamento">
-                <SelectCustom
-                  value={form.statusPagamento}
-                  options={STATUS_OPCOES.map((s) => ({ value: s, label: STATUS_META[s].label, color: STATUS_META[s].color }))}
-                  onChange={(v) => setField("statusPagamento", v)}
-                />
-              </Field>
-              <Field label="Valor mensal (R$)">
-                <input className="dl-input" type="number" step="0.01" value={form.valorMensal} onChange={(e) => setField("valorMensal", e.target.value)} />
-              </Field>
-              <Field label="Próximo vencimento">
-                <input className="dl-input" type="date" value={form.proximoVencimento} onChange={(e) => setField("proximoVencimento", e.target.value)} />
-              </Field>
-            </div>
+                <p className="sa-endereco sa-endereco--fixo">
+                  <span className="dl-mono sa-endereco__url">
+                    {HOST_VITRINE}/<b>{criado.slug}</b>
+                  </span>
+                  <span className="sa-endereco__nota">Endereço da vitrine pública.</span>
+                </p>
 
-            {!editingId ? (
-              <div className="sa-modal__extra">
-                <span className="dl-mono sa-modal__extra-label">// usuário admin inicial (opcional)</span>
+                {criado.admin ? (
+                  <div className="sa-credenciais">
+                    <span className="dl-mono sa-modal__extra-label">// acesso do administrador</span>
+                    <dl className="sa-credenciais__lista">
+                      <div>
+                        <dt className="dl-mono">LOGIN</dt>
+                        <dd>{criado.admin.login}</dd>
+                      </div>
+                      <div>
+                        <dt className="dl-mono">SENHA PROVISÓRIA</dt>
+                        <dd>{criado.admin.senha}</dd>
+                      </div>
+                    </dl>
+                    <p className="sa-credenciais__nota">
+                      Anote agora: a senha não volta a ser exibida. No primeiro acesso o sistema
+                      obriga a definir uma nova.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="sa-modal__foot">
+                  <Button
+                    href={`/vitrine/${criado.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    variant="ghost"
+                    arrow={false}
+                  >
+                    Ver vitrine
+                  </Button>
+                  <Button as="button" type="button" variant="primary" arrow={false} onClick={fecharModal}>
+                    Concluir
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="sa-modal__head">
+                  <Eyebrow>{editingId ? "EDITAR" : "PROVISIONAR"}</Eyebrow>
+                  <h2 className="sa-modal__title">{editingId ? "Editar tenant" : "Novo tenant"}</h2>
+                </div>
+
+                {formError ? <Alert tone="danger">{formError}</Alert> : null}
+
                 <div className="sa-form-grid">
-                  <Field label="Login do admin">
-                    <input className="dl-input" value={form.adminLogin} onChange={(e) => setField("adminLogin", e.target.value)} />
+                  {/* O nome não é só um rótulo: é dele que sai o endereço da
+                      vitrine, único entre todas as imobiliárias. Por isso o campo
+                      ocupa a linha inteira e mostra o endereço se formando. */}
+                  <div className="sa-nome">
+                    <Field label="Nome *">
+                      <input className="dl-input" required value={form.name} onChange={(e) => setField("name", e.target.value)} />
+                    </Field>
+
+                    {editingId ? (
+                      <p className="sa-endereco sa-endereco--fixo">
+                        <span className="dl-mono sa-endereco__url">
+                          {HOST_VITRINE}/<b>{form.slug}</b>
+                        </span>
+                        <span className="sa-endereco__nota">
+                          O endereço da vitrine não muda depois de criado, mesmo que o nome mude.
+                        </span>
+                      </p>
+                    ) : form.name.trim() ? (
+                      <span className={`sa-endereco is-${slug.estado}`} aria-live="polite">
+                        <span className="sa-endereco__linha">
+                          <span className="dl-mono sa-endereco__url">
+                            {HOST_VITRINE}/<b>{slug.valor}</b>
+                          </span>
+                          <span className="sa-endereco__selo">{SELO_SLUG[slug.estado]}</span>
+                        </span>
+                        <span className="sa-endereco__nota">
+                          {slug.mensagem || "Endereço da vitrine, gerado a partir do nome."}
+                        </span>
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <Field label="E-mail">
+                    <input className="dl-input" type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} />
                   </Field>
-                  <Field label="Senha do admin">
-                    <input className="dl-input" type="text" value={form.adminSenha} onChange={(e) => setField("adminSenha", e.target.value)} />
+                  <Field label="WhatsApp">
+                    <input className="dl-input" value={form.whatsapp} onChange={(e) => setField("whatsapp", e.target.value)} placeholder="5511999999999" />
+                  </Field>
+                  <Field label="Plano">
+                    <SelectCustom
+                      value={form.plano}
+                      options={planoOpcoes}
+                      onChange={(v) => setField("plano", v)}
+                      placeholder="Selecione o plano"
+                    />
+                  </Field>
+                  <Field label="Status pagamento">
+                    <SelectCustom
+                      value={form.statusPagamento}
+                      options={STATUS_OPCOES.map((s) => ({ value: s, label: STATUS_META[s].label, color: STATUS_META[s].color }))}
+                      onChange={(v) => setField("statusPagamento", v)}
+                    />
+                  </Field>
+                  <Field label="Valor mensal (R$)">
+                    <input className="dl-input" type="number" step="0.01" value={form.valorMensal} onChange={(e) => setField("valorMensal", e.target.value)} />
+                  </Field>
+                  <Field label="Próximo vencimento">
+                    <input className="dl-input" type="date" value={form.proximoVencimento} onChange={(e) => setField("proximoVencimento", e.target.value)} />
                   </Field>
                 </div>
-              </div>
-            ) : null}
 
-            <div className="sa-modal__foot">
-              <Button as="button" type="button" variant="ghost" arrow={false} onClick={() => setModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button as="button" type="submit" variant="primary" disabled={saving}>
-                {saving ? "Salvando…" : "Salvar"}
-              </Button>
-            </div>
+                {!editingId ? (
+                  <p className="dl-mono sa-modal__extra-label">
+                    // o acesso do administrador é criado junto, com senha provisória e troca
+                    obrigatória no primeiro login
+                  </p>
+                ) : null}
+
+                <div className="sa-modal__foot">
+                  <Button as="button" type="button" variant="ghost" arrow={false} onClick={fecharModal}>
+                    Cancelar
+                  </Button>
+                  {/* Desligado enquanto o endereço não fecha: seguir com um slug
+                      ocupado só adiaria a mesma recusa para o fim do cadastro. */}
+                  <Button
+                    as="button"
+                    type="submit"
+                    variant="primary"
+                    disabled={saving || (!editingId && (slug.estado === "indisponivel" || slug.estado === "checando"))}
+                  >
+                    {saving ? "Salvando…" : editingId ? "Salvar" : "Criar tenant"}
+                  </Button>
+                </div>
+              </>
+            )}
           </form>
         </div>
       ) : null}
@@ -473,9 +660,57 @@ const CSS = `
 .sa-modal__head { display: grid; gap: 10px; }
 .sa-modal__title { font-size: 24px; font-weight: 800; letter-spacing: -0.035em; color: var(--strong); }
 .sa-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.sa-modal__extra { border-top: 1px solid var(--line); padding-top: 18px; display: grid; gap: 14px; }
-.sa-modal__extra-label { color: var(--placeholder); font-size: 9.5px; text-transform: none; letter-spacing: 0.05em; }
+.sa-modal__extra-label { color: var(--placeholder); font-size: 9.5px; text-transform: none; letter-spacing: 0.05em; line-height: 1.6; }
 .sa-modal__foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+/* ── Endereço da vitrine ──────────────────────────────────────────────────
+   Colado no campo do nome, com respiro menor que o do próximo campo: é
+   consequência do que foi digitado ali em cima, não um campo novo. A caixa
+   troca de cor conforme o estado e o texto de apoio troca junto, sem a linha
+   pular. Mesma peça do cadastro da landing. */
+.sa-nome { grid-column: 1 / -1; display: grid; gap: 6px; }
+.sa-endereco {
+  display: grid; gap: 5px;
+  padding: 9px 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+  transition: background 0.22s ease, border-color 0.22s ease;
+}
+.sa-endereco__linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Sem o caixa-alta do .dl-mono: o slug é minúsculo de verdade, e mostrá-lo em
+   maiúsculas seria prometer um endereço que não é o que vai ser criado. */
+.sa-endereco__url {
+  flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--placeholder);
+  text-transform: none; letter-spacing: 0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sa-endereco__url b { color: var(--subtle); font-weight: 600; }
+.sa-endereco__selo {
+  flex: 0 0 auto; font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--placeholder);
+}
+.sa-endereco__nota { font-size: 11px; line-height: 1.5; color: var(--placeholder); }
+
+.sa-endereco.is-checando .sa-endereco__selo { color: var(--subtle); }
+.sa-endereco.is-livre { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3); }
+.sa-endereco.is-livre .sa-endereco__url b { color: #86efac; }
+.sa-endereco.is-livre .sa-endereco__selo { color: #86efac; }
+.sa-endereco.is-indisponivel { background: rgba(248,113,113,0.09); border-color: rgba(248,113,113,0.3); }
+.sa-endereco.is-indisponivel .sa-endereco__selo { color: #fca5a5; }
+.sa-endereco.is-indisponivel .sa-endereco__nota { color: #fca5a5; }
+
+/* ── Credenciais do admin recém-criado ── */
+.sa-credenciais {
+  display: grid; gap: 12px; padding: 16px 18px; border-radius: 14px;
+  background: rgba(212,175,55,0.07); border: 1px solid rgba(212,175,55,0.26);
+}
+.sa-credenciais__lista { display: grid; gap: 12px; }
+.sa-credenciais__lista dt { color: #55555f; font-size: 8.5px; letter-spacing: 0.13em; }
+.sa-credenciais__lista dd {
+  margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--strong);
+  font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.01em;
+  word-break: break-all; user-select: all;
+}
+.sa-credenciais__nota { font-size: 11.5px; line-height: 1.6; color: var(--subtle); }
 
 @media (max-width: 720px) {
   .sa-form-grid { grid-template-columns: 1fr; }
