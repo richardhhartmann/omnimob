@@ -38,6 +38,11 @@ app.use(
       
       if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Diagnóstico: sem isto, "Not allowed by CORS" não diz qual origem chegou
+      // nem o que o servidor considera permitido — impossível de depurar no Render.
+      console.warn(
+        `[cors] Origin recusada: "${origin}" — permitidas: ${allowedOrigins.join(", ") || "(nenhuma)"}`
+      );
       callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
