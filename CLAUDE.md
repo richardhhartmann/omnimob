@@ -72,7 +72,7 @@ JWT_SECRET=omnimob-dev-secret
 APP_URL=https://omnimob.app          # base p/ links de e-mail (trial, avisos)
 FRONTEND_URL=https://omnimob.app     # fallback de redirect do OAuth Meta
 META_CALLBACK_URL=https://api.omnimob.app/api/social/oauth/callback
-ALLOWED_ORIGINS=https://omnimob.app,http://localhost:5173,http://localhost:3000
+ALLOWED_ORIGINS=https://omnimob.app,https://www.omnimob.app,http://localhost:5173,http://localhost:3000
 GEMINI_API_KEY=...          # Google AI Studio
 GEMINI_MODEL=gemini-2.5-flash
 ```
