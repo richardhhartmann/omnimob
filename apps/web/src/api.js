@@ -1,4 +1,9 @@
-const API_URL = import.meta.env.VITE_API_URL || "https://api.omnimob.app";
+/* Base da API. A barra do fim é removida de propósito: todo `path` daqui já
+   começa com "/", então uma env terminada em barra produziria "//api/...", que
+   o Express não casa com rota nenhuma — a resposta vira 404 em TODA requisição,
+   sem erro de CORS nem nada que aponte a causa. Normalizar aqui deixa a
+   variável de ambiente à prova de barra sobrando. */
+const API_URL = (import.meta.env.VITE_API_URL || "https://api.omnimob.app").replace(/\/+$/, "");
 
 let authToken = null;
 let adminToken = null;

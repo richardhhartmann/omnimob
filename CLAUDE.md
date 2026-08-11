@@ -63,24 +63,57 @@ omnimob/
 - `authMiddleware.js` — valida JWT, injeta `req.user`
 - `tenantMiddleware.js` — lê header `x-tenant-slug`, injeta `req.tenant`; toda query filtra por `tenantId`
 
-**Env vars da API (`.env` em `apps/api`):**
-```
-DATABASE_URL=postgresql://...supabase...
-DIRECT_URL=postgresql://...supabase...
-PORT=4000
-JWT_SECRET=omnimob-dev-secret
-APP_URL=https://omnimob.app          # base p/ links de e-mail (trial, avisos)
-FRONTEND_URL=https://omnimob.app     # fallback de redirect do OAuth Meta
-META_CALLBACK_URL=https://api.omnimob.app/api/social/oauth/callback
-ALLOWED_ORIGINS=https://omnimob.app,https://www.omnimob.app,http://localhost:5173,http://localhost:3000
-GEMINI_API_KEY=...          # Google AI Studio
-GEMINI_MODEL=gemini-2.5-flash
-```
+### Env vars
+
+> **A regra que evita a maior parte dos enganos:** metade destas variáveis
+> aponta para a **API** (`api.omnimob.app`) e a outra metade para o **FRONT**
+> (`omnimob.app`). Trocar as duas coisas é o erro clássico — e o sintoma nunca
+> diz o que houve: o app quebra no CORS, ou o link do e-mail cai num 404.
+
+**`apps/api/.env`** — obrigatórias:
+
+| Variável | Aponta p/ | Dev | Produção |
+|---|---|---|---|
+| `DATABASE_URL` | — | pooler Supabase `:6543` (`pgbouncer=true`) | idem |
+| `DIRECT_URL` | — | Supabase `:5432` (migrations) | idem |
+| `PORT` | — | `4000` | `4000` |
+| `JWT_SECRET` | — | qualquer string | segredo forte e distinto do de dev |
+| `APP_URL` | **FRONT** | `http://localhost:5173` | `https://omnimob.app` |
+| `FRONTEND_URL` | **FRONT** | `http://localhost:5173` | `https://omnimob.app` |
+| `ALLOWED_ORIGINS` | **FRONT** | `http://localhost:5173,http://localhost:3000` | `https://omnimob.app,https://www.omnimob.app` |
+| `META_CALLBACK_URL` | **API** | `http://localhost:4000/api/social/oauth/callback` | `https://api.omnimob.app/api/social/oauth/callback` |
+| `META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN` | — | do app Meta | idem |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | — | Google AI Studio / `gemini-2.5-flash` | idem |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | `sk_test_…` | **`sk_live_…`** |
+| `STRIPE_PRICE_BASIC` / `_PRO` / `_PREMIUM` | — | preços de teste | preços live |
+| `SMTP_PASS` | — | vazio (só loga) | **obrigatória** — sem ela nenhum e-mail sai, em silêncio |
+| `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
+
+Com padrão no código, defina só para sobrescrever: `SMTP_HOST`
+(`smtp.hostinger.com`), `SMTP_PORT` (`465`), `SMTP_SECURE` (`true`),
+`SMTP_USER` (`notifications@omnimob.app`), `EMAIL_REMETENTE`, `DATABASE_HOST`.
+
+Opcionais: `FAXINA_AUTOMATICA=true` (agendador de limpeza — só com uma
+instância), `SEED_DEV=true`, `SUPER_ADMIN_EMAIL` / `_NOME` / `_PASSWORD` (só o
+seed lê; **sem `SUPER_ADMIN_PASSWORD` a senha vira `superadmin`**).
+
+Em produção defina também `NODE_ENV=production`: é ele que fecha o atalho de
+CORS que libera qualquer `localhost`.
+
+**`apps/web/.env`** (tudo com prefixo `VITE_`, e tudo vai para o bundle — nada
+de segredo aqui):
+
+| Variável | Aponta p/ | Dev | Produção |
+|---|---|---|---|
+| `VITE_API_URL` | **API** | `http://localhost:4000` | `https://api.omnimob.app` — **sem barra no fim** |
+| `VITE_CLOUDINARY_CLOUD_NAME` | — | `dpwuxmbli` | idem |
+| `VITE_CLOUDINARY_UPLOAD_PRESET` | — | `domus-app` (nome do preset no Cloudinary) | idem |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | — | `pk_test_…` | **`pk_live_…`** |
 
 **Ambientes:**
-- **Front (produção):** `https://omnimob.app` (Vercel)
-- **API (produção):** `https://api.omnimob.app` (Render — registrar CNAME `api` apontando para o serviço; copie estas envs para o dashboard do Render)
-- **Dev local:** web em `5173`, API em `4000` — o `.env` local já mantém `localhost` no CORS, e o frontend só usa a API de produção quando `VITE_API_URL` está setado
+- **Front (produção):** `https://omnimob.app` (Vercel) — hoje o apex redireciona 308 para `www.omnimob.app`; ambos estão no CORS
+- **API (produção):** `https://api.omnimob.app` (Render — CNAME `api` apontando para o serviço)
+- **Dev local:** web em `5173`, API em `4000`
 
 ---
 

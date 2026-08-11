@@ -28,15 +28,23 @@ const port = Number(process.env.PORT || 4000);
 app.set("trust proxy", 1);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
+
+/* O atalho de localhost existe porque o Vite troca de porta sozinho quando a
+   5173 está ocupada, e ninguém quer editar ALLOWED_ORIGINS por causa disso.
+   Mas ele vale só fora de produção: com `credentials: true`, uma origem
+   permitida pode ler resposta autenticada, e "qualquer localhost" é uma porta
+   aberta que não tem por que existir no servidor público. Em produção manda a
+   lista, e só ela. */
+const ehProducao = process.env.NODE_ENV === "production";
 
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      
-      if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
+
+      if (!ehProducao && /^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       // Diagnóstico: sem isto, "Not allowed by CORS" não diz qual origem chegou
       // nem o que o servidor considera permitido — impossível de depurar no Render.
