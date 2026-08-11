@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { getTrialStatusCompartilhado } from "../utils/trialStatus";
 import { PLANOS } from "../utils/planos";
 import { IconeCheck, IconeEstrela } from "./Icones.jsx";
 import { PerfilInicialPasso, PERFIL_INICIAL_CSS } from "./PerfilInicialPasso.jsx";
@@ -96,8 +96,7 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
   useEffect(() => {
     if (!tenantSlug) return;
 
-    api
-      .getTrialStatus(tenantSlug)
+    getTrialStatusCompartilhado(tenantSlug)
       .then((r) => {
         const qual = r?.assinaturaAtiva ? "assinante" : r?.emTrial ? "teste" : null;
         if (!qual) { aoResolver?.(); return; }

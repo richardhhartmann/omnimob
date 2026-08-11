@@ -8,6 +8,7 @@ import { provisionTenant } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
 import { cancelarAssinaturasDoSlug } from "../services/pagamentoService.js";
 import { verificarEmail } from "../services/notificationService.js";
+import { diagnosticarBanco } from "../services/healthService.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
@@ -57,6 +58,14 @@ adminRouter.use(requireSuperAdmin);
 adminRouter.get("/diagnostico/email", async (_req, res) => {
   const r = await verificarEmail();
   return res.status(r.ok ? 200 : 503).json(r);
+});
+
+/* Onde o tempo do banco é gasto, medido de dentro do servidor. Serve para
+   decidir entre "mudar de região" e "mexer na conexão" com número em vez de
+   palpite — ver o comentário de `diagnosticarBanco`. */
+adminRouter.get("/diagnostico/banco", async (req, res) => {
+  const amostras = Math.min(Number(req.query.amostras) || 5, 15);
+  return res.json(await diagnosticarBanco({ amostras }));
 });
 
 function serializeTenant(t) {

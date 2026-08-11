@@ -17,17 +17,20 @@ Este documento cruza a **visão de arquitetura** (o alvo de longo prazo) com o
 | Multi-tenant | Banco único Postgres/Supabase, isolamento por coluna `tenant_id` | ⚠️ Diverge da visão (banco-por-tenant) — ver "Isolamento" |
 | Banco global (metadados) | Mesmo banco; `tb_tenants`, `tb_super_admin` + campos de billing | 🟡 Conceito existe, físico não |
 | Provisionamento automático | `provisioningService.provisionTenant()` (registro + licença + admin) | 🟡 Funciona; passos de "criar banco/estrutura" ficam como seam |
-| Versionamento de schema | Prisma Migrate (baseline `0_init`) + `migrationService` expõe versão | 🟢 Adotado (falta aplicar baseline no banco — ver abaixo) |
+| Versionamento de schema | Prisma Migrate; baseline `0_init` **aplicado**, 10 migrações | 🟢 Em uso |
 | Autenticação centralizada | Login por `usu_login` global resolve o tenant internamente | 🟢 Não depende do nome da empresa |
-| Serviços da plataforma | `provisioning`, `migration`, `health`, `notification`, `ai` | 🟡 IA e Health reais; resto é interface desacoplada |
-| Health Service | `/health` real: DB `SELECT 1`, latência, versão do schema | 🟢 Implementado |
-| Notification Service | Interface única (email/whatsapp/push/sms) — stubs | 🟡 Terreno pronto, provedores pendentes |
-| Backup / Scheduler | Não existe | ❌ Roadmap |
-| Publicação automatizada | `socialPublisher` + webhook Meta real + `PropertyPublication` | 🟢 Estrutura pronta; canais reais ainda stub |
+| Serviços da plataforma | 11 serviços em `src/services/` — ver tabela abaixo | 🟢 Maioria real; WhatsApp/push/SMS ainda stub |
+| Health Service | `/health`: DB, latência, versão do schema, **commit em execução** | 🟢 Implementado |
+| Notification Service | **E-mail real** (SMTP/Resend, com diagnóstico). WhatsApp/push/SMS stub | 🟡 Um canal pronto, três pendentes |
+| **Cobrança / assinaturas** | **Stripe**: `pagamentoService`, webhook, 3 planos, gate por plano | 🟢 Implementado |
+| **Ciclo de vida do teste** | `trialService`: convite, expiração, avisos, faxina, slugs reservados | 🟢 Implementado |
+| Scheduler | `faxinaScheduler` (`setInterval`, ligado por `FAXINA_AUTOMATICA`) | 🟡 Simples; sem fila nem cron distribuído |
+| Backup | Não existe | ❌ Roadmap |
+| Publicação automatizada | **Graph API real** (Facebook + Instagram) em `socialRoutes` + webhook Meta + `PropertyPublication` + reconciliação | 🟢 Implementado |
 | Inteligência Artificial | `aiService` (Gemini 2.5 Flash) — descrições, título, hashtags, posts, ads, e-mail | 🟢 Implementado e testado |
-| ERP (módulos) | Imóveis, Clientes, Vendas, Cargos, Leads, TipoImóvel/Atributos | 🟢 Base; faltam Contratos, Agenda, Financeiro, Vistorias, Proprietários, Corretores |
+| ERP (módulos) | Imóveis, Clientes, Vendas, Cargos, Leads, TipoImóvel/Atributos, **Chamados**, Tutoriais | 🟢 Base; faltam Contratos, Agenda, Financeiro, Vistorias, Proprietários, Corretores |
 | Site institucional | Não existe | ❌ Roadmap |
-| Sites das imobiliárias | Vitrine pública por tenant (`/vitrine/:slug`) com editor | 🟢 Existe; falta domínio próprio/SEO/blog |
+| Sites das imobiliárias | Vitrine pública por tenant (`/vitrine/:slug`) com editor; **SEO técnico feito** | 🟡 Falta domínio próprio e blog |
 
 ---
 
@@ -59,10 +62,21 @@ A visão pede **banco por tenant sem `tenant_id`**. O código faz o oposto (banc
 | `tenantRegistry.js` | Resolve onde um tenant vive (seam multi-DB) | Real (shared-db) |
 | `provisioningService.js` | Cria/configura tenant + admin + licença | Real |
 | `migrationService.js` | Lê versão do schema (`_prisma_migrations`) | Real |
-| `healthService.js` | Disponibilidade, latência, versão | Real |
-| `notificationService.js` | Email/WhatsApp/Push/SMS (interface única) | Stub |
+| `healthService.js` | Disponibilidade, latência, versão, commit, diagnóstico do banco | Real |
+| `notificationService.js` | E-mail (Resend/SMTP) + WhatsApp/Push/SMS na mesma interface | E-mail real; resto stub |
+| `emailLayout.js` / `emailTemplates.js` | Layout e conteúdo dos e-mails transacionais | Real |
+| `pagamentoService.js` | Stripe: assinatura, cancelamento, preços por plano | Real |
+| `trialService.js` | Teste grátis: convite, expiração, faxina, slugs reservados | Real |
+| `faxinaScheduler.js` | Dispara a faxina periodicamente (`FAXINA_AUTOMATICA=true`) | Real (simples) |
 | `aiService.js` | Geração de conteúdo com Gemini 2.5 Flash | Real |
-| `socialPublisher.js` | Fila de publicação social | Parcial (canais stub) |
+
+> Havia um `socialPublisher.js` com `enqueuePropertyPublication()`, que marcava
+> as publicações como `PUBLISHED` após um `setTimeout` de 80 ms, sem publicar
+> nada. **Foi removido**: ninguém o importava, e a publicação de verdade sempre
+> esteve em `socialRoutes.js`. Ele sobrevivia como armadilha — bastava alguém
+> ligá-lo para o sistema passar a mentir sobre publicações. O único rastro são
+> refs no formato `facebook-<id>` gravadas antes, e o `isRealMetaRef()` em
+> `socialRoutes.js` existe justamente para ignorá-las na reconciliação.
 
 ---
 
@@ -88,49 +102,102 @@ Sem chave configurada, respondem `503`.
 
 ---
 
+## Cobrança e assinaturas (Stripe)
+
+`pagamentoService.js` + `stripeWebhookRoutes.js`. O webhook é montado **antes**
+do `express.json()`, com corpo cru (`express.raw`), porque a assinatura do
+Stripe é calculada sobre os bytes originais — se o body for parseado antes, a
+validação falha sem explicação óbvia.
+
+- Três planos (`BASICO`, `PROFISSIONAL`, `PREMIUM`), com preço vindo do Stripe
+  e um mapa de reserva em `planos.js` para a landing não ficar vazia enquanto a
+  resposta não chega.
+- IDs de preço lidos com alias (`STRIPE_PRICE_BASICO` **ou** `STRIPE_PRICE_BASIC`).
+- Gate por plano em `planoLibera*` — redes sociais a partir do Profissional,
+  tour 360° e IA conforme o plano.
+- Excluir tenant no super-admin cancela a assinatura no Stripe **antes** de
+  apagar a linha; falha no Stripe não bloqueia a exclusão (ver `adminRoutes.js`).
+
+---
+
+## Notificações
+
+Interface única para e-mail, WhatsApp, push e SMS. **Só o e-mail é real**; os
+outros três registram no log e devolvem o envelope.
+
+O e-mail tem dois transportes, nesta ordem: **Resend** (HTTPS) quando
+`RESEND_API_KEY` existe, e **SMTP** (nodemailer) caso contrário. Teto de 10 s
+por tentativa nos dois.
+
+> **Lição que custou caro:** o SMTP falhava em produção com `Connection timeout`
+> e a conclusão natural — "a hospedagem bloqueia SMTP" — estava errada. O
+> `smtp.hostinger.com` publica registro AAAA (IPv6) além do A, o nodemailer
+> escolhe a família olhando as interfaces de rede da máquina, e o container
+> tinha interface IPv6 **sem rota**. O socket morria em `ENETUNREACH`. Por isso
+> `getTransporter()` resolve o registro A na mão e passa `servername` para o TLS
+> continuar validando pelo nome. Sem os timeouts explícitos, esse erro ficava
+> escondido atrás de dois minutos de espera.
+
+Como o fluxo do teste grátis engole a falha de propósito (registra o link no log
+e devolve 202), o envio quebrado é invisível. Daí existir
+`GET /api/admin/diagnostico/email`: conecta e autentica **sem enviar nada**.
+
+---
+
+## Diagnóstico
+
+Dois endpoints atrás do super-admin, criados porque as falhas mais caras do
+projeto foram as silenciosas:
+
+| Endpoint | Responde |
+|---|---|
+| `GET /api/admin/diagnostico/email` | O servidor consegue enviar e-mail? Qual transporte? |
+| `GET /api/admin/diagnostico/banco` | Onde o tempo do banco é gasto: DNS, TCP e consulta, separados |
+
+O `/health` expõe o **commit em execução** (`RENDER_GIT_COMMIT`). Isso existe
+porque "meu código já subiu?" não tinha resposta de fora: o Render republica o
+mesmo commit a cada mudança de variável de ambiente, então o log dizia "deploy
+concluído" enquanto o código seguia velho.
+
+O diagnóstico do banco separa **distância** de **overhead do pooler** — dois
+diagnósticos opostos que produzem o mesmo sintoma (consulta lenta) e pedem
+soluções opostas (mudar de região × mudar a conexão).
+
+---
+
 ## Versionamento de schema (Prisma Migrate)
 
 O projeto usava `prisma db push`. Adotamos **Prisma Migrate**; a tabela nativa
 `_prisma_migrations` é a "SchemaVersion" oficial, exposta via `migrationService`
 e no `/health`.
 
-Foi gerada a migração baseline **`prisma/migrations/0_init`** (offline, a partir
-do schema atual — não tocou no banco).
-
-### Como aplicar o baseline (uma vez, por quem tem acesso ao banco)
-
-O banco já existe (criado via `db push`). Para adotar migrations sem recriar
-nada, **marque o baseline como já aplicado**:
+O baseline `prisma/migrations/0_init` **já foi aplicado**. Hoje são 10 migrações
+e o schema está em dia nos dois ambientes.
 
 ```bash
 cd apps/api
-npm run prisma:migrate:status     # deve listar 0_init como "not applied"
-npm run prisma:baseline           # prisma migrate resolve --applied 0_init
-npm run prisma:migrate:status     # agora 0_init aparece como aplicado
+npm run prisma:migrate            # dev  → cria e aplica nova migração
+npm run prisma:migrate:deploy     # produção → aplica o que foi commitado
+npm run prisma:migrate:status     # confere
 ```
 
-Depois disso, novas alterações de schema seguem o fluxo normal:
-
-```bash
-npm run prisma:migrate            # prisma migrate dev  → cria nova migração
-npm run prisma:migrate:deploy     # em produção
-```
-
-> ⚠️ **Não** rode `prisma migrate dev` antes do baseline: sem o `resolve`, o
-> Prisma pode querer resetar o banco por achar que ele está fora de sincronia.
+> **Ambientes separados.** Desenvolvimento e produção usavam o **mesmo** banco,
+> o que fazia `migrate dev`, `seed --dev` e `faxina --aplicar` locais atingirem
+> produção — a faxina, em particular, apaga tenants em cascata. Hoje são dois
+> projetos Supabase distintos; o `.env` local aponta para o de desenvolvimento e
+> o Render para o de produção. O `migrate deploy` em produção segue manual.
 
 ---
 
 ## Roadmap (o que ainda não existe)
 
-- **Backup Service** e **Scheduler** (filas, tarefas agendadas, retenção).
-- **Notification Service**: plugar provedores reais (e-mail, WhatsApp Business, push).
-- **WhatsApp Business (Cloud API)** — contatos elegíveis (opt-in), broadcast por
-  template ao publicar/compartilhar imóvel e chatbot próprio da imobiliária
+- **Backup Service** (retenção, restauração). O scheduler existe em versão
+  simples (`faxinaScheduler`); falta fila e cron distribuído.
+- **Notification Service**: plugar WhatsApp, push e SMS (o e-mail já é real).
+- **WhatsApp Business (Cloud API)** — broadcast por template e chatbot próprio
   (Premium). Plano detalhado na seção [WhatsApp Business](#whatsapp-business-cloud-api--roadmap).
-- **Publicação real** nos canais (hoje `publishToChannel` é stub).
 - **Módulos ERP** faltantes: Contratos, Agenda, Financeiro, Vistorias,
-  Proprietários, Corretores, Documentos, Chamados.
+  Proprietários, Corretores, Documentos.
 - **Site institucional** (planos, docs, blog, login central).
 - **Domínio próprio + SEO + blog** para as vitrines dos tenants.
 - **Migração de isolamento** (schema/banco-por-tenant) quando a escala pedir —
@@ -163,11 +230,11 @@ Platform (Cloud API)** da Meta. Cobre três ideias: **contatos elegíveis**,
 - O `handleWhatsApp` (PropertyForm/DivulgarModal) grava o evento ao compartilhar.
 - Habilita métricas ("imóveis mais compartilhados") e integrações futuras.
 
-**Fase 1 — Contatos elegíveis** ✅ *em implementação* (sem Meta ainda)
-- Reaproveita `Cliente` (já tem `whatsapp` e `ativo`). Novos campos:
-  `aceitaDivulgacao Boolean @default(false)` e `divulgacaoOptInAt DateTime?`.
-- UI dentro de [`ClientesPage.jsx`](../apps/web/src/pages/ClientesPage.jsx):
-  toggle "Recebe divulgações", chip indicador na lista, aba de filtro e stat.
+**Fase 1 — Contatos elegíveis** ✅ **concluída** (sem Meta ainda)
+- Reaproveita `Cliente` (já tem `whatsapp` e `ativo`). Campos `aceitaDivulgacao`
+  e `divulgacaoOptInAt` no schema, com índice `[tenantId, aceitaDivulgacao]`.
+- UI em [`ClientesPage.jsx`](../apps/web/src/pages/ClientesPage.jsx): toggle
+  "Recebe divulgações", chip na lista, aba de filtro e stat.
 - É só a **base da lista** (quem opta por receber). O envio real vem na Fase 3.
 
 **Fase 2 — Infra Cloud API** (por tenant)

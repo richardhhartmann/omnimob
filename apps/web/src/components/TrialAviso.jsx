@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { getTrialStatusCompartilhado, esquecerTrialStatus } from "../utils/trialStatus";
 import { PLANOS } from "../utils/planos";
 import { carregarStripe, stripeConfigurado, APARENCIA_STRIPE } from "../utils/stripe";
 import { IconeCheck } from "./Icones.jsx";
@@ -47,7 +48,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
 
   useEffect(() => {
     if (!tenantSlug) return;
-    api.getTrialStatus(tenantSlug).then(setSituacao).catch(() => setSituacao(null));
+    getTrialStatusCompartilhado(tenantSlug).then(setSituacao).catch(() => setSituacao(null));
   }, [tenantSlug]);
 
   // Relógio de minuto em minuto: o rótulo fala em dias, então não precisa de
@@ -206,6 +207,11 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
       }
 
       const resposta = await api.assinarPlano(tenantSlug, { plano, tokenPagamento });
+      /* A situação guardada acabou de ficar velha: era "em teste" e agora é
+         assinante. Sem descartar, quem remontasse dentro da janela ainda leria
+         o estado antigo — inclusive o modal de boas-vindas, que decide por ele
+         qual mensagem mostrar. */
+      esquecerTrialStatus(tenantSlug);
       // Não recarrega aqui: a comemoração vem antes, e o recarregamento sai só
       // quando a pessoa fecha — senão a tela some antes de ela ler.
       setConcluido(resposta?.tenant || {});
