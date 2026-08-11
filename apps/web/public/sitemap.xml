@@ -1,21 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Sitemap da Omnimob.
-
-  Só a home entra aqui, e de propósito: é a única página de marketing com URL
-  própria (o resto da landing são âncoras da mesma página, que não devem virar
-  entradas separadas).
-
-  As vitrines dos clientes (/vitrine/:slug) NÃO estão listadas porque são
-  dinâmicas — nascem e somem com os tenants, e um arquivo estático ficaria
-  mentindo em poucos dias. Elas continuam liberadas no robots.txt, então o
-  Google chega nelas por links. Para incluí-las de verdade, o caminho é um
-  sitemap gerado pela API a partir dos tenants ativos.
-
-  Sem <lastmod> por escolha: uma data fixa escrita à mão envelhece e o Google
-  passa a ignorar o campo inteiro do site. Melhor não declarar do que declarar
-  errado.
--->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://omnimob.app/</loc>

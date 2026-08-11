@@ -7,6 +7,7 @@ import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
 import { provisionTenant } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
 import { cancelarAssinaturasDoSlug } from "../services/pagamentoService.js";
+import { verificarEmail } from "../services/notificationService.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
@@ -45,6 +46,18 @@ adminRouter.post("/login", loginLimiter, async (req, res) => {
 
 // Tudo abaixo exige super-admin.
 adminRouter.use(requireSuperAdmin);
+
+/* Diagnóstico do envio de e-mail: conecta e autentica no provedor, sem enviar
+   mensagem nenhuma. Fica atrás do super-admin porque a resposta revela o
+   transporte e o host — informação de infraestrutura, não de produto.
+
+   Serve para responder de fora "este servidor consegue enviar e-mail?", que era
+   pergunta impossível: o fluxo do teste grátis trata a falha em silêncio, então
+   só se descobria cadastrando alguém e conferindo a caixa de entrada. */
+adminRouter.get("/diagnostico/email", async (_req, res) => {
+  const r = await verificarEmail();
+  return res.status(r.ok ? 200 : 503).json(r);
+});
 
 function serializeTenant(t) {
   return {
