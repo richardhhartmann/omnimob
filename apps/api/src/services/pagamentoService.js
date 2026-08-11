@@ -39,6 +39,106 @@ export function pagamentoConfigurado() {
   return Boolean(SECRET);
 }
 
+/* O Stripe embute um fragmento da CONTA nos identificadores: a chave
+   `sk_live_51AbcDefGhi...` e o preço `price_1XyzAbcDefGhi...` compartilham o
+   mesmo pedaço quando pertencem à mesma conta.
+
+   Isso permite detectar, sem chamar a API, o erro mais comum de configuração —
+   preço criado numa conta (ou num modo) e chave de outra. O sintoma é
+   `No such price`, que sugere "o preço não existe" quando na verdade ele
+   existe, só que em outro lugar. */
+function fragmentoDeConta(id) {
+  const m = String(id || "").match(/^(?:sk|pk)_(?:test|live)_51(.{10})/) ||
+            String(id || "").match(/^price_1.{6}(.{10})/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Conferência da configuração de cobrança, para rodar no ambiente de verdade.
+ *
+ * Diz o modo da chave, se cada preço configurado realmente existe na conta
+ * dela, e — quando não existe — se o motivo é o preço pertencer a outra conta.
+ * Nunca devolve a chave nem qualquer segredo.
+ */
+export async function diagnosticarPagamento() {
+  if (!SECRET) return { configurado: false, detalhe: "STRIPE_SECRET_KEY ausente." };
+
+  const modo = SECRET.startsWith("sk_live_") ? "live" : SECRET.startsWith("sk_test_") ? "test" : "desconhecido";
+  const contaDaChave = fragmentoDeConta(SECRET);
+
+  /* A conta REAL da chave, perguntada ao Stripe. O fragmento embutido no ID
+     serve para explicar o erro, mas quem decide é isto: comparar este `id` com
+     o que aparece no painel onde os preços foram criados encerra a dúvida.
+
+     Vale lembrar que "modo de teste" e "sandbox" não são a mesma coisa no
+     Stripe: cada sandbox é uma conta própria, com `acct_` diferente do da conta
+     ativada. Trocar de sandbox para produção troca de conta sem que ninguém
+     tenha escolhido trocar de conta — e é o caminho mais comum para os preços
+     e a chave acabarem em lugares diferentes. */
+  let conta = null;
+  try {
+    const a = await stripe("/account", { method: "GET" });
+    conta = {
+      id: a.id,
+      nome: a.settings?.dashboard?.display_name || null,
+      pais: a.country || null,
+      cobrancasAtivas: Boolean(a.charges_enabled),
+    };
+  } catch (erro) {
+    conta = { erro: erro.message };
+  }
+
+  const planos = {};
+  for (const [plano, precoId] of Object.entries(PRECOS)) {
+    if (!precoId) {
+      planos[plano] = { ok: false, detalhe: "Nenhum ID de preço configurado." };
+      continue;
+    }
+
+    const contaDoPreco = fragmentoDeConta(precoId);
+    const mesmaConta = contaDaChave && contaDoPreco ? contaDoPreco.startsWith(contaDaChave.slice(0, 8)) : null;
+
+    try {
+      const preco = await stripe(`/prices/${encodeURIComponent(precoId)}`, { method: "GET" });
+      planos[plano] = {
+        ok: true,
+        precoId,
+        ativo: preco.active,
+        valor: preco.unit_amount != null ? preco.unit_amount / 100 : null,
+        moeda: preco.currency,
+        recorrencia: preco.recurring?.interval || null,
+        modoDoPreco: preco.livemode ? "live" : "test",
+      };
+    } catch (erro) {
+      planos[plano] = {
+        ok: false,
+        precoId,
+        detalhe: erro.message,
+        mesmaConta,
+        diagnostico:
+          mesmaConta === false
+            ? "Este preço pertence a OUTRA conta Stripe (fragmento diferente do da chave). Use a chave da conta onde ele foi criado."
+            : "Preço não encontrado nesta conta/modo. Confira se foi criado no mesmo modo da chave.",
+      };
+    }
+  }
+
+  const algumForaDaConta = Object.values(planos).some((p) => p.mesmaConta === false);
+
+  return {
+    configurado: true,
+    modo,
+    conta,
+    contaDaChave,
+    planos,
+    leitura: algumForaDaConta
+      ? "Há preço criado em outra conta Stripe. Compare o `conta.id` acima com a conta aberta no painel onde os preços aparecem — sandbox e conta ativada são contas distintas."
+      : Object.values(planos).every((p) => p.ok)
+        ? `Chave e preços na mesma conta (${conta?.id || "?"}), modo ${modo}.`
+        : "Preço não encontrado, mas o fragmento da conta bate: confira se ele foi arquivado ou criado no outro modo desta mesma conta.",
+  };
+}
+
 export function planoTemPreco(plano) {
   return Boolean(PRECOS[plano]);
 }

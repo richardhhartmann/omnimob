@@ -6,7 +6,7 @@ import { prisma } from "../db.js";
 import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
 import { provisionTenant } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
-import { cancelarAssinaturasDoSlug } from "../services/pagamentoService.js";
+import { cancelarAssinaturasDoSlug, diagnosticarPagamento } from "../services/pagamentoService.js";
 import { verificarEmail } from "../services/notificationService.js";
 import { diagnosticarBanco } from "../services/healthService.js";
 
@@ -55,8 +55,15 @@ adminRouter.use(requireSuperAdmin);
    Serve para responder de fora "este servidor consegue enviar e-mail?", que era
    pergunta impossível: o fluxo do teste grátis trata a falha em silêncio, então
    só se descobria cadastrando alguém e conferindo a caixa de entrada. */
-adminRouter.get("/diagnostico/email", async (_req, res) => {
-  const r = await verificarEmail();
+/* `?porta=587&seguro=false` testa uma porta alternativa sem mudar variável de
+   ambiente nem esperar redeploy — o host segue sendo o configurado. */
+adminRouter.get("/diagnostico/email", async (req, res) => {
+  const porta = req.query.porta !== undefined ? Number(req.query.porta) : undefined;
+  const seguro = req.query.seguro !== undefined ? req.query.seguro !== "false" : undefined;
+  if (porta !== undefined && !Number.isInteger(porta)) {
+    return res.status(400).json({ error: "Porta inválida." });
+  }
+  const r = await verificarEmail({ porta, seguro });
   return res.status(r.ok ? 200 : 503).json(r);
 });
 
@@ -66,6 +73,15 @@ adminRouter.get("/diagnostico/email", async (_req, res) => {
 adminRouter.get("/diagnostico/banco", async (req, res) => {
   const amostras = Math.min(Number(req.query.amostras) || 5, 15);
   return res.json(await diagnosticarBanco({ amostras }));
+});
+
+/* Cobrança: modo da chave e se cada preço existe de fato na conta dela. O
+   `No such price` do Stripe não distingue "não existe" de "existe em outra
+   conta", e é sempre o segundo. */
+adminRouter.get("/diagnostico/stripe", async (_req, res) => {
+  const r = await diagnosticarPagamento();
+  const todosOk = r.configurado && Object.values(r.planos || {}).every((p) => p.ok);
+  return res.status(todosOk ? 200 : 503).json(r);
 });
 
 function serializeTenant(t) {

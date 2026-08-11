@@ -46,14 +46,36 @@ function assinaturaValida(bruto, cabecalho) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-/** O vínculo com o tenant viaja em metadata — ver pagamentoService.js. */
+/* O vínculo com o tenant viaja em metadata — ver pagamentoService.js.
+   Procuramos em vários lugares porque a forma da fatura mudou entre versões da
+   API: `invoice.subscription_details` passou a viver dentro de `invoice.parent`.
+   Como a versão é escolhida no painel, no cadastro do destino de eventos, o
+   código não controla qual chega — então aceita as duas.
+
+   Cada caminho, de onde vem:
+     metadata                              assinatura (customer.subscription.*)
+     parent.subscription_details.metadata  fatura, API nova
+     subscription_details.metadata         fatura, API antiga
+     lines.data[].metadata                 item da fatura, último recurso */
 function tenantIdDoEvento(objeto) {
+  const daLinha = (objeto?.lines?.data || [])
+    .map((l) => l?.metadata?.tenantId || l?.parent?.subscription_item_details?.metadata?.tenantId)
+    .find(Boolean);
+
   return (
     objeto?.metadata?.tenantId ||
+    objeto?.parent?.subscription_details?.metadata?.tenantId ||
     objeto?.subscription_details?.metadata?.tenantId ||
-    objeto?.lines?.data?.[0]?.metadata?.tenantId ||
+    daLinha ||
     null
   );
+}
+
+/* Fim do período coberto pela fatura, para gravar o próximo vencimento. Mesma
+   história da metadata: o período migrou para dentro de `parent` na API nova. */
+function fimDoPeriodo(objeto) {
+  const linha = objeto?.lines?.data?.[0];
+  return linha?.period?.end || objeto?.period_end || null;
 }
 
 stripeWebhookRouter.post("/", async (req, res) => {
@@ -80,11 +102,23 @@ stripeWebhookRouter.post("/", async (req, res) => {
     const objeto = evento.data?.object || {};
     const tenantId = tenantIdDoEvento(objeto);
 
+    /* Sem tenant não há o que atualizar, e cada `case` abaixo simplesmente sai.
+       Silenciar isso já custou caro em outros pontos deste projeto: o evento
+       chega, é descartado, e do lado de fora parece que o Stripe nunca avisou.
+       Um pagamento aprovado que não ativa a assinatura precisa deixar rastro. */
+    if (!tenantId && evento.type !== "ping") {
+      console.error(
+        `[stripe] evento ${evento.type} (${evento.id}) sem tenantId em metadata — ` +
+          `NADA foi atualizado. Confira se a assinatura foi criada com metadata.tenantId ` +
+          `e se a versão da API do destino de eventos mudou a forma do objeto.`,
+      );
+    }
+
     switch (evento.type) {
       // Fatura paga: mensalidade em dia e próxima cobrança registrada.
       case "invoice.paid": {
         if (!tenantId) break;
-        const fim = objeto.lines?.data?.[0]?.period?.end;
+        const fim = fimDoPeriodo(objeto);
         await prisma.tenant.update({
           where: { id: tenantId },
           data: {

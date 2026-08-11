@@ -57,9 +57,7 @@ let transporter = null;
    Por isso resolvemos o A nós mesmos e conectamos pelo IP, passando
    `servername` para o TLS continuar validando pelo NOME — sem ele o
    certificado (CN hostinger.com) não bateria com o IP e a conexão cairia. */
-async function getTransporter() {
-  if (transporter) return transporter;
-
+async function criarTransporte({ porta = SMTP_PORT, seguro = SMTP_SECURE } = {}) {
   let host = SMTP_HOST;
   let servername;
 
@@ -77,17 +75,20 @@ async function getTransporter() {
     }
   }
 
-  transporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host,
-    port: SMTP_PORT,
-    secure: SMTP_SECURE,
+    port: porta,
+    secure: seguro,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
     connectionTimeout: TIMEOUT_MS,
     greetingTimeout: TIMEOUT_MS,
     socketTimeout: TIMEOUT_MS,
     ...(servername ? { tls: { servername } } : {}),
   });
+}
 
+async function getTransporter() {
+  if (!transporter) transporter = await criarTransporte();
   return transporter;
 }
 
@@ -115,12 +116,19 @@ export function emailTransport() {
  * caixa. Com isto dá para responder "o servidor consegue enviar?" em um clique,
  * inclusive depois de trocar porta ou plano de hospedagem.
  */
-export async function verificarEmail() {
+export async function verificarEmail({ porta, seguro } = {}) {
   const transporte = emailTransport();
   if (!transporte) {
     return { transporte: null, ok: false, detalhe: "Nenhum transporte configurado." };
   }
 
+  /* Porta e modo podem ser sobrescritos só para este teste. Serve para
+     descobrir qual porta a hospedagem deixa sair sem precisar mudar variável e
+     esperar redeploy a cada tentativa — o ciclo passa de minutos para segundos.
+
+     O HOST continua fixo, de propósito: aceitar host arbitrário transformaria
+     este endpoint num scanner de portas operado de dentro do servidor. */
+  const avulso = porta !== undefined || seguro !== undefined;
   const inicio = Date.now();
   try {
     if (transporte === "resend") {
@@ -137,14 +145,26 @@ export async function verificarEmail() {
         clearTimeout(relogio);
       }
     } else {
-      const t = await getTransporter();
+      const t = avulso ? await criarTransporte({ porta, seguro }) : await getTransporter();
       await t.verify();
+      if (avulso) t.close();
     }
-    return { transporte, ok: true, ms: Date.now() - inicio };
+    return {
+      transporte,
+      ok: true,
+      ms: Date.now() - inicio,
+      ...(avulso ? { testado: `${SMTP_HOST}:${porta ?? SMTP_PORT} (seguro=${seguro ?? SMTP_SECURE})` } : {}),
+    };
   } catch (erro) {
-    if (transporte === "smtp") esquecerTransporter();
+    if (transporte === "smtp" && !avulso) esquecerTransporter();
     const detalhe = erro.name === "AbortError" ? `sem resposta em ${TIMEOUT_MS / 1000}s` : erro.message;
-    return { transporte, ok: false, ms: Date.now() - inicio, detalhe, host: transporte === "smtp" ? `${SMTP_HOST}:${SMTP_PORT}` : "api.resend.com" };
+    return {
+      transporte,
+      ok: false,
+      ms: Date.now() - inicio,
+      detalhe,
+      host: transporte === "smtp" ? `${SMTP_HOST}:${porta ?? SMTP_PORT}` : "api.resend.com",
+    };
   }
 }
 
