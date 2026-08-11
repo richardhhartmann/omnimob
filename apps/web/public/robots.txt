@@ -1,0 +1,30 @@
+# Omnimob — https://omnimob.app
+#
+# Este arquivo precisa existir como ARQUIVO em public/: o app é um SPA e o
+# vercel.json reescreve tudo para index.html. A Vercel consulta o sistema de
+# arquivos antes de aplicar rewrites, então o que estiver aqui vence a regra —
+# mas o que não estiver vira HTML com status 200, que o robô não sabe ler.
+
+User-agent: *
+Allow: /
+
+# Painel e telas autenticadas. Não têm valor de busca e o robô só veria a tela
+# de login, o que gera páginas duplicadas e sem conteúdo no índice.
+Disallow: /login
+Disallow: /admin
+Disallow: /leads
+Disallow: /clientes
+Disallow: /usuarios
+Disallow: /cargos
+Disallow: /configuracoes
+Disallow: /tipos-imovel
+Disallow: /imoveis
+
+# Link mágico do teste grátis: a URL carrega um token de uso único e curta
+# duração. Indexar isso não ajuda ninguém e expõe o parâmetro.
+Disallow: /comecar
+
+# As vitrines públicas (/vitrine/...) ficam liberadas de propósito: são o
+# conteúdo que cada imobiliária quer encontrável.
+
+Sitemap: https://omnimob.app/sitemap.xml

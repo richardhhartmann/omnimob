@@ -205,7 +205,7 @@ ${PERFIL_INICIAL_CSS}`}</style>
           <>
             <p className="bv-texto">
               Seu ambiente está no <strong>plano {info?.nome || dados.plano}</strong>, limpo e só
-              seu — sem anúncio de mentira para apagar depois. Mexa à vontade: cadastre, apague,
+              seu. Mexa à vontade: cadastre, apague,
               monte a vitrine do seu jeito.
             </p>
 

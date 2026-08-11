@@ -3,6 +3,7 @@ import FOG from "vanta/dist/vanta.fog.min";
 import WAVES from "vanta/dist/vanta.waves.min";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useSeo } from "../utils/seo";
 import {
   Buildings,
   Crown,
@@ -2119,6 +2120,18 @@ function StatsGrid() {
 // ── Página ──────────────────────────────────────────────────────────────────
 
 export function OmnimobLandingPage() {
+  /* Repete o que está no index.html de propósito: as tags do HTML são o estado
+     inicial de TODAS as rotas, então quem chega aqui vindo de outra tela (o
+     React Router não recarrega a página) precisa que elas voltem ao valor da
+     home. Sem isto, sair de uma vitrine e voltar deixaria o título da
+     imobiliária na aba. */
+  useSeo({
+    titulo: "Omnimob — CRM e gestão imobiliária com vitrine digital",
+    descricao:
+      "Software para imobiliárias e corretores: cadastro de imóveis, vitrine digital personalizável, captação e gestão de leads e publicação nas redes sociais.",
+    caminho: "/",
+  });
+
   // -1 = todas fechadas. A lista abre inteira à vista, e quem escolhe o que
   // ler é o visitante — com uma já aberta, a primeira pergunta ganhava um
   // destaque que ela não tem sobre as outras.

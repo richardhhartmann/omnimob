@@ -86,12 +86,20 @@ omnimob/
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | — | Google AI Studio / `gemini-2.5-flash` | idem |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | `sk_test_…` | **`sk_live_…`** |
 | `STRIPE_PRICE_BASIC` / `_PRO` / `_PREMIUM` | — | preços de teste | preços live |
-| `SMTP_PASS` | — | vazio (só loga) | **obrigatória** — sem ela nenhum e-mail sai, em silêncio |
+| `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
 
-Com padrão no código, defina só para sobrescrever: `SMTP_HOST`
-(`smtp.hostinger.com`), `SMTP_PORT` (`465`), `SMTP_SECURE` (`true`),
-`SMTP_USER` (`notifications@omnimob.app`), `EMAIL_REMETENTE`, `DATABASE_HOST`.
+**Sobre o e-mail:** o `notificationService` prefere o Resend (HTTPS) e só cai no
+SMTP se não houver `RESEND_API_KEY`. Isso não é preferência — **SMTP de saída não
+completa no Render**: a conexão com `smtp.hostinger.com:465` estoura por timeout
+e, como o convite de teste é aguardado antes da resposta HTTP, a requisição
+inteira fica presa (era o motivo de criar tenant levar minutos). O remetente
+precisa de domínio verificado no painel do Resend, senão só chega no e-mail dono
+da conta. Há teto de 10 s por tentativa nos dois caminhos.
+
+Com padrão no código, defina só para sobrescrever: `EMAIL_REMETENTE`,
+`DATABASE_HOST`, e o fallback SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
+`SMTP_USER`, `SMTP_PASS`).
 
 Opcionais: `FAXINA_AUTOMATICA=true` (agendador de limpeza — só com uma
 instância), `SEED_DEV=true`, `SUPER_ADMIN_EMAIL` / `_NOME` / `_PASSWORD` (só o

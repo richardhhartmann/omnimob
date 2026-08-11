@@ -10,6 +10,7 @@ import {
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
 import { comodidadesAtivas } from "../utils/comodidades";
 import { tipoContratoInfo } from "../utils/tiposContrato";
+import { useSeo } from "../utils/seo";
 import { loadShowcaseFonts, setCachedTenant } from "../utils/showcaseFonts";
 import { IconeEstrela } from "../components/Icones.jsx";
 
@@ -145,6 +146,28 @@ export function ShowcasePage() {
       [propertyId]: ((prev[propertyId] || 0) - 1 + total) % total,
     }));
   }
+
+  /* SEO da vitrine. Precisa vir ANTES do return antecipado abaixo, porque hook
+     não pode ser condicional. Enquanto o payload não chega o título sai vazio e
+     o useSeo não encosta em nada — deixar o título da Omnimob por um instante é
+     melhor que piscar a aba em branco.
+
+     Sem isto toda vitrine seria indexada com o título e a descrição da
+     Omnimob, competindo entre si pelas mesmas palavras em vez de cada uma
+     aparecer pelo nome da própria imobiliária. */
+  const nomeVitrine = payload?.tenant?.name;
+  useSeo({
+    titulo: nomeVitrine ? `${nomeVitrine} — Imóveis disponíveis` : "",
+    descricao:
+      payload?.tenant?.showcaseSubheadline ||
+      (nomeVitrine
+        ? `Veja os imóveis disponíveis na ${nomeVitrine}: fotos, localização e contato direto com a imobiliária.`
+        : ""),
+    caminho: `/vitrine/${tenantSlug}`,
+    // A primeira foto do acervo diz mais numa prévia de link do que a marca da
+    // Omnimob, que não é a dona desta página.
+    imagem: payload?.properties?.[0]?.images?.[0]?.url,
+  });
 
   if (!payload && !error) {
     return <div style={{ minHeight: "100vh", background: "#0f172a" }} />;

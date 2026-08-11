@@ -9,6 +9,7 @@ import { tipoContratoInfo } from "../utils/tiposContrato";
 import { loadShowcaseFonts, getCachedTenant, setCachedTenant } from "../utils/showcaseFonts";
 import { IconeFaisca } from "../components/Icones.jsx";
 import { IconeCheck } from "../components/Icones.jsx";
+import { useSeo } from "../utils/seo";
 
 const IcPin  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
 const IcArea = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6"/><path d="M3 3l6 6"/><path d="M21 15v6h-6"/><path d="M21 21l-6-6"/></svg>;
@@ -160,6 +161,26 @@ export function ShowcasePropertyPage() {
   const andamentoLabel = { PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" }[property?.andamento];
   const contratoInfo = tipoContratoInfo(property?.tipoContrato);
   const lancamento = isLancamento(property?.createdAt);
+
+  /* SEO do imóvel. É a página com maior chance de trazer visita de busca — quem
+     procura "apartamento 2 quartos em <bairro>" cai aqui, não na home da
+     vitrine. Por isso o título carrega cidade/estado e a descrição usa o texto
+     do próprio anúncio, cortado no limite que o Google costuma exibir. */
+  const local = [property?.city, property?.state].filter(Boolean).join("/");
+  useSeo({
+    titulo: property?.title
+      ? [property.title, local && `em ${local}`, tenant?.name && `— ${tenant.name}`].filter(Boolean).join(" ")
+      : "",
+    descricao:
+      property?.description?.trim()
+        ? `${property.description.trim().slice(0, 155).replace(/\s+\S*$/, "")}…`
+        : property?.title
+          ? `${property.title}${local ? ` em ${local}` : ""}. Fotos, detalhes e contato direto com a imobiliária.`
+          : "",
+    caminho: `/vitrine/${tenantSlug}/imovel/${propertyId}`,
+    imagem: property?.images?.[0]?.url,
+    tipo: "article",
+  });
 
   const stat = (icon, label, value) => value ? (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "16px", background: "rgba(255,255,255,0.04)", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.07)" }}>

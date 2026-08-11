@@ -11,24 +11,117 @@
     <link rel="icon" href="/favicon-512.png" type="image/png" sizes="512x512" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0a0a0b" />
+
+    <!-- Estas tags são o estado INICIAL, valendo para a home e para quem lê o
+         HTML sem executar JavaScript. Cada rota reescreve título, descrição,
+         canonical e Open Graph em tempo de execução — ver src/utils/seo.js.
+
+         Note que NÃO há <link rel="canonical"> aqui: como o mesmo arquivo serve
+         todas as rotas, um canonical fixo apontando para a home mandaria o
+         Google desindexar as vitrines dos clientes. Ele é escrito por rota. -->
+    <title>Omnimob — CRM e gestão imobiliária com vitrine digital</title>
     <meta
       name="description"
-      content="Omnimob — plataforma de gestão imobiliária com vitrine digital personalizável, captura de leads e publicação nas redes sociais."
+      content="Software para imobiliárias e corretores: cadastro de imóveis, vitrine digital personalizável, captação e gestão de leads e publicação nas redes sociais."
     />
+    <meta name="robots" content="index,follow" />
+    <meta name="author" content="Omnimob" />
+
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Omnimob — gestão imobiliária e vitrine digital" />
+    <meta property="og:site_name" content="Omnimob" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://omnimob.app/" />
+    <meta property="og:title" content="Omnimob — CRM e gestão imobiliária com vitrine digital" />
     <meta
       property="og:description"
+      content="Do cadastro do imóvel ao lead fechado, num só lugar. Vitrine sem escrever código, captação de leads e publicação nas redes."
+    />
+    <!-- 1200x630: proporção que Facebook, LinkedIn e WhatsApp esperam. O
+         logo.png antigo era retrato (499x603) e era recortado nas laterais. -->
+    <meta property="og:image" content="https://omnimob.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Omnimob — CRM e gestão imobiliária com vitrine digital" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Omnimob — CRM e gestão imobiliária com vitrine digital" />
+    <meta
+      name="twitter:description"
       content="Do cadastro do imóvel ao lead fechado, num só lugar."
     />
-    <meta property="og:image" content="/logo.png" />
+    <meta name="twitter:image" content="https://omnimob.app/og-image.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
     />
-    <title>Omnimob</title>
+
+    <!-- Dados estruturados. Ficam no HTML (e não no JS) porque é o único
+         conteúdo desta página que existe antes da renderização — o Google lê
+         mesmo se abandonar a fila de renderização.
+
+         Os preços são os mesmos publicados na landing. O PREMIUM é "sob
+         consulta", então só o piso entra: `lowPrice` sem `highPrice` é a
+         forma correta de declarar "a partir de". -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://omnimob.app/#organizacao",
+            "name": "Omnimob",
+            "url": "https://omnimob.app/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://omnimob.app/logo.png",
+              "width": 499,
+              "height": 603
+            },
+            "image": "https://omnimob.app/og-image.png",
+            "description": "Plataforma de gestão imobiliária com vitrine digital personalizável, captação de leads e publicação nas redes sociais.",
+            "areaServed": { "@type": "Country", "name": "Brasil" }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://omnimob.app/#site",
+            "url": "https://omnimob.app/",
+            "name": "Omnimob",
+            "inLanguage": "pt-BR",
+            "publisher": { "@id": "https://omnimob.app/#organizacao" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://omnimob.app/#software",
+            "name": "Omnimob",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "CRM imobiliário",
+            "operatingSystem": "Web",
+            "url": "https://omnimob.app/",
+            "inLanguage": "pt-BR",
+            "description": "CRM e sistema de gestão para imobiliárias e corretores: cadastro de imóveis, vitrine digital personalizável, captação e gestão de leads, e publicação em Facebook, Instagram e WhatsApp.",
+            "publisher": { "@id": "https://omnimob.app/#organizacao" },
+            "featureList": [
+              "Cadastro e gestão de imóveis",
+              "Vitrine digital personalizável com editor visual",
+              "Captação e gestão de leads",
+              "Publicação em Facebook, Instagram e WhatsApp",
+              "Geração de descrições e anúncios com inteligência artificial",
+              "Métricas de visitas, leads e vendas"
+            ],
+            "offers": {
+              "@type": "AggregateOffer",
+              "priceCurrency": "BRL",
+              "lowPrice": "99",
+              "offerCount": 3,
+              "url": "https://omnimob.app/#planos"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
