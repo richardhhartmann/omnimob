@@ -28,6 +28,12 @@ import { DominioVitrine } from "./DominioVitrine.jsx";
    precisa ver as de assinante também — é outra mensagem, em outro momento. */
 const chaveVisto = (slug, modo) => `domus_boas_vindas_${modo}_${slug}`;
 
+/* Qual versão se aplica a esta imobiliária, da última vez que perguntamos:
+   "teste", "assinante" ou "nenhum". Guardado só para decidir se o véu de espera
+   precisa aparecer — ver `esperando`, mais abaixo. Nunca substitui a resposta do
+   servidor: o modal em si continua saindo do `/me/trial` de agora. */
+const chaveModo = (slug) => `domus_boas_vindas_modo_${slug}`;
+
 // Duração da saída. Precisa bater com a das animações no CSS.
 const SAIDA_MS = 260;
 
@@ -129,8 +135,10 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
      que impede quinhentos imóveis de entrarem com o preço no campo errado. */
   const [passo, setPasso] = useState("boas-vindas");
 
-  /* O passo do endereço só libera o "Concluir" quando a escolha se fecha —
-     endereço da Omnimob aceito, ou domínio próprio já no ar. Ver o JSX. */
+  /* O passo do endereço libera o "Concluir" enquanto a escolha estiver fechada:
+     endereço da Omnimob (o padrão, e já no ar) ou domínio próprio verificado.
+     Escolher o domínio próprio REABRE a pendência e o botão some de novo — por
+     isso é um estado que vai e volta, e não um "já concluiu". Ver o JSX. */
   const [enderecoResolvido, setEnderecoResolvido] = useState(false);
 
   /* Enquanto a resposta não chega, a tela fica travada por um véu.
@@ -140,12 +148,28 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
      inteiro clicável nesse intervalo — a pessoa começava a trabalhar e o modal
      de boas-vindas caía por cima do que ela estava fazendo.
 
-     Quem JÁ viu as duas versões (teste e assinante) não vê véu nenhum: dá para
-     saber disso pelo localStorage, antes de perguntar qualquer coisa ao
-     servidor. É o caso de todo acesso a partir do segundo, que é a maioria. */
+     Quem não vai ver modal nenhum também não deve ver véu, e é aí que a versão
+     anterior errava: ela só dispensava o véu de quem tivesse visto AS DUAS
+     versões — teste e assinante. Só que ninguém está nas duas situações ao mesmo
+     tempo. Quem está em teste vê as boas-vindas do teste, ganha a marca "teste"
+     e nunca a de "assinante" — então a condição jamais fechava, e "Preparando
+     seu painel…" voltava a cada acesso, para sempre, para todo mundo.
+
+     A pergunta certa não é "viu as duas?", é "viu a que se aplica a você?". Qual
+     se aplica depende do servidor, mas a de ONTEM está guardada, e ela acerta em
+     todo acesso menos um: o primeiro depois de assinar. Nesse, o véu não aparece
+     e o modal de assinante entra sem ele — uma vez na vida do cliente, contra o
+     véu eterno que existia antes. */
   const [esperando, setEsperando] = useState(() => {
     if (!tenantSlug) return false;
     try {
+      const modoConhecido = localStorage.getItem(chaveModo(tenantSlug));
+      // Nem teste nem assinante: não há boas-vindas para esta conta.
+      if (modoConhecido === "nenhum") return false;
+      if (modoConhecido && localStorage.getItem(chaveVisto(tenantSlug, modoConhecido))) return false;
+      /* Sem modo guardado (acesso anterior a esta versão): cai no critério
+         antigo, que continua correto quando fecha — quem viu as duas não verá
+         mais nenhuma. */
       return !(
         localStorage.getItem(chaveVisto(tenantSlug, "teste")) &&
         localStorage.getItem(chaveVisto(tenantSlug, "assinante"))
@@ -161,6 +185,9 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
     getTrialStatusCompartilhado(tenantSlug)
       .then((r) => {
         const qual = r?.assinaturaAtiva ? "assinante" : r?.emTrial ? "teste" : null;
+        /* Grava o modo ANTES de qualquer saída: é justamente para os acessos em
+           que nada é exibido que o próximo precisa saber que não haverá véu. */
+        try { localStorage.setItem(chaveModo(tenantSlug), qual || "nenhum"); } catch { /* sem storage */ }
         if (!qual) { aoResolver?.(); return; }
         try {
           if (localStorage.getItem(chaveVisto(tenantSlug, qual))) { aoResolver?.(); return; }
@@ -296,18 +323,23 @@ ${PERFIL_INICIAL_CSS}`}</style>
             <DominioVitrine
               tenantSlug={tenantSlug}
               compacto
-              aoConcluir={() => setEnderecoResolvido(true)}
+              aoResolverEndereco={setEnderecoResolvido}
               aoAtualizarTenant={aoAtualizarTenant}
             />
 
-            {/* O botão só aparece quando a escolha chegou ao fim: ou a pessoa
-                optou pelo endereço da Omnimob, ou o domínio dela já está no ar.
+            {/* O botão acompanha a escolha em vez de aparecer uma vez e ficar.
 
-                No meio do caminho ele atrapalhava — quem estava esperando o DNS
-                via um "Concluir" ao lado do aviso de que ainda faltava algo, e
-                a leitura natural era que dava para sair dali com tudo pronto.
-                Sem botão, a única saída é resolver ou trocar de opção, que é o
-                que a tela quer. Fechar o modal continua possível pelo Esc. */}
+                Ao abrir o passo ele JÁ ESTÁ AQUI: o endereço da Omnimob vem
+                marcado e é o que vale de fato, então quem só quer seguir em
+                frente segue — sem ter de clicar num cartão já aceso para
+                destravar a saída.
+
+                Escolher o domínio próprio faz o botão sumir, e ele não volta
+                enquanto o domínio não estiver no ar. É de propósito: com o
+                "Concluir" ao lado do aviso de que o DNS ainda não respondeu, a
+                leitura natural era que dava para sair dali com tudo pronto.
+                Sem ele, a saída é resolver o domínio ou voltar para o endereço
+                da Omnimob. Fechar o modal continua possível pelo Esc. */}
             {enderecoResolvido ? (
               <button
                 type="button"

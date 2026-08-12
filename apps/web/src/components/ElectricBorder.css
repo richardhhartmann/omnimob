@@ -1,0 +1,91 @@
+/* A cor "clara" sai de color-mix, e não do oklch relativo do original.
+
+   `oklch(from var(--cor) l c h)` é sintaxe de cor relativa, que ainda não roda
+   em todo navegador — e onde não roda a declaração inteira é descartada, o que
+   apagaria as bordas de brilho sem aviso. `color-mix` cobre o mesmo terreno com
+   suporte muito mais amplo. */
+.electric-border {
+  --electric-light-color: color-mix(in srgb, var(--electric-border-color) 78%, white);
+  position: relative;
+  border-radius: inherit;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.eb-canvas-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.eb-canvas { display: block; }
+
+.eb-content {
+  position: relative;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+.eb-layers {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.eb-glow-1,
+.eb-glow-2,
+.eb-background-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.eb-glow-1 {
+  border: 2px solid color-mix(in srgb, var(--electric-border-color) 60%, transparent);
+  filter: blur(1px);
+}
+
+.eb-glow-2 {
+  border: 2px solid var(--electric-light-color);
+  filter: blur(4px);
+}
+
+.eb-background-glow {
+  z-index: -1;
+  transform: scale(1.1);
+  filter: blur(32px);
+  opacity: 0.3;
+  background: linear-gradient(-30deg, var(--electric-light-color), transparent, var(--electric-border-color));
+}
+
+/* Uso como MOLDURA de um cartão que já existe: a borda vira uma camada por
+   cima, sem entrar no fluxo nem mexer no grid em que o cartão vive. O canvas
+   estoura a caixa de propósito (o traçado é deslocado por ruído), então nada
+   aqui pode recortar. */
+.electric-border--moldura {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ─── Só os raios ────────────────────────────────────────────────────────────
+   O componente desenha TRÊS coisas: o traçado irregular no canvas (os raios) e
+   duas bordas CONTÍNUAS de brilho (eb-glow-1 e eb-glow-2), que seguem o
+   retângulo arredondado com precisão.
+
+   Sobre um cartão que já tem borda própria, essas duas leem como um segundo
+   contorno aceso por baixo dos raios — indistinguível de um brilho antigo que
+   alguém esqueceu de remover. Aqui elas saem, e fica o traçado mais o bloom
+   difuso do fundo, que não tem forma de borda e por isso não disputa. */
+.electric-border--so-raios .eb-glow-1,
+.electric-border--so-raios .eb-glow-2 {
+  display: none;
+}

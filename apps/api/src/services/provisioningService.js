@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import { getGlobalPrisma } from "./tenantRegistry.js";
 import { garantirSubdominioDaCasa } from "./dominioService.js";
+import { criarCargosPadrao, CARGO_ADMIN } from "./cargosPadrao.js";
+import { criarTiposPadrao } from "./tiposPadrao.js";
 
 /**
  * ─── Provisioning Service ────────────────────────────────────────────────────
@@ -14,7 +16,6 @@ import { garantirSubdominioDaCasa } from "./dominioService.js";
  * chama o serviço (rotas admin).
  */
 
-const CARGO_ADMIN = "Administrador";
 const STATUS_VALIDOS = ["TRIAL", "EM_DIA", "ATRASADO", "CANCELADO"];
 
 // Sem 0/O/1/l/I: a senha vai por e-mail (ou é ditada por telefone) e alguém vai
@@ -103,9 +104,35 @@ export async function provisionTenant(input = {}) {
   let adminCreated = false;
   let warning = null;
 
-  const cargo = await prisma.cargo.findFirst({ where: { descricao: CARGO_ADMIN } });
+  /* Cada imobiliária ganha o SEU conjunto de cargos.
+
+     Era `findFirst({ descricao: "Administrador" })` — sem tenant, porque a
+     tabela não tinha dono. O cliente novo herdava o cargo de outra empresa, e
+     dali em diante as duas dividiam as mesmas permissões: mexer numa mexia na
+     outra. Também dependia de o seed ter rodado, o que fazia a criação de
+     tenant falhar em banco limpo. */
+  let cargo = null;
+  try {
+    cargo = await criarCargosPadrao(prisma, tenant.id);
+  } catch (e) {
+    warning = `Tenant criado, mas falha ao criar os cargos: ${e.message}`;
+  }
+
+  /* Catálogo de tipos de imóvel da casa.
+
+     Enquanto `TipoImovel` era global, o cliente novo enxergava o catálogo dos
+     outros e ninguém percebia que o provisionamento não criava nenhum. Agora o
+     tipo tem dono: sem este passo, o primeiro cadastro de imóvel abriria com a
+     lista de tipos vazia. Falha não derruba o tenant — dá para recriar depois,
+     e é melhor um catálogo faltando que um cadastro perdido. */
+  try {
+    await criarTiposPadrao(prisma, tenant.id);
+  } catch (e) {
+    console.warn(`[provisionamento] falha ao criar tipos de imóvel de ${slug}: ${e.message}`);
+    warning = warning || `Tenant criado, mas falha ao criar os tipos de imóvel: ${e.message}`;
+  }
   if (!cargo) {
-    warning = `Tenant criado, mas cargo '${CARGO_ADMIN}' não existe (rode o seed base).`;
+    warning = warning || `Tenant criado, mas o cargo '${CARGO_ADMIN}' não foi criado.`;
   } else {
     try {
       const senhaHash = await bcrypt.hash(senha, 10);
@@ -141,13 +168,27 @@ export async function provisionTenant(input = {}) {
 
   /* Endereço da casa: `<slug>.omnimob.app`.
 
-     Não bloqueia nem falha o provisionamento — a função engole o próprio erro.
-     Se a Vercel estiver fora do ar ou sem credencial, a imobiliária nasce do
-     mesmo jeito e continua acessível pelo caminho `/vitrine/<slug>`; o
-     subdomínio pode ser criado depois, em lote. Amarrar a criação do cliente à
-     disponibilidade de um serviço externo seria trocar um endereço bonito por
-     um cadastro que falha. */
-  await garantirSubdominioDaCasa(slug);
+     Não bloqueia o provisionamento: se a Vercel estiver fora do ar ou sem
+     credencial, a imobiliária nasce do mesmo jeito e continua acessível pelo
+     caminho `/vitrine/<slug>`. Amarrar a criação do cliente à disponibilidade de
+     um serviço externo seria trocar um endereço bonito por um cadastro que
+     falha.
+
+     MAS A FALHA PRECISA APARECER. Antes o retorno era descartado e só restava um
+     `console.warn` — o tenant nascia, o painel anunciava `<slug>.omnimob.app`
+     para o cliente, e o endereço não abria. Ninguém ficava sabendo até alguém
+     tentar acessar. Agora vira `warning`, que é o que o painel do super-admin
+     mostra ao final da criação, e o `scripts/subdominios.js` conserta depois. */
+  const sub = await garantirSubdominioDaCasa(slug);
+  if (!sub.ok) {
+    const aviso =
+      `A imobiliária foi criada, mas o endereço ${sub.host || `${slug}.omnimob.app`} não ficou ` +
+      `pronto (${sub.motivo}). A vitrine responde por /vitrine/${slug}. ` +
+      `Rode 'npm run subdominios -- --aplicar' para reparar.`;
+    // Não sobrescreve um aviso anterior (cargos/tipos): os dois importam, e o
+    // primeiro é o que aconteceu mais cedo na criação.
+    warning = warning ? `${warning} | ${aviso}` : aviso;
+  }
 
   return { tenant, adminCreated, adminLogin: login, adminSenha: senha, warning };
 }

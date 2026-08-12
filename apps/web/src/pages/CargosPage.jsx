@@ -4,6 +4,8 @@ import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { Avatar, EmptyState, SearchInput, StatCard, StatGrid } from "../components/adminUi";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { useConfirm } from "../components/ConfirmModal";
+import { ModalCiencia } from "../components/ModalCiencia";
+import { planoLiberaRedes } from "../utils/planos";
 
 const PERMISSOES = [
   { key: "acessarPainel",     label: "Acessar Painel" },
@@ -17,9 +19,47 @@ const PERMISSOES = [
   { key: "publicarRedes",     label: "Publicar em Redes" },
 ];
 
+/* `verConfiguracoes` NÃO está na lista acima, e é de propósito: ela não é uma
+   escolha, é uma consequência de ser o Administrador. O servidor a recalcula a
+   cada gravação a partir do nome do cargo (ver `cargoRoutes`), então não há o
+   que marcar, desmarcar ou exibir aqui — nem para o Administrador. */
+
 // Permissões que o usuário NÃO pode remover do próprio cargo (senão se tranca
 // para fora do painel / da gestão de cargos).
 const LOCKED_NO_PROPRIO_CARGO = ["acessarPainel", "gerenciarCargos"];
+
+/* Conceder isto é entregar a chave de todas as outras portas: quem gerencia
+   cargos pode editar o próprio cargo e se dar qualquer permissão que falte —
+   inclusive as que o Administrador não deu. Daí o modal de ciência. */
+const PERMISSAO_DE_RISCO = "gerenciarCargos";
+
+/* ─── Permissões que o plano precisa liberar antes ───────────────────────────
+   Marcar uma permissão de recurso que o plano não tem produz a pior forma de
+   erro: a que não avisa. A pessoa marca "Publicar em Redes", a tela confirma
+   com um selo azul, e só na hora de publicar é que nada acontece — sem nenhuma
+   pista de que o problema é o plano, e não a permissão.
+
+   Por isso a permissão some da tela inteira (formulário E selos) enquanto o
+   plano não a libera. Não é ocultar um recurso para vender: é não oferecer um
+   botão que não liga em nada.
+
+   O valor guardado no banco NÃO é apagado — quem já tinha a permissão marcada e
+   caiu de plano volta a vê-la marcada ao subir de novo. Fica invisível, não
+   perdida.
+
+   Contas em teste rodam como PREMIUM, então veem tudo — que é o certo: o teste
+   existe para experimentar o produto inteiro. */
+const DEPENDE_DO_PLANO = {
+  publicarRedes: planoLiberaRedes,
+};
+
+/** As permissões que fazem sentido oferecer neste plano. */
+function permissoesDoPlano(plano) {
+  return PERMISSOES.filter((p) => {
+    const exige = DEPENDE_DO_PLANO[p.key];
+    return exige ? exige(plano) : true;
+  });
+}
 
 function emptyForm() {
   const f = { descricao: "" };
@@ -29,6 +69,12 @@ function emptyForm() {
 
 export function CargosPage({ session, onSessionUpdate }) {
   const tenantSlug = session?.tenant?.slug;
+  /* Uma lista só para a tela inteira: formulário, selos e a contagem de
+     "sem permissões" precisam concordar sobre o que existe neste plano. */
+  const permissoesVisiveis = useMemo(
+    () => permissoesDoPlano(session?.tenant?.plano),
+    [session?.tenant?.plano],
+  );
   const { confirm, modal: confirmModal } = useConfirm();
   const [cargos, setCargos] = useState([]);
   const [view, setView] = useState("list");
@@ -39,6 +85,11 @@ export function CargosPage({ session, onSessionUpdate }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  /* Concessão de `gerenciarCargos` esperando a ciência do administrador.
+     Guarda a mudança inteira (não só a chave) para poder aplicá-la tal e qual
+     quando ele confirmar — reconstruir a partir do form depois abriria espaço
+     para aplicar uma coisa diferente da que foi mostrada no modal. */
+  const [concessaoPendente, setConcessaoPendente] = useState(null);
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -48,8 +99,11 @@ export function CargosPage({ session, onSessionUpdate }) {
   const stats = useMemo(() => ({
     total: cargos.length,
     usuarios: cargos.reduce((sum, c) => sum + (c._count?.usuarios || 0), 0),
-    semPermissao: cargos.filter((c) => PERMISSOES.every((p) => !c[p.key])).length,
-  }), [cargos]);
+    // Conta pelo que a tela mostra: um cargo cuja única permissão é invisível
+    // neste plano aparece sem nenhum selo, e dizer que ele tem uma contradiria
+    // o que está à vista.
+    semPermissao: cargos.filter((c) => permissoesVisiveis.every((p) => !c[p.key])).length,
+  }), [cargos, permissoesVisiveis]);
 
   const visiveis = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -67,6 +121,13 @@ export function CargosPage({ session, onSessionUpdate }) {
   function abrirEditar(c) {
     setEditando(c);
     const f = { descricao: c.descricao };
+    /* `PERMISSOES` (a lista COMPLETA), não `permissoesVisiveis`.
+
+       O auto-save manda o form inteiro a cada clique. Carregando só o que está
+       à vista, uma permissão escondida pelo plano viria ausente do form e o
+       servidor a gravaria como false — apagando, ao mexer em qualquer outra
+       caixa, algo que a pessoa nem sabia que estava lá. Assim ela viaja intacta
+       e volta a aparecer marcada quando o plano subir. */
     for (const p of PERMISSOES) f[p.key] = Boolean(c[p.key]);
     setForm(f);
     setError("");
@@ -82,11 +143,9 @@ export function CargosPage({ session, onSessionUpdate }) {
     }
   }
 
-  // Auto-save ao tickar um checkbox (só quando editando)
-  async function handlePermissaoChange(key, value) {
-    const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
-    if (LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario) return; // bloqueado
-
+  // Grava a permissão de fato. Separado do handler porque o modal de ciência
+  // precisa chamar exatamente isto depois do "estou ciente".
+  async function aplicarPermissao(key, value) {
     const newForm = { ...form, [key]: value };
     setForm(newForm);
     setSaving(true);
@@ -100,6 +159,36 @@ export function CargosPage({ session, onSessionUpdate }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  // Auto-save ao tickar um checkbox (só quando editando)
+  async function handlePermissaoChange(key, value) {
+    const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
+    if (LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario) return; // bloqueado
+
+    /* Conceder "Gerenciar Cargos" a OUTRO cargo para no modal de ciência.
+       Tirar não para: desfazer uma concessão de risco tem de ser tão fácil
+       quanto possível. E o próprio cargo também não — quem está editando já
+       tem a permissão, então não há nada sendo concedido ali. */
+    if (key === PERMISSAO_DE_RISCO && value === true && !ehProprioCargoDoUsuario) {
+      setConcessaoPendente({ key, value, modo: "salvar" });
+      return;
+    }
+    await aplicarPermissao(key, value);
+  }
+
+  /* Confirmação do modal. Os dois modos existem porque a tela grava de duas
+     formas: editando um cargo é auto-save a cada clique; criando, o valor só
+     entra no form e vai junto no "Criar Cargo". */
+  async function confirmarConcessao() {
+    const pendente = concessaoPendente;
+    setConcessaoPendente(null);
+    if (!pendente) return;
+    if (pendente.modo === "form") {
+      setForm((p) => ({ ...p, [pendente.key]: true }));
+      return;
+    }
+    await aplicarPermissao(pendente.key, pendente.value);
   }
 
   // Salva somente a descrição (ou cria novo cargo com tudo)
@@ -137,9 +226,25 @@ export function CargosPage({ session, onSessionUpdate }) {
 
   if (view === "form") {
     const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
+    const nomeDoCargo = (editando?.descricao || form.descricao || "este cargo").trim();
 
     return (
       <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+        <ModalCiencia
+          aberto={Boolean(concessaoPendente)}
+          titulo="Conceder Gerenciar Cargos?"
+          descricao={`Você está prestes a dar a "${nomeDoCargo}" o poder de editar cargos e permissões desta imobiliária.`}
+          riscos={[
+            "Quem tem esta permissão pode editar o PRÓPRIO cargo e se conceder qualquer outra permissão — inclusive as que você não deu.",
+            "Pode alterar as permissões de todos os outros cargos, e remover acessos de quem trabalha aqui.",
+            "Pode conceder este mesmo poder a mais cargos, sem passar por você.",
+            "Na prática, é um segundo administrador: você deixa de ser o único a decidir quem pode o quê.",
+          ]}
+          textoCiencia="Estou ciente de que este cargo poderá alterar permissões — inclusive as dele mesmo — e quero conceder assim mesmo."
+          confirmarLabel="Conceder mesmo assim"
+          aoConfirmar={confirmarConcessao}
+          aoCancelar={() => setConcessaoPendente(null)}
+        />
         <h2 style={{ marginBottom: "24px" }}>{editando ? "Editar Cargo" : "Novo Cargo"}</h2>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
@@ -170,10 +275,20 @@ export function CargosPage({ session, onSessionUpdate }) {
               )}
             </div>
             <div data-tour="cargo-permissoes" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px" }}>
-              {PERMISSOES.map(({ key, label }) => {
+              {permissoesVisiveis.map(({ key, label }) => {
                 const locked = LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario;
                 const checked = locked ? true : Boolean(form[key]);
                 const isAutoSaving = editando !== null;
+                /* Criando um cargo, conceder a permissão de risco também passa
+                   pelo modal — senão bastava criar já com ela marcada para
+                   contornar o aviso inteiro. */
+                const aoMarcar = (marcado) => {
+                  if (isAutoSaving) return handlePermissaoChange(key, marcado);
+                  if (key === PERMISSAO_DE_RISCO && marcado) {
+                    return setConcessaoPendente({ key, value: true, modo: "form" });
+                  }
+                  return setForm((p) => ({ ...p, [key]: marcado }));
+                };
 
                 return (
                   <label
@@ -192,11 +307,7 @@ export function CargosPage({ session, onSessionUpdate }) {
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={(e) =>
-                        isAutoSaving
-                          ? handlePermissaoChange(key, e.target.checked)
-                          : setForm((p) => ({ ...p, [key]: e.target.checked }))
-                      }
+                      onChange={(e) => aoMarcar(e.target.checked)}
                       disabled={loading || locked || saving}
                       style={{ accentColor: "#6366f1", width: "14px", height: "14px", flexShrink: 0 }}
                     />
@@ -256,7 +367,7 @@ export function CargosPage({ session, onSessionUpdate }) {
                     <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
                       {c._count?.usuarios > 0 ? `${c._count.usuarios} usuário${c._count.usuarios !== 1 ? "s" : ""}` : "Nenhum usuário"}
                       {" · "}
-                      {PERMISSOES.filter((p) => c[p.key]).length} permiss{PERMISSOES.filter((p) => c[p.key]).length !== 1 ? "ões" : "ão"}
+                      {permissoesVisiveis.filter((p) => c[p.key]).length} permiss{permissoesVisiveis.filter((p) => c[p.key]).length !== 1 ? "ões" : "ão"}
                     </div>
                   </div>
                 </div>
@@ -266,7 +377,7 @@ export function CargosPage({ session, onSessionUpdate }) {
                 </div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {PERMISSOES.filter((p) => c[p.key]).map((p) => (
+                {permissoesVisiveis.filter((p) => c[p.key]).map((p) => (
                   <span key={p.key} style={{
                     fontSize: "11px", fontWeight: "600", padding: "2px 9px", borderRadius: "20px",
                     background: "rgba(99,102,241,0.15)", color: "#a5b4fc",
@@ -274,7 +385,7 @@ export function CargosPage({ session, onSessionUpdate }) {
                     {p.label}
                   </span>
                 ))}
-                {PERMISSOES.every((p) => !c[p.key]) && (
+                {permissoesVisiveis.every((p) => !c[p.key]) && (
                   <span style={{ fontSize: "12px", opacity: 0.4 }}>Sem permissões</span>
                 )}
               </div>

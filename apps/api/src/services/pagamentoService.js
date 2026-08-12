@@ -284,6 +284,58 @@ export async function cancelarAssinatura(assinaturaId) {
   });
 }
 
+/* ─── Cancelamento pedido pelo próprio cliente ───────────────────────────────
+ * Agenda o fim da assinatura para o TÉRMINO DO PERÍODO JÁ PAGO — não corta na
+ * hora. Quem pagou o mês tem direito ao mês; cancelar imediatamente seria
+ * cobrar por um serviço e retirá-lo no mesmo gesto.
+ *
+ * Distingue-se de `cancelarAssinaturasDoSlug`, que faz DELETE e mata na hora:
+ * aquela serve à exclusão do tenant pelo super-admin, onde não sobra nada para
+ * usar mesmo. Esta é o botão do cliente.
+ *
+ * A busca é por `metadata.slug`, como lá — o id da assinatura não é guardado em
+ * coluna nenhuma (ver o cabeçalho deste arquivo).
+ *
+ * Não mexe em `statusPagamento`: o tenant segue EM_DIA até o período acabar, e
+ * quem vira a chave para CANCELADO é o webhook, ao receber
+ * `customer.subscription.deleted` do Stripe na data. Marcar aqui tiraria o
+ * acesso de quem ainda pagou por ele.
+ *
+ * @returns {{ configurado, encontradas, agendadas: Array<{id, terminaEm}>, falhas }}
+ */
+export async function agendarCancelamentoDoSlug(slug) {
+  const vazio = { configurado: false, encontradas: 0, agendadas: [], falhas: [] };
+  if (!pagamentoConfigurado() || !slug) return vazio;
+
+  const lista = await stripe("/subscriptions?limit=100&status=active", { method: "GET" });
+  const alvos = (lista?.data || []).filter((s) => s.metadata?.slug === slug);
+
+  const resultado = { configurado: true, encontradas: alvos.length, agendadas: [], falhas: [] };
+  for (const assinatura of alvos) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const atualizada = await stripe(`/subscriptions/${assinatura.id}`, {
+        dados: { cancel_at_period_end: true },
+      });
+      /* Nas versões recentes o `current_period_end` saiu da assinatura e passou
+         para o item — mesma leitura defensiva que `criarAssinatura` faz. */
+      const fim =
+        atualizada?.items?.data?.[0]?.current_period_end ??
+        atualizada?.current_period_end ??
+        assinatura?.items?.data?.[0]?.current_period_end ??
+        assinatura?.current_period_end ??
+        null;
+      resultado.agendadas.push({
+        id: assinatura.id,
+        terminaEm: fim ? new Date(fim * 1000) : null,
+      });
+    } catch (erro) {
+      resultado.falhas.push({ id: assinatura.id, motivo: erro.message });
+    }
+  }
+  return resultado;
+}
+
 /* ─── Limpeza por slug ────────────────────────────────────────────────────────
  * Cancela IMEDIATAMENTE toda assinatura ativa marcada com este slug. É o que o
  * script `npm run stripe:limpar -- --slug=…` faz, extraído para cá porque agora

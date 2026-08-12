@@ -1,0 +1,35 @@
+.counter-container {
+  position: relative;
+  display: inline-block;
+}
+
+.counter-counter {
+  display: flex;
+  overflow: hidden;
+  line-height: 1;
+}
+
+.counter-digit {
+  position: relative;
+  width: 1ch;
+  /* Algarismos de mesma largura: sem isto a coluna muda de largura ao rolar
+     entre um "1" e um "8", e o número inteiro treme durante a contagem. */
+  font-variant-numeric: tabular-nums;
+}
+
+.counter-number {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gradient-container {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+
+.top-gradient { position: absolute; top: 0; width: 100%; }
+.bottom-gradient { position: absolute; bottom: 0; width: 100%; }

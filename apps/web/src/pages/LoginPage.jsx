@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import GradientWaves from "../components/GradientWaves";
 import { Alert, Button, OmnimobStyles, Eyebrow, Field, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/omnimobKit";
 
 /* Login do painel do tenant.
@@ -109,7 +110,15 @@ export function LoginPage({ onLogin }) {
       error={error}
       saindo={saindo}
       nota="// imóveis · vitrine · leads · equipe"
-      rodape={<Link to="/admin/login" className="lg-alt">Administração da plataforma</Link>}
+      rodape={
+        <>
+          {/* Antes do link da plataforma: quem chega aqui travado quer resolver
+              a própria senha, não achar o painel de administração da Omnimob. */}
+          <Link to="/recuperar-senha" className="lg-alt">Esqueci minha senha</Link>
+          {" · "}
+          <Link to="/admin/login" className="lg-alt">Administração da plataforma</Link>
+        </>
+      }
     >
       <Field label="Login">
         <input
@@ -226,10 +235,49 @@ function DefinirSenhaCard({ alvo, onConcluir, onCancelar }) {
 
 // ─── Casca compartilhada pelas duas telas ─────────────────────────────────────
 
-function AuthShell({ eyebrow, strong, soft, descricao, error, nota, rodape, onSubmit, saindo, children }) {
+/* Exportada para a recuperação de senha usar a MESMA casca.
+   Reconstruir o vidro, os blobs e o logo noutro arquivo daria duas telas de
+   autenticação parecidas mas nunca iguais — e é justamente na tela de recuperar
+   senha, onde a pessoa já desconfia de estar no lugar errado, que qualquer
+   diferença visual parece phishing. */
+export function AuthShell({ eyebrow, strong, soft, descricao, error, nota, rodape, onSubmit, saindo, children }) {
   return (
     <div className={`dl-root dl-page lg-root${saindo ? " authx-out" : ""}`}>
       <OmnimobStyles extra={CSS} />
+
+      {/* Fundo de ondas. Vive numa camada própria, atrás dos blobs e do cartão.
+
+          As cores saem da paleta que a tela já tinha (--accent #818cf8 e o
+          #6366f1 do botão), e não do roxo/rosa do exemplo: o login é a primeira
+          tela do produto e não pode apresentar uma identidade que nenhuma outra
+          repete.
+
+          `mouseInteraction={false}`: o paralaxe do componente é preso ao canvas,
+          e aqui o cartão de vidro cobre o meio da tela — o efeito responderia só
+          nas bordas, o que lê como falha em vez de recurso. */}
+      <div className="lg-ondas" aria-hidden="true">
+        <GradientWaves
+          horizonColor="#111117"
+          waveColor="#6366f1"
+          crestColor="#818cf8"
+          speed={0.35}
+          amplitude={2.2}
+          waveScale={0.6}
+          waveRatio={0.9}
+          swell={30}
+          turbulence={18}
+          tilt={1.11}
+          zoom={1.0}
+          height={5.5}
+          fogDepth={14}
+          detail="medium"
+          brightness={0.9}
+          opacity={0.85}
+          mouseInteraction={false}
+          grain
+          grainIntensity={0.04}
+        />
+      </div>
 
       <div className="lg-shapes authx-shapes" aria-hidden="true">
         <Scallop size={160} color="#818cf8" style={{ position: "absolute", top: "14%", right: "9%", opacity: 0.28 }} />
@@ -297,7 +345,10 @@ const CSS = `
 .lg-root .dl-btn--accent:hover { background: #6366f1; box-shadow: 0 14px 34px -14px rgba(99,102,241,0.7); }
 .lg-root .dl-input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,0.18); }
 
-.lg-shapes { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+/* Camada das ondas: abaixo dos blobs e do cartão, e sem ponteiro — o canvas
+   cobriria a tela inteira e engoliria o clique nos campos. */
+.lg-ondas { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.lg-shapes { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
 .lg-shape { position: absolute; display: block; border-radius: 999px; }
 .lg-shape--halfs {
   left: -16px; top: 28%; width: 66px; height: 86px;
@@ -312,7 +363,7 @@ const CSS = `
 }
 
 .lg-card {
-  position: relative; z-index: 1;
+  position: relative; z-index: 2;
   width: 100%; max-width: 430px; padding: 34px 34px 30px;
   border-radius: 22px; display: flex; flex-direction: column;
 }

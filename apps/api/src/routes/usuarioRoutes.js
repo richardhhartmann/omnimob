@@ -39,14 +39,29 @@ function comSufixoDoTenant(login, slug) {
   return limpo.endsWith(sufixo) ? limpo : `${limpo}${sufixo}`.slice(0, 60);
 }
 
+/* O cargo tem de ser da MESMA imobiliária do usuário.
+
+   Antes de `tb_cargo` ter dono isso nem era uma pergunta possível — os cargos
+   eram de todo mundo. Agora é: um `cargoCodigo` de outra empresa criaria um
+   usuário governado por permissões que esta imobiliária não vê nem controla, e
+   o banco aceitaria calado, porque a chave estrangeira só olha para o cargo. */
+async function cargoDoTenant(cargoCodigo, tenantId) {
+  const id = Number(cargoCodigo);
+  if (!Number.isInteger(id)) return null;
+  return prisma.cargo.findFirst({ where: { id, tenantId }, select: { id: true } });
+}
+
 usuarioRouter.post("/", async (req, res) => {
   try {
-    const { nome, senha, cargoCodigo } = req.body;
+    const { nome, senha, cargoCodigo, email } = req.body;
     // Só na criação. Aplicar isto na edição renomearia logins anteriores à
     // regra (o `admin` do seed, por exemplo) e tiraria a pessoa do ar.
     const login = comSufixoDoTenant(req.body.login || "", req.tenant.slug);
     if (!nome || !login || !cargoCodigo) {
       return res.status(400).json({ error: "Nome, login e cargo são obrigatórios." });
+    }
+    if (!await cargoDoTenant(cargoCodigo, req.tenant.id)) {
+      return res.status(400).json({ error: "Cargo não encontrado nesta imobiliária." });
     }
     // Senha é opcional na criação. Se vier, é apenas uma senha provisória; de
     // qualquer forma o usuário é obrigado a definir uma no primeiro acesso.
@@ -56,6 +71,9 @@ usuarioRouter.post("/", async (req, res) => {
         tenantId: req.tenant.id,
         nome,
         login,
+        // Normaliza para null: string vazia faria a busca da recuperação de
+        // senha casar dois usuários "sem e-mail" como se fossem o mesmo.
+        email: String(email || "").trim().toLowerCase() || null,
         senha: senhaHash,
         cargoCodigo: Number(cargoCodigo),
         forcaAlterarSenha: true, // novos usuários sempre trocam a senha no 1º acesso
@@ -80,7 +98,7 @@ usuarioRouter.put("/:id", async (req, res) => {
 
     // A senha NÃO pode ser alterada diretamente pelo painel. Para forçar uma
     // troca, use a flag forcaAlterarSenha (o usuário define a nova no acesso).
-    const { nome, login, cargoCodigo, ativo, forcaAlterarSenha } = req.body;
+    const { nome, login, cargoCodigo, ativo, forcaAlterarSenha, email } = req.body;
 
     // Desativar a si mesmo é a única forma de um tenant ficar sem ninguém que
     // consiga entrar. O painel já esconde o campo; aqui é a trava de verdade.
@@ -88,9 +106,14 @@ usuarioRouter.put("/:id", async (req, res) => {
       return res.status(400).json({ error: "Você não pode desativar o seu próprio usuário." });
     }
 
+    if (cargoCodigo !== undefined && !await cargoDoTenant(cargoCodigo, req.tenant.id)) {
+      return res.status(400).json({ error: "Cargo não encontrado nesta imobiliária." });
+    }
+
     const data = {};
     if (nome !== undefined) data.nome = nome;
     if (login !== undefined) data.login = login;
+    if (email !== undefined) data.email = String(email || "").trim().toLowerCase() || null;
     if (cargoCodigo !== undefined) data.cargoCodigo = Number(cargoCodigo);
     if (ativo !== undefined) data.ativo = Boolean(ativo);
     if (forcaAlterarSenha !== undefined) data.forcaAlterarSenha = Boolean(forcaAlterarSenha);

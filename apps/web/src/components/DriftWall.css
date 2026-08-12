@@ -1,0 +1,169 @@
+.drift-wall {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  perspective: var(--dw-perspective, 1200px);
+  perspective-origin: 50% 50%;
+  --dw-tile-w: 200px;
+  --dw-tile-h: 132px;
+  --dw-gap: 18px;
+  --dw-radius: 14px;
+  --dw-lift: 64px;
+  --dw-dim: 0.55;
+  --dw-gray: 0;
+  --dw-overlay: #060010;
+  --dw-edge: 40%;
+  -webkit-mask-image:
+    radial-gradient(ellipse 78% 82% at 50% 46%, #000 var(--dw-edge), transparent 100%),
+    linear-gradient(to top, #000 var(--dw-edge), transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    radial-gradient(ellipse 78% 82% at 50% 46%, #000 var(--dw-edge), transparent 100%),
+    linear-gradient(to top, #000 var(--dw-edge), transparent 100%);
+  mask-composite: intersect;
+}
+
+.drift-wall__plane {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: row;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.drift-wall__col {
+  position: relative;
+  width: calc(var(--dw-tile-w) + var(--dw-gap));
+  transform-style: preserve-3d;
+}
+
+.drift-wall__track {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+  transform-style: preserve-3d;
+}
+
+/* SEM `preserve-3d` por peça.
+
+   Ele existia para o `translateZ` do hover (a peça vindo para a frente). Só que
+   isso cria um contexto 3D por peça — com duzentas na parede, são duzentas
+   camadas que o compositor recalcula a cada quadro da PÁGINA, não só da seção.
+   Medindo a rolagem completa, era o maior custo da landing.
+
+   O 3D que importa é o do plano e o das colunas, que continuam. A peça em
+   destaque agora cresce em escala no lugar de avançar em Z: na prática lê igual,
+   porque o avanço era pequeno e a perspectiva já é rasa nessa profundidade. */
+.drift-wall__tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: calc(var(--dw-tile-h) + var(--dw-gap));
+  flex: 0 0 auto;
+  outline: none;
+}
+
+.drift-wall__inner {
+  position: absolute;
+  inset: calc(var(--dw-gap) / 2);
+  display: block;
+  border-radius: var(--dw-radius);
+  overflow: hidden;
+  background: #0b0b12;
+  opacity: var(--dw-dim);
+  transform: translateZ(0);
+  pointer-events: none;
+  transition:
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.drift-wall__tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: grayscale(var(--dw-gray)) saturate(0.92);
+  transition: filter 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.drift-wall__overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--dw-overlay);
+  opacity: 0.42;
+  pointer-events: none;
+  transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.drift-wall__tile.is-active .drift-wall__inner,
+.drift-wall__tile:focus-visible .drift-wall__inner {
+  opacity: 1;
+  /* Escala no lugar de translateZ: sem contexto 3D na peça, o Z não teria
+     profundidade para percorrer. O fator sai do mesmo --dw-lift. */
+  transform: scale(calc(1 + var(--dw-lift) / 420));
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.7);
+}
+
+.drift-wall__tile.is-active img,
+.drift-wall__tile:focus-visible img {
+  filter: grayscale(0) saturate(1.05);
+}
+
+.drift-wall__tile.is-active .drift-wall__overlay,
+.drift-wall__tile:focus-visible .drift-wall__overlay {
+  opacity: 0;
+}
+
+.drift-wall__tile:focus-visible .drift-wall__inner {
+  box-shadow:
+    0 24px 60px -18px rgba(0, 0, 0, 0.7),
+    0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+/* ─── Modo decorativo ────────────────────────────────────────────────────────
+   Parede usada como fundo de seção. O cursor de mão do original mentiria: não
+   há nada para clicar, e o conteúdo real da seção está por cima. `pointer-events`
+   desligado também impede que a parede roube a seleção de texto do título. */
+.drift-wall--decorativa,
+.drift-wall--decorativa .drift-wall__plane {
+  cursor: default;
+}
+
+.drift-wall--decorativa {
+  pointer-events: none;
+}
+
+/* Decorativa MAS clicável: o contêiner volta a receber ponteiro e a peça ganha
+   o cursor de mão. Classe separada porque a parede só de fundo continua
+   inerte — misturar as duas faria o fundo roubar a seleção do texto. */
+.drift-wall--clicavel {
+  pointer-events: auto;
+}
+.drift-wall--clicavel .drift-wall__tile {
+  cursor: pointer;
+}
+
+/* ─── Peça com conteúdo (cartão), em vez de imagem ───────────────────────────
+   O conteúdo é montado por quem usa o componente, então aqui só o encaixe:
+   ocupar a peça inteira e não deixar o texto vazar do canto arredondado. */
+.drift-wall__inner > *:not(.drift-wall__overlay) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drift-wall__plane,
+  .drift-wall__track {
+    will-change: auto;
+  }
+}

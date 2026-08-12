@@ -306,19 +306,64 @@ const RAIZ = process.env.VITRINE_DOMINIO_RAIZ || "omnimob.app";
  * forma, então o pior caso é o subdomínio não existir ainda.
  */
 export async function garantirSubdominioDaCasa(slug) {
-  if (!dominioConfigurado() || !slug) return { ok: false, motivo: "não configurado" };
+  if (!dominioConfigurado() || !slug) {
+    return { ok: false, host: slug ? `${slug}.${RAIZ}` : null, motivo: "VERCEL_TOKEN/VERCEL_PROJECT_ID não configurados" };
+  }
 
   const host = `${slug}.${RAIZ}`;
   try {
     await vercel(`/v10/projects/${PROJETO}/domains`, { method: "POST", corpo: { name: host } });
     return { ok: true, host, criado: true };
   } catch (erro) {
-    // Já existir é sucesso: a intenção era garantir, não criar do zero.
-    if (erro.codigo === "domain_already_in_use" || erro.status === 409) {
-      return { ok: true, host, criado: false };
+    const jaEmUso = erro.codigo === "domain_already_in_use" || erro.status === 409;
+    if (!jaEmUso) {
+      console.warn(`[dominio] não consegui cadastrar ${host} na Vercel: ${erro.message}`);
+      return { ok: false, host, motivo: erro.message };
     }
-    console.warn(`[dominio] não consegui cadastrar ${host} na Vercel: ${erro.message}`);
-    return { ok: false, host, motivo: erro.message };
+
+    /* "Já em uso" tem dois significados, e a Vercel usa o mesmo código para os
+       dois — a mesma armadilha que `cadastrarDominio` já tratava, e que aqui
+       estava sendo lida como sucesso puro e simples:
+
+         a) já está NESTE projeto — o caso bom, e o esperado ao reexecutar.
+         b) está em OUTRO projeto ou outra conta. Aí o endereço NUNCA vai
+            responder por aqui, e devolver `ok: true` fazia o painel anunciar
+            para o cliente uma vitrine que não abre.
+
+       A consulta abaixo separa os dois: ela só encontra o domínio se ele
+       estiver neste projeto. */
+    try {
+      const info = await vercel(`/v9/projects/${PROJETO}/domains/${encodeURIComponent(host)}`);
+      return { ok: true, host, criado: false, verificado: info?.verified !== false };
+    } catch {
+      const motivo =
+        `${host} está cadastrado em OUTRO projeto da Vercel — um domínio só serve um projeto ` +
+        `por vez. Remova-o lá (Vercel → Domains) e rode 'npm run subdominios -- --aplicar'.`;
+      console.warn(`[dominio] ${motivo}`);
+      return { ok: false, host, motivo };
+    }
+  }
+}
+
+/**
+ * O subdomínio da casa está mesmo de pé?
+ *
+ * Consulta a Vercel em vez de tentar abrir o endereço: um GET no host devolve
+ * erro de TLS enquanto o certificado não sai, e isso é indistinguível de
+ * "domínio não existe" para quem lê o resultado. A Vercel sabe a diferença.
+ *
+ * @returns {{ host, registrado: boolean, verificado: boolean, motivo?: string }}
+ */
+export async function conferirSubdominioDaCasa(slug) {
+  const host = `${slug}.${RAIZ}`;
+  if (!dominioConfigurado() || !slug) {
+    return { host, registrado: false, verificado: false, motivo: "não configurado" };
+  }
+  try {
+    const info = await vercel(`/v9/projects/${PROJETO}/domains/${encodeURIComponent(host)}`);
+    return { host, registrado: true, verificado: info?.verified !== false };
+  } catch (erro) {
+    return { host, registrado: false, verificado: false, motivo: erro.message };
   }
 }
 

@@ -1,5 +1,10 @@
 import bcrypt from "bcryptjs";
 import prismaPkg from "@prisma/client";
+/* O catálogo de cargos vive no serviço, não aqui: o provisionamento de tenant
+   novo usa a MESMA lista, e duas cópias divergiriam na primeira permissão nova
+   (foi assim que `verConfiguracoes` quase nasceu só num dos dois lados). */
+import { CARGOS_PADRAO as CARGOS, dadosDoCargo } from "../src/services/cargosPadrao.js";
+import { TIPOS_IMOVEL, criarTiposPadrao } from "../src/services/tiposPadrao.js";
 
 const {
   PrismaClient,
@@ -24,341 +29,10 @@ async function hashPassword(plain) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  DADOS BASE — sempre carregados (globais, compartilhados por todos os tenants)
+//  DADOS BASE — tipos de imóvel e atributos (esses sim, compartilhados)
 // ════════════════════════════════════════════════════════════════════════════
 
-// Toda permissão existente em Cargo. Cada cargo abaixo lista só as que concede;
-// as demais ficam false automaticamente.
-const PERMISSOES = [
-  "acessarPainel",
-  "editarPagina",
-  "gerenciarImoveis",
-  "gerenciarLeads",
-  "gerenciarUsuarios",
-  "gerenciarClientes",
-  "gerenciarCargos",
-  "verRelatorios",
-  "publicarRedes",
-];
 
-const CARGOS = [
-  { descricao: "Administrador", permite: PERMISSOES },
-  {
-    descricao: "Gerente",
-    permite: ["acessarPainel", "editarPagina", "gerenciarImoveis", "gerenciarLeads", "gerenciarUsuarios", "gerenciarClientes", "verRelatorios", "publicarRedes"],
-  },
-  {
-    descricao: "Corretor",
-    permite: ["acessarPainel", "gerenciarImoveis", "gerenciarLeads", "gerenciarClientes", "verRelatorios", "publicarRedes"],
-  },
-  {
-    descricao: "Assistente Comercial",
-    permite: ["acessarPainel", "gerenciarLeads", "gerenciarClientes"],
-  },
-  {
-    descricao: "Marketing",
-    permite: ["acessarPainel", "editarPagina", "verRelatorios", "publicarRedes"],
-  },
-  {
-    descricao: "Editor de Vitrine",
-    permite: ["editarPagina"],
-  },
-  {
-    descricao: "Consulta (Somente Leitura)",
-    permite: ["acessarPainel", "verRelatorios"],
-  },
-];
-
-const TIPOS_IMOVEL = [
-  {
-    descricao: "Casa",
-    areaFields: ["areaTerreno", "areaConstruida"],
-    atributos: [
-      { descricao: "Piscina", grupo: "Lazer" },
-      { descricao: "Quintal", grupo: "Lazer" },
-      { descricao: "Churrasqueira", grupo: "Lazer" },
-      { descricao: "Varanda", grupo: "Lazer" },
-      { descricao: "Jardim", grupo: "Lazer" },
-      { descricao: "Garagem Coberta", grupo: "Infraestrutura" },
-      { descricao: "Área de Serviço", grupo: "Infraestrutura" },
-      { descricao: "Quarto de Empregada", grupo: "Infraestrutura" },
-      { descricao: "Energia Solar", grupo: "Infraestrutura" },
-      { descricao: "Poço Artesiano", grupo: "Infraestrutura" },
-      { descricao: "Muro/Murado", grupo: "Segurança" },
-      { descricao: "Portão Eletrônico", grupo: "Segurança" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-      { descricao: "Alarme", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Apartamento",
-    areaFields: ["areaPrivativa", "areaTotal"],
-    atributos: [
-      { descricao: "Piscina", grupo: "Lazer" },
-      { descricao: "Salão de Festas", grupo: "Lazer" },
-      { descricao: "Varanda/Sacada", grupo: "Lazer" },
-      { descricao: "Churrasqueira", grupo: "Lazer" },
-      { descricao: "Academia", grupo: "Lazer" },
-      { descricao: "Playground", grupo: "Lazer" },
-      { descricao: "Elevador", grupo: "Infraestrutura" },
-      { descricao: "Área de Serviço", grupo: "Infraestrutura" },
-      { descricao: "Depósito/Armário", grupo: "Infraestrutura" },
-      { descricao: "Água Inclusa", grupo: "Infraestrutura" },
-      { descricao: "Gás Encanado", grupo: "Infraestrutura" },
-      { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-      { descricao: "Segurança 24h", grupo: "Segurança" },
-      { descricao: "Interfone/Videofone", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Cobertura",
-    areaFields: ["areaPrivativa", "areaTotal"],
-    atributos: [
-      { descricao: "Piscina Privativa", grupo: "Lazer" },
-      { descricao: "Churrasqueira", grupo: "Lazer" },
-      { descricao: "Varanda Ampla", grupo: "Lazer" },
-      { descricao: "Jacuzzi/Spa", grupo: "Lazer" },
-      { descricao: "Área Gourmet", grupo: "Lazer" },
-      { descricao: "Vista Panorâmica", grupo: "Lazer" },
-      { descricao: "Elevador Privativo", grupo: "Infraestrutura" },
-      { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
-      { descricao: "Acabamento Premium", grupo: "Infraestrutura" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Studio",
-    areaFields: ["areaPrivativa"],
-    atributos: [
-      { descricao: "Mobiliado", grupo: "Infraestrutura" },
-      { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
-      { descricao: "Lavanderia Coletiva", grupo: "Infraestrutura" },
-      { descricao: "Bicicletário", grupo: "Infraestrutura" },
-      { descricao: "Coworking", grupo: "Lazer" },
-      { descricao: "Academia", grupo: "Lazer" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-      { descricao: "Interfone", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Kitnet",
-    areaFields: ["areaPrivativa"],
-    atributos: [
-      { descricao: "Mobiliado", grupo: "Infraestrutura" },
-      { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
-      { descricao: "Cozinha Americana", grupo: "Infraestrutura" },
-      { descricao: "Lavanderia Coletiva", grupo: "Infraestrutura" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-      { descricao: "Interfone", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Loft",
-    areaFields: ["areaPrivativa"],
-    atributos: [
-      { descricao: "Pé-direito Alto", grupo: "Infraestrutura" },
-      { descricao: "Mezanino", grupo: "Infraestrutura" },
-      { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
-      { descricao: "Mobiliado", grupo: "Infraestrutura" },
-      { descricao: "Vaga de Garagem", grupo: "Infraestrutura" },
-      { descricao: "Varanda", grupo: "Lazer" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Sobrado",
-    areaFields: ["areaTerreno", "areaConstruida"],
-    atributos: [
-      { descricao: "Quintal", grupo: "Lazer" },
-      { descricao: "Churrasqueira", grupo: "Lazer" },
-      { descricao: "Varanda", grupo: "Lazer" },
-      { descricao: "Suíte Master", grupo: "Infraestrutura" },
-      { descricao: "Closet", grupo: "Infraestrutura" },
-      { descricao: "Área de Serviço", grupo: "Infraestrutura" },
-      { descricao: "Garagem Coberta", grupo: "Infraestrutura" },
-      { descricao: "Portão Eletrônico", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Flat",
-    areaFields: ["areaPrivativa"],
-    atributos: [
-      { descricao: "Mobiliado", grupo: "Infraestrutura" },
-      { descricao: "Ar-condicionado", grupo: "Infraestrutura" },
-      { descricao: "Estacionamento", grupo: "Infraestrutura" },
-      { descricao: "Serviço de Quarto", grupo: "Comodidades" },
-      { descricao: "Recepção 24h", grupo: "Comodidades" },
-      { descricao: "Restaurante", grupo: "Comodidades" },
-      { descricao: "Academia", grupo: "Lazer" },
-      { descricao: "Piscina", grupo: "Lazer" },
-    ],
-  },
-  {
-    descricao: "Casa em Condominio",
-    areaFields: ["areaTerreno", "areaConstruida"],
-    atributos: [
-      { descricao: "Piscina", grupo: "Lazer" },
-      { descricao: "Churrasqueira", grupo: "Lazer" },
-      { descricao: "Playground", grupo: "Lazer" },
-      { descricao: "Salão de Festas", grupo: "Lazer" },
-      { descricao: "Academia", grupo: "Lazer" },
-      { descricao: "Quadra Esportiva", grupo: "Lazer" },
-      { descricao: "Área Verde", grupo: "Lazer" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-      { descricao: "Guarita", grupo: "Segurança" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-      { descricao: "Condomínio Fechado", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Casa de Praia",
-    areaFields: ["areaTerreno", "areaConstruida"],
-    atributos: [
-      { descricao: "Vista para o Mar", grupo: "Lazer" },
-      { descricao: "Piscina", grupo: "Lazer" },
-      { descricao: "Churrasqueira", grupo: "Lazer" },
-      { descricao: "Varanda Gourmet", grupo: "Lazer" },
-      { descricao: "Quintal", grupo: "Lazer" },
-      { descricao: "Ducha Externa", grupo: "Comodidades" },
-      { descricao: "Mobiliado", grupo: "Infraestrutura" },
-      { descricao: "Garagem Coberta", grupo: "Infraestrutura" },
-    ],
-  },
-  {
-    descricao: "Chácara",
-    areaFields: ["areaTerreno", "areaConstruida"],
-    atributos: [
-      { descricao: "Piscina", grupo: "Lazer" },
-      { descricao: "Churrasqueira", grupo: "Lazer" },
-      { descricao: "Pomar", grupo: "Lazer" },
-      { descricao: "Campo de Futebol", grupo: "Lazer" },
-      { descricao: "Lago/Açude", grupo: "Lazer" },
-      { descricao: "Área Verde", grupo: "Lazer" },
-      { descricao: "Casa de Caseiro", grupo: "Infraestrutura" },
-      { descricao: "Poço Artesiano", grupo: "Infraestrutura" },
-      { descricao: "Energia Elétrica", grupo: "Infraestrutura" },
-    ],
-  },
-  {
-    descricao: "Sítio",
-    areaFields: ["areaTerreno", "areaConstruida"],
-    atributos: [
-      { descricao: "Nascente/Água", grupo: "Infraestrutura" },
-      { descricao: "Casa Sede", grupo: "Infraestrutura" },
-      { descricao: "Poço Artesiano", grupo: "Infraestrutura" },
-      { descricao: "Energia Elétrica", grupo: "Infraestrutura" },
-      { descricao: "Curral", grupo: "Infraestrutura" },
-      { descricao: "Pasto", grupo: "Infraestrutura" },
-      { descricao: "Pomar", grupo: "Lazer" },
-      { descricao: "Plantação", grupo: "Infraestrutura" },
-    ],
-  },
-  {
-    descricao: "Terreno",
-    areaFields: ["areaTerreno"],
-    atributos: [
-      { descricao: "Murado", grupo: "Infraestrutura" },
-      { descricao: "Área Verde", grupo: "Infraestrutura" },
-      { descricao: "Plano", grupo: "Topografia" },
-      { descricao: "Em Aclive", grupo: "Topografia" },
-      { descricao: "Em Declive", grupo: "Topografia" },
-      { descricao: "Esquina", grupo: "Localização" },
-      { descricao: "Acesso Pavimentado", grupo: "Localização" },
-      { descricao: "Documentação Regular", grupo: "Documentação" },
-    ],
-  },
-  {
-    descricao: "Lote em Condominio",
-    areaFields: ["areaTerreno"],
-    atributos: [
-      { descricao: "Plano", grupo: "Topografia" },
-      { descricao: "Área Verde Próxima", grupo: "Localização" },
-      { descricao: "Infraestrutura Completa", grupo: "Infraestrutura" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-      { descricao: "Condomínio Fechado", grupo: "Segurança" },
-      { descricao: "Documentação Regular", grupo: "Documentação" },
-    ],
-  },
-  {
-    descricao: "Galpão",
-    areaFields: ["areaTerreno", "areaConstruida"],
-    atributos: [
-      { descricao: "Pé-direito Alto", grupo: "Infraestrutura" },
-      { descricao: "Doca de Carga", grupo: "Infraestrutura" },
-      { descricao: "Elétrica Trifásica", grupo: "Infraestrutura" },
-      { descricao: "Pátio de Manobra", grupo: "Infraestrutura" },
-      { descricao: "Mezanino", grupo: "Infraestrutura" },
-      { descricao: "Estacionamento", grupo: "Infraestrutura" },
-      { descricao: "Escritório", grupo: "Comodidades" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Loja",
-    areaFields: ["areaPrivativa", "areaTotal"],
-    atributos: [
-      { descricao: "Vitrine", grupo: "Infraestrutura" },
-      { descricao: "Depósito", grupo: "Infraestrutura" },
-      { descricao: "Mezanino", grupo: "Infraestrutura" },
-      { descricao: "Estacionamento", grupo: "Infraestrutura" },
-      { descricao: "Ar-condicionado", grupo: "Comodidades" },
-      { descricao: "WC Privativo", grupo: "Comodidades" },
-      { descricao: "Boa Localização/Fluxo", grupo: "Localização" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Comercial",
-    areaFields: ["areaConstruida", "areaTotal"],
-    atributos: [
-      { descricao: "Estacionamento", grupo: "Infraestrutura" },
-      { descricao: "Gerador", grupo: "Infraestrutura" },
-      { descricao: "Fibra Ótica", grupo: "Infraestrutura" },
-      { descricao: "Pé-direito Alto", grupo: "Infraestrutura" },
-      { descricao: "Elétrica Trifásica", grupo: "Infraestrutura" },
-      { descricao: "Mezanino", grupo: "Infraestrutura" },
-      { descricao: "Depósito/Almoxarifado", grupo: "Infraestrutura" },
-      { descricao: "Copa/Cozinha", grupo: "Comodidades" },
-      { descricao: "WC Privativo", grupo: "Comodidades" },
-      { descricao: "Recepção", grupo: "Comodidades" },
-      { descricao: "Ar-condicionado Central", grupo: "Comodidades" },
-      { descricao: "Rampa para Deficientes", grupo: "Acessibilidade" },
-      { descricao: "Elevador", grupo: "Acessibilidade" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Sala Comercial",
-    areaFields: ["areaPrivativa", "areaTotal"],
-    atributos: [
-      { descricao: "Ar-condicionado", grupo: "Comodidades" },
-      { descricao: "Recepção Compartilhada", grupo: "Comodidades" },
-      { descricao: "Copa", grupo: "Comodidades" },
-      { descricao: "WC Privativo", grupo: "Comodidades" },
-      { descricao: "Internet/Fibra", grupo: "Infraestrutura" },
-      { descricao: "Estacionamento", grupo: "Infraestrutura" },
-      { descricao: "Elevador", grupo: "Acessibilidade" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-    ],
-  },
-  {
-    descricao: "Prédio Comercial",
-    areaFields: ["areaTerreno", "areaConstruida", "areaTotal"],
-    atributos: [
-      { descricao: "Elevador", grupo: "Acessibilidade" },
-      { descricao: "Estacionamento", grupo: "Infraestrutura" },
-      { descricao: "Subsolo/Garagem", grupo: "Infraestrutura" },
-      { descricao: "Gerador", grupo: "Infraestrutura" },
-      { descricao: "Recepção", grupo: "Comodidades" },
-      { descricao: "Ar-condicionado Central", grupo: "Comodidades" },
-      { descricao: "Portaria 24h", grupo: "Segurança" },
-      { descricao: "Câmeras de Segurança", grupo: "Segurança" },
-    ],
-  },
-];
 
 // ════════════════════════════════════════════════════════════════════════════
 //  DADOS DEV — somente com --dev (apenas para desenvolvimento)
@@ -636,52 +310,61 @@ function fakePhone(i) {
 
 // ─── Seeders ───────────────────────────────────────────────────────────────
 
-async function seedCargos() {
-  console.log("→ Cargos (base)...");
+/* Cargos são POR IMOBILIÁRIA, então este seeder roda depois dos tenants e
+   devolve um mapa de dois níveis: `map[slug][descricao]`.
+
+   Antes ele rodava antes de existir tenant e criava um conjunto único, global.
+   Era esse conjunto que todas as imobiliárias dividiam — inclusive as criadas
+   em produção pelo provisionamento, que ia buscar o "Administrador" do seed. */
+async function seedCargos(tenants) {
+  console.log("→ Cargos (um conjunto por imobiliária)...");
   const map = {};
-  for (const { descricao, permite } of CARGOS) {
-    const data = Object.fromEntries(PERMISSOES.map((p) => [p, permite.includes(p)]));
-    let cargo = await prisma.cargo.findFirst({ where: { descricao } });
-    if (cargo) {
-      cargo = await prisma.cargo.update({ where: { id: cargo.id }, data });
-    } else {
-      cargo = await prisma.cargo.create({ data: { descricao, ...data } });
+  for (const [slug, tenant] of Object.entries(tenants)) {
+    map[slug] = {};
+    for (const modelo of CARGOS) {
+      const data = dadosDoCargo(modelo, tenant.id);
+      let cargo = await prisma.cargo.findFirst({
+        where: { tenantId: tenant.id, descricao: modelo.descricao },
+      });
+      if (cargo) {
+        cargo = await prisma.cargo.update({ where: { id: cargo.id }, data });
+      } else {
+        cargo = await prisma.cargo.create({ data });
+      }
+      map[slug][modelo.descricao] = cargo;
     }
-    map[descricao] = cargo;
-    console.log(`  ✓ ${descricao}`);
+    console.log(`  ✓ ${slug} — ${CARGOS.length} cargos`);
   }
   return map;
 }
 
-async function seedTipos() {
-  console.log("→ Tipos de imóvel e atributos (base)...");
-  const tiposMap = {};
-  const atributosMap = {}; // atributosMap[tipoDescricao][atributoDescricao] = record
-  for (const tipo of TIPOS_IMOVEL) {
-    let tipoRecord = await prisma.tipoImovel.findFirst({ where: { descricao: tipo.descricao } });
-    if (!tipoRecord) {
-      tipoRecord = await prisma.tipoImovel.create({ data: { descricao: tipo.descricao, areaFields: tipo.areaFields ?? [] } });
-    } else {
-      const current = Array.isArray(tipoRecord.areaFields) ? tipoRecord.areaFields : [];
-      if (current.length === 0 && tipo.areaFields?.length > 0) {
-        tipoRecord = await prisma.tipoImovel.update({ where: { id: tipoRecord.id }, data: { areaFields: tipo.areaFields } });
-      }
-    }
-    tiposMap[tipo.descricao] = tipoRecord;
-    atributosMap[tipo.descricao] = {};
+/* Tipos são POR IMOBILIÁRIA, então este seeder roda depois dos tenants e
+   devolve mapas de dois níveis: `tiposMap[slug][descricao]`.
 
-    for (const atr of tipo.atributos) {
-      let rec = await prisma.modeloAtributo.findFirst({
-        where: { tipoId: tipoRecord.id, descricao: atr.descricao },
-      });
-      if (!rec) {
-        rec = await prisma.modeloAtributo.create({
-          data: { tipoId: tipoRecord.id, descricao: atr.descricao, grupo: atr.grupo },
-        });
-      }
-      atributosMap[tipo.descricao][atr.descricao] = rec;
+   A criação em si mora em `criarTiposPadrao` — o mesmo caminho que o
+   provisionamento usa. Aqui fica só a releitura, porque o seed de imóveis de
+   exemplo precisa dos ids para amarrar imóvel a tipo e a atributo. */
+async function seedTipos(tenants) {
+  console.log("→ Tipos de imóvel e atributos (um catálogo por imobiliária)...");
+  const tiposMap = {};
+  const atributosMap = {};
+
+  for (const [slug, tenant] of Object.entries(tenants)) {
+    await criarTiposPadrao(prisma, tenant.id);
+
+    tiposMap[slug] = {};
+    atributosMap[slug] = {};
+    const tipos = await prisma.tipoImovel.findMany({
+      where: { tenantId: tenant.id },
+      include: { atributos: true },
+    });
+    for (const t of tipos) {
+      tiposMap[slug][t.descricao] = t;
+      atributosMap[slug][t.descricao] = Object.fromEntries(
+        t.atributos.map((a) => [a.descricao, a]),
+      );
     }
-    console.log(`  ✓ ${tipo.descricao} (${tipo.atributos.length} atributos)`);
+    console.log(`  ✓ ${slug} — ${tipos.length} tipos`);
   }
   return { tiposMap, atributosMap };
 }
@@ -706,7 +389,8 @@ async function seedUsuarios(tenants, cargos) {
   const senha = await hashPassword("admin");
   for (const u of USUARIOS_DEV) {
     const tenantId = tenants[u.tenantSlug].id;
-    const cargoCodigo = cargos[u.cargo].id;
+    // O cargo agora vem do conjunto DA imobiliária do usuário.
+    const cargoCodigo = cargos[u.tenantSlug][u.cargo].id;
     await prisma.usuario.upsert({
       where: { login: u.login },
       update: { nome: u.nome, tenantId, cargoCodigo, senha, ativo: true },
@@ -740,7 +424,8 @@ async function seedImoveis(tenants, tiposMap, atributosMap) {
 
   for (const im of IMOVEIS_DEV) {
     const tenant = tenants[im.tenantSlug];
-    const tipo = tiposMap[im.tipo];
+    // O tipo agora vem do catálogo DA imobiliária do imóvel.
+    const tipo = tiposMap[im.tenantSlug]?.[im.tipo];
 
     const data = {
       tenantId: tenant.id,
@@ -774,7 +459,7 @@ async function seedImoveis(tenants, tiposMap, atributosMap) {
 
     // Atributos
     for (const atrDesc of im.atributos ?? []) {
-      const atr = atributosMap[im.tipo]?.[atrDesc];
+      const atr = atributosMap[im.tenantSlug]?.[im.tipo]?.[atrDesc];
       if (!atr) {
         console.warn(`    ! atributo "${atrDesc}" não existe no tipo "${im.tipo}" — ignorado`);
         continue;
@@ -899,18 +584,22 @@ async function seedSuperAdmin() {
 async function main() {
   console.log(`\n🌱 Seed Omnimob — modo: ${SEED_DEV ? "DEV (base + exemplos)" : "BASE (apenas cargos/tipos/atributos)"}\n`);
 
-  // Dados base — sempre
-  const cargos = await seedCargos();
-  const { tiposMap, atributosMap } = await seedTipos();
+  // Dados base — sempre. Cargos e tipos de imóvel saíram daqui: sem imobiliária
+  // não há a quem pertencerem, e criá-los soltos era o que os tornava globais.
   await seedSuperAdmin();
 
   if (!SEED_DEV) {
-    console.log("\n✅ Dados base carregados. Imóveis de exemplo ignorados (rode com --dev para popular).");
+    /* Cargos e tipos deixaram de ser dados "base": pertencem a uma imobiliária
+       e nascem junto com ela, no provisionamento. Sem --dev não há imobiliária
+       nenhuma para povoar. */
+    console.log("\n✅ Super-admin pronto. Cargos e tipos nascem com cada imobiliária (rode com --dev para criar as de exemplo).");
     return;
   }
 
   // Dados de desenvolvimento — somente com --dev
   const tenants = await seedTenants();
+  const cargos = await seedCargos(tenants);
+  const { tiposMap, atributosMap } = await seedTipos(tenants);
   await seedUsuarios(tenants, cargos);
   await seedClientes(tenants);
   await seedImoveis(tenants, tiposMap, atributosMap);

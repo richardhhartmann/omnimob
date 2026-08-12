@@ -31,8 +31,15 @@ import { enderecoVisivel } from "../utils/enderecoVitrine";
    `baseDaVitrine` lê da sessão, e a sessão só é montada no login — o
    `/api/auth/me` devolve o usuário, nunca o tenant. Então "Ver página",
    "Copiar link" e os links de divulgação continuavam apontando para o endereço
-   da Omnimob até a pessoa sair e entrar de novo, sem nenhuma pista do porquê. */
-export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtualizarTenant }) {
+   da Omnimob até a pessoa sair e entrar de novo, sem nenhuma pista do porquê.
+
+   `aoResolverEndereco(resolvido, escolha)` avisa quem hospeda esta tela se dá para sair
+   dela agora. É um ESTADO, não um evento: dispara nos dois sentidos, porque
+   escolher o domínio próprio *retira* a saída que existia um instante antes.
+   Antes era um `aoConcluir` de uma via só, e por isso o passo do primeiro
+   acesso abria sem botão nenhum mesmo já tendo o endereço da Omnimob válido e
+   marcado. */
+export function DominioVitrine({ tenantSlug, compacto = false, aoResolverEndereco, aoAtualizarTenant }) {
   const [estado, setEstado] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [escolha, setEscolha] = useState(null); // "omnimob" | "proprio"
@@ -52,18 +59,21 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtu
            não uma sugestão. Deixar os dois cartões apagados dava a impressão de
            que nada estava definido e a vitrine estava sem endereço.
 
-           Marcar aqui não conta como escolha: o `aoConcluir` só dispara no
-           clique, então no modal de primeiro acesso o botão "Concluir" segue
-           esperando uma decisão de verdade. */
+           E marcado JÁ CONTA como escolha resolvida: a vitrine está no ar neste
+           endereço, ninguém precisa confirmar o que já é verdade. Quem só quer
+           seguir em frente não deveria ter de clicar num cartão que já está
+           aceso para o botão de sair aparecer. Quem `resolvido` é, logo abaixo. */
         setEscolha(r.dominio ? "proprio" : "omnimob");
-        // Domínio já no ar é escolha resolvida — quem abre a tela de novo não
-        // deve ficar sem saída porque a decisão foi tomada da vez passada.
         aoAtualizarTenant?.({ dominioProprio: r.dominio || null, dominioStatus: r.status });
-        if (r.status === "ATIVO") aoConcluir?.("proprio");
       })
-      .catch(() => setEstado(null))
+      /* Falhou a consulta: cai no endereço da Omnimob, que é verdade
+         independente de resposta do servidor — a vitrine está no ar nele agora.
+         Sem isso, os dois cartões ficavam apagados e o passo do primeiro acesso
+         não oferecia saída nenhuma, justamente no momento em que o sistema já
+         tinha dado um problema. */
+      .catch(() => { setEstado(null); setEscolha("omnimob"); })
       .finally(() => setCarregando(false));
-    // `aoConcluir` fica fora das deps de propósito: o pai costuma passar uma
+    // `aoAtualizarTenant` fica fora das deps de propósito: o pai costuma passar
     // função nova a cada render, e incluí-la refaria a requisição sem parar.
   }, [tenantSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -91,9 +101,6 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtu
       const r = await api.verificarDominio(tenantSlug);
       setEstado((s) => ({ ...s, ...r }));
       aoAtualizarTenant?.({ dominioProprio: r.dominio || null, dominioStatus: r.status });
-      // Avisa quem hospeda esta tela (o modal de primeiro acesso) que a escolha
-      // chegou ao fim — é o gatilho do botão de concluir.
-      if (r.status === "ATIVO") aoConcluir?.("proprio");
       if (r.status !== "ATIVO") {
         setErro("O DNS ainda não respondeu. Isso leva de alguns minutos a algumas horas — pode fechar e voltar depois.");
       }
@@ -126,13 +133,37 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtu
     setTimeout(() => setCopiado(""), 1800);
   }
 
+  const ativo = estado?.status === "ATIVO";
+  const pendente = estado?.status === "PENDENTE";
+
+  /* Dá para sair desta tela agora?
+
+     O endereço da Omnimob resolve na hora: já está no ar, não há o que
+     configurar nem o que esperar. O domínio próprio só resolve em ATIVO — em
+     PENDENTE o DNS ainda não respondeu, e deixar sair dali faria a pessoa
+     encerrar o primeiro acesso achando que a vitrine mudou de endereço quando
+     ela ainda não mudou.
+
+     Daí sair do domínio próprio inacabado ter uma saída só, e ser a de trocar
+     para o endereço da Omnimob ("Cancelar e usar o endereço da Omnimob", no
+     painel de espera). Não é uma trava: é que as outras saídas seriam mentira. */
+  const resolvido = ativo || escolha === "omnimob";
+
+  /* Efeito, e não chamada dentro dos handlers, porque as entradas são muitas —
+     carregar, escolher cartão, cadastrar, verificar, remover — e uma delas
+     esquecida devolve o bug que este componente acabou de perder. Derivando de
+     `resolvido`, não há como um caminho novo esquecer de avisar. */
+  useEffect(() => {
+    if (carregando) return;
+    aoResolverEndereco?.(resolvido, escolha);
+    // `aoResolverEndereco` fora das deps: o pai passa função nova a cada render.
+  }, [carregando, resolvido, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (carregando) return <div className="dv-carregando">Carregando…</div>;
 
   const enderecoOmnimob = enderecoVisivel(estado?.slug || tenantSlug);
   const bloqueadoNoPlano = estado && estado.liberadoNoPlano === false;
   const semIntegracao = estado && estado.disponivel === false;
-  const ativo = estado?.status === "ATIVO";
-  const pendente = estado?.status === "PENDENTE";
 
   return (
     <div className={`dv${compacto ? " dv--compacto" : ""}`}>
@@ -170,7 +201,7 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtu
           <button
             type="button"
             className={`dv-opcao${escolha === "omnimob" ? " is-ativa" : ""}`}
-            onClick={() => { setEscolha("omnimob"); aoConcluir?.("omnimob"); }}
+            onClick={() => setEscolha("omnimob")}
           >
             <span className="dv-opcao__titulo">Usar o endereço da Omnimob</span>
             <span className="dv-opcao__end">{enderecoOmnimob}</span>

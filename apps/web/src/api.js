@@ -463,6 +463,40 @@ export const api = {
       body: JSON.stringify({ plano }),
     }),
 
+  /* Cancela a assinatura no fim do período já pago.
+
+     Sem `confirmar`, a rota responde 409 com `code: "CONFIRMAR_CANCELAMENTO"` e
+     a data até quando o acesso vale — é assim que a tela sabe o que dizer no
+     aviso antes de perguntar. Com `confirmar: true`, agenda de verdade. */
+  cancelarAssinatura: (tenantSlug, confirmar = false) =>
+    request("/api/tenants/me/cancelar-assinatura", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ confirmar }),
+    }),
+
+  /* ─── Recuperação de senha ────────────────────────────────────────────────
+     Nenhuma delas exige sessão: quem esqueceu a senha, por definição, não tem.
+
+     `pedirRecuperacaoSenha` responde sempre 200 com a mesma mensagem, exista a
+     conta ou não — não trate um "sucesso" aqui como prova de que o e-mail saiu. */
+  pedirRecuperacaoSenha: (identificador) =>
+    request("/api/auth/recuperar-senha", {
+      method: "POST",
+      body: JSON.stringify({ identificador }),
+    }),
+
+  // Confere o link antes de a pessoa digitar a senha nova.
+  validarTokenSenha: (token) =>
+    request(`/api/auth/redefinir-senha/${encodeURIComponent(token)}`),
+
+  // Devolve a sessão pronta: quem redefine entra direto, sem passar pelo login.
+  redefinirSenha: (token, novaSenha) =>
+    request("/api/auth/redefinir-senha", {
+      method: "POST",
+      body: JSON.stringify({ token, novaSenha }),
+    }),
+
   // Interesse comercial pela própria Omnimob (landing), antes de existir tenant.
   enviarInteresseOmnimob: (payload = {}) =>
     request("/public/interesse", {

@@ -18,9 +18,19 @@ import {
   Sparkle,
   Globe,
   ChatCircleText,
+  CreditCard,
+  EnvelopeSimple,
+  FileArrowUp,
+  LinkSimple,
 } from "@phosphor-icons/react";
 import { api } from "../api";
 import { OmnimobSplash } from "../components/OmnimobSplash";
+import DriftWall from "../components/DriftWall";
+import ElectricBorder from "../components/ElectricBorder";
+import BounceCards from "../components/BounceCards";
+import LineSidebar from "../components/LineSidebar";
+import Counter from "../components/Counter";
+import GhostCursor from "../components/GhostCursor";
 import { TrialModal } from "../components/TrialModal";
 import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
 import { IconeCheck, IconeX } from "../components/Icones.jsx";
@@ -38,7 +48,7 @@ import {
   LogoLockup,
   Reveal,
   Scallop,
-  StatValue,
+  parseStat,
   reduzirMovimento,
   useReveal,
 } from "../styles/omnimobKit";
@@ -461,6 +471,10 @@ const MENU_ITENS = [
 /* `cor` é qualquer fundo CSS (as marcas com degradê usam o mesmo do painel, em
    PropertyForm) e `texto` só aparece quando o fundo é claro demais para branco
    — caso do dourado das métricas. */
+/* `curto` é o rótulo que aparece no baralho. O leque deixa ~77px de cada peça à
+   mostra, e nomes como "Formulário de contato" saíam cortados no meio — numa
+   seção cujo trabalho é justamente nomear os canais. O nome inteiro continua em
+   `name`, que é o que vai para a lista lida por leitor de tela. */
 const INTEGRACOES = [
   { type: "REDES", name: "Facebook", Icon: FacebookLogo, cor: "#1877f2" },
   {
@@ -470,51 +484,99 @@ const INTEGRACOES = [
     cor: "linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",
   },
   { type: "MENSAGENS", name: "WhatsApp", Icon: WhatsappMarca, cor: "#25d366" },
-  { type: "MÍDIA", name: "Cloudinary", Icon: CloudArrowUp, cor: "#3448c5" },
-  { type: "IA", name: "Google Gemini", Icon: Sparkle, cor: "linear-gradient(135deg,#4285f4,#9b72cb,#d96570)" },
-  { type: "VITRINE", name: "Página pública", Icon: Globe, cor: ACCENT },
-  { type: "LEADS", name: "Formulário de contato", Icon: ChatCircleText, cor: MINT },
-  { type: "MÉTRICAS", name: "Painel de desempenho", Icon: ChartLineUp, cor: GOLD, texto: "#0a0a0b" },
+  { type: "IA", name: "Google Gemini", curto: "Gemini", Icon: Sparkle, cor: "linear-gradient(135deg,#4285f4,#9b72cb,#d96570)" },
+  { type: "VITRINE", name: "Página pública", curto: "Vitrine", Icon: Globe, cor: ACCENT },
+  { type: "LEADS", name: "Formulário de contato", curto: "Contato", Icon: ChatCircleText, cor: MINT },
+  { type: "MÉTRICAS", name: "Painel de desempenho", curto: "Painel", Icon: ChartLineUp, cor: GOLD, texto: "#0a0a0b" },
+  { type: "MIGRAÇÃO", name: "Importação de planilha", curto: "Planilhas", Icon: FileArrowUp, cor: "#0f766e" },
+  { type: "DOMÍNIO", name: "Domínio próprio", curto: "Domínio", Icon: LinkSimple, cor: "#111827" },
 ];
 
 // Faixa horizontal de destaques. Cards claros funcionam como "marca-texto"
 // no meio dos escuros — mesma ideia da faixa de depoimentos da referência.
-const FAIXA = [
-  { kind: "stat", value: "+1.200", label: "Imóveis publicados na plataforma", tone: "mint" },
-  { kind: "text", title: "Vitrine no ar em minutos", desc: "Sem desenvolvedor, sem template travado. Você arrasta, solta e publica." },
-  { kind: "text", title: "Layout mobile independente", desc: "Monte o desktop e ajuste o mobile separadamente — ou copie um para o outro num clique." },
-  { kind: "stat", value: "3", label: "Canais de divulgação integrados", tone: "accent" },
-  { kind: "text", title: "Desfazer e refazer sempre", desc: "Cinquenta passos de histórico no editor, com Ctrl+Z e Ctrl+Y." },
-  { kind: "stat", value: "24/7", label: "Vitrine pública sempre disponível", tone: "gold" },
-  { kind: "text", title: "Conteúdo escrito por IA", desc: "Descrição, título, hashtags e post prontos a partir do cadastro do imóvel." },
-  { kind: "text", title: "Cada imobiliária isolada", desc: "Dados, usuários e vitrine separados por tenant, do banco à requisição." },
+/* `detalhe` é o que aparece ao clicar na peça, na parede de destaques. Texto
+   novo — confira a redação antes de publicar; o resto dos campos é o que já
+   existia na faixa. */
+const FAIXA_EXTRA = [
+  {
+    kind: "text",
+    title: "Leads direto no painel",
+    desc: "O interesse começa na vitrine e chega até sua equipe sem planilha no caminho.",
+    detalhe: "Quando um visitante entra em contato por um imóvel, o lead fica associado à imobiliária e pode ser acompanhado pelo painel. Você centraliza imóvel, interessado e origem da oportunidade no mesmo lugar.",
+  },
+  {
+    kind: "stat",
+    value: "1",
+    label: "Painel para toda a operação",
+    tone: "mint",
+    detalhe: "Imóveis, leads, usuários, clientes, divulgação e desempenho convivem dentro da mesma plataforma. Menos abas abertas, menos informação espalhada e mais contexto para sua equipe trabalhar.",
+  },
+  {
+    kind: "text",
+    title: "Sua marca, não a nossa",
+    desc: "Cores, identidade e conteúdo da vitrine ficam com a cara da sua imobiliária.",
+    detalhe: "A Omnimob permite personalizar cores, textos, destaques, banners e a organização dos blocos. A tecnologia fica por trás — quem aparece para o cliente é a sua marca.",
+  },
+  {
+    kind: "text",
+    title: "Salvo enquanto você cria",
+    desc: "A vitrine acompanha suas alterações sem depender de um botão Salvar a cada passo.",
+    detalhe: "As mudanças realizadas no editor são salvas automaticamente. Você pode ajustar textos, posições, cores e blocos com mais fluidez sem interromper o processo a cada alteração.",
+  },
+  {
+    kind: "stat",
+    value: "50",
+    label: "Alterações que você pode retroceder.",
+    tone: "accent",
+    detalhe: "O editor mantém até cinquenta etapas no histórico de desfazer e refazer. Isso deixa você experimentar layouts, posições e estilos sem medo de perder uma versão que estava funcionando melhor.",
+  },
+  {
+    kind: "text",
+    title: "Desempenho por imóvel",
+    desc: "Entenda quais imóveis recebem atenção e quais realmente geram oportunidades.",
+    detalhe: "A plataforma registra eventos de visualização, leads e vendas ligados aos imóveis. Assim, o cadastro deixa de ser apenas uma ficha e passa a carregar também o histórico de desempenho daquele anúncio.",
+  },
+  {
+    kind: "text",
+    title: "Uma ficha, vários usos",
+    desc: "Cadastre a informação uma vez e reaproveite em toda a jornada do imóvel.",
+    detalhe: "Título, preço, endereço, atributos, imagens e demais informações partem do mesmo cadastro. A vitrine, os insights e os recursos de divulgação trabalham sobre essa única fonte de dados.",
+  },
+  {
+    kind: "text",
+    title: "Equipe com acessos diferentes",
+    desc: "Administração, operação e edição da vitrine não precisam ter as mesmas permissões.",
+    detalhe: "A plataforma diferencia funções como administrador, agente e editor de vitrine. Isso permite organizar a equipe de acordo com o papel de cada pessoa sem entregar o mesmo nível de acesso para todo mundo.",
+  },
+  {
+    kind: "text",
+    title: "Imagens prontas para a vitrine",
+    desc: "Fotos dos imóveis organizadas e disponíveis para uso direto na experiência pública.",
+    detalhe: "As imagens ficam associadas ao cadastro do imóvel, com ordenação própria e armazenamento em nuvem. Assim, a galeria exibida para o visitante parte diretamente do conteúdo administrado pela imobiliária.",
+  },
+  {
+    kind: "text",
+    title: "Do painel para a vitrine",
+    desc: "Ativou o imóvel? Ele já pode fazer parte da experiência pública da imobiliária.",
+    detalhe: "O mesmo catálogo administrado internamente alimenta a vitrine pública. Isso reduz retrabalho e evita manter uma relação de imóveis no sistema e outra completamente separada no site.",
+  },
+  {
+    kind: "stat",
+    value: "2",
+    label: "Experiências de layout por vitrine",
+    tone: "gold",
+    detalhe: "Desktop e mobile possuem layouts independentes. Você pode tratar cada tela como uma experiência própria ou começar pelo desktop e copiar a estrutura para o celular antes dos ajustes finais.",
+  },
+  {
+    kind: "text",
+    title: "Sua operação cresce junto",
+    desc: "A Omnimob foi construída para atender várias imobiliárias sem misturar nenhuma delas.",
+    detalhe: "Cada imobiliária possui seu próprio contexto de usuários, imóveis, leads, configurações e vitrine. A arquitetura multi-tenant permite que a plataforma cresça mantendo cada operação logicamente isolada.",
+  },
 ];
 
-// Velocidade da faixa quando ela anda sozinha no celular, em pixels por
-// segundo. Bate com a esteira de CSS do desktop (60 s para uma lista).
-const FAIXA_VELOCIDADE = 34;
 
-/* Quantas cópias da lista ficam no trilho. Três, e não duas, por causa da
-   rolagem livre do celular.
 
-   O laço da rolagem funciona assim: como as cópias são idênticas, deslocar a
-   posição em uma cópia inteira não muda nada do que se vê — muda só quanto
-   ainda há para rolar de cada lado, que volta a ser uma lista inteira. Com duas
-   cópias esse deslocamento sempre joga o dedo colado numa das pontas do trilho,
-   e ponta de trilho é parede: não há para onde rolar nem evento de rolagem que
-   avise. Com três, a posição vive na cópia do meio, com uma lista de sobra dos
-   dois lados, e a parede nunca chega. */
-const FAIXA_COPIAS = 3;
-
-/* Distância de uma cópia, medida nos cartões — e não em scrollWidth dividido
-   pelo número de cópias, que erraria por uma fração de vão (o trilho tem um vão
-   a menos que os cartões) e daria um pulinho a cada volta. */
-function faixaVolta(caixa) {
-  const cartoes = caixa.firstElementChild?.children;
-  const primeiro = cartoes?.[0];
-  const seguinte = cartoes?.[FAIXA.length];
-  return primeiro && seguinte ? seguinte.offsetLeft - primeiro.offsetLeft : 0;
-}
 
 const FAQ = [
   {
@@ -539,7 +601,7 @@ const FAQ = [
   },
   {
     q: "Os dados da minha imobiliária ficam separados dos das outras?",
-    a: "Ficam. A Omnimob é multi-tenant: cada imobiliária tem seus próprios imóveis, usuários, leads e vitrine, e toda requisição é filtrada pelo tenant de origem.",
+    a: "Ficam. A Omnimob é multi-tenant: cada imobiliária tem seus próprios imóveis, usuários, leads e vitrine.",
   },
   /* A pergunta que trava quem já opera. Ela existe na página porque agora
      existe um caminho para ela: o teste pergunta o perfil logo na abertura e,
@@ -548,7 +610,7 @@ const FAQ = [
      importação automática, que ainda não existe. */
   {
     q: "Já uso outro sistema. Dá para trazer meus imóveis e clientes?",
-    a: "Dá, e você não vai redigitar nada sozinho. Ao começar o teste, diga que já tem uma imobiliária: perguntamos qual sistema você usa hoje, o que precisa vir junto (imóveis e fotos, clientes, leads, equipe) e como os dados podem sair de lá. Um especialista responde no seu e-mail para conduzir a importação dentro do próprio período de teste — se você não souber como exportar, essa parte também é com a gente.",
+    a: "Dá, e você não vai redigitar nada sozinho. Ao começar o teste, diga que já tem uma imobiliária: perguntamos qual sistema você usa hoje, o que precisa vir junto (imóveis e fotos, clientes, leads, equipe) e como os dados podem sair de lá.",
   },
 ];
 
@@ -1557,6 +1619,20 @@ const FLARE = {
   PREMIUM: { cor: "#f0c24b", onda: 0xa0732e, tinta: "rgba(160,115,46,0.22)", realce: "#f0c24b" },
 };
 
+/* Cor do contorno elétrico de cada plano — e quem NÃO tem contorno.
+
+   O Básico fica de fora de propósito: o brilho é o destaque dos planos pagos, e
+   acender os três iguala justamente o que a seção precisa diferenciar. `null`
+   aqui não é "ainda não escolhi", é "este não acende".
+
+   O contorno substituiu o antigo flare de sombra interna no hover — ver o bloco
+   `.dl-plan:hover` no CSS, que só guarda o realce do botão agora. */
+const BORDA_ELETRICA = {
+  BASICO: null,
+  PROFISSIONAL: "#a855f7",
+  PREMIUM: "#ffb323",
+};
+
 /* ── Lista de recursos do cartão, que abre e fecha ───────────────────────────
    O botão "Ver todos os recursos" trocava as duas listas de um quadro para o
    outro: o cartão saltava de altura e o texto aparecia já no lugar novo, sem
@@ -1882,6 +1958,19 @@ function Planos({ planos, aoTestar }) {
             onMouseEnter={() => setSobHover(i)}
             onMouseLeave={() => setSobHover((h) => (h === i ? null : h))}
           >
+            {/* Contorno elétrico — só no cartão sob o mouse, e só nos planos que
+                acendem. Montado sob demanda porque cada instância roda o próprio
+                laço de canvas: três ligados o tempo todo seriam três desenhos
+                por quadro para mostrar, no máximo, um. */}
+            {BORDA_ELETRICA[p.key] && (emCarrossel ? i === atual : sobHover === i) ? (
+              <ElectricBorder
+                className="electric-border--moldura electric-border--so-raios"
+                color={BORDA_ELETRICA[p.key]}
+                speed={1}
+                chaos={0.06}
+                borderRadius={0}
+              />
+            ) : null}
             {/* A coroa fica pendurada na borda de cima do topo de linha, metade
                 dentro e metade fora: é um selo pregado no cartão, não mais uma
                 linha dentro dele. Ela sai na cor do próprio plano (dourada, no
@@ -1966,131 +2055,331 @@ function Planos({ planos, aoTestar }) {
   );
 }
 
-/* ── Faixa horizontal ────────────────────────────────────────────────────────
-   No desktop ela é uma esteira de CSS: gira sozinha e para quando o mouse
-   encosta. No celular não existe mouse, e uma faixa que passa sozinha sem poder
-   ser segurada é a pior peça de qualquer landing — o cartão que interessou some
-   antes de acabar de ser lido, e não há como trazê-lo de volta.
+/* Cartão de destaque como PEÇA da parede.
 
-   Então lá a faixa vira uma área rolável de verdade e o avanço passa a ser
-   escrito em scrollLeft, quadro a quadro, em vez de sair de um transform. É essa
-   troca que permite as duas coisas ao mesmo tempo: enquanto ninguém toca, o laço
-   empurra; ao primeiro gesto ele desliga de vez e sobra a rolagem nativa, com a
-   inércia que o sistema já dá.
+   Mesma marcação da faixa que existia antes (`dl-fcard`), com um modificador
+   que a solta da largura fixa: dentro da parede quem manda no tamanho é a
+   peça, e o cartão só precisa preenchê-la. */
+function cartaoDaFaixa(c) {
+  return (
+    <div className={`dl-fcard dl-fcard--parede ${c.kind === "stat" ? `dl-fcard--${c.tone}` : ""}`}>
+      {c.kind === "stat" ? (
+        <>
+          <strong className="dl-fcard__value">{c.value}</strong>
+          <span className="dl-fcard__label">{c.label}</span>
+        </>
+      ) : (
+        <>
+          <span className="dl-fcard__quote" aria-hidden="true">”</span>
+          <h3 className="dl-fcard__title">{c.title}</h3>
+          <p className="dl-fcard__desc">{c.desc}</p>
+        </>
+      )}
+    </div>
+  );
+}
 
-   O laço, porém, não pode desligar junto: a faixa é infinita nos dois modos. Nos
-   dois casos ele é a mesma volta de uma cópia da lista (ver FAIXA_COPIAS) — o
-   que muda é só quem escreve a posição, o relógio ou o dedo.
-   ────────────────────────────────────────────────────────────────────────── */
-function FaixaCorrida() {
-  const caixaRef = useRef(null);
-  const [solta, setSolta] = useState(false);
-  const emMobile = useMedia(CARROSSEL);
+/* Parede de destaques — o fundo desta seção.
+
+   Substitui a esteira horizontal que rolava aqui. Os cartões são os mesmos; o
+   que mudou é que agora eles ocupam a seção inteira, em perspectiva, atrás do
+   texto.
+
+   DECORATIVA de propósito (`interactive={false}`): o conteúdo dos cartões já
+   está escrito no texto da seção, e como a parede repete a lista várias vezes
+   para o laço fechar, deixá-la focável encheria a navegação por teclado de
+   paradas repetidas antes do próximo link de verdade.
+
+   No celular a parede encolhe em vez de sumir: menos colunas, peças menores e
+   menos inclinação — a mesma cena, num palco estreito. */
+/* A fumaça só é montada perto da seção dela.
+
+   Sem porteiro ela é um contexto WebGL com bloom e grão desenhando o tempo
+   todo, mesmo com a seção a três telas de distância. O componente para o
+   próprio laço quando o rastro apaga, mas o contexto continua ocupando memória
+   de vídeo — e a página tem outros dois (as duas cenas do Vanta).
+
+   Nada de invólucro posicionado em volta: o GhostCursor escreve
+   `position: relative` no pai via style inline, e isso venceria a folha,
+   zerando a altura da caixa. Ele é filho direto da seção, e só o `if` decide se
+   existe. */
+function FumacaQuandoVisivel() {
+  const marcaRef = useRef(null);
+  const [perto, setPerto] = useState(false);
 
   useEffect(() => {
-    const caixa = caixaRef.current;
-    if (!caixa || !emMobile || solta || reduzirMovimento()) return undefined;
-
-    let quadro = 0;
-    let antes = 0;
-    let pos = caixa.scrollLeft;
-
-    const passo = (agora) => {
-      // Teto no delta: uma aba em segundo plano volta com centenas de
-      // milissegundos acumulados, e sem o teto a faixa daria um salto na volta.
-      const dt = antes ? Math.min(agora - antes, 64) : 0;
-      antes = agora;
-
-      // Mesma cópia do meio que a rolagem livre usa, para o dedo já pegar a
-      // faixa num ponto de onde dá para ir aos dois lados.
-      const volta = faixaVolta(caixa);
-      if (volta) {
-        if (pos >= volta * 2) pos -= volta;
-        else if (pos < volta) pos += volta;
-      }
-      pos += (FAIXA_VELOCIDADE * dt) / 1000;
-      caixa.scrollLeft = pos;
-
-      quadro = requestAnimationFrame(passo);
-    };
-
-    quadro = requestAnimationFrame(passo);
-    return () => cancelAnimationFrame(quadro);
-  }, [emMobile, solta]);
-
-  /* Qualquer gesto de rolagem entrega o controle, e não o devolve mais. O sinal
-     não pode ser o evento de scroll: o próprio laço rola a caixa, e ele se
-     desligaria no primeiro quadro. */
-  useEffect(() => {
-    const caixa = caixaRef.current;
-    if (!caixa || !emMobile || solta) return undefined;
-    const assumir = () => setSolta(true);
-    const gestos = ["pointerdown", "touchstart", "wheel"];
-    gestos.forEach((g) => caixa.addEventListener(g, assumir, { passive: true }));
-    return () => gestos.forEach((g) => caixa.removeEventListener(g, assumir));
-  }, [emMobile, solta]);
-
-  /* O laço, agora com o dedo no comando: a posição é trazida de volta para a
-     cópia do meio sempre que sai dela, e o último cartão volta a ser seguido
-     pelo primeiro.
-
-     QUANDO enrolar é o detalhe que decide se isto fica bom ou irritante:
-     escrever em scrollLeft no meio de um impulso CANCELA o impulso, e o
-     movimento morre na mão de quem acabou de arrastar. Por isso a regra normal é
-     esperar a rolagem assentar — parada, a troca de cópia não se vê nem se
-     sente, porque as duas mostram a mesma coisa. Só perto das pontas de verdade
-     a volta é imediata: perder o impulso é ruim, bater na parede é pior. */
-  useEffect(() => {
-    const caixa = caixaRef.current;
-    if (!caixa || !emMobile || !solta) return undefined;
-
-    let repouso = 0;
-    const enrolar = () => {
-      const volta = faixaVolta(caixa);
-      if (!volta) return;
-      if (caixa.scrollLeft >= volta * 2) caixa.scrollLeft -= volta;
-      else if (caixa.scrollLeft < volta) caixa.scrollLeft += volta;
-    };
-
-    const aoRolar = () => {
-      const volta = faixaVolta(caixa);
-      if (volta && (caixa.scrollLeft < volta * 0.5 || caixa.scrollLeft > volta * 2.5)) enrolar();
-      clearTimeout(repouso);
-      repouso = setTimeout(enrolar, 140);
-    };
-
-    caixa.addEventListener("scroll", aoRolar, { passive: true });
-    return () => {
-      caixa.removeEventListener("scroll", aoRolar);
-      clearTimeout(repouso);
-    };
-  }, [emMobile, solta]);
+    const el = marcaRef.current?.parentElement;
+    if (!el || typeof IntersectionObserver === "undefined") { setPerto(true); return undefined; }
+    const io = new IntersectionObserver(([e]) => setPerto(e.isIntersecting), { rootMargin: "300px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   return (
-    // O Reveal não repassa ref, então o embrulho fica com ele e a caixa rolável
-    // fica um nível abaixo — que é onde a máscara e o recorte já viviam.
-    <Reveal className="dl-marquee-wrap">
-      <div className="dl-marquee" ref={caixaRef}>
-        <div className="dl-marquee__track">
-          {Array.from({ length: FAIXA_COPIAS }, () => FAIXA).flat().map((c, i) => (
-            <div key={`${c.kind}-${i}`} className={`dl-fcard ${c.kind === "stat" ? `dl-fcard--${c.tone}` : ""}`}>
-              {c.kind === "stat" ? (
-                <>
-                  <strong className="dl-fcard__value">{c.value}</strong>
-                  <span className="dl-fcard__label">{c.label}</span>
-                </>
-              ) : (
-                <>
-                  <span className="dl-fcard__quote" aria-hidden="true">”</span>
-                  <h3 className="dl-fcard__title">{c.title}</h3>
-                  <p className="dl-fcard__desc">{c.desc}</p>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+    <>
+      {/* Âncora de zero altura: serve só para achar a seção pai sem envolver o
+          canvas em nada — é o pai dele que precisa ser a seção. */}
+      <span ref={marcaRef} aria-hidden="true" style={{ display: "none" }} />
+      {perto ? (
+        <GhostCursor
+          color="#a99109"
+          brightness={1}
+          edgeIntensity={0}
+          trailLength={50}
+          inertia={0.5}
+          grainIntensity={0.05}
+          bloomStrength={0.1}
+          bloomRadius={1.0}
+          bloomThreshold={0.025}
+          fadeDelayMs={1000}
+          fadeDurationMs={1500}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/* Baralho dos canais — substitui a grade de quatro colunas que havia aqui.
+
+   O leque tem 12 peças, e a quantidade não está travada em lugar nenhum: as
+   posições são calculadas pelo BounceCards a partir do número de itens e da
+   largura medida. Acrescentar um canal em INTEGRACOES basta — no componente
+   original isso exigiria editar um array paralelo de transformações, e esquecer
+   dele empilharia o cartão novo em cima do último, sem erro.
+
+   O contêiner acompanha a largura da tela porque o leque é horizontal: fixado
+   em pixels, ele estouraria no celular e sobraria no monitor grande. */
+function BaralhoDeCanais() {
+  const caixaRef = useRef(null);
+  const [largura, setLargura] = useState(1000);
+
+  useEffect(() => {
+    const el = caixaRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(([e]) => setLargura(e.contentRect.width || 1000));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const pecas = useMemo(
+    () => INTEGRACOES.map((it) => ({
+      key: it.name,
+      content: (
+        <span
+          className={`bc-canal${it.texto ? " bc-canal--claro" : ""}`}
+          style={{ "--canal-cor": it.cor, "--canal-tinta": it.texto || "#fff" }}
+        >
+          <span className="bc-canal__marca" aria-hidden="true">
+            <it.Icon size={86} weight="fill" />
+          </span>
+          <span className="bc-canal__texto">
+            <span className="bc-canal__tipo">{it.type}</span>
+            <span className="bc-canal__nome">{it.curto || it.name}</span>
+          </span>
+        </span>
+      ),
+    })),
+    [],
+  );
+
+  return (
+    <div className="dl-baralho" ref={caixaRef}>
+      <BounceCards
+        items={pecas}
+        containerWidth={Math.max(320, largura)}
+        containerHeight={largura < 700 ? 220 : 280}
+        animationDelay={0.15}
+        animationStagger={0.05}
+        easeType="elastic.out(1, 0.62)"
+        inclinacao={largura < 700 ? 6 : 9}
+      />
+
+      {/* A mesma lista, em texto, para leitor de tela e para busca: o baralho é
+          um monte de peças giradas e sobrepostas, e a ordem visual dele não
+          corresponde a ordem nenhuma que faça sentido ler em voz alta. */}
+      <ul className="dl-baralho__lista">
+        {INTEGRACOES.map((it) => (
+          <li key={it.name}>{it.type}: {it.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ParedeDeDestaques() {
+  const emMobile = useMedia(CARROSSEL);
+  const [aberto, setAberto] = useState(null);
+  const fundoRef = useRef(null);
+  const [naVista, setNaVista] = useState(false);
+
+  /* A parede só aparece quando a seção dela é a que se está vendo.
+
+     Ela já pausava fora da tela, mas continuava desenhada — ao rolar, as peças
+     ficavam paradas na beirada, aparecendo por baixo da seção vizinha. O limiar
+     de 35% é o que separa "estou nesta seção" de "ela está passando": com um
+     valor baixo demais a parede acenderia enquanto a pessoa ainda lê a seção
+     anterior. */
+  useEffect(() => {
+    const el = fundoRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setNaVista(true); return undefined; }
+    const io = new IntersectionObserver(([e]) => setNaVista(e.isIntersecting), { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const pecas = useMemo(
+    () => FAIXA_EXTRA.map((c) => ({ title: c.label || c.title, content: cartaoDaFaixa(c), dados: c })),
+    [],
+  );
+
+  // Esc fecha. O painel cobre a seção, então precisa da saída de teclado.
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const aoTeclar = (e) => { if (e.key === "Escape") setAberto(null); };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [aberto]);
+
+  return (
+    <>
+      <div className={`dl-porque__fundo${naVista ? " is-na-vista" : ""}`} ref={fundoRef}>
+                      <DriftWall
+          items={pecas}
+          interactive={false}
+          onItemClick={(item) => setAberto(item.dados)}
+          /* "auto" enche a largura medida: com número fixo, monitor largo
+             deixava as laterais vazias e a parede virava uma faixa central. */
+          columns={emMobile ? 3 : "auto"}
+          tileWidth={emMobile ? 190 : 268}
+          tileHeight={emMobile ? 140 : 178}
+          gap={emMobile ? 12 : 18}
+          radius={18}
+          tilt={emMobile ? 10 : 15}
+          turn={emMobile ? -8 : -12}
+          perspective={emMobile ? 900 : 1400}
+          depth={emMobile ? 80 : 120}
+          speed={emMobile ? 26 : 32}
+          variance={0.45}
+          parallax={0}
+          lift={emMobile ? 0 : 26}
+          /* Borda mais cheia que o padrão do componente: o recorte forte deixava
+             os cantos apagados numa tela grande, e é justamente onde sobra
+             espaço para a parede aparecer. */
+          fade={0.28}
+          dim={0.62}
+          overlayColor="transparent"
+        />
+      ) : null}
       </div>
-    </Reveal>
+
+      {/* Lista real da seção, para leitor de tela e para o teclado.
+
+          A parede é `aria-hidden` porque repete as mesmas peças várias vezes
+          para o laço fechar — anunciar oito destaques cinco vezes seria pior que
+          não anunciar. Aqui eles aparecem uma vez só, na ordem escrita, e cada
+          um abre o mesmo painel que o clique na peça abre. */}
+      <ul className="dl-porque__lista">
+        {FAIXA_EXTRA.map((c) => (
+          <li key={c.title || c.label}>
+            <button type="button" onClick={() => setAberto(c)}>
+              {c.title || `${c.value} — ${c.label}`}
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {aberto ? (
+        <div className="dl-porque__painel" role="dialog" aria-modal="true" aria-label={aberto.title || aberto.label}>
+          {/* Fundo clicável para fechar: com a parede andando atrás, um clique
+              fora do painel é o gesto que a pessoa tenta primeiro. */}
+          <div className="dl-porque__saida" onClick={() => setAberto(null)} aria-hidden="true" />
+          <Reveal className="dl-porque__caixa">
+            <span className="dl-porque__tag">
+              {aberto.kind === "stat" ? aberto.value : "DESTAQUE"}
+            </span>
+            <h3>{aberto.title || aberto.label}</h3>
+            <p>{aberto.detalhe || aberto.desc}</p>
+            <button type="button" className="dl-porque__fechar" onClick={() => setAberto(null)}>
+              Fechar
+            </button>
+          </Reveal>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/* Número da métrica, rolando como marcador mecânico.
+
+   O Counter recebe um número puro, e as métricas daqui não são números puros:
+   têm prefixo ("+1.200"), sufixo ("98%") ou simplesmente não são número
+   ("24/7"). `parseStat` já separava essas partes para a contagem antiga — aqui
+   ela decide se o marcador entra em cena ou se o texto vai cru.
+
+   AS CASAS SÃO FIXADAS PELO VALOR FINAL, e não pelo atual: contando 0 → 1200 o
+   marcador precisa nascer com quatro colunas. Deixá-las sair do valor corrente
+   faria o número ganhar casas no meio da rolagem e a largura pular a cada
+   centena.
+
+   E o valor só sobe quando o bloco aparece: o Counter anima ao ver a prop
+   mudar, então até lá ele fica em zero — que é o estado de onde a contagem
+   parte. */
+function StatNumero({ raw, ativo }) {
+  const info = useMemo(() => parseStat(raw), [raw]);
+  const caixaRef = useRef(null);
+
+  /* O Counter precisa da altura de cada algarismo EM PIXELS — é dela que sai o
+     deslocamento da coluna. Mas `.dl-stat__n` tem tamanho fluido
+     (clamp(28px, 3.4vw, 44px)), então fixar um número aqui descolaria o
+     marcador do resto do bloco em metade das larguras de tela. Medimos o
+     tamanho que o CSS resolveu e reagimos quando ele muda. */
+  const [tamanho, setTamanho] = useState(40);
+  useEffect(() => {
+    const el = caixaRef.current;
+    if (!el) return undefined;
+    const medir = () => setTamanho(parseFloat(getComputedStyle(el).fontSize) || 40);
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /* As casas do marcador, com o ponto de milhar no meio quando o número
+     original tinha um ("+1.200"). O Counter trata "." como casa literal — a
+     mesma peça que ele usa para separar decimais serve aqui de separador, e sem
+     ela o número sairia "+1200", perdendo a leitura que a métrica já tinha. */
+  const casas = useMemo(() => {
+    if (!info) return [];
+    const digitos = String(Math.trunc(Math.abs(info.valor)) || 0).length;
+    const saida = [];
+    for (let i = 0; i < digitos; i += 1) {
+      const restantes = digitos - i - 1;
+      // Separador antes de cada grupo de três que ainda falta fechar.
+      if (info.agrupado && i > 0 && restantes % 3 === 2) saida.push(".");
+      saida.push(10 ** restantes);
+    }
+    return saida;
+  }, [info]);
+
+  // "24/7" e afins não têm número para rolar.
+  if (!info) return raw;
+
+  return (
+    <span className="dl-stat__roll" ref={caixaRef}>
+      {info.prefixo}
+      <Counter
+        value={ativo ? info.valor : 0}
+        places={casas}
+        fontSize={tamanho}
+        padding={2}
+        gap={1}
+        horizontalPadding={0}
+        borderRadius={0}
+        gradientHeight={10}
+        gradientFrom="var(--bg)"
+      />
+      {info.sufixo}
+    </span>
   );
 }
 
@@ -2108,7 +2397,7 @@ function StatsGrid() {
         >
           <span className="dl-mono dl-index">[{String(i + 1).padStart(2, "0")}]</span>
           <strong className="dl-stat__n">
-            <StatValue raw={s.n} ativo={visivel} />
+            <StatNumero raw={s.n} ativo={visivel} />
           </strong>
           <span className="dl-stat__l">{s.label}</span>
         </div>
@@ -2135,7 +2424,10 @@ export function OmnimobLandingPage() {
   // -1 = todas fechadas. A lista abre inteira à vista, e quem escolhe o que
   // ler é o visitante — com uma já aberta, a primeira pergunta ganhava um
   // destaque que ela não tem sobre as outras.
-  const [faqAberto, setFaqAberto] = useState(-1);
+  /* Abre na primeira. Antes era -1 (todas fechadas) porque o acordeão empilhado
+     dava destaque indevido à primeira pergunta; agora a resposta tem coluna
+     própria, e -1 deixaria metade da seção em branco. */
+  const [faqAberto, setFaqAberto] = useState(0);
   const ano = new Date().getFullYear();
 
   /* Uma porta só para a página inteira: o teste. `planoDesejado` guarda com
@@ -2156,8 +2448,23 @@ export function OmnimobLandingPage() {
      que aquela mesma execução tinha acabado de criar — no StrictMode, que roda
      efeito/limpeza/efeito, sobrava um canvas órfão e a névoa ficava dobrada.
      Rodando uma vez só, cada execução destrói exatamente o que criou. */
+  /* A névoa só existe perto da seção dela.
+
+     Ela nascia no load e ficava viva a página inteira — um contexto WebGL a
+     desenhar por trás de tudo enquanto a pessoa lê o topo. Com o GhostCursor
+     eram DOIS contextos permanentes, e navegador guarda poucos: o custo aparece
+     como queda de quadros na rolagem, longe da seção que causa. */
+  const [nevoaPerto, setNevoaPerto] = useState(false);
   useEffect(() => {
-    if (!vantaRef.current) return undefined;
+    const el = vantaRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setNevoaPerto(true); return undefined; }
+    const io = new IntersectionObserver(([e]) => setNevoaPerto(e.isIntersecting), { rootMargin: "400px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!vantaRef.current || !nevoaPerto) return undefined;
     const efeito = FOG({
       el: vantaRef.current,
       THREE: THREE,
@@ -2174,7 +2481,7 @@ export function OmnimobLandingPage() {
       zoom: 2.00,
     });
     return () => efeito.destroy();
-  }, []);
+  }, [nevoaPerto]);
 
   return (
     <div className="dl-root">
@@ -2307,6 +2614,19 @@ export function OmnimobLandingPage() {
           aparelho volta a mostrar a seção sem remontar nada. */}
       <section className="dl-section dl-section--ghost" id="desafio">
         <GhostWord>+ visibilidade.</GhostWord>
+
+        {/* Filho DIRETO da seção, e não dentro de um invólucro.
+
+            O componente escreve `position: relative` no PAI via style inline, e
+            isso vencia o `position: absolute` da folha no invólucro que havia
+            aqui: ele saía do posicionamento absoluto, virava elemento de fluxo
+            sem conteúdo e ficava com altura 0. Caixa zerada, o resize nunca
+            valida e o canvas fica nos 300×150 padrão — o efeito existia no DOM
+            e não desenhava nada.
+
+            A seção já é `position: relative` e tem altura própria, que é
+            exatamente o que ele espera. */}
+        <FumacaQuandoVisivel />
         <div className="dl-wrap">
           <SectionHead eyebrow="O DESAFIO" eyebrowTone={GOLD} strong="Pare de perder cliente" soft="por falta de presença digital.">
             Anúncio espalhado em grupo de WhatsApp, foto solta no Instagram, planilha desatualizada. O
@@ -2374,34 +2694,22 @@ export function OmnimobLandingPage() {
             conteúdo dentro da própria plataforma.
           </SectionHead>
 
-          <div className="dl-grid-hair dl-grid-hair--4">
-            {INTEGRACOES.map((it, i) => (
-              <Reveal
-                key={it.name}
-                className={`dl-cell dl-int${it.texto ? " dl-int--claro" : ""}`}
-                delay={i * 60}
-                style={{ "--int-cor": it.cor, "--int-texto": it.texto || "#fff" }}
-              >
-                <span className="dl-int__marca" aria-hidden="true">
-                  <it.Icon size={92} weight="fill" />
-                </span>
-                <span className="dl-mono dl-int__type">{it.type}</span>
-                <span className="dl-int__name">{it.name}</span>
-              </Reveal>
-            ))}
-          </div>
+          <BaralhoDeCanais />
         </div>
       </section>
 
-      {/* ── Faixa de destaques ── */}
-      <section className="dl-section dl-section--tight" id="porque">
-        <div className="dl-wrap">
+      {/* ── Destaques: parede à deriva no fundo da seção inteira ──
+          O conteúdo fica por cima da parede, não ao lado dela — por isso a
+          seção é o palco (`position: relative`) e a parede é uma camada
+          absoluta atrás. */}
+      <section className="dl-section dl-section--tight dl-porque" id="porque">
+        <ParedeDeDestaques />
+
+        <div className="dl-wrap dl-porque__frente">
           <SectionHead eyebrow="POR QUE OMNIMOB" strong="O que muda no dia a dia" soft="de quem usa.">
             Detalhes pequenos que aparecem toda semana na rotina da imobiliária.
           </SectionHead>
         </div>
-
-        <FaixaCorrida />
       </section>
 
       {/* ── Planos ── */}
@@ -2422,16 +2730,39 @@ export function OmnimobLandingPage() {
             As dúvidas que mais aparecem antes de começar.
           </SectionHead>
 
-          <div className="dl-faq">
-            {FAQ.map((item, i) => (
-              <FaqItem
-                key={item.q}
-                item={item}
-                indice={i}
-                aberto={faqAberto === i}
-                onToggle={() => setFaqAberto(faqAberto === i ? -1 : i)}
-              />
-            ))}
+          {/* A lista de perguntas comanda; a resposta aparece ao lado.
+
+              `activeIndex` é passado, não deixado por conta do componente: a
+              pergunta destacada na lista e a resposta exibida têm de ser a
+              mesma coisa, e duas fontes de verdade para um fato só é como elas
+              divergem. */}
+          <div className="dl-faq2">
+            <LineSidebar
+              className="dl-faq2__lista"
+              items={FAQ.map((f) => f.q)}
+              activeIndex={faqAberto}
+              onItemClick={(i) => setFaqAberto(i)}
+              accentColor={GOLD}
+              textColor="var(--strong)"
+              markerColor="var(--placeholder)"
+              proximityRadius={90}
+              maxShift={18}
+              markerLength={52}
+              markerGap={18}
+              itemGap={22}
+              fontSize={0.95}
+              smoothing={110}
+            />
+
+            <div className="dl-faq2__resposta">
+              {/* `key` na pergunta: sem ela o React reaproveita o nó e o texto
+                  troca sem a transição de entrada, como se nada tivesse mudado. */}
+              <Reveal key={FAQ[faqAberto]?.q || "vazio"} className="dl-faq2__caixa">
+                <span className="dl-mono dl-faq2__num">F.{String(faqAberto + 1).padStart(2, "0")}</span>
+                <h3 className="dl-faq2__q">{FAQ[faqAberto]?.q}</h3>
+                <p className="dl-faq2__a">{FAQ[faqAberto]?.a}</p>
+              </Reveal>
+            </div>
           </div>
         </div>
       </section>
@@ -2665,8 +2996,16 @@ const CSS = `
    O conteúdo não precisa de z-index: .dl-wrap já é relative com z-index 1, e
    a palavra fica no 0. */
 .dl-section--ghost { position: relative; overflow: hidden; }
+/* O canvas do GhostCursor cobre a seção (o componente o posiciona sozinho) e
+   não recebe ponteiro. O conteúdo sobe acima dele: o z-index padrão do
+   componente é 10, então o texto precisa de um valor maior para continuar
+   selecionável e clicável. */
+.dl-section--ghost > .dl-wrap { position: relative; z-index: 12; }
 .dl-ghost {
-  position: absolute; inset: 0; z-index: 0;
+  /* Acima do canvas do GhostCursor (z-index 10). As letras são pretas como o
+     fundo, então por cima da fumaça elas a ocultam: a palavra lê como um
+     recorte vazado no rastro, e não como texto iluminado sobre ele. */
+  position: absolute; inset: 0; z-index: 11;
   display: flex; align-items: center; justify-content: center;
   pointer-events: none; user-select: none;
   /* Longe da tela até o primeiro mousemove, senão a palavra nasceria acesa
@@ -2683,13 +3022,9 @@ const CSS = `
   white-space: nowrap;
   /* Mesma cor do fundo: a palavra some, e só o relevo das sombras aparece. */
   color: var(--bg);
-  /* A primeira camada é mais fechada e mais opaca: é ela que dá a aresta do
-     relevo perto do cursor. As outras três só espalham o brilho. */
-  text-shadow:
-    22px 22px 46px rgba(212,175,55,0.50),
-    40px 40px 90px rgba(212,175,55,0.30),
-    64px 64px 140px rgba(212,175,55,0.16),
-    92px 92px 200px rgba(212,175,55,0.08);
+  /* Sem sombra: o relevo dourado existia para dar volume à palavra quando ela
+     era o único efeito da seção. Com a fumaça atrás, ele virava um segundo
+     brilho competindo com o rastro — e é o rastro que ilumina agora. */
 }
 /* Se a palavra for para uma seção alternada, ela acompanha o fundo de lá. */
 .dl-section--alt .dl-ghost span { color: var(--bg-alt); }
@@ -3592,30 +3927,195 @@ const CSS = `
 /* Posições de partida + keyframes dos blocos e do ponteiro, calculados. */
 ${editorCSS()}
 
-/* ── Faixa horizontal ── */
-.dl-marquee {
-  margin-top: 8px; overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+/* O marcador rolando dentro do bloco de métrica. O baseline alinha o prefixo
+   ("+") e o sufixo ("%") com os algarismos; a caixa do Counter tem overflow
+   escondido, então ela precisa herdar o tamanho para o recorte cair na altura
+   certa da linha. */
+.dl-stat__roll {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
 }
-.dl-marquee__track {
-  --vao: 14px;
-  display: flex; gap: var(--vao); width: max-content;
-  animation: dlMarquee 60s linear infinite;
+
+/* ── Baralho dos canais ──
+   O leque é posicionado por transform, então ele não ocupa altura própria: a
+   caixa é que reserva o espaço, e o overflow precisa ficar visível para as
+   pontas do baralho e o giro dos cartões não serem decepados. */
+.dl-baralho {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: visible;
+  margin-top: clamp(8px, 2vw, 20px);
 }
-.dl-marquee:hover .dl-marquee__track { animation-play-state: paused; }
-/* O percurso é UMA cópia da lista, e não metade do trilho: com três cópias no
-   trilho (ver FAIXA_COPIAS) a metade cai no meio de um cartão. A correção de um
-   terço de vão fecha a conta — o trilho tem um vão a menos que os cartões, e sem
-   ela o laço erraria por alguns pixels a cada volta. */
-@keyframes dlMarquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(calc(-100% / 3 - var(--vao) / 3)); }
+/* Lista de acesso: existe para leitor de tela e busca, não para os olhos. */
+.dl-baralho__lista {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
+
+/* ── Destaques: parede à deriva no fundo da seção ──
+   A seção é o palco e a parede é a camada de trás. Altura mínima porque a
+   parede precisa de espaço vertical para a perspectiva fazer sentido — só com
+   o título dentro, a seção teria uns 200px e a parede sairia achatada. */
+.dl-porque {
+  position: relative;
+  isolation: isolate;
+  min-height: clamp(520px, 62vh, 720px);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+/* A parede só existe enquanto a seção é a que se está vendo.
+
+   Ela pausava fora da tela (o DriftWall tem o próprio observador), mas seguia
+   desenhada: ao rolar, as peças apareciam paradas na beirada da seção vizinha,
+   o que denuncia o truque e polui as seções de cima e de baixo. Agora ela some
+   por completo, e volta com uma transição — não com um estalo. */
+.dl-porque__fundo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.55s var(--ease-out, ease);
+  /* Não recebe clique nem seleção: quem manda na frente é o texto da seção. */
+  pointer-events: none;
+}
+/* Véu radial entre a parede e o texto. Sem ele o título disputa contorno com os
+   cartões que passam atrás — e o que se perde é sempre a leitura do título, que
+   é a única coisa ali que precisa ser lida.
+
+   Concentrado no miolo e fraco nas pontas: é no centro que o texto está, e
+   escurecer as bordas junto apagaria justamente a parte da parede que numa tela
+   grande é a que tem espaço para aparecer. */
+.dl-porque__fundo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    ellipse 58% 62% at 50% 50%,
+    rgba(10, 10, 11, 0.93) 0%,
+    rgba(10, 10, 11, 0.78) 38%,
+    rgba(10, 10, 11, 0.28) 66%,
+    rgba(10, 10, 11, 0) 84%
+  );
+  /* Some junto com o cabeçalho: o véu existe para o texto ser lido, e sem texto
+     ele só estaria escondendo a parede que a pessoa foi olhar. */
+  transition: opacity 0.45s var(--ease-out, ease);
+}
+.dl-porque:hover .dl-porque__fundo::after { opacity: 0.35; }
+/* Ligada pelo observador da seção (ver ParedeDeDestaques). */
+.dl-porque__fundo.is-na-vista { opacity: 1; }
+
+/* O cabeçalho recua no hover para a parede virar o assunto.
+
+   O pointer-events desligado é o que faz o clique atravessar e chegar às peças —
+   sem isso o título continuaria interceptando os cliques no meio da seção,
+   justamente onde ele está. */
+.dl-porque__frente {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  transition: opacity 0.45s var(--ease-out, ease), filter 0.45s var(--ease-out, ease);
+}
+.dl-porque:hover .dl-porque__frente {
+  opacity: 0.14;
+  /* Borrado além de apagado: só a opacidade deixava o texto legível por baixo
+     dos cartões e as duas camadas brigavam. Desfocado ele vira atmosfera. */
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* Lista de acesso: existe para leitor de tela e teclado, não para os olhos.
+   Não usa display:none porque isso a tiraria dos dois também. */
+.dl-porque__lista {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Ao receber foco por teclado ela reaparece, no lugar do cabeçalho. */
+.dl-porque__lista:focus-within {
+  position: relative;
+  width: auto; height: auto;
+  margin: 0; overflow: visible; clip-path: none; white-space: normal;
+  z-index: 3;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: center; padding: 12px;
+}
+.dl-porque__lista button {
+  background: var(--surface); color: var(--strong);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 8px 14px; font-size: 13px; cursor: pointer;
+}
+
+/* Painel do detalhe */
+.dl-porque__painel {
+  position: absolute; inset: 0; z-index: 4;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+/* Fundo do modal.
+
+   Era um <button> e saía pintado de roxo: a landing tem estilo global de botão,
+   e um botão sem texto no meio da tela herdava a cor de ação. Virou div com
+   clique — as saídas acessíveis (o botão "Fechar" e o Esc) já existem dentro do
+   painel, então nada se perde.
+
+   O desfoque é o que separa o painel do movimento atrás dele: sem ele a parede
+   continua andando nítida ao lado do texto que a pessoa parou para ler. */
+.dl-porque__saida {
+  position: absolute; inset: 0;
+  background: rgba(10, 10, 11, 0.55);
+  backdrop-filter: blur(14px) saturate(0.9);
+  -webkit-backdrop-filter: blur(14px) saturate(0.9);
+  cursor: pointer;
+}
+.dl-porque__caixa {
+  position: relative;
+  max-width: 520px; width: 100%;
+  padding: 26px 28px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 80px -24px rgba(0, 0, 0, 0.8);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dl-porque__tag {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px; letter-spacing: 0.12em;
+  color: var(--accent-soft);
+}
+.dl-porque__caixa h3 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--strong); }
+.dl-porque__caixa p { font-size: 14px; line-height: 1.75; color: var(--subtle); }
+.dl-porque__fechar {
+  align-self: flex-start; margin-top: 4px;
+  background: transparent; color: var(--subtle);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 8px 16px; font-size: 13px; cursor: pointer;
+}
+.dl-porque__fechar:hover { color: var(--strong); border-color: var(--accent-soft); }
+
 .dl-fcard {
   flex: 0 0 auto; width: 268px; min-height: 168px; padding: 22px 24px;
   border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 9px;
+}
+/* Dentro da parede quem manda no tamanho é a peça: o cartão larga a largura
+   fixa e preenche o que receber. */
+.dl-fcard--parede {
+  width: 100%; height: 100%; min-height: 0;
+  padding: 18px 20px; border-radius: inherit;
+  overflow: hidden;
 }
 .dl-fcard__quote { font-size: 26px; line-height: 0.6; color: var(--accent-soft); }
 .dl-fcard__title { font-size: 14px; font-weight: 700; color: var(--strong); letter-spacing: -0.02em; }
@@ -3629,7 +4129,18 @@ ${editorCSS()}
 /* ── Planos ── */
 .dl-plans {
   display: grid; grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 20px;
+  /* O hidden vem primeiro como reserva: navegador que não conheça o clip ignora
+     as duas linhas seguintes e fica com o recorte antigo, em vez de perder o
+     arredondamento dos cantos.
+
+     O overflow-clip-margin é o que permite os raios do contorno elétrico saírem
+     do quadro: o recorte continua existindo (os cantos arredondados dependem
+     dele), mas a pintura pode passar 70px além da borda — que é o alcance do
+     traçado deslocado por ruído do ElectricBorder. */
+  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 70px;
 }
 .dl-plan {
   position: relative; padding: 32px 26px; display: flex; flex-direction: column;
@@ -3702,23 +4213,15 @@ ${editorCSS()}
    lista de recursos já está considerando aquele plano, e o botão acender antes
    de o cursor chegar nele é o que transforma a leitura em clique.
 
-   O flare aqui é PARA DENTRO, e não em volta como no celular. No desktop os
-   três planos dividem uma moldura só, com overflow escondido para os cantos
-   arredondados valerem: qualquer brilho externo seria decepado na borda do
-   quadro e nas divisórias entre os cartões. Para dentro, o cartão acende
-   inteiro e a moldura continua intacta.
+   O BRILHO DO CARTÃO saiu daqui. Era uma sombra interna em var(--flare), e foi
+   substituído pelo contorno elétrico (ElectricBorder), montado no JSX só para o
+   cartão sob o mouse e só nos planos que acendem — o Básico não acende mais, em
+   desktop nem em celular. O que restou nesta regra é o botão.
 
    Só onde existe mouse de verdade: em tela de toque o :hover fica grudado
    depois do primeiro toque, e o carrossel já tem o dono do destaque, que é o
    cartão em foco. */
 @media (hover: hover) and (pointer: fine) and (min-width: 641px) {
-  .dl-plan { transition: box-shadow 0.4s var(--ease-out); }
-  .dl-plan:hover {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--flare) 45%, transparent),
-      inset 0 0 30px -14px var(--flare),
-      inset 0 -40px 60px -50px var(--flare);
-  }
   /* O botão de contorno assume o mesmo preenchimento do botão do plano em
      destaque. A regra precisa de três classes para vencer .dl-root .dl-btn--
      outline, que já pesa duas. */
@@ -3791,6 +4294,49 @@ ${editorCSS()}
 .dl-plans__ponto.is-on::before { width: 20px; background: var(--realce, var(--accent-soft)); }
 
 /* ── FAQ ── */
+/* ── FAQ: lista à esquerda, resposta à direita ──
+   Substituiu o acordeão empilhado. As cores são as mesmas de antes: dourado no
+   acento (era a cor do item aberto e do hover), branco na pergunta e o cinza de
+   placeholder nos traços.
+
+   O display:grid é o que põe a resposta AO LADO. Sem ele os dois filhos são
+   blocos e caem um embaixo do outro — foi o que aconteceu quando este bloco se
+   perdeu numa edição. */
+.dl-faq2 {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) 1.1fr;
+  gap: clamp(24px, 4vw, 56px);
+  align-items: start;
+  border-top: 1px solid var(--line);
+  padding-top: clamp(20px, 3vw, 34px);
+}
+.dl-faq2__lista { min-width: 0; }
+
+.dl-faq2__resposta {
+  /* Grudada ao rolar: a resposta é o que se está lendo, e a lista ao lado é
+     longa o bastante para levá-la para fora da tela. */
+  position: sticky;
+  top: 96px;
+  min-width: 0;
+}
+.dl-faq2__caixa {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: clamp(20px, 2.4vw, 30px);
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.dl-faq2__num { font-size: 9.5px; color: var(--gold); letter-spacing: 0.1em; }
+.dl-faq2__q { font-size: 17px; font-weight: 700; color: var(--strong); letter-spacing: -0.02em; line-height: 1.35; }
+.dl-faq2__a { font-size: 14px; line-height: 1.75; color: var(--subtle); }
+
+/* Uma coluna só no celular: a resposta vai para baixo da lista, e a fixação por
+   rolagem sai — grudar um bloco numa tela estreita rouba a altura toda. */
+@media (max-width: 760px) {
+  .dl-faq2 { grid-template-columns: 1fr; }
+  .dl-faq2__resposta { position: static; }
+}
+
 .dl-faq { border-top: 1px solid var(--line); }
 .dl-faq__item { border-bottom: 1px solid var(--line); }
 .dl-root .dl-faq__q {
@@ -4122,24 +4668,12 @@ ${editorCSS()}
      um e meio cortado, e a máscara recua para não comer o que aparece. */
   .dl-fcard { width: 224px; min-height: 150px; padding: 18px 20px; }
   .dl-fcard__value { font-size: 32px; }
-  /* ── Faixa rolável ──
-     Aqui a faixa deixa de ser uma esteira de CSS e vira área de rolagem: quem
-     empurra passa a ser o laço em scrollLeft do FaixaCorrida, que para de vez ao
-     primeiro toque e devolve a faixa para o dedo. Sem isto os dois brigariam —
-     o transform continuaria correndo por baixo da rolagem.
-
-     O eixo vertical precisa ser declarado junto: com um dos eixos em "auto" e o
-     outro em "visible", o "visible" vira "auto" sozinho e sobra uma barra de
-     rolagem vertical dentro da faixa. */
-  .dl-marquee {
-    overflow-x: auto; overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; -ms-overflow-style: none;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-  }
-  .dl-marquee::-webkit-scrollbar { display: none; }
-  .dl-marquee__track { animation: none; }
+    /* Na parede a leitura do cartão é o que importa, e num palco estreito o
+     texto encolhe junto com a peça. Um degrau a menos de tamanho evita que a
+     descrição vire duas linhas de nada. */
+  .dl-fcard--parede { padding: 14px 16px; gap: 6px; }
+  .dl-fcard--parede .dl-fcard__value { font-size: 30px; }
+  .dl-fcard--parede .dl-fcard__desc { font-size: 12px; line-height: 1.55; }
 
   /* A barra do mock do editor não comporta URL e aviso lado a lado; some a
      URL, que é enfeite, e fica o aviso, que é a história da seção. */
@@ -4246,27 +4780,17 @@ ${editorCSS()}
     background: var(--surface);
     filter: brightness(0.55); transform: scale(0.965);
   }
-  /* ── Flare do cartão em foco ──
-     A cor vem de --flare, escrito no cartão pelo JS, então cada plano acende na
-     sua. Quatro camadas de sombra: o fio da borda, a luz curta e duas de
-     estouro, que é o que dá a leitura de neon.
+  /* ── Cartão em foco ──
+     Sai do escurecimento e volta ao tamanho cheio. Só isso: o neon que morava
+     aqui — quatro camadas de box-shadow na cor do plano — foi substituído pelo
+     contorno elétrico, montado no JSX para o cartão em foco.
 
-     Tudo em box-shadow, e nenhuma camada por baixo do cartão. Sombra externa é
-     desenhada FORA da caixa de borda, então ela não tem como pintar o miolo em
-     nenhum estado — nem quando o cartão vira contexto de empilhamento. Foi a
-     tentativa anterior, com um pseudo-elemento borrado atrás, que fazia o
-     cartão piscar de cor no meio da troca.
-
-     Nada de sombra interna, pelo mesmo motivo: ela pintaria a beirada do miolo
-     com a cor do plano. */
+     Manter os dois somava um brilho por baixo do outro no mesmo cartão, com
+     duas cores e dois formatos de borda disputando a mesma beirada. E não
+     bastava tirar do Básico: nos planos que acendem é justamente onde os dois
+     apareciam juntos. */
   .dl-plans .dl-plan.is-atual {
     filter: none; transform: none;
-    border-color: color-mix(in srgb, var(--flare) 65%, transparent);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--flare) 42%, transparent),
-      0 0 11px -2px color-mix(in srgb, var(--flare) 55%, transparent),
-      0 0 26px -4px color-mix(in srgb, var(--flare) 42%, transparent),
-      0 0 58px -12px color-mix(in srgb, var(--flare) 72%, transparent);
   }
   /* ── Coroa ──
      Pendurada na borda de cima, metade para dentro e metade para fora. A cor
@@ -4393,7 +4917,7 @@ ${editorCSS()}
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dl-marquee__track, .dl-stage__float, .dl-chip-float, .dl-pulse { animation: none; }
+  .dl-stage__float, .dl-chip-float, .dl-pulse { animation: none; }
   /* As esteiras de imóveis param na primeira cópia, que já é uma grade cheia; o
      bloco selecionado do editor fica só com o contorno, sem o pulso; e a
      etiqueta do plano fica com o degradê parado, que já é a cor dela. */

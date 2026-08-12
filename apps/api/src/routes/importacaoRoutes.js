@@ -85,7 +85,7 @@ importacaoRouter.post(
          existe aqui. Sem isso, uma coluna "cargo" com valores do sistema antigo
          ("Corretor Sênior") reprovaria a planilha inteira. */
       const cargoPadrao = await prisma.cargo.findFirst({
-        where: { descricao: req.body.cargoPadrao || "Corretor" },
+        where: { tenantId: req.tenant.id, descricao: req.body.cargoPadrao || "Corretor" },
         select: { id: true },
       });
 
@@ -108,8 +108,16 @@ importacaoRouter.post(
 importacaoRouter.get("/referencias", async (req, res) => {
   try {
     const [tipos, cargos] = await Promise.all([
-      prisma.tipoImovel.findMany({ select: { id: true, descricao: true }, orderBy: { descricao: "asc" } }),
-      prisma.cargo.findMany({ select: { id: true, descricao: true }, orderBy: { descricao: "asc" } }),
+      prisma.tipoImovel.findMany({
+        where: { tenantId: req.tenant.id },
+        select: { id: true, descricao: true },
+        orderBy: { descricao: "asc" },
+      }),
+      prisma.cargo.findMany({
+        where: { tenantId: req.tenant.id },
+        select: { id: true, descricao: true },
+        orderBy: { descricao: "asc" },
+      }),
     ]);
     return res.json({ tipos, cargos, loteMaximo: LOTE_MAXIMO });
   } catch {

@@ -10,6 +10,7 @@ import { ShowcaseEditorPage } from "./pages/ShowcaseEditorPage";
 import { ShowcasePropertyPage } from "./pages/ShowcasePropertyPage";
 import { ShowcasePage } from "./pages/ShowcasePage";
 import { TrialConfirmarPage } from "./pages/TrialConfirmarPage";
+import { RecuperarSenhaPage } from "./pages/RecuperarSenhaPage";
 import { AdminLayout } from "./components/AdminLayout";
 import { CargosPage } from "./pages/CargosPage";
 import { ClientesPage } from "./pages/ClientesPage";
@@ -224,6 +225,17 @@ export default function App() {
       {/* Destino do link mágico do teste grátis: público e sem sessão. */}
       <Route path="/comecar" element={<TrialConfirmarPage />} />
 
+      {/* Recuperação de senha. Dois caminhos para a MESMA página: `/recuperar-
+          senha` pede o link, `/redefinir-senha?token=…` é para onde o e-mail
+          aponta. Separá-los em componentes faria a segunda tela precisar de um
+          jeito próprio de voltar para a primeira quando o link expira.
+
+          Públicas por definição: quem esqueceu a senha não tem sessão. E sem o
+          `session ?` do login — quem está logado e clicou no link do e-mail
+          quer trocar a senha, não ser mandado de volta ao painel. */}
+      <Route path="/recuperar-senha" element={<RecuperarSenhaPage onLogin={handleLogin} />} />
+      <Route path="/redefinir-senha" element={<RecuperarSenhaPage onLogin={handleLogin} />} />
+
       <Route path="/vitrine/:tenantSlug" element={<ShowcasePage />} />
       <Route path="/vitrine/:tenantSlug/imovel/:propertyId" element={<ShowcasePropertyPage />} />
 
@@ -303,7 +315,7 @@ export default function App() {
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/configuracoes" element={
-          cargo?.editarPagina || cargo?.gerenciarUsuarios
+          cargo?.verConfiguracoes
             ? <ConfiguracaoPage session={session} onSessionUpdate={handleSessionUpdate} />
             : <Navigate to={defaultPublicPath} replace />
         } />

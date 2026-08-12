@@ -32,7 +32,7 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
   const podeUsuarios = Boolean(cargo?.gerenciarUsuarios);
   const podeCargos   = Boolean(cargo?.gerenciarCargos);
   const podeVitrine  = Boolean(cargo?.editarPagina);
-  const podeConfig   = Boolean(cargo?.editarPagina || cargo?.gerenciarUsuarios);
+  const podeConfig   = Boolean(cargo?.verConfiguracoes);
 
   const etapas = [
     {

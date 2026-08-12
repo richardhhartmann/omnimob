@@ -4,7 +4,7 @@ import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
-import { criarAssinatura, precosDosPlanos } from "../services/pagamentoService.js";
+import { criarAssinatura, precosDosPlanos, agendarCancelamentoDoSlug } from "../services/pagamentoService.js";
 import { fidelizarTrial } from "../services/trialService.js";
 import { sendEmail } from "../services/notificationService.js";
 import { emailAssinaturaConfirmada } from "../services/emailTemplates.js";
@@ -100,8 +100,11 @@ tenantRouter.put("/me", requireAuth, requireTenant, requirePermissao("editarPagi
    próprio cliente. É heurística, mas não exige coluna nova (nem migração) e
    não quebra se ele editar um registro de exemplo — `createdAt` não muda.
 
-   Cargos ficam de fora da conta de propósito: no schema atual `Cargo` não tem
-   `tenantId`, é global. Contar como perda do cliente seria mentira. */
+   Cargos continuam fora da conta. O motivo mudou: eram globais (sem `tenantId`)
+   e contá-los seria mentira; hoje são da imobiliária, mas todo tenant nasce com
+   o mesmo conjunto padrão — então o que existe ali é povoamento, não obra do
+   cliente. Passariam a contar se um dia a origem de cada cargo for distinguida
+   (criado no provisionamento × criado por gente). */
 const JANELA_DEMO_MS = 90 * 1000;
 
 /**
@@ -504,6 +507,108 @@ tenantRouter.post(
       }
       console.error("[POST /tenants/me/assinar]", err);
       return res.status(500).json({ error: "Erro ao processar a assinatura." });
+    }
+  },
+);
+
+/* ─── Cancelamento da assinatura, pedido pelo próprio cliente ────────────────
+   O cancelamento é AGENDADO para o fim do período já pago, nunca imediato:
+   quem pagou o mês tem direito ao mês. Até lá nada muda no painel — o tenant
+   segue `EM_DIA`, com o plano que tem.
+
+   Quem vira a chave para `CANCELADO` é o webhook do Stripe, ao receber
+   `customer.subscription.deleted` na data do corte (ver stripeWebhookRoutes).
+   Marcar aqui tiraria na hora o acesso de quem ainda tem período pago — e, se o
+   cancelamento falhasse no provedor, deixaria o banco dizendo uma coisa e a
+   cobrança fazendo outra.
+
+   Duas etapas, como a troca de plano: sem `confirmar: true` a rota só relata o
+   que vai acontecer. Cancelar assinatura não acontece por acidente. */
+tenantRouter.post(
+  "/me/cancelar-assinatura",
+  requireAuth,
+  requireTenant,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: { id: true, slug: true, plano: true, statusPagamento: true, proximoVencimento: true },
+      });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      if (tenant.statusPagamento === "CANCELADO") {
+        return res.status(409).json({
+          error: "A assinatura desta conta já está cancelada.",
+          code: "JA_CANCELADO",
+        });
+      }
+
+      /* Teste não tem assinatura para cancelar — não há cobrança correndo. Ele
+         expira sozinho na data, e o serviço de trial cuida disso. Oferecer um
+         "cancelar" aqui só criaria a dúvida de estar perdendo algo agora. */
+      if (tenant.statusPagamento === "TRIAL") {
+        return res.status(409).json({
+          error: "Sua conta está em teste e não há cobrança ativa. O teste termina sozinho na data — não é preciso cancelar nada.",
+          code: "EM_TRIAL",
+          terminaEm: tenant.proximoVencimento,
+        });
+      }
+
+      if (!req.body?.confirmar) {
+        return res.status(409).json({
+          code: "CONFIRMAR_CANCELAMENTO",
+          planoAtual: tenant.plano || "BASICO",
+          validoAte: tenant.proximoVencimento,
+        });
+      }
+
+      const resultado = await agendarCancelamentoDoSlug(tenant.slug);
+
+      /* Sem provedor configurado o cancelamento não tem como acontecer de
+         verdade. Responder "ok" aqui seria o pior desfecho possível: o cliente
+         sai certo de que cancelou e a cobrança continua vindo. */
+      if (!resultado.configurado) {
+        return res.status(503).json({
+          error: "O provedor de pagamento não está configurado. Fale com o time para cancelar.",
+          code: "PROVEDOR_NAO_CONFIGURADO",
+        });
+      }
+
+      /* Nenhuma assinatura ativa com este slug. Acontece quando a cobrança foi
+         acertada por fora, ou já cancelada antes. Não é erro do cliente, mas
+         também não podemos afirmar que cancelamos algo. */
+      if (resultado.encontradas === 0) {
+        return res.status(404).json({
+          error: "Não encontrei uma assinatura ativa para esta conta. Fale com o time para confirmar o cancelamento.",
+          code: "SEM_ASSINATURA",
+        });
+      }
+
+      if (resultado.falhas.length && !resultado.agendadas.length) {
+        return res.status(502).json({
+          error: "O provedor recusou o cancelamento. Tente de novo em alguns minutos ou fale com o time.",
+          code: "PROVEDOR_FALHOU",
+        });
+      }
+
+      // A mais distante: com mais de uma assinatura (não deveria acontecer, mas
+      // acontece), o acesso vale até a última acabar.
+      const validoAte = resultado.agendadas
+        .map((a) => a.terminaEm)
+        .filter(Boolean)
+        .sort((a, b) => b - a)[0] || tenant.proximoVencimento;
+
+      return res.json({
+        cancelado: true,
+        validoAte,
+        assinaturas: resultado.agendadas.length,
+        // Uma falha parcial com outra agendada: a tela precisa poder dizer isso.
+        falhasParciais: resultado.falhas.length,
+      });
+    } catch (err) {
+      console.error("[POST /tenants/me/cancelar-assinatura]", err);
+      return res.status(500).json({ error: "Erro ao cancelar a assinatura." });
     }
   },
 );

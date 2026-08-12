@@ -49,8 +49,28 @@ omnimob/
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`
 - `/api/social/*` — publicação e OAuth Meta (+ webhook em `/api/social/webhook`)
 - `/api/ai/*` — geração de conteúdo com IA (Gemini)
-- `/public/*` — showcase público (sem auth)
+- `/public/*` — showcase público (sem auth); inclui `GET /public/sitemap.xml`, servido em `omnimob.app/sitemap.xml` por reescrita da Vercel
+- `/previa/*` — HTML com Open Graph para robôs de prévia (WhatsApp, Facebook, LinkedIn). A Vercel reescreve `/vitrine/*` para cá **só** quando o user-agent é de robô; pessoa continua recebendo o SPA. Ver `previaRoutes.js`
 - `/health` — health check real (DB + latência + versão do schema)
+
+**Testes:** `npm test` em `apps/api` (runner nativo do Node, sem dependência
+nova). São de **integração, contra o banco de dev** — os três vazamentos entre
+imobiliárias que este projeto teve moravam na junção rota + query, e nenhum teste
+de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com slug
+`zz-teste-<pid>-` e as apaga no fim; o PID entra no prefixo porque o runner roda
+**um processo por arquivo, em paralelo**. E-mail é neutralizado em `test/helpers.js`.
+
+| Arquivo | O que guarda |
+|---|---|
+| `test/isolamento.test.js` | A pede recurso da B pelo id real → 404 (cargos, tipos, atributos, usuários) |
+| `test/recuperacao.test.js` | resposta igual para conta existente/inexistente; link de uso único |
+| `test/previa.test.js` | Open Graph com foto e preço; escape de HTML no texto do cliente |
+
+**Isolamento multi-tenant:** `Cargo` e `TipoImovel` já foram tabelas globais —
+sem `tenantId`, compartilhadas por todas as imobiliárias, com CRUD aberto na
+tela. Hoje as duas têm dono e filtro em toda query. Ao criar modelo novo que o
+cliente edita, **comece pelo `tenantId`**: os dois vazamentos passaram meses
+invisíveis porque com um cliente só o sintoma não aparece.
 
 **Camada de serviços (`src/services/`):** desacoplada, alinhada à arquitetura-alvo.
 - `tenantRegistry.js` — **seam multi-tenant**: resolve onde um tenant vive. Hoje banco único; ponto de troca para schema/banco-por-tenant. Use `getTenantClient()`/`getGlobalPrisma()` em vez de importar `db.js` direto.
@@ -74,8 +94,8 @@ omnimob/
 
 | Variável | Aponta p/ | Dev | Produção |
 |---|---|---|---|
-| `DATABASE_URL` | — | pooler Supabase `:6543` (`pgbouncer=true`) | idem |
-| `DIRECT_URL` | — | Supabase `:5432` (migrations) | idem |
+| `DATABASE_URL` | — | pooler Supabase `:6543` (`pgbouncer=true`) | **outro projeto Supabase** |
+| `DIRECT_URL` | — | Supabase `:5432` (migrations) | idem, do projeto de produção |
 | `PORT` | — | `4000` | `4000` |
 | `JWT_SECRET` | — | qualquer string | segredo forte e distinto do de dev |
 | `APP_URL` | **FRONT** | `http://localhost:5173` | `https://omnimob.app` |
@@ -119,7 +139,7 @@ de segredo aqui):
 | `VITE_STRIPE_PUBLISHABLE_KEY` | — | `pk_test_…` | **`pk_live_…`** |
 
 **Ambientes:**
-- **Front (produção):** `https://omnimob.app` (Vercel) — hoje o apex redireciona 308 para `www.omnimob.app`; ambos estão no CORS
+- **Front (produção):** `https://omnimob.app` (Vercel) — o **apex é o canônico**: `www.omnimob.app` redireciona 308 para ele, e não o contrário. É para o apex que apontam o `og:url`, o `sitemap.xml` e o `Sitemap:` do `robots.txt`. Os dois seguem no CORS: o `www` só aparece como origem se algo chamar a API antes de seguir o redirecionamento
 - **API (produção):** `https://api.omnimob.app` (Render — CNAME `api` apontando para o serviço)
 - **Dev local:** web em `5173`, API em `4000`
 
@@ -294,13 +314,30 @@ Painel lateral sticky (272px, `top: 56px`, `height: calc(100vh - 56px)`).
 
 ## O que NÃO existe ainda (oportunidades futuras)
 
-- Publicação real nos canais sociais (`publishToChannel` ainda é stub; OAuth/webhook Meta já existem)
+- Envio automático de mensagem por WhatsApp (a publicação em Facebook/Instagram **já é real** — ver `socialRoutes.js`, que chama a Graph API; falta só o app Meta sair do modo de desenvolvimento)
 - UI de IA no frontend (backend `/api/ai/*` pronto)
 - Notification Service com provedores reais (interface pronta, envio é stub)
 - Backup Service e Scheduler
 - Isolamento por schema/banco-por-tenant (seam pronto em `tenantRegistry.js`)
 - Módulos ERP: Contratos, Agenda, Financeiro, Vistorias, Proprietários, Corretores
 - Site institucional; domínio próprio + SEO + blog para as vitrines
-- Recuperação de senha, testes automatizados, deploy CI/CD
+- Testes automatizados e deploy CI/CD (recuperação de senha **já existe** — `POST /api/auth/recuperar-senha`)
 
 > Panorama completo visão × realidade + roadmap: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)
+
+---
+
+## Scripts operacionais (`apps/api`)
+
+| Comando | O que faz |
+|---|---|
+| `npm test` | Suíte de integração (ver acima) |
+| `npm run subdominios` | **Confere** `<slug>.omnimob.app` de cada imobiliária na Vercel e diz o que está faltando ou pendente de verificação. Ensaio por padrão; `-- --aplicar` cadastra os que faltam |
+| `npm run faxina` | Trials vencidos: desativa e remove. Ensaio por padrão; `--aplicar` executa |
+| `npm run stripe:limpar -- --slug=…` | Cancela assinaturas do slug no Stripe |
+| `npm run prisma:seed:dev` | Imobiliárias de exemplo + catálogos |
+
+> O subdomínio de cada imobiliária é cadastrado **individualmente** na Vercel no
+> provisionamento — não existe wildcard `*.omnimob.app`. Se aquela chamada
+> falhar, o tenant nasce e o painel anuncia um endereço que não abre; hoje isso
+> vira `warning` na criação, e o `npm run subdominios` repara depois.

@@ -6,6 +6,7 @@ import { planoInfo, PLANOS } from "../utils/planos";
 import { useConfirm } from "../components/ConfirmModal";
 import { IconeCelular, IconeCheck, IconeEnvelope, IconeTelefone, IconeX } from "../components/Icones.jsx";
 import { DominioVitrine } from "../components/DominioVitrine.jsx";
+import { ModalCiencia } from "../components/ModalCiencia.jsx";
 import { ImportadorDados, podeImportar } from "../components/ImportadorDados.jsx";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
@@ -31,6 +32,16 @@ function formatCep(v) {
   const d = v.replace(/\D/g, "").slice(0, 8);
   if (d.length <= 5) return d;
   return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
+
+/* Data por extenso, curta. Devolve string vazia para valor ausente ou inválido:
+   quem chama monta a frase em volta, e um "Invalid Date" no meio do aviso de
+   cancelamento seria pior que a frase sem a data. */
+function formatarData(valor) {
+  if (!valor) return "";
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
 /* Esqueleto da tela de Configurações.
@@ -386,8 +397,16 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   const [cobranca, setCobranca] = useState(null); // { emTrial, precos, ... }
   const [trocandoPlano, setTrocandoPlano] = useState("");
   const [planoMsg, setPlanoMsg] = useState(null);  // { tipo, texto }
+  /* Cancelamento em duas etapas, espelhando a rota: `confirmarCancelamento`
+     guarda o que o servidor respondeu no ensaio (até quando o acesso vale) e é
+     o que abre o modal. Nulo = modal fechado. */
+  const [confirmarCancelamento, setConfirmarCancelamento] = useState(null);
+  const [cancelando, setCancelando] = useState(false);
   const { confirm, modal: confirmModal } = useConfirm();
-  const podeTrocarPlano = Boolean(session?.usuario?.cargo?.gerenciarUsuarios);
+  /* Mexer no plano segue a mesma permissão que abre esta tela. Era
+     `gerenciarUsuarios`, que dizia respeito a gerir gente e não a contratar —
+     e deixava quem administra a equipe trocar o plano da imobiliária. */
+  const podeTrocarPlano = Boolean(session?.usuario?.cargo?.verConfiguracoes);
   const [saveStatus, setSaveStatus] = useState("idle");
   const [cepLoading, setCepLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -475,6 +494,59 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
       setPlanoMsg({ tipo: "error", texto: err.message || "Não foi possível trocar o plano." });
     } finally {
       setTrocandoPlano("");
+    }
+  }
+
+  /* ─── Cancelamento da assinatura ──────────────────────────────────────────
+     Primeiro clique não cancela nada: pergunta ao servidor o que aconteceria.
+     Ele responde 409 com a data até quando o acesso vale, e é ESSA data que o
+     modal mostra. Inventá-la no front (somando 30 dias, por exemplo) daria um
+     número que não vem da cobrança real — e a única coisa que a pessoa quer
+     saber neste momento é até quando ela ainda tem o que pagou. */
+  async function pedirCancelamento() {
+    setPlanoMsg(null);
+    try {
+      // Sem `confirmar`. O caminho normal é o catch: 409 é a resposta esperada.
+      await api.cancelarAssinatura(tenantSlug, false);
+      /* 200 aqui significaria cancelamento sem confirmação — a rota não faz
+         isso, mas se um dia fizer, é melhor a tela recarregar do que mentir. */
+      setPlanoMsg({ tipo: "success", texto: "Assinatura cancelada." });
+    } catch (err) {
+      const corpo = err.body || {};
+      if (corpo.code === "CONFIRMAR_CANCELAMENTO") {
+        setConfirmarCancelamento({ validoAte: corpo.validoAte, planoAtual: corpo.planoAtual });
+        return;
+      }
+      // EM_TRIAL, JA_CANCELADO e afins já vêm com mensagem pronta e em português.
+      setPlanoMsg({ tipo: "error", texto: err.message || "Não foi possível cancelar." });
+    }
+  }
+
+  async function confirmarCancelamentoAgora() {
+    setCancelando(true);
+    try {
+      const r = await api.cancelarAssinatura(tenantSlug, true);
+      setConfirmarCancelamento(null);
+      const ate = r?.validoAte ? formatarData(r.validoAte) : null;
+      setPlanoMsg({
+        tipo: "success",
+        texto: ate
+          ? `Assinatura cancelada. Seu acesso continua normal até ${ate}, e não haverá nova cobrança.`
+          : "Assinatura cancelada. Não haverá nova cobrança.",
+      });
+      /* Falha parcial: alguma assinatura foi agendada e outra não. Raro, mas
+         calar sobre isso deixaria uma cobrança viva sem ninguém saber. */
+      if (r?.falhasParciais) {
+        setPlanoMsg({
+          tipo: "error",
+          texto: "Parte do cancelamento não foi concluída. Fale com o time para confirmar que nada continuará sendo cobrado.",
+        });
+      }
+    } catch (err) {
+      setConfirmarCancelamento(null);
+      setPlanoMsg({ tipo: "error", texto: err.message || "Não foi possível cancelar." });
+    } finally {
+      setCancelando(false);
     }
   }
 
@@ -659,6 +731,27 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   return (
     <div className="main-content" style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "24px" }}>
       {confirmModal}
+
+      {/* A data vem do servidor (do provedor de pagamento, na verdade), não de
+          uma conta feita aqui — é o que a pessoa realmente comprou. */}
+      <ModalCiencia
+        aberto={Boolean(confirmarCancelamento)}
+        titulo="Cancelar a assinatura?"
+        descricao={
+          confirmarCancelamento?.validoAte
+            ? `Seu acesso continua igual até ${formatarData(confirmarCancelamento.validoAte)}. Depois dessa data a conta deixa de ser cobrada e o painel fica indisponível.`
+            : "Seu acesso continua até o fim do período já pago. Depois disso a conta deixa de ser cobrada e o painel fica indisponível."
+        }
+        riscos={[
+          "A vitrine pública sai do ar no fim do período — quem tiver o link deixa de encontrar seus imóveis.",
+          "Os usuários da equipe perdem o acesso ao painel na mesma data.",
+          "Nenhuma cobrança nova é feita. O período já pago não é devolvido proporcionalmente.",
+        ]}
+        textoCiencia="Estou ciente de que a vitrine e o painel ficam indisponíveis ao fim do período já pago, e quero cancelar."
+        confirmarLabel={cancelando ? "Cancelando…" : "Cancelar assinatura"}
+        aoConfirmar={confirmarCancelamentoAgora}
+        aoCancelar={() => setConfirmarCancelamento(null)}
+      />
 
       {/* ── Cabeçalho ─── */}
       <div data-tour="config-cabecalho" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
@@ -1012,6 +1105,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                     <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", opacity: 1 }}>
                       <input
                         type="checkbox"
+                        className="sw"
                         checked={Boolean(form.autoGerarIA)}
                         onChange={(e) => set("autoGerarIA", e.target.checked)}
                         style={{ marginTop: "2px" }}
@@ -1103,6 +1197,40 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+
+                  {/* ── Cancelar assinatura ──────────────────────────────────
+                      Fica por último e visualmente apartado, sem competir com a
+                      grade de planos: é a saída, e saída não se oferece no meio
+                      do caminho de quem está decidindo entre um plano e outro.
+
+                      Só para quem paga. Em teste não há cobrança para cancelar,
+                      e a rota recusa com essa explicação — mas nem chegamos lá:
+                      sem botão, ninguém tropeça na dúvida. */}
+                  {cobranca && !emTrial && podeTrocarPlano && (
+                    <div style={{ marginTop: "6px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#fca5a5" }}>Cancelar assinatura</div>
+                      <p style={{ margin: "5px 0 12px", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                        Você continua com acesso normal até o fim do período já pago — nada é
+                        interrompido hoje, e nenhuma nova cobrança é feita depois disso.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={pedirCancelamento}
+                        disabled={cancelando}
+                        style={{
+                          width: "auto", padding: "9px 16px", borderRadius: "9px",
+                          border: "1px solid rgba(239,68,68,0.35)",
+                          background: "rgba(239,68,68,0.10)",
+                          color: "#fca5a5", fontSize: "12.5px", fontWeight: 600,
+                          cursor: cancelando ? "not-allowed" : "pointer",
+                          opacity: cancelando ? 0.6 : 1,
+                          boxShadow: "none", transform: "none",
+                        }}
+                      >
+                        {cancelando ? "Cancelando…" : "Cancelar minha assinatura"}
+                      </button>
                     </div>
                   )}
                 </>

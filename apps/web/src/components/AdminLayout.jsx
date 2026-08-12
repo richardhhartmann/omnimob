@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { TrialAviso } from "./TrialAviso";
@@ -10,6 +10,7 @@ import { TourDeTela } from "./TourDeTela";
 import { AjudaModal } from "./AjudaModal";
 import { corDeTextoPara } from "./adminUi";
 import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
+import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   House,
@@ -164,6 +165,12 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const corPrimaria = session?.tenant?.primaryColor || "#4f46e5";
   const tintaPrimaria = corDeTextoPara(corPrimaria);
 
+  /* Brilho de borda direcional em todo botão do painel. Um listener delegado
+     aqui na raiz alimenta o CSS — ver `utils/brilhoDeBorda.js` e o bloco
+     `.ds-shell button::after` no styles.css. */
+  const shellRef = useRef(null);
+  useBrilhoDeBorda(shellRef);
+
   // ── Colapso ──────────────────────────────────────────────────────────────────
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
@@ -285,7 +292,12 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       {
         label: "VITRINE",
         itens: [
-          (cargo?.editarPagina || cargo?.gerenciarUsuarios) && { key: "config", Icon: GearSix, label: "Configurações", active: isConfiguracoes, onClick: () => navigate("/configuracoes") },
+          /* Permissão própria, e só do Administrador. Saía de
+             `editarPagina || gerenciarUsuarios`: tirar "Gerenciar Usuários" de
+             um cargo levava junto Configurações, que não tem nada a ver com
+             gerir gente — e, do outro lado, o Editor de Vitrine entrava numa
+             tela com plano, cobrança e cancelamento de assinatura. */
+          cargo?.verConfiguracoes && { key: "config", Icon: GearSix, label: "Configurações", active: isConfiguracoes, onClick: () => navigate("/configuracoes") },
           cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar página", active: isShowcaseEditor, href: showcaseEditorLink },
           { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver página", href: showcaseLink, external: true },
         ].filter(Boolean),
@@ -344,6 +356,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       />
 
       <div
+        ref={shellRef}
         className="ds-shell"
         style={{ "--tenant-primary": corPrimaria, "--tenant-primary-ink": tintaPrimaria }}
       >
@@ -405,12 +418,16 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
           {/* Rodapé */}
           <div className="ds-foot">
-            {/* Só aparece enquanto o tenant estiver em teste; some ao assinar. */}
+            {/* Só aparece enquanto o tenant estiver em teste; some ao assinar.
+
+                `podeAssinar` segue `verConfiguracoes` — assinar é decisão de
+                quem responde pela conta, e é a mesma permissão que abre
+                Configurações, onde o plano vive. Era `gerenciarUsuarios`. */}
             <SideTooltip label="Assinar a Omnimob" collapsed={c}>
               <div>
                 <TrialAviso
                   tenantSlug={tenantSlug}
-                  podeAssinar={Boolean(cargo?.gerenciarUsuarios)}
+                  podeAssinar={Boolean(cargo?.verConfiguracoes)}
                   aoAssinar={() => window.location.reload()}
                 />
               </div>

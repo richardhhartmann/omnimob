@@ -145,6 +145,14 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
   const cargo = session?.usuario?.cargo;
   const canViewReports = Boolean(cargo?.verRelatorios); // abre o Painel de Performance
   const canPublish = Boolean(cargo?.publicarRedes) && planoLiberaRedes(session?.tenant?.plano); // divulgar exige plano Profissional+
+  /* Os selos de Facebook/Instagram no card saem inteiros no Básico.
+
+     Eles mostram o estado de uma publicação que ali não pode existir — dois
+     ícones apagados, para sempre, anunciando um recurso de outro plano em cada
+     imóvel da lista. Diferente do botão de divulgar (`canPublish`), isto não
+     depende do cargo: é o plano que não tem a funcionalidade, então não há
+     cargo nenhum para quem esses ícones façam sentido. */
+  const mostraRedes = planoLiberaRedes(session?.tenant?.plano);
 
   const openInsights = (id) => { if (canViewReports) navigate(`/imoveis/${id}`); };
 
@@ -405,9 +413,11 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                   </div>
                 </div>
 
-                {/* Footer com badges sociais + ações */}
-                <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px 8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                  <SocialBadges publications={property.publications} />
+                {/* Footer com badges sociais + ações.
+                    Sem os selos sobra um filho só, e `space-between` jogaria as
+                    ações para a esquerda — daí o alinhamento mudar junto. */}
+                <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: mostraRedes ? "space-between" : "flex-end", alignItems: "center", flexWrap: "wrap", gap: "10px 8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                  {mostraRedes && <SocialBadges publications={property.publications} />}
                   <div style={{ display: "flex", gap: "8px" }}>
                     {canPublish && (
                       <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ ...btnShare }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar nas redes sociais">
@@ -440,11 +450,14 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
               // Efeito zebrado: linhas alternam o tom de fundo para facilitar a leitura.
               const rowBg = index % 2 === 0 ? "rgba(255,255,255,0.015)" : "rgba(255,255,255,0.055)";
               const rowHover = "rgba(255,255,255,0.10)";
+              /* A grade perde uma coluna junto com os selos. Mantida em quatro,
+                 sobraria uma faixa vazia entre o texto e as ações — 40px de
+                 nada, em toda linha da lista. */
               return (
                 <div
                   key={property.id}
                   onClick={() => openInsights(property.id)}
-                  style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: "20px", alignItems: "center", padding: "14px 24px", cursor: canViewReports ? "pointer" : "default", background: rowBg, transition: "background 0.2s" }}
+                  style={{ display: "grid", gridTemplateColumns: mostraRedes ? "auto 1fr auto auto" : "auto 1fr auto", gap: "20px", alignItems: "center", padding: "14px 24px", cursor: canViewReports ? "pointer" : "default", background: rowBg, transition: "background 0.2s" }}
                   onMouseEnter={(e) => e.currentTarget.style.background = rowHover}
                   onMouseLeave={(e) => e.currentTarget.style.background = rowBg}
                 >
@@ -469,7 +482,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     </p>
                   </div>
 
-                  <SocialBadges publications={property.publications} />
+                  {mostraRedes && <SocialBadges publications={property.publications} />}
 
                   <div style={{ display: "flex", gap: "8px" }}>
                     {canPublish && (

@@ -2486,3 +2486,245 @@ svg.icon-moon,
   .authx-out .authx-shapes,
   .authx-in { animation: none; }
 }
+
+/* ─── Brilho de borda direcional nos botões do painel ────────────────────────
+   Técnica do BorderGlow (React Bits), adaptada de cartão para botão.
+
+   O ângulo do ponteiro chega em --cursor-angle, escrito por um listener
+   delegado na raiz do painel (ver utils/brilhoDeBorda.js). Ele gira a máscara
+   cônica, e é isso que faz o brilho parecer seguir o cursor em volta da borda.
+
+   ESCOPADO A .ds-shell de propósito: o seletor `button` do styles.css é global
+   e alcança a landing e as telas de login, que têm linguagem visual própria.
+
+   O halo achatado que existia no :hover foi substituído por este, e não somado.
+   Os dois juntos dariam duas luzes na mesma beirada — foi exatamente o que
+   aconteceu nos cartões de plano quando o flare antigo ficou por baixo dos
+   raios. */
+.ds-shell button,
+.ds-shell .link-button {
+  /* Necessário para o ::after se ancorar. Não muda o fluxo: só cria o bloco
+     de contenção, e botão raramente tem filho posicionado. */
+  position: relative;
+  /* Cor do brilho. Cada família de botão sobrescreve abaixo. */
+  --brilho: var(--accent);
+  --cursor-angle: 45deg;
+  --edge-proximity: 0;
+}
+
+.ds-shell button::after,
+.ds-shell .link-button::after {
+  content: "";
+  position: absolute;
+  /* Estoura 1px para o fio assentar em cima da borda, não dentro dela. */
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease-out;
+
+  /* O cone: aceso na direção do ponteiro e no lado oposto (o brilho atravessa a
+     peça), apagado nos flancos. É o giro deste ângulo que dá o movimento. */
+  -webkit-mask-image: conic-gradient(
+    from var(--cursor-angle) at center,
+    #000 2.5%, transparent 12%, transparent 88%, #000 97.5%
+  );
+  mask-image: conic-gradient(
+    from var(--cursor-angle) at center,
+    #000 2.5%, transparent 12%, transparent 88%, #000 97.5%
+  );
+
+  box-shadow:
+    inset 0 0 0 1px var(--brilho),
+    inset 0 0 6px -1px var(--brilho),
+    0 0 4px -1px var(--brilho),
+    0 0 12px -2px var(--brilho);
+}
+
+/* Quem liga é o hover; a proximidade da borda só moderniza a intensidade.
+   No componente original a opacidade saía só da proximidade — num botão de
+   44px todo ponto está perto de uma borda, e o brilho ficaria sempre aceso. */
+.ds-shell button:hover:not(:disabled)::after,
+.ds-shell .link-button:hover::after {
+  opacity: calc(0.55 + 0.45 * var(--edge-proximity) / 100);
+}
+
+/* Botão desabilitado não acende: ele não responde ao clique, e brilhar seria
+   convidar para uma ação que não acontece. */
+.ds-shell button:disabled::after { opacity: 0; }
+
+/* As mesmas famílias que já tinham flare próprio no hover mantêm a cor delas. */
+.ds-shell .btn-danger { --brilho: #ef4444; }
+.ds-shell .btn-whatsapp,
+.ds-shell .divulgar-pub.btn-whatsapp { --brilho: #25d366; }
+.ds-shell .button-secondary { --brilho: rgba(255, 255, 255, 0.55); }
+
+/* O halo achatado sai de cena para o direcional assumir sozinho. O leve
+   levantar no hover continua: ele é resposta ao toque, não decoração. */
+.ds-shell button:hover,
+.ds-shell .link-button:hover,
+.ds-shell .btn-danger:hover:not(:disabled),
+.ds-shell .btn-whatsapp:hover:not(:disabled) {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-shell button::after,
+  .ds-shell .link-button::after { display: none; }
+}
+
+/* ─── Checkbox ───────────────────────────────────────────────────────────────
+   Estilo inspirado no de @mrhyddenn: contorno arredondado que acende, halo
+   redondo no hover e o "check" entrando desenhado.
+
+   FEITO EM CSS PURO, e não com o componente de styled-components do original.
+   Dois motivos: o projeto não tem CSS-in-JS e um runtime inteiro para um widget
+   é caro; e o componente exigiria trocar os 14 pontos de uso, enquanto a regra
+   aqui alcança todos — inclusive os que ainda vão nascer.
+
+   O que se perde: o traçado do SVG original é desenhado por stroke-dashoffset,
+   e não há como animar o interior de um SVG a partir do CSS de fora. O check
+   aqui entra por escala e clip, que lê parecido e não exige marcação nova. */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border-radius: 7px;
+  border: 1.5px solid var(--border, #c8ccd4);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  /* O tap no celular pinta um retângulo cinza por cima do controle. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Halo do hover: o alvo cresce sem o controle crescer junto. */
+input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 42px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+input[type="checkbox"]:hover::before { opacity: 0.07; }
+
+/* O check. `scale(0)` no repouso e a escala como transição: é o que dá a
+   entrada, já que o desenho por stroke não é alcançável daqui. */
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid var(--accent, #6366f1);
+  border-width: 0 2px 2px 0;
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0);
+  transform-origin: 55% 45%;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+input[type="checkbox"]:hover { border-color: var(--accent, #6366f1); }
+input[type="checkbox"]:checked { border-color: var(--accent, #6366f1); }
+input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1); }
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent, #6366f1);
+  outline-offset: 3px;
+}
+
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+input[type="checkbox"]:disabled::before { opacity: 0; }
+
+/* ─── Switch (liga/desliga) ──────────────────────────────────────────────────
+   Só para controle que LIGA ou DESLIGA um estado — usuário ativo, forçar troca
+   de senha, preencher imóvel por IA. Seleção múltipla (permissões de cargo,
+   atributos do imóvel) continua checkbox: uma fileira de interruptores lê como
+   configuração, não como escolha, e essas listas são escolha.
+
+   Opt-in pela classe .sw, e não por seletor de estrutura, porque quem sabe se o
+   controle é um interruptor ou um item de lista é quem escreve a tela.
+
+   Sem marcação nova: o original precisa de label > input + span, o que exigiria
+   reescrever cada ponto de uso. Aqui o trilho é o próprio input e os dois botões
+   são ::before e ::after — mesma leitura, uma classe. */
+input[type="checkbox"].sw {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 3.5em;
+  height: 2em;
+  font-size: 15px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50px;
+  background: #292727;
+  /* Recorta os dois botões enquanto eles entram e saem pelas pontas. */
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Botão ACESO: espera fora do trilho, à direita, e entra ao ligar. */
+input[type="checkbox"].sw::before {
+  content: "";
+  position: absolute;
+  height: 1.4em;
+  width: 1.4em;
+  right: 0.3em;
+  bottom: 0.3em;
+  transform: translateX(150%);
+  background-color: #59d102;
+  border-radius: inherit;
+  transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
+  /* Anula o halo do checkbox comum, que aqui não faz sentido. */
+  opacity: 1;
+  top: auto;
+  left: auto;
+}
+
+/* Botão APAGADO: à esquerda, e sai pela ponta ao ligar. */
+input[type="checkbox"].sw::after {
+  content: "";
+  position: absolute;
+  height: 1.4em;
+  width: 1.4em;
+  left: 0.3em;
+  bottom: 0.3em;
+  top: auto;
+  background-color: #ccc;
+  border: 0;
+  border-radius: inherit;
+  transform: none;
+  transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+input[type="checkbox"].sw:hover::before { opacity: 1; }
+input[type="checkbox"].sw:checked { border: 0; }
+input[type="checkbox"].sw:checked::before { transform: translateX(0); }
+input[type="checkbox"].sw:checked::after { transform: translateX(-150%); }
+
+input[type="checkbox"].sw:focus-visible {
+  outline: 2px solid #59d102;
+  outline-offset: 3px;
+}
+input[type="checkbox"].sw:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -394,3 +394,46 @@ export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, ur
 
   return { subject, body, html };
 }
+
+/* Recuperação de senha.
+
+   O texto evita prometer que a conta existe: quem pede a recuperação vê sempre
+   a mesma resposta na tela, e o e-mail só chega para quem tem cadastro. Dizer
+   aqui "sua conta está ativa" transformaria o e-mail no confirmador que a tela
+   se recusou a ser. */
+export function emailRecuperarSenha({ nome, link, imobiliaria }) {
+  const subject = "Redefinir sua senha da Omnimob";
+
+  const body = [
+    `Olá, ${nome}.`,
+    "",
+    `Recebemos um pedido para redefinir a senha do seu acesso${imobiliaria ? ` na ${imobiliaria}` : ""}.`,
+    "",
+    "Abra o link abaixo para escolher uma nova senha:",
+    link,
+    "",
+    "O link vale por 1 hora e só pode ser usado uma vez.",
+    "Se não foi você quem pediu, ignore esta mensagem — sua senha continua a mesma.",
+  ].join("\n");
+
+  const html = layoutEmail({
+    preheader: "Escolha uma nova senha para o seu acesso.",
+    conteudo: [
+      eyebrow("● REDEFINIR SENHA"),
+      titulo("Escolha uma nova senha"),
+      paragrafo(
+        `Olá, ${forte(nome)}. Recebemos um pedido para redefinir a senha do seu acesso${
+          imobiliaria ? ` na ${forte(imobiliaria)}` : ""
+        }.`,
+      ),
+      botao("Criar nova senha", link),
+      linkDeReserva(link),
+      aviso(
+        `Este link vale por <strong style="color:${COR.forte};">1 hora</strong> e só funciona uma vez. ` +
+          "Se não foi você quem pediu, é só ignorar — sua senha continua a mesma.",
+      ),
+    ].join(""),
+  });
+
+  return { subject, body, html };
+}

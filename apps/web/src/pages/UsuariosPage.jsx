@@ -7,7 +7,7 @@ import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 
-const FORM_EMPTY = { nome: "", login: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
+const FORM_EMPTY = { nome: "", login: "", email: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
 
 /* ─── Sufixo de tenant no login ───────────────────────────────────────────────
    A tela de login é uma só para todos os clientes, então o login precisa ser
@@ -115,6 +115,9 @@ export function UsuariosPage({ session }) {
     setForm({
       nome: u.nome,
       login: base,
+      // `?? ""` porque o campo é controlado: `null` do banco viraria input
+      // não-controlado e o React reclamaria na primeira digitação.
+      email: u.email ?? "",
       comSufixo: temSufixo,
       cargoCodigo: String(u.cargoCodigo),
       ativo: u.ativo,
@@ -146,6 +149,9 @@ export function UsuariosPage({ session }) {
         const payload = {
           nome: form.nome,
           login: loginFinal,
+          // Vazio vira null: string vazia no banco faria a busca da recuperação
+          // de senha casar dois usuários "sem e-mail" como se fossem o mesmo.
+          email: form.email.trim() || null,
           cargoCodigo: Number(form.cargoCodigo),
           ativo: form.ativo,
           forcaAlterarSenha: form.forcaAlterarSenha,
@@ -157,6 +163,7 @@ export function UsuariosPage({ session }) {
         const created = await api.createUsuario(tenantSlug, {
           nome: form.nome,
           login: loginFinal,
+          email: form.email.trim() || null,
           cargoCodigo: Number(form.cargoCodigo),
           ativo: form.ativo,
         });
@@ -219,6 +226,25 @@ export function UsuariosPage({ session }) {
             onChange={(e) => setForm((p) => ({ ...p, nome: e.target.value }))}
             required disabled={loading}
           />
+
+          {/* Opcional, mas é o que permite a pessoa recuperar a própria senha.
+              Sem e-mail, quem esquece a senha depende de alguém redefinir por
+              ela — daí a legenda dizer isso em vez de só "opcional". */}
+          <div>
+            <input
+              type="email"
+              placeholder="E-mail (para recuperação de senha)"
+              value={form.email}
+              onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+              disabled={loading}
+              autoComplete="off"
+            />
+            <p style={{ margin: "5px 2px 0", fontSize: "11.5px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+              {form.email.trim()
+                ? "É para cá que vai o link de redefinir senha."
+                : "Sem e-mail, esta pessoa não consegue recuperar a senha sozinha."}
+            </p>
+          </div>
           {/* Campo composto: a pessoa digita a base e vê o sufixo do tenant
               colado, para o login final não ser surpresa na tela de entrada. */}
           <div data-tour="usuario-login">
@@ -283,7 +309,7 @@ export function UsuariosPage({ session }) {
                 simplesmente não existe. */}
             {editando?.id === meuId ? null : (
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-                <input type="checkbox" checked={form.ativo} onChange={(e) => setForm((p) => ({ ...p, ativo: e.target.checked }))} disabled={loading} />
+                <input type="checkbox" className="sw" checked={form.ativo} onChange={(e) => setForm((p) => ({ ...p, ativo: e.target.checked }))} disabled={loading} />
                 Usuário ativo
               </label>
             )}
@@ -291,7 +317,7 @@ export function UsuariosPage({ session }) {
                 a senha no primeiro acesso (força troca é sempre true). */}
             {editando && (
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-                <input type="checkbox" checked={form.forcaAlterarSenha} onChange={(e) => setForm((p) => ({ ...p, forcaAlterarSenha: e.target.checked }))} disabled={loading} />
+                <input type="checkbox" className="sw" checked={form.forcaAlterarSenha} onChange={(e) => setForm((p) => ({ ...p, forcaAlterarSenha: e.target.checked }))} disabled={loading} />
                 Forçar alteração de senha no próximo acesso
               </label>
             )}

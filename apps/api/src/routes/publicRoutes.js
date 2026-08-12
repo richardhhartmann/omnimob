@@ -548,3 +548,87 @@ publicRouter.get("/planos", async (_req, res) => {
     return res.json({ precos: {} });
   }
 });
+
+/* ─── Sitemap ────────────────────────────────────────────────────────────────
+   Lista a home e a vitrine de cada imobiliária ativa. Substitui o arquivo fixo
+   que havia em `apps/web/public/`, e que só continha a home: as vitrines são o
+   conteúdo que cresce, e um arquivo estático nunca saberia de uma imobiliária
+   que entrou ontem.
+
+   REGRA QUE GOVERNA O RESTO DESTA FUNÇÃO: um sitemap só pode listar URLs do
+   MESMO host em que ele é servido. É por isso que existe o filtro lá embaixo,
+   e é por isso que o endereço aqui é montado com `/vitrine/<slug>` em vez de
+   sair do `enderecoDaVitrine()` — a vitrine que vive em domínio próprio, ou num
+   subdomínio, está noutro host, e listá-la aqui faria o Google descartar a
+   entrada. Quem tem domínio próprio precisa do sitemap dele, no domínio dele;
+   é trabalho separado e ainda não existe.
+
+   Servido a partir de `omnimob.app/sitemap.xml` por reescrita da Vercel (ver
+   `apps/web/vercel.json`) — precisa ser servido de lá, e não de
+   `api.omnimob.app`, exatamente pela regra do parágrafo acima. */
+
+/** Escapa o que a XML não aceita cru. Slug é validado no cadastro, mas o
+    endereço é montado por concatenação e um dia pode receber outra coisa. */
+function xml(texto) {
+  return String(texto)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+publicRouter.get("/sitemap.xml", async (req, res) => {
+  try {
+    const base = baseDoApp(req);
+    if (!base) {
+      console.warn("[sitemap] sem APP_URL nem Origin confiável; devolvendo só a home");
+    }
+    const site = (base || "https://omnimob.app").replace(/\/+$/, "");
+
+    /* `ativo` é o interruptor da conta. CANCELADO fica de fora por decência com
+       quem cancelou: continuar anunciando a vitrine dela na busca é divulgar um
+       endereço que ela não quer mais no ar. TRIAL e ATRASADO entram — a vitrine
+       responde nos dois casos, e sumir do índice a cada atraso de boleto seria
+       pior para a imobiliária do que o próprio atraso. */
+    const tenants = await prisma.tenant.findMany({
+      where: { ativo: true, statusPagamento: { not: "CANCELADO" } },
+      select: { slug: true, updatedAt: true, dominioProprio: true, dominioStatus: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const urls = [
+      `  <url>\n    <loc>${xml(site)}/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    ];
+
+    for (const t of tenants) {
+      // Domínio próprio ATIVO = outro host. Ver a regra no topo do bloco.
+      if (t.dominioProprio && t.dominioStatus === "ATIVO") continue;
+      if (!t.slug) continue;
+      const loc = `${site}/vitrine/${encodeURIComponent(t.slug)}`;
+      const lastmod = t.updatedAt ? t.updatedAt.toISOString().slice(0, 10) : null;
+      urls.push(
+        `  <url>\n    <loc>${xml(loc)}</loc>\n` +
+          (lastmod ? `    <lastmod>${lastmod}</lastmod>\n` : "") +
+          `    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>`
+      );
+    }
+
+    const corpo = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
+
+    res.type("application/xml");
+    // Uma hora de cache: o robô não volta com pressa, e isso protege o banco de
+    // uma varredura repetida. `s-maxage` é o que a borda da Vercel respeita.
+    res.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
+    return res.send(corpo);
+  } catch (erro) {
+    console.error("[sitemap] falha ao montar:", erro.message);
+    /* Devolver 500 faria o Google marcar o sitemap como quebrado e parar de
+       buscá-lo por um tempo. Um sitemap válido só com a home é degradação
+       melhor: nada some do índice por causa de uma falha momentânea de banco. */
+    const site = (baseDoApp(req) || "https://omnimob.app").replace(/\/+$/, "");
+    res.type("application/xml");
+    return res.send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${xml(site)}/</loc>\n  </url>\n</urlset>\n`
+    );
+  }
+});

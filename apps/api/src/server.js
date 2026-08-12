@@ -13,6 +13,7 @@ import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
 import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
+import { previaRouter } from "./routes/previaRoutes.js";
 import { stripeWebhookRouter } from "./routes/stripeWebhookRoutes.js";
 import { iniciarFaxinaAutomatica } from "./services/faxinaScheduler.js";
 import { socialRouter } from "./routes/socialRoutes.js";
@@ -159,6 +160,11 @@ app.use("/api/clientes", clienteRouter);
 app.use("/api/social", socialRouter);
 app.use("/api/ai", aiRouter);
 app.use("/public", publicRouter);
+/* Prévia de link para robôs de rede social. Montado ANTES de qualquer coisa que
+   pudesse capturar `/previa/*`, e fora do `publicRouter` porque devolve HTML, e
+   não JSON — misturar os dois no mesmo router faria o tratamento de erro comum
+   responder JSON para um robô que só entende marcação. */
+app.use("/previa", previaRouter);
 
 app.use((error, _req, res, _next) => {
   console.error(error);

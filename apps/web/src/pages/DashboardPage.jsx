@@ -108,7 +108,7 @@ function HomePage({ session }) {
       onClick: () => navigate("/cargos"),
       accent: "#e04212",
     },
-    (cargo?.editarPagina || cargo?.gerenciarUsuarios) && {
+    cargo?.verConfiguracoes && {
       icon: <GearSix size={32} weight="duotone" />,
       title: "Configurações",
       description: "Dados legais, contato, endereço e identidade visual.",

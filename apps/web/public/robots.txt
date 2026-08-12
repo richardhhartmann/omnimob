@@ -27,4 +27,18 @@ Disallow: /comecar
 # As vitrines públicas (/vitrine/...) ficam liberadas de propósito: são o
 # conteúdo que cada imobiliária quer encontrável.
 
+# O sitemap NÃO é arquivo: é montado pela API (rota `/public/sitemap.xml`) e
+# servido neste endereço por reescrita da Vercel — a lista de vitrines muda a
+# cada imobiliária que entra, e um arquivo fixo nunca saberia da mais recente.
+#
+# Dois cuidados, os dois pela mesma regra (um sitemap só vale para URLs do host
+# em que ele está publicado):
+#
+#   · o endereço aqui é o de OMNIMOB.APP, não o da API. Apontar direto para
+#     api.omnimob.app faria o Google descartar tudo lá dentro, porque as URLs
+#     listadas são deste domínio e o sitemap estaria noutro.
+#   · não recoloque um `sitemap.xml` em `public/`. Vale o mesmo que vale para
+#     este arquivo, ao contrário: a Vercel lê o sistema de arquivos ANTES dos
+#     rewrites, então o estático venceria a reescrita — em silêncio, e o sitemap
+#     voltaria a ter só a home.
 Sitemap: https://omnimob.app/sitemap.xml

@@ -589,25 +589,6 @@ export function SuperAdminPage({ session, onLogout }) {
                       onChange={(v) => setField("statusPagamento", v)}
                     />
                   </Field>
-
-                  {/* Plano e status são eixos independentes, e isso não era
-                      óbvio: dá para ter Premium em teste e Básico pagante. Já
-                      aconteceu de um tenant Premium ser criado com o status
-                      padrão (Trial) e a pessoa estranhar o painel tratá-lo como
-                      teste — estava certo, só não estava dito em lugar nenhum.
-                      Esta linha diz, em uma frase, o que será criado. */}
-                  <p className="sa-resumo">
-                    <span className="dl-mono sa-modal__extra-label">// o que será criado</span>
-                    <strong>
-                      {(PLANO_OPCOES.find((o) => o.value === form.plano)?.label) || "Básico"}
-                      {" · "}
-                      {form.statusPagamento === "TRIAL"
-                        ? "em teste — não cobra, e o painel mostra contagem regressiva"
-                        : form.statusPagamento === "EM_DIA"
-                          ? "pagante — recebe as boas-vindas de assinante"
-                          : STATUS_META[form.statusPagamento]?.label}
-                    </strong>
-                  </p>
                   <Field label="Valor mensal (R$)">
                     <input className="dl-input" type="number" step="0.01" value={form.valorMensal} onChange={(e) => setField("valorMensal", e.target.value)} />
                   </Field>

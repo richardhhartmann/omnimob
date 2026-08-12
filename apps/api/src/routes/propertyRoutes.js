@@ -75,9 +75,34 @@ propertyRouter.put("/tipos-contrato", requireImoveis, async (req, res) => {
 
 // ─── Tipos de imóvel com seus atributos ──────────────────────────────────────
 
-propertyRouter.get("/tipos", async (_req, res) => {
+/* Todo acesso a tipo/atributo passa pelo tenant.
+
+   A tabela era global e estas rotas não filtravam nada: `PUT /tipos/:id` com um
+   id qualquer renomeava o tipo de outra imobiliária, e o DELETE apagava. Como o
+   catálogo nasce igual para todo mundo, os ids são adivinháveis — não era
+   preciso nem descobrir nada.
+
+   O atributo não tem `tenantId` próprio: ele pertence a um tipo, e é o tipo que
+   tem dono. Por isso as rotas de atributo sobem até o tipo para checar. */
+async function tipoDoTenant(tipoId, tenantId) {
+  const id = Number(tipoId);
+  if (!Number.isInteger(id)) return null;
+  return prisma.tipoImovel.findFirst({ where: { id, tenantId }, select: { id: true } });
+}
+
+async function atributoDoTenant(atributoId, tenantId) {
+  const id = Number(atributoId);
+  if (!Number.isInteger(id)) return null;
+  return prisma.modeloAtributo.findFirst({
+    where: { id, tipo: { tenantId } },
+    select: { id: true },
+  });
+}
+
+propertyRouter.get("/tipos", async (req, res) => {
   try {
     const tipos = await prisma.tipoImovel.findMany({
+      where: { tenantId: req.tenant.id },
       orderBy: { id: "asc" },
       include: { atributos: { orderBy: [{ grupo: "asc" }, { descricao: "asc" }] } },
     });
@@ -93,7 +118,11 @@ propertyRouter.post("/tipos", requireImoveis, async (req, res) => {
     const { descricao, areaFields } = req.body;
     if (!descricao) return res.status(400).json({ error: "Descrição é obrigatória." });
     const tipo = await prisma.tipoImovel.create({
-      data: { descricao, areaFields: Array.isArray(areaFields) ? areaFields : [] },
+      data: {
+        tenantId: req.tenant.id,
+        descricao,
+        areaFields: Array.isArray(areaFields) ? areaFields : [],
+      },
       include: { atributos: true },
     });
     return res.status(201).json(tipo);
@@ -105,6 +134,9 @@ propertyRouter.post("/tipos", requireImoveis, async (req, res) => {
 
 propertyRouter.put("/tipos/:id", requireImoveis, async (req, res) => {
   try {
+    if (!await tipoDoTenant(req.params.id, req.tenant.id)) {
+      return res.status(404).json({ error: "Tipo de imóvel não encontrado." });
+    }
     const { descricao, areaFields } = req.body;
     const data = {};
     if (descricao !== undefined) data.descricao = descricao;
@@ -123,6 +155,9 @@ propertyRouter.put("/tipos/:id", requireImoveis, async (req, res) => {
 
 propertyRouter.delete("/tipos/:id", requireImoveis, async (req, res) => {
   try {
+    if (!await tipoDoTenant(req.params.id, req.tenant.id)) {
+      return res.status(404).json({ error: "Tipo de imóvel não encontrado." });
+    }
     await prisma.tipoImovel.delete({ where: { id: Number(req.params.id) } });
     return res.status(204).send();
   } catch (err) {
@@ -136,6 +171,9 @@ propertyRouter.post("/tipos/:tipoId/atributos", requireImoveis, async (req, res)
   try {
     const { descricao, grupo } = req.body;
     if (!descricao) return res.status(400).json({ error: "Descrição é obrigatória." });
+    if (!await tipoDoTenant(req.params.tipoId, req.tenant.id)) {
+      return res.status(404).json({ error: "Tipo de imóvel não encontrado." });
+    }
     const atr = await prisma.modeloAtributo.create({
       data: { tipoId: Number(req.params.tipoId), descricao, grupo: grupo || null },
     });
@@ -148,6 +186,9 @@ propertyRouter.post("/tipos/:tipoId/atributos", requireImoveis, async (req, res)
 
 propertyRouter.put("/atributos/:id", requireImoveis, async (req, res) => {
   try {
+    if (!await atributoDoTenant(req.params.id, req.tenant.id)) {
+      return res.status(404).json({ error: "Atributo não encontrado." });
+    }
     const { descricao, grupo } = req.body;
     const atr = await prisma.modeloAtributo.update({
       where: { id: Number(req.params.id) },
@@ -162,6 +203,9 @@ propertyRouter.put("/atributos/:id", requireImoveis, async (req, res) => {
 
 propertyRouter.delete("/atributos/:id", requireImoveis, async (req, res) => {
   try {
+    if (!await atributoDoTenant(req.params.id, req.tenant.id)) {
+      return res.status(404).json({ error: "Atributo não encontrado." });
+    }
     await prisma.modeloAtributo.delete({ where: { id: Number(req.params.id) } });
     return res.status(204).send();
   } catch (err) {
@@ -231,10 +275,15 @@ function validarTipoContrato(tipoContrato, tenant) {
   return { error: "Este tipo de contrato não está habilitado para a sua imobiliária.", tipoContrato };
 }
 
-async function validarAtributos(atributosIds, tipoImovelId) {
+/* `tenantId` fecha o caso em que não veio tipo: sem ele, o filtro caía só sobre
+   os ids e um atributo de outra imobiliária passava na validação. Com tipo
+   informado o vínculo já bastaria (o tipo é conferido antes), mas depender
+   disso deixaria a função correta só enquanto quem chama lembrar da ordem. */
+async function validarAtributos(atributosIds, tipoImovelId, tenantId) {
   const encontrados = await prisma.modeloAtributo.findMany({
     where: {
       id: { in: atributosIds },
+      tipo: { tenantId },
       ...(tipoImovelId ? { tipoId: tipoImovelId } : {}),
     },
     select: { id: true },
@@ -264,14 +313,14 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
     // Deriva propertyType do tipo selecionado para manter compatibilidade
     let propertyType = propertyData.propertyType || "";
     if (tipoImovelId) {
-      const tipo = await prisma.tipoImovel.findUnique({ where: { id: tipoImovelId } });
+      const tipo = await prisma.tipoImovel.findFirst({ where: { id: tipoImovelId, tenantId: req.tenant.id } });
       if (!tipo) return res.status(400).json({ error: "Tipo de imovel nao encontrado." });
       propertyType = tipo.descricao;
     }
 
     // Garante que os atributos existem (e pertencem ao tipo), evitando erro de FK (P2003).
     if (atributosIds.length > 0) {
-      const erroAtributos = await validarAtributos(atributosIds, tipoImovelId);
+      const erroAtributos = await validarAtributos(atributosIds, tipoImovelId, req.tenant.id);
       if (erroAtributos) return res.status(400).json(erroAtributos);
     }
 
@@ -324,7 +373,7 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
       if (tipoImovelId === null) {
         propertyType = "";
       } else {
-        const tipo = await prisma.tipoImovel.findUnique({ where: { id: tipoImovelId } });
+        const tipo = await prisma.tipoImovel.findFirst({ where: { id: tipoImovelId, tenantId: req.tenant.id } });
         if (!tipo) return res.status(400).json({ error: "Tipo de imovel nao encontrado." });
         propertyType = tipo.descricao;
       }
@@ -333,7 +382,7 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
     // Garante que os atributos existem (e pertencem ao tipo), evitando erro de FK (P2003).
     if (atributosIds !== undefined && atributosIds.length > 0) {
       const tipoAlvo = tipoImovelId !== undefined ? tipoImovelId : current.tipoImovelId;
-      const erroAtributos = await validarAtributos(atributosIds, tipoAlvo ?? undefined);
+      const erroAtributos = await validarAtributos(atributosIds, tipoAlvo ?? undefined, req.tenant.id);
       if (erroAtributos) return res.status(400).json(erroAtributos);
     }
 

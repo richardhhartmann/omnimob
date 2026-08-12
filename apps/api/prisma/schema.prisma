@@ -134,6 +134,8 @@ model Tenant {
   updatedAt           DateTime @updatedAt
 
   usuarios     Usuario[]
+  cargos       Cargo[]
+  tiposImovel  TipoImovel[]
   properties   Property[]
   publications PropertyPublication[]
   leads        PropertyLead[]
@@ -160,8 +162,20 @@ model SuperAdmin {
 
 // ─── Cargo (substitui o enum UserRole) ───────────────────────────────────────
 
+/* Cargo é de UMA imobiliária.
+
+   Nasceu sem `tenantId`, e por um tempo a tabela foi global: as três
+   imobiliárias do banco dividiam a mesma linha "Administrador", e o
+   `cargoRoutes` listava e editava tudo sem filtro. Tirar "Gerenciar Imóveis" do
+   Corretor numa imobiliária tirava dos corretores das outras — sem aviso, e sem
+   nada na tela que sugerisse que aquele cargo não era só dela.
+
+   O vínculo é obrigatório de propósito: cargo sem dono é exatamente o estado
+   que produziu o vazamento. `onDelete: Cascade` acompanha o resto do schema —
+   sai a imobiliária, saem os cargos dela. */
 model Cargo {
   id                Int      @id @default(autoincrement()) @map("crg_codigo")
+  tenantId          String   @map("tenant_id")
   descricao         String   @map("crg_descricao")
 
   // Permissões de acesso
@@ -172,11 +186,22 @@ model Cargo {
   gerenciarUsuarios Boolean  @default(false) @map("gerenciar_usuarios")
   gerenciarClientes Boolean  @default(false) @map("gerenciar_clientes")
   gerenciarCargos   Boolean  @default(false) @map("gerenciar_cargos")
+  /* Ver o menu Configurações. Era derivada — o menu saía de
+     `editarPagina || gerenciarUsuarios` — e por isso tirar "Gerenciar Usuários"
+     de um cargo levava junto a aba de Configurações, que não tem relação
+     nenhuma com gerir gente. Agora é permissão própria.
+
+     Exclusiva do cargo Administrador: a tela nem oferece a caixa para os
+     outros, e a API recusa (ver `cargoRoutes`). Configurações é onde ficam
+     plano, cobrança, domínio e o cancelamento da assinatura. */
+  verConfiguracoes  Boolean  @default(false) @map("ver_configuracoes")
   verRelatorios     Boolean  @default(false) @map("ver_relatorios")
   publicarRedes     Boolean  @default(false) @map("publicar_redes")
 
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   usuarios          Usuario[]
 
+  @@index([tenantId])
   @@map("tb_cargo")
 }
 
@@ -188,6 +213,17 @@ model Usuario {
   cargoCodigo       Int      @map("crg_codigo")
   nome              String   @map("usu_nome")
   login             String   @unique @map("usu_login")
+  /* E-mail da PESSOA, e é para onde vai a recuperação de senha.
+
+     Anulável porque o cadastro nunca pediu e-mail — os usuários que já existem
+     não têm nenhum, e exigir agora quebraria a tela de Usuários. Quem está sem
+     e-mail simplesmente não consegue recuperar sozinho: a tela avisa, e o
+     caminho é o administrador da imobiliária redefinir por lá.
+
+     Não é único: o mesmo e-mail pode ser de duas pessoas em imobiliárias
+     diferentes (o dono que administra duas). Quem identifica alguém é o
+     `login`, que continua único no sistema inteiro. */
+  email             String?  @map("usu_email")
   senha             String   @map("usu_senha")
   forcaAlterarSenha Boolean  @default(false) @map("usu_forca_alterar_senha")
   ativo             Boolean  @default(true) @map("usu_ativo")
@@ -377,14 +413,24 @@ model Venda {
 
 // ─── Tipos de Imóvel e Atributos ─────────────────────────────────────────────
 
+/* Tipo de imóvel é de UMA imobiliária.
+
+   Mesma história do `Cargo`: nasceu sem `tenantId` e a tabela era global — só
+   que aqui havia CRUD aberto na tela de Tipos de Imóvel. Uma imobiliária
+   renomear "Apartamento" renomeava para todas; excluir excluía de todas. Os
+   atributos (`ModeloAtributo`) vão junto por herança: eles pertencem ao tipo, e
+   o tipo agora tem dono. */
 model TipoImovel {
   id         Int              @id @default(autoincrement()) @map("tip_id")
+  tenantId   String           @map("tenant_id")
   descricao  String           @map("tip_descricao")
   areaFields Json             @default("[]") @map("tip_area_fields")
 
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   atributos ModeloAtributo[]
   imoveis   Property[]
 
+  @@index([tenantId])
   @@map("tb_tipo_imovel")
 }
 

@@ -1,1 +1,28 @@
-{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+{
+  "rewrites": [
+    { "source": "/sitemap.xml", "destination": "https://api.omnimob.app/public/sitemap.xml" },
+    {
+      "source": "/vitrine/:tenantSlug/imovel/:propertyId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|SkypeUriPreview|redditbot|vkShare|W3C_Validator|Iframely|Embedly).*"
+        }
+      ],
+      "destination": "https://api.omnimob.app/previa/imovel/:tenantSlug/:propertyId"
+    },
+    {
+      "source": "/vitrine/:tenantSlug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|SkypeUriPreview|redditbot|vkShare|W3C_Validator|Iframely|Embedly).*"
+        }
+      ],
+      "destination": "https://api.omnimob.app/previa/vitrine/:tenantSlug"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

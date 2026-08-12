@@ -150,7 +150,12 @@ function casarTipo(valor, tipos) {
 
 export async function importarImoveis(tenantId, linhas = []) {
   const resultado = { criados: 0, atualizados: 0, fotos: 0, erros: [] };
-  const tipos = await prisma.tipoImovel.findMany({ select: { id: true, descricao: true } });
+  // Só o catálogo DESTA imobiliária: casar o nome vindo da planilha contra a
+  // tabela inteira pendurava o imóvel importado num tipo de outra empresa.
+  const tipos = await prisma.tipoImovel.findMany({
+    where: { tenantId },
+    select: { id: true, descricao: true },
+  });
 
   for (const [i, bruta] of linhas.entries()) {
     const nLinha = bruta.__linha ?? i + 1;
@@ -255,7 +260,12 @@ function loginDoTenant(bruto, slug) {
 export async function importarUsuarios(tenantId, linhas = [], { slug, cargoPadraoId }) {
   const resultado = { criados: 0, atualizados: 0, senhas: [], erros: [] };
 
-  const cargos = await prisma.cargo.findMany({ select: { id: true, descricao: true } });
+  // Só os cargos DESTA imobiliária: casar o nome vindo da planilha contra a
+  // tabela inteira pendurava o usuário importado num cargo de outra empresa.
+  const cargos = await prisma.cargo.findMany({
+    where: { tenantId },
+    select: { id: true, descricao: true },
+  });
   const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
   for (const [i, bruta] of linhas.entries()) {
