@@ -2243,12 +2243,10 @@ function ParedeDeDestaques() {
   return (
     <>
       <div className={`dl-porque__fundo${naVista ? " is-na-vista" : ""}`} ref={fundoRef}>
-                      <DriftWall
+        <DriftWall
           items={pecas}
           interactive={false}
           onItemClick={(item) => setAberto(item.dados)}
-          /* "auto" enche a largura medida: com número fixo, monitor largo
-             deixava as laterais vazias e a parede virava uma faixa central. */
           columns={emMobile ? 3 : "auto"}
           tileWidth={emMobile ? 190 : 268}
           tileHeight={emMobile ? 140 : 178}
@@ -2262,14 +2260,10 @@ function ParedeDeDestaques() {
           variance={0.45}
           parallax={0}
           lift={emMobile ? 0 : 26}
-          /* Borda mais cheia que o padrão do componente: o recorte forte deixava
-             os cantos apagados numa tela grande, e é justamente onde sobra
-             espaço para a parede aparecer. */
           fade={0.28}
           dim={0.62}
           overlayColor="transparent"
         />
-      ) : null}
       </div>
 
       {/* Lista real da seção, para leitor de tela e para o teclado.
