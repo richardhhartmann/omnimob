@@ -56,6 +56,18 @@ const ehProducao = process.env.NODE_ENV === "production";
 const JANELA_DOMINIOS_MS = 60_000;
 let dominiosCache = { em: 0, lista: [] };
 
+/* Subdomínios da própria casa: `<slug>.omnimob.app`.
+
+   Cada vitrine servida por subdomínio chama esta API com aquela origem, que não
+   está (nem faria sentido estar) na lista fixa. Consultar o banco por tenant
+   seria absurdo: o subdomínio JÁ é nosso por construção — ninguém de fora
+   consegue um endereço abaixo de omnimob.app, porque o DNS é nosso.
+
+   Por isso vale a forma, não a lista. Um rótulo só, sem ponto no meio: assim
+   `a.b.omnimob.app` não passa. */
+const RAIZ_VITRINE = (process.env.VITRINE_DOMINIO_RAIZ || "omnimob.app").replace(/\./g, "\\.");
+const SUBDOMINIO_NOSSO = new RegExp(`^https://[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.${RAIZ_VITRINE}$`);
+
 async function dominiosDeClientes() {
   if (Date.now() - dominiosCache.em < JANELA_DOMINIOS_MS) return dominiosCache.lista;
   try {
@@ -86,6 +98,7 @@ app.use(
 
       if (!ehProducao && /^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (SUBDOMINIO_NOSSO.test(origin)) return callback(null, true);
       if ((await dominiosDeClientes()).includes(origin)) return callback(null, true);
       // Diagnóstico: sem isto, "Not allowed by CORS" não diz qual origem chegou
       // nem o que o servidor considera permitido — impossível de depurar no Render.
