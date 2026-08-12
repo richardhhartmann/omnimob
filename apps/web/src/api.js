@@ -74,6 +74,34 @@ export const api = {
   getTenantProfile: (tenantSlug) =>
     request("/api/tenants/me", { headers: { "x-tenant-slug": tenantSlug } }),
 
+  /* Público: traduz o host acessado no slug do tenant. Usado só quando a aba
+     abre num domínio que não é o da Omnimob. */
+  slugPorDominio: (host) =>
+    request(`/public/dominio?host=${encodeURIComponent(host)}`),
+
+  // ── Domínio próprio da vitrine ──────────────────────────────────────────
+  getDominio: (tenantSlug) =>
+    request("/api/tenants/me/dominio", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  definirDominio: (tenantSlug, dominio) =>
+    request("/api/tenants/me/dominio", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ dominio }),
+    }),
+
+  verificarDominio: (tenantSlug) =>
+    request("/api/tenants/me/dominio/verificar", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  removerDominio: (tenantSlug) =>
+    request("/api/tenants/me/dominio", {
+      method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
   updateTenantProfile: (tenantSlug, payload) =>
     request("/api/tenants/me", {
       method: "PUT",

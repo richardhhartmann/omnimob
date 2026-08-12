@@ -96,6 +96,24 @@ model Tenant {
   statusPagamento     StatusPagamento @default(TRIAL)
   proximoVencimento   DateTime?
   valorMensal         Decimal?        @db.Decimal(10, 2)
+
+  /* ─── Endereço da vitrine ──────────────────────────────────────────────────
+     Enquanto `dominioProprio` for nulo, a vitrine vive no endereço da Omnimob
+     e nada aqui importa. Quando a imobiliária traz o domínio dela, guardamos:
+
+       dominioProprio  o host pedido, sem protocolo nem barra ("imob.com.br")
+       dominioStatus   PENDENTE enquanto o DNS não aponta; ATIVO depois
+       dominioAlvo     o que a Vercel mandou o cliente cadastrar no registrador
+
+     `dominioAlvo` é gravado porque o valor NÃO é fixo: a Vercel devolve um alvo
+     por projeto (hoje um CNAME `<hash>.vercel-dns-017.com`) e já trocou o IP do
+     apex uma vez. Cravar no código quebraria calado no dia da próxima troca —
+     e o sintoma seria "o domínio do cliente parou", sem pista. */
+  dominioProprio      String?  @unique @map("tnt_dominio_proprio")
+  dominioStatus       String   @default("OMNIMOB") @map("tnt_dominio_status")
+  dominioAlvo         Json?    @map("tnt_dominio_alvo")
+  dominioVerificadoEm DateTime? @map("tnt_dominio_verificado_em")
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

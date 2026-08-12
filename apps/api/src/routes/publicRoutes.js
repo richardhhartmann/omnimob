@@ -12,6 +12,7 @@ import {
 } from "../services/emailTemplates.js";
 import { interesseSchema, trialSchema } from "../validators/interesseValidators.js";
 import { precosDosPlanos } from "../services/pagamentoService.js";
+import { tenantPorDominio } from "../services/dominioService.js";
 import {
   criarTrial,
   assinarConvite,
@@ -507,6 +508,20 @@ publicRouter.post("/trial/confirmar", trialLimiter, async (req, res) => {
    aparece na página é o mesmo que o Stripe vai cobrar, e mudar o preço lá
    reflete aqui sem deploy. Sem provedor configurado devolve vazio, e a landing
    cai nos rótulos de reserva dela. */
+/* Descobre de quem é a vitrine a partir do endereço acessado.
+
+   Quando a imobiliária traz o domínio dela, a requisição chega em
+   `imobiliaria.com.br` e o front não tem slug nenhum na URL — o host é a única
+   pista. Esta rota traduz host → slug, e daí em diante tudo segue igual.
+
+   Pública e sem limite próprio porque responde uma pergunta que qualquer
+   visitante já responde só de abrir o site, e devolve um único campo. */
+publicRouter.get("/dominio", async (req, res) => {
+  const t = await tenantPorDominio(req.query.host || req.get("host"));
+  if (!t) return res.status(404).json({ error: "Nenhuma vitrine neste endereço." });
+  return res.json({ slug: t.slug, nome: t.name });
+});
+
 publicRouter.get("/planos", async (_req, res) => {
   try {
     return res.json({ precos: await precosDosPlanos() });

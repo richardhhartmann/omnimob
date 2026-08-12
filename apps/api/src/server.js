@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { prisma } from "./db.js";
 import { adminRouter } from "./routes/adminRoutes.js";
 import { aiRouter } from "./routes/aiRoutes.js";
 import { authRouter } from "./routes/authRoutes.js";
@@ -39,13 +40,53 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
    lista, e só ela. */
 const ehProducao = process.env.NODE_ENV === "production";
 
+/* ─── Domínios próprios das imobiliárias ─────────────────────────────────────
+   Quando uma imobiliária traz o domínio dela, a vitrine passa a ser servida em
+   `imobiliaria.com.br` e o navegador chama a API com ESSA origem — que não está
+   (nem poderia estar) na lista fixa do ALLOWED_ORIGINS.
+
+   Consultar o banco a cada preflight seria caro: hoje uma consulta trivial leva
+   ~900 ms em produção, e preflight acontece antes de praticamente toda
+   requisição. Então mantemos a lista em memória e recarregamos por tempo.
+
+   A janela é curta porque o custo de estar desatualizado é assimétrico: um
+   domínio recém-ativado que ainda não entrou no cache só falha por menos de um
+   minuto, enquanto um cache longo faria a vitrine do cliente parecer quebrada
+   logo depois de ele configurar tudo certo. */
+const JANELA_DOMINIOS_MS = 60_000;
+let dominiosCache = { em: 0, lista: [] };
+
+async function dominiosDeClientes() {
+  if (Date.now() - dominiosCache.em < JANELA_DOMINIOS_MS) return dominiosCache.lista;
+  try {
+    const linhas = await prisma.tenant.findMany({
+      where: { dominioStatus: "ATIVO", dominioProprio: { not: null }, ativo: true },
+      select: { dominioProprio: true },
+    });
+    // Cada domínio vale por si e pelo www — a Vercel serve os dois, e o cliente
+    // pode ter divulgado qualquer um dos dois.
+    const lista = linhas.flatMap((l) => [
+      `https://${l.dominioProprio}`,
+      `https://www.${l.dominioProprio}`,
+    ]);
+    dominiosCache = { em: Date.now(), lista };
+    return lista;
+  } catch (erro) {
+    // Banco fora do ar não pode derrubar o CORS de quem já estava na lista fixa:
+    // devolvemos o último cache conhecido e seguimos.
+    console.warn(`[cors] não consegui recarregar domínios de clientes: ${erro.message}`);
+    return dominiosCache.lista;
+  }
+}
+
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: async (origin, callback) => {
       if (!origin) return callback(null, true);
 
       if (!ehProducao && /^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
+      if ((await dominiosDeClientes()).includes(origin)) return callback(null, true);
       // Diagnóstico: sem isto, "Not allowed by CORS" não diz qual origem chegou
       // nem o que o servidor considera permitido — impossível de depurar no Render.
       console.warn(

@@ -185,7 +185,6 @@ function DefinirSenhaCard({ alvo, onConcluir, onCancelar }) {
       onSubmit={handleSubmit}
       error={error}
       saindo={saindo}
-      nota="// a senha fica salva com hash; absolutamente ninguém consegue vê-la"
     >
       <Field label="Nova senha" hint="Mínimo de 6 caracteres.">
         <input

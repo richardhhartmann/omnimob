@@ -21,8 +21,16 @@ import { useEffect } from "react";
    parte dos scrapers de preview), o caminho é pré-renderizar o HTML.
    ──────────────────────────────────────────────────────────────────────────── */
 
-const SITE = "https://omnimob.app";
-const IMAGEM_PADRAO = `${SITE}/og-image.png`;
+/* A origem é lida da janela, não fixada.
+
+   Desde que a vitrine pode viver no domínio da própria imobiliária, cravar
+   `https://omnimob.app` faria o canonical dela apontar para o NOSSO site —
+   dizendo ao Google, em toda página, que o conteúdo pertence a outro domínio.
+   Seria destruir exatamente o que o recurso promete entregar.
+
+   O fallback só existe para renderização fora do navegador. */
+const SITE = typeof window !== "undefined" ? window.location.origin : "https://omnimob.app";
+const IMAGEM_PADRAO = "https://omnimob.app/og-image.png";
 
 /** Cria a tag se não existir e devolve, para depois só mexer no conteúdo. */
 function tag(seletor, criar) {

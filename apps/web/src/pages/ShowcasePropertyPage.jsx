@@ -24,8 +24,10 @@ function isLancamento(createdAt) {
   return (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24) <= 30;
 }
 
-export function ShowcasePropertyPage() {
-  const { tenantSlug, propertyId } = useParams();
+export function ShowcasePropertyPage({ slugFixo }) {
+  /* Mesma história do ShowcasePage: em domínio próprio o slug vem do host. */
+  const { tenantSlug: slugDaRota, propertyId } = useParams();
+  const tenantSlug = slugFixo || slugDaRota;
   const [property, setProperty] = useState(null);
   const [tenant, setTenant] = useState(() => getCachedTenant(tenantSlug));
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -177,7 +179,7 @@ export function ShowcasePropertyPage() {
         : property?.title
           ? `${property.title}${local ? ` em ${local}` : ""}. Fotos, detalhes e contato direto com a imobiliária.`
           : "",
-    caminho: `/vitrine/${tenantSlug}/imovel/${propertyId}`,
+    caminho: slugFixo ? `/imovel/${propertyId}` : `/vitrine/${tenantSlug}/imovel/${propertyId}`,
     imagem: property?.images?.[0]?.url,
     tipo: "article",
   });

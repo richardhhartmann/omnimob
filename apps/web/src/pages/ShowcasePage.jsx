@@ -23,8 +23,11 @@ const SECTION_INNER_SEL = {
 };
 const STACK_BLOCK_ORDER = ["header", "title", "highlights", "properties", "footer"];
 
-export function ShowcasePage() {
-  const { tenantSlug } = useParams();
+export function ShowcasePage({ slugFixo }) {
+  /* Em domínio próprio não há slug na URL — ele vem resolvido do host, por
+     `slugFixo`. Nos endereços da Omnimob continua vindo da rota. */
+  const { tenantSlug: slugDaRota } = useParams();
+  const tenantSlug = slugFixo || slugDaRota;
   const location = useLocation();
   const [payload, setPayload] = useState(null);
   const [carouselIndexes, setCarouselIndexes] = useState({});
@@ -163,7 +166,9 @@ export function ShowcasePage() {
       (nomeVitrine
         ? `Veja os imóveis disponíveis na ${nomeVitrine}: fotos, localização e contato direto com a imobiliária.`
         : ""),
-    caminho: `/vitrine/${tenantSlug}`,
+    // Em domínio próprio a vitrine É a raiz do site; nos endereços da Omnimob
+    // ela vive sob /vitrine/:slug. O canonical precisa refletir o que vale ali.
+    caminho: slugFixo ? "/" : `/vitrine/${tenantSlug}`,
     // A primeira foto do acervo diz mais numa prévia de link do que a marca da
     // Omnimob, que não é a dona desta página.
     imagem: payload?.properties?.[0]?.images?.[0]?.url,

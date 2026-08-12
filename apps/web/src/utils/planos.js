@@ -13,6 +13,7 @@ export const PLANOS = [
     ia: false,
     redes: false,
     tour360: false,
+    dominio: false,
     descricao: "Para corretores autônomos e imobiliárias que estão começando a marcar presença digital.",
     cor: "#94a3b8",
   },
@@ -23,6 +24,7 @@ export const PLANOS = [
     ia: false,
     redes: true,
     tour360: true,
+    dominio: true,
     descricao: "Para imobiliárias em crescimento que querem divulgar nas redes e encantar clientes com tours 360°.",
     cor: "#6366f1",
   },
@@ -33,6 +35,7 @@ export const PLANOS = [
     ia: true,
     redes: true,
     tour360: true,
+    dominio: true,
     descricao: "Voltado para imobiliárias de alto padrão que buscam produtividade máxima com inteligência artificial.",
     cor: "#d4af37",
   },
@@ -51,6 +54,7 @@ export const RECURSOS_PLANOS = [
   { label: "Tudo do Plano Básico", plans: ["PROFISSIONAL"] },
   { label: "Divulgação automática em redes sociais", plans: ["PROFISSIONAL"] },
   { label: "Tour virtual 360°", plans: ["PROFISSIONAL"] },
+  { label: "Domínio próprio da imobiliária na vitrine", plans: ["PROFISSIONAL"] },
   { label: "Tudo do Plano Profissional", plans: ["PREMIUM"] },
   { label: "Geração de conteúdo por IA", plans: ["PREMIUM"] },
 ];
@@ -73,6 +77,11 @@ export function planoLiberaIA(plano) {
 // Divulgação em redes liberada? (Profissional ou Premium)
 export function planoLiberaRedes(plano) {
   return planoInfo(plano).redes;
+}
+
+// Domínio próprio da vitrine liberado? (Profissional ou Premium)
+export function planoLiberaDominio(plano) {
+  return planoInfo(plano).dominio;
 }
 
 // Tour virtual 360° liberado? (Profissional ou Premium)

@@ -20,6 +20,13 @@ export function requirePlano(minNivel, nomePlano) {
 export const requirePlanoRedes = requirePlano(1, "Profissional");
 export const requirePlanoIA = requirePlano(2, "Premium");
 
+/* Domínio próprio da vitrine → Profissional+.
+   Não protege a leitura nem a remoção, de propósito: a tela precisa poder
+   MOSTRAR o recurso a quem está no Básico (é assim que ele vira convite para
+   assinar), e quem baixa de plano tem que continuar podendo desfazer o que
+   configurou — travar a saída prenderia o domínio da pessoa aqui dentro. */
+export const requirePlanoDominio = requirePlano(1, "Profissional");
+
 // Tour virtual 360° → Profissional+ (usado para validar o flag is360 nas imagens).
 export function planoPermiteTour360(plano) {
   return nivelDoPlano(plano) >= 1;
@@ -39,6 +46,7 @@ export function planoInfo(plano) {
     nivel,
     redes: nivel >= 1,
     tour360: nivel >= 1,
+    dominio: nivel >= 1,
     ia: nivel >= 2,
   };
 }

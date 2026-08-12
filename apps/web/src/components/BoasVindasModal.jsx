@@ -3,6 +3,7 @@ import { getTrialStatusCompartilhado } from "../utils/trialStatus";
 import { PLANOS } from "../utils/planos";
 import { IconeCheck, IconeEstrela } from "./Icones.jsx";
 import { PerfilInicialPasso, PERFIL_INICIAL_CSS } from "./PerfilInicialPasso.jsx";
+import { DominioVitrine } from "./DominioVitrine.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Boas-vindas de quem acabou de assinar, no primeiro acesso ao painel.
@@ -89,8 +90,12 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
   const [modo, setModo] = useState(null); // "assinante" | "teste"
   const [aberto, setAberto] = useState(false);
   const [saindo, setSaindo] = useState(false);
-  /* "boas-vindas" → "perfil". O segundo passo é a ficha da imobiliária, que
-     alimenta a vitrine; ver PerfilInicialPasso. */
+  /* "boas-vindas" → "perfil" → "dominio".
+
+     O segundo passo é a ficha da imobiliária, que alimenta a vitrine (ver
+     PerfilInicialPasso); o terceiro é o endereço em que ela vai viver (ver
+     DominioVitrine). Nenhum dos dois é obrigatório: pular a ficha leva ao
+     endereço, e pular o endereço mantém o da Omnimob, que já funciona. */
   const [passo, setPasso] = useState("boas-vindas");
 
   useEffect(() => {
@@ -182,9 +187,28 @@ ${PERFIL_INICIAL_CSS}`}</style>
             </p>
             <PerfilInicialPasso
               tenantSlug={tenantSlug}
-              aoConcluir={(campos) => { aoAtualizarTenant?.(campos); fechar(); }}
-              aoPular={fechar}
+              aoConcluir={(campos) => { aoAtualizarTenant?.(campos); setPasso("dominio"); }}
+              aoPular={() => setPasso("dominio")}
             />
+          </>
+        ) : passo === "dominio" ? (
+          <>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 3 DE 3</span>
+            <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">O endereço da sua vitrine</h2>
+            <p className="bv-texto bv-texto--fraco bv-texto--perfil">
+              Sua vitrine já está no ar no endereço da Omnimob. Se a sua imobiliária tem
+              domínio próprio, dá para trazer ele para cá — é o que recomendamos, porque as
+              buscas passam a somar para o seu domínio.
+            </p>
+
+            <DominioVitrine tenantSlug={tenantSlug} compacto />
+
+            {/* Sair sempre disponível: escolher endereço não pode virar pedágio
+                para entrar no painel. O padrão (endereço da Omnimob) já vale
+                sem nenhum clique, e a decisão continua em Configurações. */}
+            <button type="button" className="bv-botao" onClick={fechar}>
+              Concluir
+            </button>
           </>
         ) : (
         <>

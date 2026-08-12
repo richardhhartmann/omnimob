@@ -17,6 +17,7 @@ import { ConfiguracaoPage } from "./pages/ConfiguracaoPage";
 import { TiposImovelPage } from "./pages/TiposImovelPage";
 import { UsuariosPage } from "./pages/UsuariosPage";
 import { clearSession, loadSession, saveSession } from "./session";
+import { ehDominioDaOmnimob, slugDoDominioAtual } from "./utils/dominioVitrine";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { SuperAdminPage } from "./pages/SuperAdminPage";
 import { OmnimobLandingPage } from "./pages/OmnimobLandingPage";
@@ -30,6 +31,28 @@ export default function App() {
   });
   const location = useLocation();
   const DEFAULT_PUBLIC_SHOWCASE = "/vitrine/imobiliaria-centro";
+
+  /* ─── Vitrine em domínio próprio ────────────────────────────────────────────
+     Quando a imobiliária traz o domínio dela, a página abre em
+     `imobiliaria.com.br/` — sem slug em lugar nenhum da URL. O host é a única
+     pista de quem é aquela vitrine, e a tradução host → slug é a primeira coisa
+     que este componente faz.
+
+     `undefined` = ainda perguntando · `null` = é endereço da Omnimob ou não há
+     vitrine aqui · string = slug do dono. A distinção importa: renderizar a
+     landing enquanto a resposta não chegou faria a vitrine do cliente piscar a
+     página da Omnimob antes de aparecer. Em domínio da Omnimob a função nem vai
+     à rede, então essa espera não existe no caminho comum. */
+  const [slugDoDominio, setSlugDoDominio] = useState(() =>
+    ehDominioDaOmnimob() ? null : undefined,
+  );
+
+  useEffect(() => {
+    if (slugDoDominio !== undefined) return;
+    let vivo = true;
+    slugDoDominioAtual().then((s) => { if (vivo) setSlugDoDominio(s); });
+    return () => { vivo = false; };
+  }, [slugDoDominio]);
 
   const [adminSession, setAdminSession] = useState(() => {
     const a = loadAdminSession();
@@ -128,6 +151,35 @@ export default function App() {
   const cargo = session?.usuario?.cargo;
   const canAccessTenantPanel = Boolean(cargo?.acessarPainel || cargo?.editarPagina);
   const defaultPublicPath = session?.tenant?.slug ? `/vitrine/${session.tenant.slug}` : DEFAULT_PUBLIC_SHOWCASE;
+
+  // Ainda perguntando de quem é este domínio: não decide nada antes da resposta.
+  if (slugDoDominio === undefined) {
+    return <div style={{ minHeight: "100vh", background: "#0f172a" }} />;
+  }
+
+  /* Domínio da imobiliária: o site inteiro É a vitrine dela. As rotas do
+     produto (login, painel, editor) não existem aqui — quem entra por este
+     endereço é cliente da imobiliária, não usuário da Omnimob, e qualquer
+     caminho desconhecido volta para a home da vitrine em vez de oferecer um
+     login que não faz sentido nenhum para ele. */
+  if (slugDoDominio) {
+    return (
+      <Routes location={location}>
+        <Route path="/" element={<ShowcasePage slugFixo={slugDoDominio} />} />
+        <Route path="/imovel/:propertyId" element={<ShowcasePropertyPage slugFixo={slugDoDominio} />} />
+        {/* Os links internos da vitrine ainda montam `/vitrine/:slug/imovel/:id`
+            — é o caminho que existe nos endereços da Omnimob. Aceitá-los aqui
+            evita que navegar para um imóvel caia no catch-all e volte para a
+            home. O canonical continua sendo o caminho curto. */}
+        <Route path="/vitrine/:tenantSlug" element={<ShowcasePage slugFixo={slugDoDominio} />} />
+        <Route
+          path="/vitrine/:tenantSlug/imovel/:propertyId"
+          element={<ShowcasePropertyPage slugFixo={slugDoDominio} />}
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes location={location}>
