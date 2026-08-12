@@ -124,7 +124,25 @@ export default function App() {
           saveSession(next);
           setSession(next);
         })
-        .catch(() => {});
+        .catch((err) => {
+          /* 403 aqui significa uma coisa só: o token guardado é de OUTRO tenant
+             (o `requireTenant` compara o slug enviado com o tenantId do token).
+             Acontece ao trocar de imobiliária na mesma máquina — provisionar um
+             tenant novo e entrar nele, por exemplo.
+
+             Engolir esse erro deixava o painel de pé com uma sessão morta: cada
+             tela pedia seus dados e recebia 403, então nada carregava, nenhum
+             modal aparecia e a única pista era o console. Melhor derrubar a
+             sessão e mandar para o login, que é o que a pessoa faria de qualquer
+             jeito depois de dez minutos achando que o sistema quebrou.
+
+             Só no 403: 401 pode ser token expirado com renovação em curso, e
+             falha de rede não diz nada sobre a validade da sessão. */
+          if (err?.status === 403) {
+            clearSession();
+            setSession(null);
+          }
+        });
     }
 
     refreshPermissoes();

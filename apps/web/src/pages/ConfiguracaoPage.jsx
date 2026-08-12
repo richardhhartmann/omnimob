@@ -5,6 +5,7 @@ import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
 import { planoInfo, PLANOS } from "../utils/planos";
 import { useConfirm } from "../components/ConfirmModal";
 import { IconeCelular, IconeCheck, IconeEnvelope, IconeTelefone, IconeX } from "../components/Icones.jsx";
+import { DominioVitrine } from "../components/DominioVitrine.jsx";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -671,6 +672,22 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                 <input style={inputStyle} value={form.estado} onChange={(e) => set("estado", e.target.value.toUpperCase())} placeholder="SP" maxLength={2} />
               </Campo>
             </div>
+          </Secao>
+
+          {/* Endereço da vitrine. Fica no Perfil, junto de "Dados da Empresa",
+              porque é identidade da imobiliária — o endereço em que os clientes
+              dela vão encontrá-la — e não uma preferência de aparência.
+
+              É a mesma tela do passo 3 do primeiro acesso: quem pulou lá volta
+              aqui, e quem escolheu o endereço da Omnimob troca por um próprio
+              quando comprar o domínio. */}
+          <Secao cor="#d4af37" titulo="Endereço da vitrine" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M2 12h20" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          }>
+            <DominioVitrine tenantSlug={tenantSlug} />
           </Secao>
 
           {/* Fica no Perfil porque é uma preferência de QUEM está logado, não
