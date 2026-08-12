@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { getGlobalPrisma } from "./tenantRegistry.js";
+import { garantirSubdominioDaCasa } from "./dominioService.js";
 
 /**
  * ─── Provisioning Service ────────────────────────────────────────────────────
@@ -137,6 +138,16 @@ export async function provisionTenant(input = {}) {
       }`;
     }
   }
+
+  /* Endereço da casa: `<slug>.omnimob.app`.
+
+     Não bloqueia nem falha o provisionamento — a função engole o próprio erro.
+     Se a Vercel estiver fora do ar ou sem credencial, a imobiliária nasce do
+     mesmo jeito e continua acessível pelo caminho `/vitrine/<slug>`; o
+     subdomínio pode ser criado depois, em lote. Amarrar a criação do cliente à
+     disponibilidade de um serviço externo seria trocar um endereço bonito por
+     um cadastro que falha. */
+  await garantirSubdominioDaCasa(slug);
 
   return { tenant, adminCreated, adminLogin: login, adminSenha: senha, warning };
 }

@@ -270,6 +270,58 @@ export async function removerDominio(tenantId) {
   return { status: "OMNIMOB" };
 }
 
+/* ─── Subdomínio da casa: <slug>.omnimob.app ─────────────────────────────────
+   O caminho óbvio seria cadastrar `*.omnimob.app` como domínio curinga do
+   projeto. A Vercel aceita cadastrar, mas marca "Invalid Configuration" e exige
+   que o domínio use os nameservers DELA — e os nossos estão na Hostinger, onde
+   vivem os MX, o SPF, os três DKIM e, principalmente, o CNAME de
+   `api.omnimob.app` que aponta para o Render. Migrar nameserver por causa de um
+   endereço bonito arriscaria derrubar e-mail e API juntos.
+
+   O contorno tem duas partes:
+
+     1. UM registro DNS curinga na Hostinger (`*` → CNAME da Vercel), feito uma
+        vez, que faz qualquer subdomínio resolver para lá;
+
+     2. cada `<slug>.omnimob.app` cadastrado individualmente no projeto — que é
+        a mesma operação do domínio do cliente, e essa a Vercel faz com DNS
+        externo sem reclamar.
+
+   Como o DNS já resolve pelo curinga, a verificação passa na hora: não há
+   espera de propagação como no domínio do cliente.
+
+   Custo a vigiar: cada tenant ocupa um slot de domínio do projeto. Com curinga
+   seria um só — vale conferir o limite do plano antes de escalar.
+   ────────────────────────────────────────────────────────────────────────── */
+
+const RAIZ = process.env.VITRINE_DOMINIO_RAIZ || "omnimob.app";
+
+/**
+ * Garante que `<slug>.omnimob.app` esteja cadastrado no projeto da Vercel.
+ *
+ * Idempotente de propósito: é chamada no provisionamento e pode ser rodada de
+ * novo em lote sobre tenants antigos sem quebrar. Nunca lança — falhar aqui não
+ * pode impedir a criação da imobiliária, que é a operação importante. O
+ * endereço de caminho (`/vitrine/<slug>`) continua funcionando de qualquer
+ * forma, então o pior caso é o subdomínio não existir ainda.
+ */
+export async function garantirSubdominioDaCasa(slug) {
+  if (!dominioConfigurado() || !slug) return { ok: false, motivo: "não configurado" };
+
+  const host = `${slug}.${RAIZ}`;
+  try {
+    await vercel(`/v10/projects/${PROJETO}/domains`, { method: "POST", corpo: { name: host } });
+    return { ok: true, host, criado: true };
+  } catch (erro) {
+    // Já existir é sucesso: a intenção era garantir, não criar do zero.
+    if (erro.codigo === "domain_already_in_use" || erro.status === 409) {
+      return { ok: true, host, criado: false };
+    }
+    console.warn(`[dominio] não consegui cadastrar ${host} na Vercel: ${erro.message}`);
+    return { ok: false, host, motivo: erro.message };
+  }
+}
+
 /** Resolve o tenant a partir do host da requisição (vitrine em domínio próprio). */
 export async function tenantPorDominio(host) {
   const dominio = normalizarDominio(host);
