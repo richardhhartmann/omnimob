@@ -98,6 +98,10 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
      endereço, e pular o endereço mantém o da Omnimob, que já funciona. */
   const [passo, setPasso] = useState("boas-vindas");
 
+  /* O passo do endereço só libera o "Concluir" quando a escolha se fecha —
+     endereço da Omnimob aceito, ou domínio próprio já no ar. Ver o JSX. */
+  const [enderecoResolvido, setEnderecoResolvido] = useState(false);
+
   /* Enquanto a resposta não chega, a tela fica travada por um véu.
 
      `/me/trial` é caro: seis consultas ao banco mais uma ida ao Stripe pelos
@@ -238,14 +242,26 @@ ${PERFIL_INICIAL_CSS}`}</style>
               buscas passam a somar para o seu domínio.
             </p>
 
-            <DominioVitrine tenantSlug={tenantSlug} compacto />
+            <DominioVitrine
+              tenantSlug={tenantSlug}
+              compacto
+              aoConcluir={() => setEnderecoResolvido(true)}
+              aoAtualizarTenant={aoAtualizarTenant}
+            />
 
-            {/* Sair sempre disponível: escolher endereço não pode virar pedágio
-                para entrar no painel. O padrão (endereço da Omnimob) já vale
-                sem nenhum clique, e a decisão continua em Configurações. */}
-            <button type="button" className="bv-botao" onClick={fechar}>
-              Concluir
-            </button>
+            {/* O botão só aparece quando a escolha chegou ao fim: ou a pessoa
+                optou pelo endereço da Omnimob, ou o domínio dela já está no ar.
+
+                No meio do caminho ele atrapalhava — quem estava esperando o DNS
+                via um "Concluir" ao lado do aviso de que ainda faltava algo, e
+                a leitura natural era que dava para sair dali com tudo pronto.
+                Sem botão, a única saída é resolver ou trocar de opção, que é o
+                que a tela quer. Fechar o modal continua possível pelo Esc. */}
+            {enderecoResolvido ? (
+              <button type="button" className="bv-botao bv-botao--espacado" onClick={fechar}>
+                Concluir
+              </button>
+            ) : null}
           </>
         ) : (
         <>
@@ -358,6 +374,10 @@ ${PERFIL_INICIAL_CSS}`}</style>
 }
 
 const CSS = `
+/* Descola o botão do bloco acima. No passo do endereço ele vem logo depois de
+   uma tabela de registros DNS, e colado dava a impressão de fazer parte dela. */
+.bv-botao--espacado { margin-top: 18px; }
+
 /* Espera enquanto /me/trial responde. Sem animação de entrada: ele aparece no
    primeiro quadro, porque o que ele impede é justamente o clique apressado. */
 .bv-espera {

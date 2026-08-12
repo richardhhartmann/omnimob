@@ -12,16 +12,42 @@ import { api } from "../api";
    descobrir o óbvio, e em produção cada ida à API custa caro.
    ──────────────────────────────────────────────────────────────────────────── */
 
+const DOMINIO_RAIZ = import.meta.env?.VITE_DOMINIO_RAIZ || "omnimob.app";
+
+/* Subdomínios reservados: são endereços do produto, não de vitrine. A lista
+   espelha `SLUGS_RESERVADOS` do backend, que impede um tenant de nascer com
+   qualquer um destes slugs — sem essa simetria, `app.omnimob.app` procuraria
+   uma imobiliária chamada "app". */
+const RESERVADOS = new Set(["www", "api", "app", "admin", "painel", "static", "cdn", "mail"]);
+
 const NOSSOS = [
   /^localhost$/,
   /^127\.0\.0\.1$/,
-  /^omnimob\.app$/,
-  /^www\.omnimob\.app$/,
   /\.vercel\.app$/, // pré-visualizações de deploy
 ];
 
+/**
+ * O slug embutido no host, quando ele é um subdomínio de vitrine.
+ * `imobiliaria.omnimob.app` → "imobiliaria" · `omnimob.app` → null
+ *
+ * Vale mais que a consulta por domínio próprio: o slug já está no endereço,
+ * então não há ida à rede nenhuma para descobrir de quem é a página.
+ */
+export function slugDoSubdominio(host = window.location.hostname) {
+  const h = String(host || "").toLowerCase();
+  if (!h.endsWith(`.${DOMINIO_RAIZ}`)) return null;
+  const rotulo = h.slice(0, -(DOMINIO_RAIZ.length + 1));
+  // Só um nível: `a.b.omnimob.app` não é vitrine de ninguém.
+  if (!rotulo || rotulo.includes(".") || RESERVADOS.has(rotulo)) return null;
+  return rotulo;
+}
+
 export function ehDominioDaOmnimob(host = window.location.hostname) {
-  return NOSSOS.some((r) => r.test(String(host || "").toLowerCase()));
+  const h = String(host || "").toLowerCase();
+  if (h === DOMINIO_RAIZ) return true;
+  if (NOSSOS.some((r) => r.test(h))) return true;
+  // Subdomínio reservado (www, api…) também é endereço nosso, não vitrine.
+  return h.endsWith(`.${DOMINIO_RAIZ}`) && slugDoSubdominio(h) === null;
 }
 
 /**
@@ -34,6 +60,13 @@ export function ehDominioDaOmnimob(host = window.location.hostname) {
  */
 export async function slugDoDominioAtual() {
   const host = window.location.hostname;
+
+  /* Subdomínio nosso responde na hora: o slug É o rótulo. Perguntar ao servidor
+     algo que está escrito no endereço só adicionaria latência — e latência aqui
+     atrasa a primeira pintura da vitrine. */
+  const doSubdominio = slugDoSubdominio(host);
+  if (doSubdominio) return doSubdominio;
+
   if (ehDominioDaOmnimob(host)) return null;
   try {
     const r = await api.slugPorDominio(host);

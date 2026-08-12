@@ -111,7 +111,15 @@ export async function provisionTenant(input = {}) {
       await prisma.usuario.create({
         data: {
           login,
-          nome: `Admin ${name}`,
+          /* Só "Administrador", sem o nome da imobiliária.
+
+             Era `Admin ${name}`, e isso repetia a imobiliária dentro do nome da
+             PESSOA: no painel, a barra lateral já diz de quem é a conta no topo,
+             e embaixo aparecia "Admin Dev" — o mesmo nome duas vezes na mesma
+             tela, uma delas no lugar onde deveria estar quem está usando o
+             sistema. Quem assume a conta troca por gente de verdade em
+             Configurações; até lá, o cargo basta. */
+          nome: "Administrador",
           senha: senhaHash,
           tenantId: tenant.id,
           cargoCodigo: cargo.id,

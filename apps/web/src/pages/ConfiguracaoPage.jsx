@@ -32,6 +32,91 @@ function formatCep(v) {
   return `${d.slice(0, 5)}-${d.slice(5)}`;
 }
 
+/* Esqueleto da tela de Configurações.
+
+   Substitui um "Carregando configurações..." centralizado. A frase informava,
+   mas empurrava a página inteira para baixo e depois a puxava de volta quando
+   os dados chegavam — e nesta API, com os segundos de latência que ela tem, o
+   salto era longo o suficiente para a pessoa clicar no lugar errado.
+
+   O esqueleto ocupa desde já a forma que o conteúdo vai ter: três blocos com
+   cabeçalho e campos, nas mesmas medidas das seções reais. Quando os dados
+   entram, nada se move.
+
+   Não é uma cópia fiel de cada seção de propósito: manter duas árvores em
+   sincronia daria trabalho a cada campo novo, e ninguém lê um esqueleto — o
+   que importa é a silhueta e a altura. */
+function Linha({ largura = "100%", altura = 12, raio = 6 }) {
+  return <div className="cfg-esq__linha" style={{ width: largura, height: altura, borderRadius: raio }} />;
+}
+
+function EsqueletoConfiguracoes() {
+  return (
+    <div className="cfg-esq" aria-busy="true" aria-label="Carregando configurações">
+      <style>{ESQUELETO_CSS}</style>
+      {[0, 1, 2].map((i) => (
+        <div className="cfg-esq__secao" key={i}>
+          <div className="cfg-esq__cab">
+            <div className="cfg-esq__icone" />
+            <Linha largura="140px" altura={13} />
+          </div>
+          <div className="cfg-esq__corpo">
+            {/* Dois campos por linha, como o formulário real. */}
+            <div className="cfg-esq__par">
+              <div><Linha largura="72px" altura={9} /><Linha altura={38} raio={10} /></div>
+              <div><Linha largura="90px" altura={9} /><Linha altura={38} raio={10} /></div>
+            </div>
+            <div><Linha largura="64px" altura={9} /><Linha altura={38} raio={10} /></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const ESQUELETO_CSS = `
+.cfg-esq { display: flex; flex-direction: column; gap: 16px; }
+.cfg-esq__secao {
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px; overflow: hidden;
+}
+.cfg-esq__cab {
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.cfg-esq__icone {
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  background: rgba(255,255,255,0.06);
+}
+.cfg-esq__corpo { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+.cfg-esq__corpo > div { display: flex; flex-direction: column; gap: 6px; }
+.cfg-esq__par { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .cfg-esq__par { grid-template-columns: 1fr; } }
+
+/* O brilho corre da esquerda para a direita sobre um fundo fixo. Animar
+   \`background-position\` numa faixa larga custa menos que animar opacidade em
+   dezenas de elementos, e o movimento único mantém a leitura de "isto ainda
+   está chegando" em vez de "isto está piscando". */
+.cfg-esq__linha {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.05) 0%,
+    rgba(255,255,255,0.09) 40%,
+    rgba(255,255,255,0.05) 80%
+  );
+  background-size: 300% 100%;
+  animation: cfg-esq-brilho 1.4s ease-in-out infinite;
+}
+@keyframes cfg-esq-brilho {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+/* Sem movimento: fica o bloco parado, que já comunica a espera pela forma. */
+@media (prefers-reduced-motion: reduce) {
+  .cfg-esq__linha { animation: none; }
+}
+`;
+
 // ─── Primitivos ───────────────────────────────────────────────────────────────
 
 function Campo({ label, hint, children }) {
@@ -531,13 +616,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
     finally { setCepLoading(false); }
   }
 
-  if (loading) {
-    return (
-      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "18px", padding: "64px", textAlign: "center", color: "var(--text-muted)" }}>
-        Carregando configurações...
-      </div>
-    );
-  }
+  if (loading) return <EsqueletoConfiguracoes />;
 
   const saveIndicator = {
     idle: null,
@@ -687,7 +766,11 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
             </svg>
           }>
-            <DominioVitrine tenantSlug={tenantSlug} />
+            <DominioVitrine
+              tenantSlug={tenantSlug}
+              aoAtualizarTenant={(campos) =>
+                onSessionUpdate?.({ ...session, tenant: { ...session.tenant, ...campos } })}
+            />
           </Secao>
 
           {/* Fica no Perfil porque é uma preferência de QUEM está logado, não

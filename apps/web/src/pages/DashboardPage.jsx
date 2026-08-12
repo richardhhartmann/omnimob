@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import {
   Buildings,
@@ -125,7 +126,8 @@ function HomePage({ session }) {
       icon: <ArrowSquareOut size={32} weight="duotone" />,
       title: "Ver página",
       description: "Veja sua página pública como um cliente veria.",
-      onClick: () => window.open(`/vitrine/${tenantSlug}`, "_blank"),
+      // Endereço público de verdade: domínio da imobiliária quando existe.
+      onClick: () => window.open(baseDaVitrine(session?.tenant), "_blank"),
       accent: "#475569",
     },
   ].filter(Boolean);

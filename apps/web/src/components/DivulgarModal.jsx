@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { linkDoImovel } from "../utils/enderecoVitrine";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
@@ -60,7 +61,9 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
       property.parkingSpots ? `${property.parkingSpots} vaga${property.parkingSpots !== 1 ? "s" : ""}` : "",
     ].filter(Boolean).join(" · ");
     const atribs = property.atributos?.map((a) => a.atributo?.descricao).filter(Boolean) || [];
-    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${property.id}`;
+    /* Link que vai para o cliente final: precisa ser o endereço público real —
+       o domínio da imobiliária quando ela tem um. */
+    const vitrineUrl = linkDoImovel(property.id);
     const whatsapp = session?.tenant?.whatsapp || "";
     const lines = [
       `🏠 ${property.title}`,
@@ -171,7 +174,9 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
   }
 
   function handleWhatsApp() {
-    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${property.id}`;
+    /* Link que vai para o cliente final: precisa ser o endereço público real —
+       o domínio da imobiliária quando ela tem um. */
+    const vitrineUrl = linkDoImovel(property.id);
     const text = captions.whatsapp || `🏠 ${property.title}\n🔗 ${vitrineUrl}`;
     shareWhatsapp({ text, imageUrls: coverUrls, title: property.title });
   }

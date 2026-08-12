@@ -54,6 +54,12 @@ function montarSessao(usuario) {
       showcaseConfig: usuario.tenant.showcaseConfig,
       plano: (usuario.tenant.plano || "BASICO").toUpperCase(),
       autoGerarIA: usuario.tenant.autoGerarIA,
+      /* Endereço público da vitrine. Vai na sessão porque TODO link para ela —
+         "Ver página", copiar link, o que vai no post de divulgação — precisa
+         apontar para o domínio da imobiliária quando ele existe. Sem isto cada
+         tela teria de buscar o domínio por conta própria, e alguma esqueceria. */
+      dominioProprio: usuario.tenant.dominioProprio,
+      dominioStatus: usuario.tenant.dominioStatus,
     },
   };
 }

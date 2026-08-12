@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { linkDoImovel } from "../utils/enderecoVitrine";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
@@ -1440,7 +1441,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
     const atribs = tipoSel?.atributos
       ?.filter((a) => form.atributosIds.includes(a.id))
       .map((a) => a.descricao) || [];
-    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
+    const vitrineUrl = linkDoImovel(savedPropertyId);
     const whatsapp = session?.tenant?.whatsapp || "";
 
     const contratoLabel = tipoContratoInfo(form.tipoContrato)?.label || "";
@@ -2328,7 +2329,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
   }
 
   function handleWhatsApp() {
-    const vitrineUrl = `${window.location.origin}/vitrine/${tenantSlug}/imovel/${savedPropertyId}`;
+    const vitrineUrl = linkDoImovel(savedPropertyId);
     const text = captions.whatsapp || `🏠 ${form.title}\n🔗 ${vitrineUrl}`;
     shareWhatsapp({ text, imageUrls: coverUrls, title: form.title });
   }

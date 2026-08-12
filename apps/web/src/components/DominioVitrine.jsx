@@ -24,7 +24,14 @@ import { api } from "../api";
    caractere digitado à mão é uma chance de errar e culpar o sistema.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
+/* `aoAtualizarTenant` mantém a SESSÃO em dia com o endereço.
+
+   Sem ele, configurar o domínio não mudava nada fora desta tela: o
+   `baseDaVitrine` lê da sessão, e a sessão só é montada no login — o
+   `/api/auth/me` devolve o usuário, nunca o tenant. Então "Ver página",
+   "Copiar link" e os links de divulgação continuavam apontando para o endereço
+   da Omnimob até a pessoa sair e entrar de novo, sem nenhuma pista do porquê. */
+export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtualizarTenant }) {
   const [estado, setEstado] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [escolha, setEscolha] = useState(null); // "omnimob" | "proprio"
@@ -41,10 +48,16 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
         setDominio(r.dominio || "");
         // Quem já tem domínio cai direto na tela dele; quem não tem escolhe.
         setEscolha(r.dominio ? "proprio" : null);
+        // Domínio já no ar é escolha resolvida — quem abre a tela de novo não
+        // deve ficar sem saída porque a decisão foi tomada da vez passada.
+        aoAtualizarTenant?.({ dominioProprio: r.dominio || null, dominioStatus: r.status });
+        if (r.status === "ATIVO") aoConcluir?.("proprio");
       })
       .catch(() => setEstado(null))
       .finally(() => setCarregando(false));
-  }, [tenantSlug]);
+    // `aoConcluir` fica fora das deps de propósito: o pai costuma passar uma
+    // função nova a cada render, e incluí-la refaria a requisição sem parar.
+  }, [tenantSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(carregar, [carregar]);
 
@@ -55,6 +68,7 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
     try {
       const r = await api.definirDominio(tenantSlug, dominio);
       setEstado((s) => ({ ...s, ...r }));
+      aoAtualizarTenant?.({ dominioProprio: r.dominio || null, dominioStatus: r.status });
     } catch (err) {
       setErro(err.message || "Não consegui cadastrar o domínio.");
     } finally {
@@ -68,6 +82,10 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
     try {
       const r = await api.verificarDominio(tenantSlug);
       setEstado((s) => ({ ...s, ...r }));
+      aoAtualizarTenant?.({ dominioProprio: r.dominio || null, dominioStatus: r.status });
+      // Avisa quem hospeda esta tela (o modal de primeiro acesso) que a escolha
+      // chegou ao fim — é o gatilho do botão de concluir.
+      if (r.status === "ATIVO") aoConcluir?.("proprio");
       if (r.status !== "ATIVO") {
         setErro("O DNS ainda não respondeu. Isso leva de alguns minutos a algumas horas — pode fechar e voltar depois.");
       }
@@ -83,6 +101,7 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
     setEnviando(true);
     try {
       await api.removerDominio(tenantSlug);
+      aoAtualizarTenant?.({ dominioProprio: null, dominioStatus: "OMNIMOB" });
       setDominio("");
       setEscolha("omnimob");
       carregar();
@@ -180,6 +199,11 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
             <span className="dv-pulso" aria-hidden="true" />
             Aguardando o DNS de <strong>{estado.dominio}</strong>
           </div>
+
+          {/* Cadastrar não prova posse — quem prova é o DNS. Se o domínio já
+              aponta para algum lugar, a pessoa precisa saber ANTES de mexer no
+              registrador, porque a troca derruba o que estiver no ar lá. */}
+          {estado.aviso ? <p className="dv-aviso">{estado.aviso}</p> : null}
 
           <p className="dv-texto">
             Entre no painel onde você registrou o domínio (Registro.br, GoDaddy, Hostinger…) e
@@ -319,6 +343,13 @@ const CSS = `
 .dv-ajuda { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.55); }
 .dv-ajuda code, .dv-texto code { font-size: 11.5px; }
 .dv-erro { margin: 0; font-size: 12.5px; line-height: 1.5; color: #fca5a5; }
+/* Aviso, não erro: o cadastro deu certo — o que está em jogo é o site que já
+   existe no endereço, e a pessoa precisa decidir de olhos abertos. */
+.dv-aviso {
+  margin: 0; padding: 10px 12px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.5; color: #e8c96a;
+  background: rgba(212,175,55,0.10); border: 1px solid rgba(212,175,55,0.28);
+}
 
 /* Tabela de registros. Rola no eixo X em vez de quebrar o valor do CNAME:
    valor de DNS partido em duas linhas é copiado errado. */

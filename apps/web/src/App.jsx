@@ -120,6 +120,18 @@ export default function App() {
       if (!s?.token || !s?.tenant?.slug) return;
       api.getMe(s.tenant.slug)
         .then((usuario) => {
+          /* A sessão pode ter acabado enquanto esta resposta vinha.
+
+             Sem esta guarda, sair da conta com um `getMe` em voo ressuscitava
+             a sessão: a resposta chegava depois do logout e o `.then` gravava
+             tudo de volta no localStorage e no estado — a pessoa era devolvida
+             ao painel e tinha que sair de novo. Como este efeito também roda a
+             cada foco da janela, e a API leva segundos, a corrida acontecia
+             sempre.
+
+             Comparar o token resolve: se ele mudou (ou sumiu), esta resposta é
+             de uma sessão que não existe mais e deve ser descartada. */
+          if (sessionRef.current?.token !== s.token) return;
           const next = { ...s, usuario };
           saveSession(next);
           setSession(next);
@@ -138,7 +150,9 @@ export default function App() {
 
              Só no 403: 401 pode ser token expirado com renovação em curso, e
              falha de rede não diz nada sobre a validade da sessão. */
-          if (err?.status === 403) {
+          // Mesma guarda: 403 de uma sessão que já foi embora não derruba a
+          // sessão nova de quem acabou de entrar com outra conta.
+          if (err?.status === 403 && sessionRef.current?.token === s.token) {
             clearSession();
             setSession(null);
           }

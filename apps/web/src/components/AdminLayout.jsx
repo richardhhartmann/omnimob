@@ -3,6 +3,8 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { TrialAviso } from "./TrialAviso";
 import { BoasVindasModal } from "./BoasVindasModal";
+import { baseDaVitrine } from "../utils/enderecoVitrine";
+import { planoInfo } from "../utils/planos";
 import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
 import { TourDeTela } from "./TourDeTela";
 import { AjudaModal } from "./AjudaModal";
@@ -75,6 +77,22 @@ function SideTooltip({ label, collapsed, children }) {
   );
 }
 
+/* Selo do plano contratado, no alto da sidebar.
+
+   Fica ao lado do nome da imobiliária porque responde uma pergunta de
+   identidade — "que Omnimob é esta?" — e não de navegação. Quem opera o painel
+   precisa saber disso de relance: metade das telas esconde recurso por plano, e
+   sem o selo a ausência de um botão parece defeito em vez de limite do plano. */
+function SeloPlano({ plano }) {
+  const info = planoInfo(plano);
+  if (!info) return null;
+  return (
+    <span className="ds-plano" style={{ "--plano": info.cor }} title={`Plano ${info.nome}`}>
+      {info.nome}
+    </span>
+  );
+}
+
 // ── Item de navegação ──────────────────────────────────────────────────────────
 /* `tourId` vira `data-tour` no elemento. É o gancho que o tour guiado usa para
    achar o item — nomeado de propósito, em vez de seletor estrutural: um
@@ -96,7 +114,16 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
     </>
   );
 
-  const el = href ? (
+  /* Endereço absoluto sai do domínio do painel — é o caso da vitrine em domínio
+     próprio. `<Link>` faz navegação de rota e trataria "https://..." como
+     caminho a resolver dentro do app; âncora comum é o que sai daqui de fato. */
+  const externo = typeof href === "string" && /^https?:\/\//.test(href);
+
+  const el = externo ? (
+    <a href={href} className={cls} data-tour={tourId} target="_blank" rel="noreferrer">
+      {content}
+    </a>
+  ) : href ? (
     <Link to={href} className={cls} data-tour={tourId} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}>
       {content}
     </Link>
@@ -171,8 +198,15 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);
 
-  // ── Links ─────────────────────────────────────────────────────────────────────
-  const showcaseLink       = useMemo(() => tenantSlug ? `/vitrine/${tenantSlug}`         : "#", [tenantSlug]);
+  /* ── Links ────────────────────────────────────────────────────────────────
+     "Ver página" leva ao endereço PÚBLICO da vitrine — o domínio da
+     imobiliária, quando ela tem um. É o endereço que ela divulga e que os
+     clientes conhecem; mandar para o caminho interno mostraria o mesmo
+     conteúdo, mas ensinaria o endereço errado a quem for copiar da barra.
+
+     O editor é o oposto: vive no painel da Omnimob e não existe no domínio do
+     cliente, então continua sendo caminho interno. */
+  const showcaseLink       = useMemo(() => (tenantSlug ? baseDaVitrine(session?.tenant) : "#"), [tenantSlug, session?.tenant]);
   const showcaseEditorLink = useMemo(() => tenantSlug ? `/vitrine/${tenantSlug}/editar`  : "#", [tenantSlug]);
 
   // ── Estado ativo ──────────────────────────────────────────────────────────────
@@ -324,10 +358,21 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 : tenantName.charAt(0).toUpperCase()}
             </div>
             {!c ? (
-              <div className="ds-head__text">
-                <span className="ds-head__name">{tenantName}</span>
-                {tenantSlug ? <span className="ds-head__slug">/{tenantSlug}</span> : null}
-              </div>
+              <>
+                {/* Só o nome. O slug era detalhe de endereço num lugar que
+                    responde "de quem é este painel" — e com o selo do plano ao
+                    lado, três informações empilhadas em 56px de altura viravam
+                    ruído. Quem precisa do endereço tem "Ver página" no menu e a
+                    seção de endereço em Configurações. */}
+                <div className="ds-head__text">
+                  <span className="ds-head__name">{tenantName}</span>
+                </div>
+                {/* Selo do plano. Some com a sidebar recolhida: ali sobram 28px
+                    e a marca tem prioridade. A cor vem de `planos.js`, a mesma
+                    que a landing e o painel super-admin usam — plano é uma só
+                    ideia no produto e deve ter uma só aparência. */}
+                <SeloPlano plano={session?.tenant?.plano} />
+              </>
             ) : null}
           </div>
 
@@ -508,6 +553,22 @@ const CSS = `
 .ds-mark.has-logo { background: transparent; }
 .ds-mark img { width: 100%; height: 100%; object-fit: contain; }
 .ds-head__text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+/* Pílula do plano. O margin-left auto empurra para a direita sem depender de
+   ninguém no meio; o flex-shrink zero impede que ela vire "Premi…" quando o
+   nome da imobiliária é comprido — quem encolhe é o nome, que tem reticências.
+   (Sem crases neste comentário: ele vive dentro de um template literal.)
+
+   A cor vem do próprio plano (planos.js), a mesma que a landing e o painel
+   super-admin usam: plano é uma ideia só no produto e merece uma aparência só. */
+.ds-plano {
+  margin-left: auto; flex-shrink: 0;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--plano);
+  background: color-mix(in srgb, var(--plano) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--plano) 34%, transparent);
+  line-height: 1.5; white-space: nowrap;
+}
 .ds-head__name {
   font-size: 13px; font-weight: 600; color: var(--s-strong); letter-spacing: -0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

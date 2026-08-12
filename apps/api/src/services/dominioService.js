@@ -160,6 +160,36 @@ export async function cadastrarDominio(tenantId, bruto) {
   const registros = instrucoes(dominio, info);
   const verificado = Boolean(info?.verified);
 
+  /* Para onde este domínio aponta HOJE.
+
+     Cadastrar não é provar posse: a Vercel aceita qualquer nome e marca como
+     não verificado — quem prova é o registro DNS, que só quem tem a senha do
+     registrador consegue criar. Ou seja, digitar o domínio de outra empresa
+     "passa", e por isso nada acontece com ele.
+
+     O que faltava era dizer isso. Sem aviso, o cadastro parece ter funcionado
+     e a pessoa fica esperando uma vitrine que nunca vai aparecer — ou, pior,
+     descobre tarde demais que o endereço já era de um site no ar e que
+     concluir a configuração vai derrubá-lo. */
+  let aviso = null;
+  if (!verificado) {
+    try {
+      const dns = await import("node:dns/promises");
+      const [ips, cnames] = await Promise.all([
+        dns.resolve4(dominio).catch(() => []),
+        dns.resolveCname(dominio).catch(() => []),
+      ]);
+      if (ips.length || cnames.length) {
+        aviso =
+          `Atenção: ${dominio} já aponta para outro servidor hoje` +
+          `${ips.length ? ` (${ips[0]})` : ""}. Se existe um site nesse endereço, ` +
+          `ele sai do ar quando você trocar o DNS para cá.`;
+      }
+    } catch {
+      /* Falha de DNS aqui é só a perda do aviso — o cadastro continua válido. */
+    }
+  }
+
   await prisma.tenant.update({
     where: { id: tenantId },
     data: {
@@ -170,7 +200,7 @@ export async function cadastrarDominio(tenantId, bruto) {
     },
   });
 
-  return { dominio, status: verificado ? "ATIVO" : "PENDENTE", registros };
+  return { dominio, status: verificado ? "ATIVO" : "PENDENTE", registros, aviso };
 }
 
 /** Pergunta à Vercel se o DNS já aponta, e atualiza o tenant. */

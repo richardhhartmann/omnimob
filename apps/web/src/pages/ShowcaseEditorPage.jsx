@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { api } from "../api";
@@ -1955,15 +1956,17 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           </button>
 
           {/* Copiar link */}
-          <button type="button" className="button-secondary" onClick={() => { navigator.clipboard.writeText(window.location.origin + "/vitrine/" + tenantSlug); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }} title="Copiar link da vitrine" style={{ color: linkCopied ? "#4ade80" : undefined, transition: "color 0.3s" }}>
+          <button type="button" className="button-secondary" onClick={() => { navigator.clipboard.writeText(baseDaVitrine()); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }} title="Copiar link da vitrine" style={{ color: linkCopied ? "#4ade80" : undefined, transition: "color 0.3s" }}>
             {linkCopied
                   ? <><IconeCheck size={13} /> Link copiado!</>
                   : <><IconeLink size={13} /> Copiar Link</>}
           </button>
 
-          <Link className="link-button" to={`/vitrine/${tenantSlug}`} target="_blank" style={{ padding: "8px 14px" }}>
+          {/* Âncora, não <Link>: em domínio próprio o endereço é absoluto e sai
+              do app — o Link tentaria resolver como rota interna. */}
+          <a className="link-button" href={baseDaVitrine()} target="_blank" rel="noreferrer" style={{ padding: "8px 14px" }}>
             Ver Página
-          </Link>
+          </a>
         </div>
       </div>
 
