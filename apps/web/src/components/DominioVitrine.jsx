@@ -155,7 +155,11 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtu
               Usar o domínio da minha imobiliária
               <em className="dv-tag">recomendado</em>
             </span>
-            <span className="dv-opcao__end">imobiliaria.com.br</span>
+            {/* Exemplo com o nome DELA, não um genérico. "imobiliaria.com.br"
+                é abstrato o bastante para a pessoa não reconhecer que aquilo é
+                o lugar do próprio domínio; com o slug ali, a frase vira uma
+                pergunta concreta — "é esse mesmo o meu endereço?". */}
+            <span className="dv-opcao__end">{(estado?.slug || tenantSlug) || "imobiliaria"}.com.br</span>
             <span className="dv-opcao__nota">
               {bloqueadoNoPlano
                 ? "Disponível a partir do plano Profissional."

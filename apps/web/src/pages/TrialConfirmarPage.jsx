@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { enderecoVisivel, baseDaVitrine } from "../utils/enderecoVitrine";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { OmnimobStyles, LOGO_LOCKUP_HEADER_SRC } from "../styles/omnimobKit";
@@ -46,7 +47,7 @@ export function TrialConfirmarPage() {
     const texto = `Omnimob — acesso de teste
 Usuário: ${dados.login}
 Senha: ${dados.senha}
-Vitrine: ${window.location.origin}/vitrine/${dados.slug}`;
+Vitrine: ${baseDaVitrine({ slug: dados.slug })}`;
     try {
       await navigator.clipboard.writeText(texto);
       setCopiado(true);
@@ -108,7 +109,12 @@ Vitrine: ${window.location.origin}/vitrine/${dados.slug}`;
               </div>
               <div className="tm-linha">
                 <span className="tm-chave dl-mono">VITRINE</span>
-                <code className="tm-valor">/vitrine/{dados.slug}</code>
+                {/* Endereço vindo da mesma função que monta os links do painel
+                    e dos e-mails. Era `/vitrine/{slug}` escrito à mão, e ficou
+                    para trás quando o subdomínio entrou — esta é a primeira
+                    tela que a pessoa vê depois de confirmar o e-mail, então o
+                    endereço errado aqui é o primeiro que ela decora. */}
+                <code className="tm-valor">{enderecoVisivel(dados.slug)}</code>
               </div>
             </div>
 
