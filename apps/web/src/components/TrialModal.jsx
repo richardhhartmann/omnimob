@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { enderecoVisivel } from "../utils/enderecoVitrine";
+import { provedorDoEmail } from "../utils/provedorEmail";
 import { formatPhone } from "../utils/masks";
 import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { MODAL_CSS } from "./modalCSS";
@@ -53,10 +55,11 @@ const VOLUMES = ["Até 50", "51 a 200", "201 a 500", "Mais de 500"];
    o campo seguinte, longo o bastante para não consultar letra por letra. */
 const ESPERA_SLUG = 450;
 
-// Só o host: o endereço fica curto e não mente entre ambientes (em produção é
-// o domínio de verdade, em desenvolvimento é o localhost mesmo).
-const HOST_VITRINE =
-  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "omnimob.app/vitrine";
+/* O endereço da vitrine que aparece enquanto a pessoa digita o nome da
+   imobiliária sai de `enderecoVisivel`, a mesma função que monta os links de
+   verdade no painel. Antes era montado aqui com `/vitrine/` cravado, e no dia
+   em que o subdomínio for ligado esta tela continuaria anunciando o formato
+   antigo — prometendo um endereço e entregando outro. */
 
 const SLUG_VAZIO = { valor: "", estado: "vazio", mensagem: "" };
 
@@ -99,6 +102,11 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
   const [erros, setErros] = useState({});
   const [criando, setCriando] = useState(false);
   const [enviado, setEnviado] = useState(false);   // link de confirmação a caminho
+
+  /* Provedor reconhecido pelo domínio do e-mail digitado, para o atalho da tela
+     de confirmação. Derivado, não guardado em estado: ele muda junto com o
+     campo e não tem vida própria. */
+  const provedor = provedorDoEmail(form.email);
   const [falha, setFalha] = useState("");
   /* Endereço da vitrine, derivado do nome da imobiliária.
      estado: "vazio" | "checando" | "livre" | "indisponivel" | "erro" */
@@ -346,10 +354,34 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                 fizer se perde.
               </p>
             ) : null}
+            {/* O próximo passo de quem acabou de pedir um link de confirmação é
+                abrir a caixa de entrada — então o botão principal faz isso, em
+                vez de só fechar o modal.
+
+                Só quando reconhecemos o provedor. Para domínio próprio
+                (contato@imobiliaria.com.br) não há webmail que se possa
+                adivinhar, e aí o botão neutro continua sendo o certo. */}
             <div className="pm-acoes tm-acoes">
-              <button type="button" className="pm-botao pm-botao--primario" onClick={aoFechar}>
-                Entendi
-              </button>
+              {provedor ? (
+                <>
+                  <button type="button" className="pm-botao" onClick={aoFechar}>
+                    Entendi
+                  </button>
+                  <a
+                    className="pm-botao pm-botao--primario"
+                    href={provedor.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={aoFechar}
+                  >
+                    Abrir {provedor.nome}
+                  </a>
+                </>
+              ) : (
+                <button type="button" className="pm-botao pm-botao--primario" onClick={aoFechar}>
+                  Entendi
+                </button>
+              )}
             </div>
           </div>
         ) : passo === "perfil" ? (
@@ -584,7 +616,7 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                   <span className={`tm-endereco is-${slug.estado}`} id="tm-endereco" aria-live="polite">
                     <span className="tm-endereco__linha">
                       <span className="dl-mono tm-endereco__url">
-                        {HOST_VITRINE}/<b>{slug.valor}</b>
+                        <b>{enderecoVisivel(slug.valor)}</b>
                       </span>
                       <span className="tm-endereco__selo">{SELO_SLUG[slug.estado]}</span>
                     </span>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { enderecoVisivel } from "../utils/enderecoVitrine";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Escolha do endereço da vitrine.
@@ -46,8 +47,15 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtu
       .then((r) => {
         setEstado(r);
         setDominio(r.dominio || "");
-        // Quem já tem domínio cai direto na tela dele; quem não tem escolhe.
-        setEscolha(r.dominio ? "proprio" : null);
+        /* Quem já tem domínio cai na tela dele. Quem não tem começa com o
+           endereço da Omnimob marcado — porque é o que está valendo de fato,
+           não uma sugestão. Deixar os dois cartões apagados dava a impressão de
+           que nada estava definido e a vitrine estava sem endereço.
+
+           Marcar aqui não conta como escolha: o `aoConcluir` só dispara no
+           clique, então no modal de primeiro acesso o botão "Concluir" segue
+           esperando uma decisão de verdade. */
+        setEscolha(r.dominio ? "proprio" : "omnimob");
         // Domínio já no ar é escolha resolvida — quem abre a tela de novo não
         // deve ficar sem saída porque a decisão foi tomada da vez passada.
         aoAtualizarTenant?.({ dominioProprio: r.dominio || null, dominioStatus: r.status });
@@ -120,7 +128,7 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir, aoAtu
 
   if (carregando) return <div className="dv-carregando">Carregando…</div>;
 
-  const enderecoOmnimob = `omnimob.app/vitrine/${estado?.slug || tenantSlug}`;
+  const enderecoOmnimob = enderecoVisivel(estado?.slug || tenantSlug);
   const bloqueadoNoPlano = estado && estado.liberadoNoPlano === false;
   const semIntegracao = estado && estado.disponivel === false;
   const ativo = estado?.status === "ATIVO";

@@ -50,6 +50,25 @@ export function baseDaVitrine(tenant) {
   return `${origem}/vitrine/${t.slug}`;
 }
 
+/**
+ * O mesmo endereço, sem protocolo — para MOSTRAR na tela.
+ *
+ * Existe separado do `baseDaVitrine` porque endereço exibido e endereço clicado
+ * são coisas diferentes: um `https://` no meio de uma frase polui, mas um link
+ * sem protocolo não abre. Ter as duas formas saindo da mesma fonte é o que
+ * impede a tela de anunciar um endereço e o botão levar a outro.
+ *
+ * Aceita só o slug, para as telas que ainda estão montando o tenant (o cadastro
+ * do super-admin mostra o endereço se formando enquanto se digita o nome).
+ */
+export function enderecoVisivel(slugOuTenant) {
+  const t = typeof slugOuTenant === "string" ? { slug: slugOuTenant } : tenantAtual(slugOuTenant);
+  if (!t?.slug) return "";
+  if (t.dominioProprio && t.dominioStatus === "ATIVO") return t.dominioProprio;
+  if (SUBDOMINIO_LIGADO) return `${t.slug}.${DOMINIO_RAIZ}`;
+  return `${DOMINIO_RAIZ}/vitrine/${t.slug}`;
+}
+
 /** Endereço de um imóvel dentro da vitrine. */
 export function linkDoImovel(propertyId, tenant) {
   const base = baseDaVitrine(tenant);

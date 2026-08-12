@@ -6,6 +6,7 @@ import { AdminShell } from "../components/AdminShell";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { PLANOS } from "../utils/planos";
+import { enderecoVisivel } from "../utils/enderecoVitrine";
 import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { AdminChamadosPage, CHAMADOS_CSS } from "./admin/AdminChamadosPage";
 import { AdminTutoriaisPage, TUTORIAIS_CSS } from "./admin/AdminTutoriaisPage";
@@ -58,8 +59,9 @@ const EMPTY_FORM = {
    endereços diferentes para o mesmo nome. */
 const ESPERA_SLUG = 450;
 const SLUG_VAZIO = { valor: "", estado: "vazio", mensagem: "" };
-const HOST_VITRINE =
-  typeof window !== "undefined" ? `${window.location.host}/vitrine` : "omnimob.app/vitrine";
+/* O endereço mostrado enquanto se digita o nome. Sai da mesma função que
+   monta o link de verdade: quando o subdomínio for ligado, esta tela passa a
+   anunciar `imobiliaria.omnimob.app` sem ninguém lembrar de vir aqui. */
 const SELO_SLUG = {
   vazio: "",
   checando: "verificando…",
@@ -465,7 +467,7 @@ export function SuperAdminPage({ session, onLogout }) {
 
                 <p className="sa-endereco sa-endereco--fixo">
                   <span className="dl-mono sa-endereco__url">
-                    {HOST_VITRINE}/<b>{criado.slug}</b>
+                    <b>{enderecoVisivel(criado.slug)}</b>
                   </span>
                   <span className="sa-endereco__nota">Endereço da vitrine pública.</span>
                 </p>
@@ -545,7 +547,7 @@ export function SuperAdminPage({ session, onLogout }) {
                     {editingId ? (
                       <p className="sa-endereco sa-endereco--fixo">
                         <span className="dl-mono sa-endereco__url">
-                          {HOST_VITRINE}/<b>{form.slug}</b>
+                          <b>{enderecoVisivel(form.slug)}</b>
                         </span>
                         <span className="sa-endereco__nota">
                           O endereço da vitrine não muda depois de criado, mesmo que o nome mude.
@@ -555,7 +557,7 @@ export function SuperAdminPage({ session, onLogout }) {
                       <span className={`sa-endereco is-${slug.estado}`} aria-live="polite">
                         <span className="sa-endereco__linha">
                           <span className="dl-mono sa-endereco__url">
-                            {HOST_VITRINE}/<b>{slug.valor}</b>
+                            <b>{enderecoVisivel(slug.valor)}</b>
                           </span>
                           <span className="sa-endereco__selo">{SELO_SLUG[slug.estado]}</span>
                         </span>
