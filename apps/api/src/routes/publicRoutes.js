@@ -12,7 +12,7 @@ import {
 } from "../services/emailTemplates.js";
 import { interesseSchema, trialSchema } from "../validators/interesseValidators.js";
 import { precosDosPlanos } from "../services/pagamentoService.js";
-import { tenantPorDominio } from "../services/dominioService.js";
+import { tenantPorDominio, enderecoDaVitrine } from "../services/dominioService.js";
 import {
   criarTrial,
   assinarConvite,
@@ -454,6 +454,7 @@ publicRouter.post("/trial/confirmar", trialLimiter, async (req, res) => {
       imoveis,
       validade,
       base,
+      urlVitrine: enderecoDaVitrine(tenant, base),
     });
     await sendEmail({
       to: convite.email,

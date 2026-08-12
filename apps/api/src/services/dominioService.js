@@ -322,6 +322,36 @@ export async function garantirSubdominioDaCasa(slug) {
   }
 }
 
+/* ─── Endereço público da vitrine ────────────────────────────────────────────
+   Mesma decisão que o front toma em `enderecoVitrine.js`, e ela precisa existir
+   aqui também porque o servidor manda e-mail: "Ver minha vitrine", o aviso de
+   assinatura, o resumo que vai para o time. Um link de e-mail com o endereço
+   antigo é pior que um link errado na tela — a pessoa guarda o e-mail, encaminha
+   para o corretor, cola no WhatsApp.
+
+   A ordem é a mesma dos dois lados:
+     1. domínio da imobiliária, se estiver ATIVO
+     2. subdomínio da casa, se o recurso estiver ligado
+     3. caminho `<APP_URL>/vitrine/<slug>`
+
+   `VITRINE_SUBDOMINIO` é separado do `VITE_VITRINE_SUBDOMINIO` do front por
+   necessidade — são processos diferentes, em hospedagens diferentes. Ligue os
+   dois juntos, ou o e-mail e a tela vão divulgar endereços diferentes. */
+const SUBDOMINIO_LIGADO = process.env.VITRINE_SUBDOMINIO === "true";
+
+/**
+ * @param {{ slug: string, dominioProprio?: string|null, dominioStatus?: string }} tenant
+ * @param {string} base — APP_URL, usada só no formato de caminho
+ */
+export function enderecoDaVitrine(tenant, base = "") {
+  if (!tenant?.slug) return "";
+  if (tenant.dominioProprio && tenant.dominioStatus === "ATIVO") {
+    return `https://${tenant.dominioProprio}`;
+  }
+  if (SUBDOMINIO_LIGADO) return `https://${tenant.slug}.${RAIZ}`;
+  return `${String(base).replace(/\/+$/, "")}/vitrine/${tenant.slug}`;
+}
+
 /** Resolve o tenant a partir do host da requisição (vitrine em domínio próprio). */
 export async function tenantPorDominio(host) {
   const dominio = normalizarDominio(host);

@@ -25,6 +25,26 @@ import {
 
 const NOME_PLANO = { BASICO: "Básico", PROFISSIONAL: "Profissional", PREMIUM: "Premium" };
 
+/* Endereço público da vitrine para os links dos e-mails.
+
+   Quem chama passa `urlVitrine` já resolvido (ver `enderecoDaVitrine` em
+   dominioService) — porque só ele sabe se a imobiliária tem domínio próprio ou
+   se o subdomínio está ligado. O fallback existe para não quebrar chamada
+   antiga, e reproduz o formato de caminho.
+
+   Link de e-mail erra pior que link de tela: a pessoa guarda a mensagem,
+   encaminha para o corretor, cola no WhatsApp. Um endereço desatualizado ali
+   circula por semanas. */
+function vitrineUrl({ urlVitrine, base, slug }) {
+  if (urlVitrine) return urlVitrine;
+  return `${String(base || "").replace(/\/+$/, "")}/vitrine/${slug}`;
+}
+
+/* O mesmo endereço sem protocolo, para MOSTRAR dentro do corpo do e-mail. */
+function vitrineTexto(args) {
+  return vitrineUrl(args).replace(/^https?:\/\//, "");
+}
+
 // ─── 1. Interesse comercial (vai para o time) ────────────────────────────────
 
 export function emailInteresseComercial({ imobiliaria, email, telefone, plano, temWhatsapp }) {
@@ -107,9 +127,9 @@ export function emailConviteTrial({ imobiliaria, link }) {
 
 // `imoveis` continua na assinatura porque as rotas ainda o passam; o ambiente
 // nasce vazio, então o texto não promete mais nada cadastrado lá dentro.
-export function emailTrialNoAr({ imobiliaria, login, senha, slug, validade, base }) {
+export function emailTrialNoAr({ imobiliaria, login, senha, slug, validade, base, urlVitrine }) {
   const urlPainel = `${base}/login`;
-  const urlVitrine = `${base}/vitrine/${slug}`;
+  const urlDaVitrine = vitrineUrl({ urlVitrine, base, slug });
   const subject = "Seu teste da Omnimob está no ar";
 
   const body = [
@@ -119,7 +139,7 @@ export function emailTrialNoAr({ imobiliaria, login, senha, slug, validade, base
     `Usuário: ${login}`,
     `Senha:   ${senha}`,
     "",
-    `Sua vitrine pública: ${urlVitrine}`,
+    `Sua vitrine pública: ${urlDaVitrine}`,
     "",
     `O ambiente está limpo, esperando os seus imóveis — o primeiro cadastro leva poucos minutos.`,
     `O teste vale até ${validade} — e nada se perde se você fechar plano antes.`,
@@ -136,7 +156,7 @@ export function emailTrialNoAr({ imobiliaria, login, senha, slug, validade, base
       dados([
         { rotulo: "Usuário", valor: login, mono: true },
         { rotulo: "Senha", valor: senha, mono: true },
-        { rotulo: "Vitrine", valor: `/vitrine/${slug}`, mono: true },
+        { rotulo: "Vitrine", valor: vitrineTexto({ urlVitrine, base, slug }), mono: true },
       ]),
       botao("Entrar no painel", urlPainel),
       aviso(
@@ -149,7 +169,7 @@ export function emailTrialNoAr({ imobiliaria, login, senha, slug, validade, base
         "Abra a vitrine e veja como ele aparece para o cliente",
         "Arraste os blocos no editor para deixar a página com a sua cara",
       ]),
-      botao("Ver minha vitrine", urlVitrine, { tom: "escuro" }),
+      botao("Ver minha vitrine", urlDaVitrine, { tom: "escuro" }),
       aviso(
         `O teste vale até <strong style="color:${COR.forte};">${esc(
           validade,
@@ -182,7 +202,7 @@ const FORMATO_MIGRACAO = {
 };
 
 export function emailAvisoNovoTrial({
-  imobiliaria, email, telefone, slug, validade, base,
+  imobiliaria, email, telefone, slug, validade, base, urlVitrine,
   perfil = "nova", planoDesejado, migracao,
 }) {
   /* Duas conversas diferentes, e é o assunto do e-mail que precisa separá-las:
@@ -255,7 +275,7 @@ export function emailAvisoNovoTrial({
               + "levante isso no primeiro contato.</span>",
             )]
           : []),
-      botao("Ver a vitrine dele", `${base}/vitrine/${slug}`),
+      botao("Ver a vitrine dele", vitrineUrl({ urlVitrine, base, slug })),
       divisor(),
       paragrafo(
         `<span style="color:${COR.apagado};font-size:13px;">Responder este e-mail cai direto no interessado.</span>`,
@@ -270,7 +290,7 @@ export function emailAvisoNovoTrial({
 // ─── 5. Assinatura confirmada (vai para o cliente) ───────────────────────────
 
 export function emailAssinaturaConfirmada({
-  imobiliaria, plano, valorRotulo, proximaCobranca, inventario = {}, recursos = [], base, slug,
+  imobiliaria, plano, valorRotulo, proximaCobranca, inventario = {}, recursos = [], base, slug, urlVitrine,
 }) {
   const subject = `Assinatura confirmada — bem-vindo à Omnimob, ${imobiliaria}`;
 
@@ -296,7 +316,7 @@ export function emailAssinaturaConfirmada({
     recursos.length ? `O plano libera:\n- ${recursos.join("\n- ")}` : "",
     "",
     `Painel:  ${base}/login`,
-    `Vitrine: ${base}/vitrine/${slug}`,
+    `Vitrine: ${vitrineUrl({ urlVitrine, base, slug })}`,
     "",
     "A cobrança é mensal e automática. Para cancelar ou trocar o cartão, é só responder este e-mail.",
   ]
@@ -336,7 +356,7 @@ export function emailAssinaturaConfirmada({
 
 // ─── 6. Teste vencido (vai para o cliente) ───────────────────────────────────
 
-export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base }) {
+export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, urlVitrine }) {
   const subject = `O teste da ${imobiliaria} venceu — ainda dá para recuperar`;
 
   const body = [
@@ -369,7 +389,7 @@ export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base }) 
         `<span style="color:${COR.apagado};font-size:13px;">Passado esse prazo o ambiente é removido, e aí não há como recuperar. Precisa de mais tempo? Responda este e-mail que a gente resolve.</span>`,
       ),
     ].join(""),
-    rodape: `Vitrine: ${esc(base)}/vitrine/${esc(slug)}`,
+    rodape: `Vitrine: ${esc(vitrineUrl({ urlVitrine, base, slug }))}`,
   });
 
   return { subject, body, html };

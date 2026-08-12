@@ -238,12 +238,16 @@ export async function limparTrials({ aplicar = false } = {}) {
 
   const aDesativar = await prisma.tenant.findMany({
     where: { statusPagamento: "TRIAL", ativo: true, proximoVencimento: { lt: agora } },
-    select: { id: true, slug: true, name: true, email: true, proximoVencimento: true },
+    // Os campos de domínio entram aqui porque o e-mail de expiração linka a
+    // vitrine, e o endereço dela depende deles.
+    select: { id: true, slug: true, name: true, email: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
   });
 
   const aRemover = await prisma.tenant.findMany({
     where: { statusPagamento: "TRIAL", proximoVencimento: { lt: limiteRemocao } },
-    select: { id: true, slug: true, name: true, email: true, proximoVencimento: true },
+    // Os campos de domínio entram aqui porque o e-mail de expiração linka a
+    // vitrine, e o endereço dela depende deles.
+    select: { id: true, slug: true, name: true, email: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
   });
 
   if (!aplicar) {
@@ -267,6 +271,7 @@ export async function limparTrials({ aplicar = false } = {}) {
         slug: t.slug,
         diasAteRemover: DIAS_ATE_REMOVER,
         base,
+        urlVitrine: enderecoDaVitrine(t, base),
       });
       // eslint-disable-next-line no-await-in-loop
       await sendEmail({

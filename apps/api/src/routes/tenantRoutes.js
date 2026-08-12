@@ -9,6 +9,7 @@ import { fidelizarTrial } from "../services/trialService.js";
 import { sendEmail } from "../services/notificationService.js";
 import { emailAssinaturaConfirmada } from "../services/emailTemplates.js";
 import {
+  enderecoDaVitrine,
   cadastrarDominio,
   verificarDominio,
   removerDominio,
@@ -436,6 +437,7 @@ tenantRouter.post(
         ]);
         const info = planoInfo(plano);
         const modelo = emailAssinaturaConfirmada({
+          urlVitrine: enderecoDaVitrine(tenant, (process.env.APP_URL || "").replace(/\/+$/, "")),
           imobiliaria: tenant.name,
           plano: info?.nome || plano,
           valorRotulo: assinatura.valorMensal
