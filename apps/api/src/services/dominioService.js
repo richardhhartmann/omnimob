@@ -130,12 +130,30 @@ export async function cadastrarDominio(tenantId, bruto) {
       corpo: { name: dominio },
     });
   } catch (erro) {
-    // Já cadastrado neste projeto (ex.: tentativa anterior) não é erro: seguimos
-    // para a consulta e devolvemos o estado atual.
-    if (erro.codigo === "domain_already_in_use" || erro.status === 409) {
+    const jaEmUso = erro.codigo === "domain_already_in_use" || erro.status === 409;
+    if (!jaEmUso) throw erro;
+
+    /* "Já em uso" tem dois significados bem diferentes, e a Vercel usa o mesmo
+       código para os dois:
+
+         a) já está NESTE projeto — tentativa anterior que ficou pela metade.
+            É o caso bom: consultamos e seguimos do ponto em que parou.
+
+         b) está em OUTRO projeto ou outra conta Vercel. Aí a consulta abaixo
+            devolve "Project Domain not found", que é a pior mensagem possível
+            — ela diz que não achou, quando o problema é justamente ter achado
+            no lugar errado.
+
+       Um domínio só pode servir um projeto por vez, então (b) não é algo que
+       resolvemos daqui: alguém precisa soltá-lo lá primeiro. */
+    try {
       info = await vercel(`/v9/projects/${PROJETO}/domains/${encodeURIComponent(dominio)}`);
-    } else {
-      throw erro;
+    } catch {
+      throw new Error(
+        `O domínio ${dominio} já está cadastrado em outro projeto da Vercel — um domínio ` +
+          `só pode apontar para um projeto por vez. Remova-o lá (Vercel → Domains → ` +
+          `${dominio} → Remove) e tente de novo aqui.`,
+      );
     }
   }
 
