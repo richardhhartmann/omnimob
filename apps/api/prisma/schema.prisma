@@ -114,6 +114,22 @@ model Tenant {
   dominioAlvo         Json?    @map("tnt_dominio_alvo")
   dominioVerificadoEm DateTime? @map("tnt_dominio_verificado_em")
 
+  /* O que a imobiliária disse, ao pedir o teste, que traria de outro sistema:
+     `{ sistemaAtual, itens, volume, formato, observacao }`. Nulo para quem
+     está abrindo agora e não tem nada para trazer.
+
+     Precisa ficar aqui, e não só no e-mail que o time recebe, porque quem
+     responde a ela é o PRIMEIRO ACESSO: a pessoa marcou "imóveis e clientes"
+     num modal na landing e, dias depois, entra no painel — o convite que
+     carregava essa informação já foi consumido. Sem gravar, o boas-vindas não
+     teria como saber que ela veio para migrar.
+
+     `migracaoResolvidaEm` marca que o assunto já foi tratado (ela importou, ou
+     disse que faz depois). Um carimbo em vez de apagar a intenção: o que ela
+     pretendia trazer continua sendo informação útil para o time de vendas. */
+  migracaoIntencao    Json?     @map("tnt_migracao_intencao")
+  migracaoResolvidaEm DateTime? @map("tnt_migracao_resolvida_em")
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -183,6 +199,18 @@ model Usuario {
   vendas  Venda[]
   tutorial UsuarioTutorial[]
   chamados Chamado[]
+  /* Identificador que o registro tinha no sistema de origem, quando veio de uma
+     importação. Nulo em tudo que nasceu aqui dentro.
+
+     Existe por um motivo prático: reimportar é a norma, não a exceção. A
+     primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
+     chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
+     ela, a importação vira "atualize quem já veio, crie o resto".
+
+     Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
+     eles não têm nada a ver um com o outro. */
+  origemExterna String? @map("origem_externa")
+  @@unique([tenantId, origemExterna], name: "usuario_origem")
 
   @@index([tenantId, ativo])
   @@map("tb_usuario")
@@ -301,6 +329,18 @@ model Cliente {
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   vendas Venda[]
+  /* Identificador que o registro tinha no sistema de origem, quando veio de uma
+     importação. Nulo em tudo que nasceu aqui dentro.
+
+     Existe por um motivo prático: reimportar é a norma, não a exceção. A
+     primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
+     chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
+     ela, a importação vira "atualize quem já veio, crie o resto".
+
+     Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
+     eles não têm nada a ver um com o outro. */
+  origemExterna String? @map("origem_externa")
+  @@unique([tenantId, origemExterna], name: "cliente_origem")
 
   @@index([tenantId, ativo])
   @@index([tenantId, cpf])
@@ -416,6 +456,18 @@ model Property {
   metricEvents PropertyMetricEvent[]
   leads        PropertyLead[]
   vendas       Venda[]
+  /* Identificador que o registro tinha no sistema de origem, quando veio de uma
+     importação. Nulo em tudo que nasceu aqui dentro.
+
+     Existe por um motivo prático: reimportar é a norma, não a exceção. A
+     primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
+     chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
+     ela, a importação vira "atualize quem já veio, crie o resto".
+
+     Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
+     eles não têm nada a ver um com o outro. */
+  origemExterna String? @map("origem_externa")
+  @@unique([tenantId, origemExterna], name: "property_origem")
 
   @@index([tenantId, status])
 }

@@ -301,6 +301,29 @@ export const api = {
   excluirCliente: (tenantSlug, id) =>
     request(`/api/clientes/${id}/permanente`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
 
+  /* Encerra o lembrete de "você disse que traria dados de outro sistema" —
+     tanto para quem foi importar quanto para quem deixou para depois. */
+  migracaoResolvida: (tenantSlug) =>
+    request("/api/tenants/me/migracao/resolvida", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  // ─── Importação de outra plataforma ──────────────────────────────────────
+  // Os tipos de imóvel e cargos DESTA imobiliária, para a tela avisar antes o
+  // que da planilha não vai casar com o que existe aqui.
+  importacaoReferencias: (tenantSlug) =>
+    request("/api/importacao/referencias", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  /* Um lote por chamada. Quem fatia é a tela — assim o progresso anda na frente
+     de quem está olhando, em vez de deixar uma barra parada por dois minutos. */
+  importarLote: (tenantSlug, entidade, linhas) =>
+    request(`/api/importacao/${entidade}`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ linhas }),
+    }),
+
   // ─── Tipos e atributos ───────────────────────────────────────────────────
   createTipoImovel: (tenantSlug, payload) =>
     request("/api/properties/tipos", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),

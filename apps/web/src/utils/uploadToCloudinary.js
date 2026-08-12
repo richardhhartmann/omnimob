@@ -23,6 +23,71 @@ export async function uploadToCloudinary(file) {
   return { url: body.secure_url, publicId: body.public_id };
 }
 
+/* ─── Fotos vindas de importação ────────────────────────────────────────────
+   Na importação as fotos não estão no computador de ninguém: são URLs que a
+   planilha traz, apontando para o sistema antigo. O Cloudinary aceita receber a
+   URL e buscar a imagem sozinho, então o arquivo nunca trafega por aqui — nem
+   pelo navegador, nem pela nossa API.
+
+   Copiar em vez de só guardar o link é o ponto: no dia em que a imobiliária
+   desligar o sistema antigo, as fotos somem da vitrine junto. */
+export async function uploadUrlToCloudinary(url) {
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+  if (!cloudName || !uploadPreset) throw new Error("Cloudinary não configurado.");
+
+  const formData = new FormData();
+  formData.append("file", url); // o Cloudinary busca a imagem nesta URL
+  formData.append("upload_preset", uploadPreset);
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const corpo = await response.json().catch(() => ({}));
+    throw new Error(corpo?.error?.message || "Cloudinary recusou a imagem.");
+  }
+  return (await response.json()).secure_url;
+}
+
+/**
+ * Copia várias URLs de uma vez. Devolve `Map<urlOriginal, urlNova>`.
+ *
+ * De quatro em quatro: a lentidão aqui é de rede, não de processador, então
+ * uma por vez desperdiça o tempo de espera — mas centenas ao mesmo tempo fazem
+ * o Cloudinary responder 420 e o navegador segurar as conexões numa fila.
+ *
+ * Uma foto que falha NÃO derruba o imóvel: ela fica de fora e a tela conta
+ * quantas ficaram. Um imóvel sem uma foto é corrigível na tela de imóveis; um
+ * imóvel que não entrou dá trabalho de achar.
+ */
+export async function copiarUrlsParaCloudinary(urls, { aoProgredir, jaCopiadas = new Map() } = {}) {
+  const pendentes = [...new Set(urls)].filter((u) => !jaCopiadas.has(u));
+  const resultado = new Map(jaCopiadas);
+  const falhas = [];
+  let feitas = 0;
+
+  const FRENTES = 4;
+  const fila = [...pendentes];
+
+  async function trabalhar() {
+    while (fila.length) {
+      const url = fila.shift();
+      try {
+        resultado.set(url, await uploadUrlToCloudinary(url));
+      } catch (erro) {
+        falhas.push({ url, motivo: erro.message });
+      }
+      feitas += 1;
+      aoProgredir?.(feitas, pendentes.length);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(FRENTES, fila.length) }, trabalhar));
+  return { copiadas: resultado, falhas };
+}
+
 // Remove o fundo de uma imagem localmente (no navegador, via canvas), sem depender
 // de nenhum add-on/serviço externo. Detecta a cor de fundo amostrando os 4 cantos e
 // torna transparentes os pixels próximos dela (com borda suavizada). Ideal para logos

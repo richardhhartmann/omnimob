@@ -6,6 +6,7 @@ import { planoInfo, PLANOS } from "../utils/planos";
 import { useConfirm } from "../components/ConfirmModal";
 import { IconeCelular, IconeCheck, IconeEnvelope, IconeTelefone, IconeX } from "../components/Icones.jsx";
 import { DominioVitrine } from "../components/DominioVitrine.jsx";
+import { ImportadorDados, podeImportar } from "../components/ImportadorDados.jsx";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -326,6 +327,14 @@ const TABS = [
   {
     key: "redes", label: "Redes Sociais", cor: "#1877f2",
     icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>,
+  },
+  {
+    /* Importação mora aqui, e não numa entrada própria do menu lateral: é coisa
+       que se faz uma vez, na mudança de sistema, e um item permanente na
+       navegação diária custaria atenção todo dia por uma tarefa de uma semana.
+       Configurações já é onde se resolve o que é da imobiliária inteira. */
+    key: "dados", label: "Dados", cor: "#0ea5e9",
+    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" /><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" /></svg>,
   },
   {
     key: "plano", label: "Plano e recursos", cor: "#d4af37",
@@ -668,7 +677,10 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
         {/* ── Menu lateral de abas ─── */}
         <aside style={{ width: "240px", flexShrink: 0, position: "sticky", top: "80px" }}>
           <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
-            {TABS.map((t) => (
+            {/* A aba de Dados some para quem não pode importar nada — sem ela,
+                a pessoa abriria uma tela cujo único conteúdo é dizer que ela
+                não tem permissão. */}
+            {TABS.filter((t) => t.key !== "dados" || podeImportar(session?.usuario?.cargo)).map((t) => (
               <TabLink key={t.key} active={tab === t.key} label={t.label} icone={t.icone} cor={t.cor} onClick={() => setTab(t.key)} />
             ))}
           </div>
@@ -937,6 +949,21 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)", opacity: 0.6, lineHeight: "1.6" }}>
               <strong>Pré-requisito:</strong> a conta do Instagram deve ser do tipo Business ou Creator, vinculada à Página do Facebook. A autenticação usa o Meta Graph API v19.0 com permissões <code>pages_manage_posts</code> e <code>instagram_content_publish</code>.
             </p>
+          </Secao>
+          </>)}
+
+          {tab === "dados" && (<>
+          <Secao cor="#0ea5e9" titulo="Importar de outra plataforma" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
+              <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
+            </svg>
+          }>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+              Traga imóveis, clientes e usuários do sistema que você usava antes, a partir de uma
+              planilha. Nada é publicado sozinho: os imóveis entram como rascunho para você revisar.
+            </p>
+            <ImportadorDados session={session} />
           </Secao>
           </>)}
 

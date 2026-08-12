@@ -443,6 +443,23 @@ publicRouter.post("/trial/confirmar", trialLimiter, async (req, res) => {
     });
     if (aviso) console.warn("[trial]", aviso);
 
+    /* A intenção de migrar sai do convite e passa a morar no tenant.
+
+       Aqui é a única passagem em que ela existe: o convite acaba de ser
+       consumido e some, e quem vai responder a ela é o primeiro acesso, dias
+       depois. Gravar falhando não pode derrubar a criação do ambiente — o
+       teste vale mais que o lembrete —, então o erro só é registrado. */
+    if (convite.migracao) {
+      try {
+        await prisma.tenant.update({
+          where: { id: tenant.id },
+          data: { migracaoIntencao: convite.migracao },
+        });
+      } catch (erro) {
+        console.warn(`[trial] não gravei a intenção de migração de ${tenant.slug}: ${erro.message}`);
+      }
+    }
+
     const validade = expiraEm.toLocaleDateString("pt-BR");
     const base = baseDoApp(req) || "";
 

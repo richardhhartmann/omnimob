@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "../api";
 import { getTrialStatusCompartilhado } from "../utils/trialStatus";
 import { PLANOS } from "../utils/planos";
 import { IconeCheck, IconeEstrela } from "./Icones.jsx";
@@ -85,17 +87,46 @@ const CONFETES = [
    para fazer — mostrou e foi fechado, ou nem chegou a aparecer. Sem esse aviso,
    o tour de primeiro acesso subiria por cima deste no acesso de quem acabou de
    assinar (ou de abrir o teste), com dois modais disputando a mesma tela. */
+/* O que a pessoa marcou lá na landing, de volta em palavras.
+
+   Leads ficam de fora da importação de propósito, e não por esquecimento: lead
+   é registro de interesse com data e origem, e trazer os do sistema antigo
+   encheria o funil de contatos frios como se tivessem chegado hoje. A lista
+   avisa quando é o caso, em vez de calar. */
+/* Rótulo de um item só, sem "e" dentro: eles entram numa enumeração, e
+   "imóveis e fotos" + "clientes" saía como "imóveis e fotos e clientes". Que as
+   fotos vêm junto é dito na lista logo abaixo, onde cabe. */
+const ROTULO_ITEM = {
+  imoveis: "imóveis",
+  clientes: "clientes",
+  usuarios: "usuários",
+  leads: "leads",
+};
+const IMPORTAVEIS = ["imoveis", "clientes", "usuarios"];
+
+function listar(itens) {
+  if (itens.length === 1) return itens[0];
+  return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
+}
+
 export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
+  const navigate = useNavigate();
   const [dados, setDados] = useState(null);
   const [modo, setModo] = useState(null); // "assinante" | "teste"
   const [aberto, setAberto] = useState(false);
   const [saindo, setSaindo] = useState(false);
-  /* "boas-vindas" → "perfil" → "dominio".
+  /* "boas-vindas" → "perfil" → "dominio" → "dados".
 
      O segundo passo é a ficha da imobiliária, que alimenta a vitrine (ver
      PerfilInicialPasso); o terceiro é o endereço em que ela vai viver (ver
      DominioVitrine). Nenhum dos dois é obrigatório: pular a ficha leva ao
-     endereço, e pular o endereço mantém o da Omnimob, que já funciona. */
+     endereço, e pular o endereço mantém o da Omnimob, que já funciona.
+
+     O quarto só existe para quem disse, ao pedir o teste, que traria a base de
+     outro sistema — e é uma PONTE, não um formulário: ele leva à tela de
+     importação em vez de trazê-la para dentro do modal. Parear vinte colunas e
+     conferir a prévia não cabe numa caixa de 520px, e é justamente a conferência
+     que impede quinhentos imóveis de entrarem com o preço no campo errado. */
   const [passo, setPasso] = useState("boas-vindas");
 
   /* O passo do endereço só libera o "Concluir" quando a escolha se fecha —
@@ -184,6 +215,19 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
     setTimeout(() => { setAberto(false); aoResolver?.(); }, SAIDA_MS);
   }
 
+  /* Encerra o passo da migração. Vale para os dois botões: quem vai importar
+     agora e quem deixa para depois já respondeu à pergunta, e repeti-la a cada
+     acesso seria cobrança.
+
+     O registro no servidor não segura a navegação — se ele falhar, o pior que
+     acontece é o lembrete voltar uma vez. Travar a pessoa na porta do painel
+     por causa de um carimbo seria pior que o problema que ele resolve. */
+  function encerrarMigracao(irImportar) {
+    api.migracaoResolvida(tenantSlug).catch(() => {});
+    fechar();
+    if (irImportar) navigate("/configuracoes?tab=dados");
+  }
+
   const info = PLANOS.find((p) => p.key === dados.plano);
   const liberados = [
     "Imóveis, vitrine, leads, clientes e equipe sem limite de uso",
@@ -197,6 +241,13 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
     : null;
 
   const ehTeste = modo === "teste";
+
+  /* O passo da migração só existe para quem tem o que migrar, então o total de
+     passos varia. Ele era escrito à mão em cada etapa — e já estava errado:
+     a ficha dizia "2 de 2" com o endereço ainda por vir. */
+  const itensMigracao = Array.isArray(dados.migracao?.itens) ? dados.migracao.itens : [];
+  const temMigracao = Boolean(dados.migracao) && itensMigracao.some((i) => IMPORTAVEIS.includes(i));
+  const totalPassos = temMigracao ? 4 : 3;
   const dias = dados.diasRestantes;
   const prazo =
     dias == null
@@ -220,7 +271,7 @@ ${PERFIL_INICIAL_CSS}`}</style>
       <div className={`bv-caixa${saindo ? " is-saindo" : ""}`} role="dialog" aria-modal="true" aria-labelledby="bv-titulo">
         {passo === "perfil" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 2 DE 2</span>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 2 DE {totalPassos}</span>
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">A ficha da sua imobiliária</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               É o que a sua vitrine mostra para quem chega de fora. Já trouxemos o que você
@@ -234,7 +285,7 @@ ${PERFIL_INICIAL_CSS}`}</style>
           </>
         ) : passo === "dominio" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 3 DE 3</span>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 3 DE {totalPassos}</span>
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">O endereço da sua vitrine</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               Sua vitrine já está no ar no endereço da Omnimob. Se a sua imobiliária tem
@@ -258,10 +309,53 @@ ${PERFIL_INICIAL_CSS}`}</style>
                 Sem botão, a única saída é resolver ou trocar de opção, que é o
                 que a tela quer. Fechar o modal continua possível pelo Esc. */}
             {enderecoResolvido ? (
-              <button type="button" className="bv-botao bv-botao--espacado" onClick={fechar}>
-                Concluir
+              <button
+                type="button"
+                className="bv-botao bv-botao--espacado"
+                onClick={() => (temMigracao ? setPasso("dados") : fechar())}
+              >
+                {temMigracao ? "Continuar" : "Concluir"}
               </button>
             ) : null}
+          </>
+        ) : passo === "dados" ? (
+          <>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 4 DE 4</span>
+            <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">Falta trazer a sua base</h2>
+            <p className="bv-texto bv-texto--fraco bv-texto--perfil">
+              Quando você pediu o teste, disse que tem{" "}
+              <strong>
+                {listar(itensMigracao.filter((i) => IMPORTAVEIS.includes(i)).map((i) => ROTULO_ITEM[i]))}
+              </strong>
+              {dados.migracao?.sistemaAtual ? <> em <strong>{dados.migracao.sistemaAtual}</strong></> : null}
+              . Dá para trazer isso agora, a partir de uma planilha — sem redigitar nada.
+            </p>
+
+            <ul className="bv-lista">
+              <li>Você envia o arquivo e diz o que é cada coluna. O chute vem pronto.</li>
+              <li>Mostramos uma prévia antes de gravar, para você conferir.</li>
+              <li>As fotos são copiadas dos links da planilha e ficam hospedadas aqui.</li>
+              <li>Os imóveis entram como rascunho — nada vai para a vitrine sem a sua revisão.</li>
+            </ul>
+
+            {/* Quem marcou leads merece a verdade agora, e não depois de
+                procurar a opção na tela de importação. */}
+            {itensMigracao.includes("leads") ? (
+              <p className="bv-texto bv-texto--fraco">
+                Leads não entram na importação: eles têm data e origem, e trazer os antigos encheria
+                seu funil de contatos frios como se tivessem chegado hoje.
+              </p>
+            ) : null}
+
+            <button type="button" className="bv-botao bv-botao--espacado" onClick={() => encerrarMigracao(true)}>
+              Importar agora
+            </button>
+            <button type="button" className="bv-secundario" onClick={() => encerrarMigracao(false)}>
+              Faço isso depois
+            </button>
+            <p className="bv-texto bv-texto--fraco bv-nota">
+              A importação fica em <strong>Configurações → Dados</strong>, sempre que você quiser.
+            </p>
           </>
         ) : (
         <>
@@ -546,6 +640,24 @@ const CSS = `
 }
 .bv-botao:hover { background: #fff; color: #0c0f1a; box-shadow: none; transform: none; }
 .bv-botao:active { scale: 1; }
+
+/* Recusar tem que ser possível sem parecer o caminho certo. Daí o botão sem
+   preenchimento: continua sendo botão de verdade, com área de clique inteira,
+   mas não disputa o olho com o "Importar agora" logo acima. */
+.ds-shell .bv-secundario, .bv-secundario {
+  width: auto; margin-top: 10px; padding: 9px 18px; border-radius: 999px; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  background: transparent; border: 1px solid rgba(255,255,255,0.14); color: #94a3b8;
+  box-shadow: none; transform: none;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+.bv-secundario:hover {
+  color: #e2e8f0; border-color: rgba(255,255,255,0.28);
+  background: transparent; box-shadow: none; transform: none;
+}
+.bv-secundario:active { scale: 1; }
+
+.bv-nota { margin-top: 14px; }
 
 @media (prefers-reduced-motion: reduce) {
   .bv-veu, .bv-caixa, .bv-selo, .bv-selo--festa { animation: none; }

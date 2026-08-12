@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { enderecoVisivel } from "../utils/enderecoVitrine";
 import { provedorDoEmail } from "../utils/provedorEmail";
+import { planoLiberaDominio, planoInfo } from "../utils/planos";
 import { formatPhone } from "../utils/masks";
 import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { MODAL_CSS } from "./modalCSS";
@@ -621,8 +622,25 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                       <span className="tm-endereco__selo">{SELO_SLUG[slug.estado]}</span>
                     </span>
                     <span className="tm-endereco__nota">
-                      {slug.mensagem || "Este será o endereço da sua vitrine pública."}
+                      {slug.mensagem || "Este será o endereço padrão da sua vitrine pública."}
                     </span>
+
+                    {/* Quem escolheu Profissional ou Premium tem direito a
+                        apontar o domínio da própria imobiliária, e este é o
+                        momento em que a informação vale mais: a pessoa está
+                        justamente olhando o endereço e decidindo se ele serve.
+
+                        Só aparece quando o plano libera — para quem está no
+                        Básico isso seria anunciar algo que ele não pode usar,
+                        no exato instante em que ele acabou de escolher o plano.
+                        Venda a mais na hora errada vira frustração. */}
+                    {planoLiberaDominio(form.plano) ? (
+                      <span className="tm-endereco__bonus">
+                        Se a sua imobiliária já tem domínio próprio, dá para usá-lo no lugar
+                        deste — o plano {planoInfo(form.plano).nome} inclui isso, e você
+                        configura depois, dentro do painel.
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
               </label>
@@ -740,6 +758,14 @@ const CSS = `${MODAL_CSS}
   color: var(--placeholder);
 }
 .tm-endereco__nota { font-size: 11px; line-height: 1.5; color: var(--placeholder); }
+/* Separado da nota por uma linha fina: é informação de outra natureza — a nota
+   fala do endereço que está ali, esta fala de uma alternativa a ele. Sem a
+   divisão, as duas frases se lêem como uma só e a segunda parece contradizer
+   a primeira. */
+.tm-endereco__bonus {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 11px; line-height: 1.5; color: var(--subtle);
+}
 
 .tm-endereco.is-checando .tm-endereco__selo { color: var(--subtle); }
 .tm-endereco.is-livre {

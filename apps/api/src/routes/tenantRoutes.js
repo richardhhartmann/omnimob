@@ -256,6 +256,7 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
       select: {
         id: true, name: true, plano: true, statusPagamento: true, valorMensal: true,
         proximoVencimento: true, createdAt: true, showcaseConfig: true,
+        migracaoIntencao: true, migracaoResolvidaEm: true,
       },
     });
     if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
@@ -305,10 +306,37 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
         imoveis, clientes, usuarios, leads, fotos,
         vitrinePersonalizada: Boolean(tenant.showcaseConfig),
       },
+      /* Só vai quando ainda está PENDENTE. Quem já importou (ou já disse que
+         faz depois) não precisa ver a oferta de novo, e resolver isso aqui
+         evita que cada tela que consome esta resposta refaça a mesma conta. */
+      migracao: tenant.migracaoIntencao && !tenant.migracaoResolvidaEm
+        ? tenant.migracaoIntencao
+        : null,
     });
   } catch (err) {
     console.error("[GET /tenants/me/trial]", err);
     return res.status(500).json({ error: "Erro ao carregar situação do teste." });
+  }
+});
+
+/* Encerra o assunto "você disse que traria dados de outro sistema".
+
+   Vale tanto para quem foi importar quanto para quem respondeu "depois": nos
+   dois casos a pergunta já foi feita e respondida, e repeti-la a cada acesso
+   seria cobrança. Quem mudar de ideia acha a importação em Configurações.
+
+   Sem permissão especial de propósito: quem está vendo o boas-vindas é quem
+   acabou de receber o ambiente, e dispensar um lembrete não desfaz nada. */
+tenantRouter.post("/me/migracao/resolvida", requireAuth, requireTenant, async (req, res) => {
+  try {
+    await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: { migracaoResolvidaEm: new Date() },
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[POST /tenants/me/migracao/resolvida]", err);
+    return res.status(500).json({ error: "Erro ao registrar." });
   }
 });
 
