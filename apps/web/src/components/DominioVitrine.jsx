@@ -4,11 +4,12 @@ import { api } from "../api";
 /* ────────────────────────────────────────────────────────────────────────────
    Escolha do endereço da vitrine.
 
-   Duas opções, e a primeira é o padrão de quem nunca mexeu:
+   Duas opções, nesta ordem na tela:
 
-     · endereço da Omnimob — já incluso, funciona sozinho, nada a configurar
      · domínio da imobiliária — recomendado, porque aí o esforço de SEO soma
        para o domínio dela e não para o nosso
+     · endereço da Omnimob — já incluso, funciona sozinho, nada a configurar,
+       e é o que vale enquanto ninguém escolher nada
 
    Usado em dois lugares (o passo do primeiro acesso e a tela de Configurações),
    e é por isso que vive aqui: a parte trabalhosa não é a escolha, é o que vem
@@ -110,19 +111,14 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
     <div className={`dv${compacto ? " dv--compacto" : ""}`}>
       <style>{CSS}</style>
 
-      {/* ── Escolha ────────────────────────────────────────────────────────── */}
+      {/* ── Escolha ──────────────────────────────────────────────────────────
+          O domínio próprio vem PRIMEIRO porque é o que recomendamos, e ordem é
+          recomendação: a primeira opção lida é a que a maioria escolhe. Ter o
+          padrão no topo empurrava justamente para o caminho que não queremos —
+          e o endereço da Omnimob não precisa de destaque, já é o que vale sem
+          clique nenhum. */}
       {!estado?.dominio ? (
         <div className="dv-opcoes">
-          <button
-            type="button"
-            className={`dv-opcao${escolha === "omnimob" ? " is-ativa" : ""}`}
-            onClick={() => { setEscolha("omnimob"); aoConcluir?.("omnimob"); }}
-          >
-            <span className="dv-opcao__titulo">Usar o endereço da Omnimob</span>
-            <span className="dv-opcao__end">{enderecoOmnimob}</span>
-            <span className="dv-opcao__nota">Já incluso no seu plano. Funciona agora, sem configurar nada.</span>
-          </button>
-
           <button
             type="button"
             className={`dv-opcao${escolha === "proprio" ? " is-ativa" : ""}${bloqueadoNoPlano ? " is-bloqueada" : ""}`}
@@ -138,6 +134,16 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoConcluir }) {
                 ? "Disponível a partir do plano Profissional."
                 : "A vitrine passa a viver no seu domínio, e as buscas do Google somam para ele."}
             </span>
+          </button>
+
+          <button
+            type="button"
+            className={`dv-opcao${escolha === "omnimob" ? " is-ativa" : ""}`}
+            onClick={() => { setEscolha("omnimob"); aoConcluir?.("omnimob"); }}
+          >
+            <span className="dv-opcao__titulo">Usar o endereço da Omnimob</span>
+            <span className="dv-opcao__end">{enderecoOmnimob}</span>
+            <span className="dv-opcao__nota">Já incluso no seu plano. Funciona agora, sem configurar nada.</span>
           </button>
         </div>
       ) : null}

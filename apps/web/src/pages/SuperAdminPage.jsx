@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Buildings, GraduationCap, Lifebuoy } from "@phosphor-icons/react";
 import { api, adminApi } from "../api";
 import { AdminShell } from "../components/AdminShell";
@@ -134,6 +135,7 @@ const ABAS = [
 ];
 
 export function SuperAdminPage({ session, onLogout }) {
+  const navegar = useNavigate();
   const [aba, setAba] = useState("tenants");
   // Contado pela aba de chamados quando ela carrega, e exibido no menu — é o
   // único número do painel que pede ação imediata.
@@ -489,15 +491,34 @@ export function SuperAdminPage({ session, onLogout }) {
                 ) : null}
 
                 <div className="sa-modal__foot">
-                  <Button
-                    href={`/vitrine/${criado.slug}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    variant="ghost"
-                    arrow={false}
-                  >
-                    Ver vitrine
-                  </Button>
+                  {criado.admin ? (
+                    /* Leva ao login com os campos já preenchidos.
+
+                       As credenciais viajam no state do roteador, NÃO na URL:
+                       query string vai parar no histórico do navegador, no
+                       Referer e em qualquer log pelo caminho — e isto aqui é
+                       uma senha. A LoginPage lê o state e o apaga em seguida,
+                       então nem o botão "voltar" a traz de volta.
+
+                       Sem `target="_blank"`: o state do roteador não atravessa
+                       aba nova, e o link abriria com os campos vazios. */
+                    <Button
+                      as="button"
+                      type="button"
+                      variant="ghost"
+                      arrow={false}
+                      onClick={() =>
+                        navegar("/login", {
+                          state: {
+                            credenciais: { login: criado.admin.login, senha: criado.admin.senha },
+                            origem: "provisionamento",
+                          },
+                        })
+                      }
+                    >
+                      Ir para o login
+                    </Button>
+                  ) : null}
                   <Button as="button" type="button" variant="primary" arrow={false} onClick={fecharModal}>
                     Concluir
                   </Button>
@@ -566,6 +587,25 @@ export function SuperAdminPage({ session, onLogout }) {
                       onChange={(v) => setField("statusPagamento", v)}
                     />
                   </Field>
+
+                  {/* Plano e status são eixos independentes, e isso não era
+                      óbvio: dá para ter Premium em teste e Básico pagante. Já
+                      aconteceu de um tenant Premium ser criado com o status
+                      padrão (Trial) e a pessoa estranhar o painel tratá-lo como
+                      teste — estava certo, só não estava dito em lugar nenhum.
+                      Esta linha diz, em uma frase, o que será criado. */}
+                  <p className="sa-resumo">
+                    <span className="dl-mono sa-modal__extra-label">// o que será criado</span>
+                    <strong>
+                      {(PLANO_OPCOES.find((o) => o.value === form.plano)?.label) || "Básico"}
+                      {" · "}
+                      {form.statusPagamento === "TRIAL"
+                        ? "em teste — não cobra, e o painel mostra contagem regressiva"
+                        : form.statusPagamento === "EM_DIA"
+                          ? "pagante — recebe as boas-vindas de assinante"
+                          : STATUS_META[form.statusPagamento]?.label}
+                    </strong>
+                  </p>
                   <Field label="Valor mensal (R$)">
                     <input className="dl-input" type="number" step="0.01" value={form.valorMensal} onChange={(e) => setField("valorMensal", e.target.value)} />
                   </Field>
@@ -658,6 +698,13 @@ const CSS = `
   display: flex; flex-direction: column; gap: 18px;
 }
 .sa-modal__head { display: grid; gap: 10px; }
+/* Ocupa a linha inteira do grid de dois campos: é uma frase, não um campo. */
+.sa-resumo {
+  grid-column: 1 / -1; margin: 0; display: grid; gap: 4px;
+  padding: 10px 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+}
+.sa-resumo strong { font-size: 13px; font-weight: 600; color: var(--strong); line-height: 1.45; }
 .sa-modal__title { font-size: 24px; font-weight: 800; letter-spacing: -0.035em; color: var(--strong); }
 .sa-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .sa-modal__extra-label { color: var(--placeholder); font-size: 9.5px; text-transform: none; letter-spacing: 0.05em; line-height: 1.6; }

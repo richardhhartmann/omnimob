@@ -98,6 +98,28 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
      endereço, e pular o endereço mantém o da Omnimob, que já funciona. */
   const [passo, setPasso] = useState("boas-vindas");
 
+  /* Enquanto a resposta não chega, a tela fica travada por um véu.
+
+     `/me/trial` é caro: seis consultas ao banco mais uma ida ao Stripe pelos
+     preços, e em produção isso passa de dez segundos. Sem o véu, o painel ficava
+     inteiro clicável nesse intervalo — a pessoa começava a trabalhar e o modal
+     de boas-vindas caía por cima do que ela estava fazendo.
+
+     Quem JÁ viu as duas versões (teste e assinante) não vê véu nenhum: dá para
+     saber disso pelo localStorage, antes de perguntar qualquer coisa ao
+     servidor. É o caso de todo acesso a partir do segundo, que é a maioria. */
+  const [esperando, setEsperando] = useState(() => {
+    if (!tenantSlug) return false;
+    try {
+      return !(
+        localStorage.getItem(chaveVisto(tenantSlug, "teste")) &&
+        localStorage.getItem(chaveVisto(tenantSlug, "assinante"))
+      );
+    } catch {
+      return true;
+    }
+  });
+
   useEffect(() => {
     if (!tenantSlug) return;
 
@@ -114,7 +136,8 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
         setModo(qual);
         setAberto(true);
       })
-      .catch(() => { aoResolver?.(); });
+      .catch(() => { aoResolver?.(); })
+      .finally(() => setEsperando(false));
   }, [tenantSlug]);
 
   useEffect(() => {
@@ -127,6 +150,20 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
     document.addEventListener("keydown", aoTeclar);
     return () => document.removeEventListener("keydown", aoTeclar);
   }, [aberto, passo]);
+
+  /* Véu de espera. Fica no mesmo z-index do modal e some assim que a resposta
+     chega — se houver boas-vindas, uma coisa troca pela outra no lugar. */
+  if (esperando && !aberto) {
+    return (
+      <div className="bv-veu" role="status" aria-live="polite">
+        <style>{CSS}</style>
+        <div className="bv-espera">
+          <span className="bv-espera__giro" aria-hidden="true" />
+          <span>Preparando seu painel…</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!aberto || !dados) return null;
 
@@ -321,6 +358,22 @@ ${PERFIL_INICIAL_CSS}`}</style>
 }
 
 const CSS = `
+/* Espera enquanto /me/trial responde. Sem animação de entrada: ele aparece no
+   primeiro quadro, porque o que ele impede é justamente o clique apressado. */
+.bv-espera {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 22px; border-radius: 14px;
+  background: rgba(18,18,20,0.92); border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.78); font-size: 14px; font-weight: 500;
+}
+.bv-espera__giro {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.18); border-top-color: #d4af37;
+  animation: bv-giro 0.7s linear infinite;
+}
+@keyframes bv-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bv-espera__giro { animation-duration: 2.4s; } }
+
 .bv-veu {
   position: fixed; inset: 0; z-index: 9997; display: grid; place-items: center; padding: 24px;
   background: rgba(5,5,7,0.74);
