@@ -4659,6 +4659,7 @@ ${editorCSS()}
   border: 1px solid var(--line);
   background: var(--surface);
   isolation: isolate;
+  margin-bottom: 20px;
 }
 .dl-periodo__pilula {
   position: absolute; z-index: -1;
