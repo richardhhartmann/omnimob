@@ -3129,17 +3129,6 @@ const CSS = `
   transition: clip-path 0.8s cubic-bezier(0.77, 0, 0.175, 1);
 }
 .dl-menu.is-open { clip-path: circle(150% at calc(100% - 60px) 36px); pointer-events: auto; }
-/* A palavra gigante ao fundo do menu.
-
-   z-index 0 aqui e 1 no conteúdo, e os dois são necessários. Ela é
-   `position: absolute` e o .dl-menu__inner era um filho comum de fluxo — e, na
-   ordem de pintura do CSS, elemento POSICIONADO vem depois de elemento em
-   fluxo, mesmo estando antes no HTML. Resultado: a palavra passava por cima
-   dos links de acesso e do e-mail, que era só o que dava para ler ali.
-
-   Sem `pointer-events: none` ela ainda roubaria o clique deles — e isso já
-   estava certo desde o começo, o que provavelmente escondeu o problema: dava
-   para clicar no link invisível. */
 .dl-menu__ghost {
   position: absolute; bottom: -6%; right: 4%; z-index: 0;
   pointer-events: none; user-select: none;
