@@ -50,10 +50,26 @@ export function ClientesPage({ session }) {
   const searchTimer = useRef(null);
   const lastCepRef = useRef("");
 
+  /* Só a PRIMEIRA carga anuncia quantos vieram. `carregarClientes` também roda
+     a cada tecla da busca (com debounce) — sem esta trava, digitar "ana" daria
+     três toasts de contagem no caminho. */
+  const jaContou = useRef(false);
+
   function carregarClientes(searchTerm = "") {
     if (!tenantSlug) return;
     api.listClientes(tenantSlug, { search: searchTerm })
-      .then(setClientes)
+      .then((lista) => {
+        setClientes(lista);
+        if (!jaContou.current) {
+          jaContou.current = true;
+          const n = Array.isArray(lista) ? lista.length : 0;
+          showToast?.(
+            n === 0 ? "Nenhum cliente cadastrado ainda."
+            : n === 1 ? "1 cliente carregado."
+            : `${n} clientes carregados.`,
+          );
+        }
+      })
       .catch(() => {})
       .finally(() => setInitialLoading(false));
   }
@@ -101,13 +117,16 @@ export function ClientesPage({ session }) {
       if (editando) {
         const updated = await api.updateCliente(tenantSlug, editando.id, payload);
         setClientes((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+        showToast?.(`${updated.nome} atualizado.`);
       } else {
         const created = await api.createCliente(tenantSlug, payload);
         setClientes((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
+        showToast?.(`${created.nome} cadastrado.`);
       }
       setView("list");
     } catch (err) {
       setError(err.message);
+      showToast?.(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -118,9 +137,11 @@ export function ClientesPage({ session }) {
       if (c.ativo) {
         await api.desativarCliente(tenantSlug, c.id);
         setClientes((prev) => prev.map((x) => x.id === c.id ? { ...x, ativo: false } : x));
+        showToast?.(`${c.nome} foi desativado.`);
       } else {
         const updated = await api.updateCliente(tenantSlug, c.id, { ativo: true });
         setClientes((prev) => prev.map((x) => x.id === updated.id ? updated : x));
+        showToast?.(`${updated.nome} foi reativado.`);
       }
     } catch (err) {
       showToast ? showToast(err.message, "error") : alert(err.message);

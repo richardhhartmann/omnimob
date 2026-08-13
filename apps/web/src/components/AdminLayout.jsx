@@ -10,6 +10,7 @@ import { TourDeTela } from "./TourDeTela";
 import { AjudaModal } from "./AjudaModal";
 import { corDeTextoPara } from "./adminUi";
 import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
+import { IconeRelatorios } from "../utils/iconesRelatorios";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
@@ -222,7 +223,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const isImovelNovo    = p === "/imoveis/novo" || p === "/tipos-imovel";
   const isImovelList    = p === "/imoveis";
   const isInsights      = p.startsWith("/imoveis/") && !isImovelNovo;
-  const isLeads         = p === "/leads";
+  const isLeads         = p === "/relatorios" || p === "/leads";
   const isClientes      = p === "/clientes";
   const isUsuarios      = p === "/usuarios";
   const isCargos        = p === "/cargos";
@@ -243,7 +244,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
   // ── Badge de novos leads ──────────────────────────────────────────────────────
   const [leadsBadge, setLeadsBadge] = useState(0);
-  const canSeeLeads = Boolean(cargo?.gerenciarLeads);
+  const canSeeLeads = Boolean(cargo?.verRelatorios);
   useEffect(() => {
     if (!tenantSlug || !canSeeLeads) return;
     function checkLeads() {
@@ -278,7 +279,11 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       {
         label: "RELACIONAMENTO",
         itens: [
-          cargo?.gerenciarLeads && { key: "leads", Icon: Users, label: "Leads", active: isLeads, onClick: () => navigate("/leads"), badge: leadsBadge },
+          /* Um item só para tudo que é leitura do que aconteceu: leads, relatório
+             mensal, funil e comissões. O rótulo é "Relatórios" e o destino é a
+             página que reúne os quatro — cada recurso novo entra LÁ DENTRO, e não
+             como mais uma linha nesta barra. */
+          cargo?.verRelatorios && { key: "leads", Icon: IconeRelatorios, label: "Relatórios", active: isLeads, onClick: () => navigate("/relatorios"), badge: leadsBadge },
           cargo?.gerenciarClientes && { key: "clientes", Icon: UserCircle, label: "Clientes", active: isClientes, onClick: () => navigate("/clientes") },
         ].filter(Boolean),
       },

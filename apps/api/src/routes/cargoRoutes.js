@@ -9,7 +9,7 @@ cargoRouter.use(requireAuth);
 cargoRouter.use(requireTenant);
 cargoRouter.use(requirePermissao("gerenciarUsuarios", "gerenciarCargos"));
 
-const PERMISSOES = ["acessarPainel", "editarPagina", "gerenciarImoveis", "gerenciarLeads",
+const PERMISSOES = ["acessarPainel", "editarPagina", "gerenciarImoveis",
   "gerenciarUsuarios", "gerenciarClientes", "gerenciarCargos", "verConfiguracoes",
   "verRelatorios", "publicarRedes"];
 

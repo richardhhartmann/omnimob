@@ -7,7 +7,8 @@ import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracao
 import { criarAssinatura, precosDosPlanos, agendarCancelamentoDoSlug } from "../services/pagamentoService.js";
 import { fidelizarTrial } from "../services/trialService.js";
 import { sendEmail } from "../services/notificationService.js";
-import { emailAssinaturaConfirmada } from "../services/emailTemplates.js";
+import { emailAssinaturaConfirmada, emailRelatorioMensal } from "../services/emailTemplates.js";
+import { montarRelatorioMensal, mesFechadoAnterior } from "../services/relatorioService.js";
 import {
   enderecoDaVitrine,
   cadastrarDominio,
@@ -15,7 +16,7 @@ import {
   removerDominio,
   dominioConfigurado,
 } from "../services/dominioService.js";
-import { planoInfo, requirePlanoDominio } from "../middlewares/planoMiddleware.js";
+import { planoInfo, requirePlano, requirePlanoDominio } from "../middlewares/planoMiddleware.js";
 
 export const tenantRouter = Router();
 
@@ -248,6 +249,75 @@ tenantRouter.delete(
     } catch (erro) {
       console.error("[dominio] remoção falhou:", erro.message);
       return res.status(400).json({ error: erro.message });
+    }
+  },
+);
+
+/* ── Relatório mensal (Profissional+) ────────────────────────────────────────
+   Duas rotas para o mesmo relatório: uma MOSTRA na tela, outra MANDA por
+   e-mail. A separação existe porque o e-mail chega uma vez por mês e some na
+   caixa de entrada; a tela é onde alguém confere um mês específico quando
+   precisa. E porque, sem pré-visualização, a primeira vez que se descobre que o
+   relatório está errado é depois de ele ter ido para o cliente.
+
+   `?ano=&mes=` opcionais: sem eles, vale o último mês FECHADO. O mês corrente
+   dá um número que muda a cada visita e não se compara com nada. */
+const requirePlanoRelatorio = requirePlano(1, "Profissional");
+
+function periodoDaQuery(query) {
+  const ano = Number(query.ano);
+  const mes = Number(query.mes);
+  const valido =
+    Number.isInteger(ano) && ano >= 2000 && ano <= 2100 && Number.isInteger(mes) && mes >= 1 && mes <= 12;
+  return valido ? { ano, mes } : mesFechadoAnterior();
+}
+
+tenantRouter.get(
+  "/me/relatorio-mensal",
+  requireAuth,
+  requireTenant,
+  requirePlanoRelatorio,
+  requirePermissao("verRelatorios"),
+  async (req, res) => {
+    try {
+      const relatorio = await montarRelatorioMensal(req.tenant.id, periodoDaQuery(req.query));
+      return res.json(relatorio);
+    } catch (err) {
+      console.error("[GET /tenants/me/relatorio-mensal]", err);
+      return res.status(500).json({ error: "Erro ao montar o relatório." });
+    }
+  },
+);
+
+tenantRouter.post(
+  "/me/relatorio-mensal/enviar",
+  requireAuth,
+  requireTenant,
+  requirePlanoRelatorio,
+  requirePermissao("verRelatorios"),
+  async (req, res) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: { name: true, email: true },
+      });
+      if (!tenant?.email) {
+        return res.status(400).json({ error: "Esta imobiliária não tem e-mail cadastrado." });
+      }
+
+      const periodo = periodoDaQuery(req.body || {});
+      const relatorio = await montarRelatorioMensal(req.tenant.id, periodo);
+      const { subject, body, html } = emailRelatorioMensal({
+        imobiliaria: tenant.name,
+        relatorio,
+        base: (process.env.APP_URL || "").replace(/\/+$/, ""),
+      });
+
+      await sendEmail({ to: tenant.email, subject, body, html });
+      return res.json({ enviado: true, para: tenant.email, periodo: relatorio.periodo });
+    } catch (err) {
+      console.error("[POST /tenants/me/relatorio-mensal/enviar]", err);
+      return res.status(500).json({ error: "Erro ao enviar o relatório.", detail: err.message });
     }
   },
 );

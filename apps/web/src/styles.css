@@ -1128,6 +1128,24 @@ button:disabled {
 .showcase-body {
   scrollbar-width: thin;
   scrollbar-color: var(--glass-highlight) transparent;
+
+  /* ── Barra de rolagem HORIZONTAL indevida ──
+     O cabeçalho e todo bloco com banner sangram de ponta a ponta com
+     `left: calc(50% - 50vw); width: 100vw`. O problema é que 100vw conta a
+     LARGURA DA JANELA INTEIRA, barra de rolagem vertical inclusa — enquanto o
+     conteúdo só dispõe da largura menos a barra. Sobram os ~15px da barra
+     estourando para a direita, e o navegador oferece rolagem horizontal para
+     alcançar um espaço onde não há nada.
+
+     `clip` e não `hidden`: os dois recortam igual, mas `hidden` cria um
+     contêiner de rolagem, e isso quebraria qualquer `position: sticky` de
+     dentro da vitrine além de permitir que a página fosse rolada de lado por
+     script. `clip` só recorta.
+
+     No eixo Y fica `visible` de propósito — a página precisa rolar normalmente.
+     A dupla clip/visible é válida; é hidden/visible que o CSS proíbe. */
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 /* Fade sutil ao entrar nas páginas públicas da vitrine (navegação SPA).

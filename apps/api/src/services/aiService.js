@@ -450,3 +450,118 @@ export async function inferirComodidadesRegiao(endereco = {}, comodidades = []) 
     return { presentes: [] };
   }
 }
+
+/* ─── IA sobre o LEAD ─────────────────────────────────────────────────────────
+   Todo o resto deste serviço trabalha sobre o IMÓVEL: escreve o anúncio, o
+   título, a legenda. Isso economiza o tempo de cadastrar. Esta função é a
+   primeira que trabalha sobre o INTERESSADO — e é a que ajuda a vender.
+
+   Ela responde as quatro perguntas que alguém do time faz ao abrir um lead:
+   o que essa pessoa quer, quão perto ela está de comprar, o que eu respondo, e
+   o que mais do acervo serve para ela.
+
+   As quatro juntas numa chamada só, e não quatro chamadas: o modelo precisa do
+   MESMO contexto para todas (a mensagem, o imóvel procurado e o acervo), e
+   dividir em quatro pagaria esse contexto quatro vezes — em custo e em espera
+   de quem está com a tela aberta. */
+
+const TEMPERATURAS = ["QUENTE", "MORNO", "FRIO"];
+
+/** Uma linha por imóvel do acervo, curta — são dezenas delas no mesmo prompt. */
+function linhaDoAcervo(p) {
+  const partes = [
+    p.propertyType || p.tipo,
+    p.neighborhood && `${p.neighborhood}`,
+    p.city,
+    p.bedrooms ? `${p.bedrooms} dorm` : null,
+    p.parkingSpots ? `${p.parkingSpots} vaga(s)` : null,
+    (p.areaPrivativa || p.squareFootage) ? `${p.areaPrivativa || p.squareFootage} m²` : null,
+    brl(p.price),
+  ].filter(Boolean);
+  return `- ${p.id} | ${p.title || "(sem título)"} — ${partes.join(", ")}`;
+}
+
+/**
+ * Lê um lead e devolve resumo, temperatura, resposta pronta e imóveis do acervo
+ * que servem para aquele interessado.
+ *
+ * @param {object} lead    { name, email, phone, message, createdAt }
+ * @param {object} imovel  O imóvel pelo qual a pessoa entrou em contato
+ * @param {object[]} acervo Outros imóveis ativos do MESMO tenant (já filtrados)
+ * @returns {Promise<{resumo,temperatura,porqueTemperatura,resposta,sugestoes:string[]}>}
+ */
+export async function analisarLead(lead = {}, imovel = null, acervo = []) {
+  /* Só ids que existem entram no enum do schema. É o que impede a IA de
+     "sugerir" um imóvel inventado — e, mais importante aqui, de devolver o id
+     de um imóvel de OUTRA imobiliária caso ele apareça no prompt por engano.
+     Quem monta o acervo é a rota, que já filtra por tenant; este enum é a
+     segunda tranca. */
+  const ids = acervo.map((p) => p.id);
+
+  const schema = {
+    type: "object",
+    properties: {
+      resumo: { type: "string" },
+      temperatura: { type: "string", enum: TEMPERATURAS },
+      porqueTemperatura: { type: "string" },
+      resposta: { type: "string" },
+      // Sem `enum` quando o acervo está vazio: enum vazio é schema inválido.
+      sugestoes: ids.length
+        ? { type: "array", items: { type: "string", enum: ids } }
+        : { type: "array", items: { type: "string" } },
+    },
+    required: ["resumo", "temperatura", "porqueTemperatura", "resposta", "sugestoes"],
+  };
+
+  const quando = lead.createdAt ? new Date(lead.createdAt).toLocaleString("pt-BR") : "(sem data)";
+  const prompt =
+    `Um interessado entrou em contato pela vitrine de uma imobiliária. Analise o contato.\n\n` +
+    `INTERESSADO\n` +
+    `- Nome: ${lead.name || "(não informado)"}\n` +
+    `- E-mail: ${lead.email || "(não informado)"}\n` +
+    `- Telefone: ${lead.phone || "(não informado)"}\n` +
+    `- Quando: ${quando}\n` +
+    `- Mensagem: ${lead.message || "(não escreveu mensagem)"}\n\n` +
+    `IMÓVEL PELO QUAL ELE SE INTERESSOU\n${imovel ? fichaImovel(imovel) : "- (imóvel não encontrado)"}\n\n` +
+    `OUTROS IMÓVEIS DISPONÍVEIS NESTA IMOBILIÁRIA\n` +
+    `${ids.length ? acervo.map(linhaDoAcervo).join("\n") : "- (nenhum outro imóvel ativo)"}\n\n` +
+    `Devolva:\n` +
+    `1. "resumo": em 1 ou 2 frases, o que essa pessoa quer. Se ela não escreveu mensagem, ` +
+    `diga o que dá para deduzir do imóvel que ela abriu — e deixe claro que é dedução.\n` +
+    `2. "temperatura": QUENTE (demonstrou intenção clara, urgência, falou em visita, ` +
+    `financiamento ou proposta), MORNO (perguntou algo específico do imóvel) ou ` +
+    `FRIO (contato genérico, sem mensagem, ou só curiosidade).\n` +
+    `3. "porqueTemperatura": uma frase curta justificando, citando o que na mensagem levou a isso. ` +
+    `Sem mensagem, a temperatura é no máximo MORNO.\n` +
+    `4. "resposta": a mensagem que o corretor deve MANDAR para essa pessoa, pronta para copiar. ` +
+    `Em português do Brasil, tratamento por "você", cordial e direta, no máximo 4 linhas. ` +
+    `Responda o que foi perguntado, e termine propondo um próximo passo concreto (visita, ligação). ` +
+    `Não invente informação que não esteja na ficha do imóvel — se ela perguntou algo que a ficha ` +
+    `não responde, diga que vai confirmar. Nunca prometa preço, desconto ou condição de pagamento.\n` +
+    `5. "sugestoes": até 3 ids de OUTROS imóveis da lista que sirvam para essa pessoa, do mais ` +
+    `aderente para o menos. Use somente ids da lista, e nunca o do imóvel que ela já abriu. ` +
+    `Se nenhum for parecido de verdade em faixa de preço, região e tamanho, devolva lista vazia — ` +
+    `sugerir qualquer coisa é pior do que não sugerir.`;
+
+  const raw = await callGemini([{ text: prompt }], {
+    system:
+      "Você é um corretor de imóveis brasileiro experiente, que lê um contato e sabe " +
+      "exatamente o que responder. É honesto: não inventa característica de imóvel nem " +
+      "promete o que não pode cumprir. Escreve sempre em português do Brasil.",
+    responseSchema: schema,
+    temperature: 0.4,
+  });
+
+  const parsed = JSON.parse(raw);
+  const validos = new Set(ids);
+  return {
+    resumo: String(parsed.resumo || "").trim(),
+    temperatura: TEMPERATURAS.includes(parsed.temperatura) ? parsed.temperatura : "FRIO",
+    porqueTemperatura: String(parsed.porqueTemperatura || "").trim(),
+    resposta: String(parsed.resposta || "").trim(),
+    // Filtra de novo na saída: o enum do schema é um pedido, não uma garantia.
+    sugestoes: Array.isArray(parsed.sugestoes)
+      ? [...new Set(parsed.sugestoes.filter((id) => validos.has(id)))].slice(0, 3)
+      : [],
+  };
+}

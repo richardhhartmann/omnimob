@@ -190,7 +190,7 @@ const JORNADA = [
 // parte do produto de que está falando.
 const RECURSOS = [
   { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar.", tela: "imoveis", url: "omnimob.app / imóveis", legenda: "PAINEL WEB · IMÓVEIS" },
-  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "omnimob.app / vitrine / editar", legenda: "PAINEL WEB · EDITOR DE VITRINE" },
+  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual intuitivo de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "omnimob.app / vitrine / editar", legenda: "PAINEL WEB · EDITOR DE VITRINE" },
   { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel.", tela: "metricas", url: "omnimob.app / métricas", legenda: "PAINEL WEB · MÉTRICAS" },
   { Icon: Megaphone, title: "Publicação em redes", desc: "Divulgue imóveis no Facebook, Instagram e WhatsApp com legenda pronta em poucos cliques.", tela: "redes", url: "omnimob.app / publicações", legenda: "PAINEL WEB · PUBLICAÇÕES" },
   { Icon: UsersThree, title: "Usuários e permissões", desc: "Crie cargos com permissões granulares para corretores, marketing, gerência e mais.", tela: "usuarios", url: "omnimob.app / usuários", legenda: "PAINEL WEB · EQUIPE" },
@@ -2922,7 +2922,7 @@ export function OmnimobLandingPage() {
       <section id="planos" className="dl-section dl-section--alt">
         <div className="dl-wrap">
           <SectionHead eyebrow="PLANOS" eyebrowTone={GOLD} strong="Escolha o plano ideal" soft="para sua imobiliária.">
-            Sem fidelidade, cancele quando quiser. Todo o núcleo do produto já está no Básico.
+            Sem fidelidade, cancele quando quiser.
           </SectionHead>
 
           <Planos planos={PLANS} aoTestar={abrirTeste} />
@@ -3129,12 +3129,25 @@ const CSS = `
   transition: clip-path 0.8s cubic-bezier(0.77, 0, 0.175, 1);
 }
 .dl-menu.is-open { clip-path: circle(150% at calc(100% - 60px) 36px); pointer-events: auto; }
+/* A palavra gigante ao fundo do menu.
+
+   z-index 0 aqui e 1 no conteúdo, e os dois são necessários. Ela é
+   `position: absolute` e o .dl-menu__inner era um filho comum de fluxo — e, na
+   ordem de pintura do CSS, elemento POSICIONADO vem depois de elemento em
+   fluxo, mesmo estando antes no HTML. Resultado: a palavra passava por cima
+   dos links de acesso e do e-mail, que era só o que dava para ler ali.
+
+   Sem `pointer-events: none` ela ainda roubaria o clique deles — e isso já
+   estava certo desde o começo, o que provavelmente escondeu o problema: dava
+   para clicar no link invisível. */
 .dl-menu__ghost {
-  position: absolute; bottom: -6%; right: 4%; pointer-events: none; user-select: none;
+  position: absolute; bottom: -6%; right: 4%; z-index: 0;
+  pointer-events: none; user-select: none;
   font-size: clamp(11rem, 24vw, 28rem); font-weight: 800; line-height: 0.8;
   letter-spacing: -0.05em; color: #0d0d0f;
 }
 .dl-menu__inner {
+  position: relative; z-index: 1;
   width: 100%; display: grid; grid-template-columns: 1.5fr 1fr; gap: 60px;
   align-content: center; padding: 120px clamp(20px, 5vw, 56px) 60px;
 }

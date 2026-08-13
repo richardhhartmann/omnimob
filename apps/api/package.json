@@ -17,6 +17,7 @@
     "prisma:seed": "node prisma/seed.js",
     "prisma:seed:dev": "node prisma/seed.js --dev",
     "faxina": "node scripts/faxina.js",
+    "relatorio": "node scripts/relatorio-mensal.js",
     "stripe:limpar": "node scripts/stripe-limpar.js",
     "subdominios": "node scripts/subdominios.js",
     "test": "node --test \"test/*.test.js\"",

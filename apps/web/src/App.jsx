@@ -4,6 +4,7 @@ import { api, setApiToken, setAdminToken } from "./api";
 import { initPointerGradient } from "./utils/pointerGradient";
 import { DashboardPage, ImovelListPage, ImovelFormPage } from "./pages/DashboardPage";
 import { LeadsPage } from "./pages/LeadsPage";
+import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PropertyInsightsPage } from "./pages/PropertyInsightsPage";
 import { ShowcaseEditorPage } from "./pages/ShowcaseEditorPage";
@@ -289,11 +290,16 @@ export default function App() {
             ? <ImovelFormPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
-        <Route path="/leads" element={
-          cargo?.gerenciarLeads
-            ? <LeadsPage session={session} />
+        {/* "Relatórios" reúne leads, relatório mensal, funil e comissões.
+            /leads continua respondendo (redireciona) porque havia link para ele
+            no menu, no badge e em tours — quebrar endereço antigo por
+            renomeação de tela é o tipo de coisa que só aparece semanas depois. */}
+        <Route path="/relatorios" element={
+          cargo?.verRelatorios
+            ? <RelatoriosPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        <Route path="/leads" element={<Navigate to="/relatorios" replace />} />
         <Route path="/usuarios" element={
           cargo?.gerenciarUsuarios
             ? <UsuariosPage session={session} />

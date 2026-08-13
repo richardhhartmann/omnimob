@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import { api } from "../api";
 import { Avatar } from "../components/adminUi";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
+import { planoLiberaIA } from "../utils/planos";
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -66,12 +67,37 @@ function StatCard({ label, value, accent, icon }) {
 
 export function LeadsPage({ session }) {
   const tenantSlug = session?.tenant?.slug || "";
+  const showToast = useOutletContext()?.showToast;
   const { confirm, modal: confirmModal } = useConfirm();
   const [data, setData] = useState({ leads: [], total: 0, page: 1, limit: 100 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [copied, setCopied] = useState(null);
+
+  /* ── IA sobre o lead (Premium) ──────────────────────────────────────────────
+     Uma análise por lead, guardada por id enquanto a tela está aberta: quem
+     analisa, lê, responde e volta não deve pagar a chamada de novo — nem a
+     espera. Não persiste no banco de propósito; a resposta certa muda conforme
+     o acervo muda, e uma análise de três semanas atrás sugeriria imóveis que
+     já foram vendidos. */
+  const temIA = planoLiberaIA(session?.tenant?.plano);
+  const [analises, setAnalises] = useState({});   // { [leadId]: resultado }
+  const [analisando, setAnalisando] = useState(null);
+  const [erroIA, setErroIA] = useState({});       // { [leadId]: mensagem }
+
+  async function analisarComIA(leadId) {
+    setAnalisando(leadId);
+    setErroIA((e) => ({ ...e, [leadId]: "" }));
+    try {
+      const r = await api.analisarLeadIA(tenantSlug, leadId);
+      setAnalises((a) => ({ ...a, [leadId]: r }));
+    } catch (err) {
+      setErroIA((e) => ({ ...e, [leadId]: err.message || "Não foi possível analisar." }));
+    } finally {
+      setAnalisando(null);
+    }
+  }
 
   // Filtros (client-side sobre os leads carregados)
   const [search, setSearch] = useState("");
@@ -127,8 +153,10 @@ export function LeadsPage({ session }) {
     try {
       await api.deleteLead(tenantSlug, leadId);
       await loadLeads();
+      showToast?.("Lead removido.");
     } catch (err) {
       setError(err.message);
+      showToast?.(err.message, "error");
     } finally {
       setDeletingId(null);
     }
@@ -381,6 +409,18 @@ export function LeadsPage({ session }) {
                       {lead.message}
                     </p>
                   ) : null}
+
+                  {temIA ? (
+                    <AnaliseIA
+                      lead={lead}
+                      analise={analises[lead.id]}
+                      carregando={analisando === lead.id}
+                      erro={erroIA[lead.id]}
+                      onAnalisar={() => analisarComIA(lead.id)}
+                      onCopiar={(texto) => copyToClipboard(texto, `ia-${lead.id}`)}
+                      copiado={copied === `ia-${lead.id}`}
+                    />
+                  ) : null}
                 </div>
 
                 {/* Ações */}
@@ -432,6 +472,113 @@ export function LeadsPage({ session }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/* ── Análise do lead pela IA ──────────────────────────────────────────────────
+   Fechada até alguém pedir. A chamada custa dinheiro e uns segundos de espera,
+   e a maioria dos leads é respondida sem precisar dela — analisar os cem da
+   lista ao abrir a tela seria cem chamadas para talvez três leituras. */
+
+const TEMPERATURA_META = {
+  QUENTE: { rotulo: "Quente", cor: "#f87171", fundo: "rgba(248,113,113,0.14)" },
+  MORNO:  { rotulo: "Morno",  cor: "#fbbf24", fundo: "rgba(251,191,36,0.14)" },
+  FRIO:   { rotulo: "Frio",   cor: "#60a5fa", fundo: "rgba(96,165,250,0.14)" },
+};
+
+function AnaliseIA({ lead, analise, carregando, erro, onAnalisar, onCopiar, copiado }) {
+  if (!analise && !carregando && !erro) {
+    return (
+      <button
+        type="button"
+        onClick={onAnalisar}
+        style={{
+          marginTop: "10px", width: "auto", padding: "7px 13px", borderRadius: "999px",
+          display: "inline-flex", alignItems: "center", gap: "7px",
+          fontSize: "12px", fontWeight: 600, cursor: "pointer",
+          background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.34)",
+          color: "#e8cf7a",
+        }}
+      >
+        <IconeFaisca /> Analisar com IA
+      </button>
+    );
+  }
+
+  if (carregando) {
+    return (
+      <p style={{ marginTop: "10px", fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic" }}>
+        Lendo o contato e olhando o acervo…
+      </p>
+    );
+  }
+
+  if (erro) {
+    return (
+      <p style={{ marginTop: "10px", fontSize: "12px", color: "#fca5a5" }}>
+        {erro}{" "}
+        <button type="button" onClick={onAnalisar} style={{ width: "auto", padding: 0, background: "none", border: 0, color: "#e8cf7a", cursor: "pointer", fontSize: "12px", textDecoration: "underline" }}>
+          tentar de novo
+        </button>
+      </p>
+    );
+  }
+
+  const t = TEMPERATURA_META[analise.temperatura] || TEMPERATURA_META.FRIO;
+  return (
+    <div style={{ marginTop: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.20)", display: "grid", gap: "10px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", color: "#e8cf7a" }}>ANÁLISE DA IA</span>
+        <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: t.cor, background: t.fundo, padding: "2px 9px", borderRadius: "999px" }}>
+          {t.rotulo}
+        </span>
+        {/* O porquê fica ao lado do rótulo, e não escondido: "quente" sem
+            justificativa é um palpite que ninguém tem como conferir. */}
+        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{analise.porqueTemperatura}</span>
+      </div>
+
+      <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.55 }}>{analise.resumo}</p>
+
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "5px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)" }}>Resposta sugerida</span>
+          <button
+            type="button"
+            onClick={() => onCopiar(analise.resposta)}
+            style={{ width: "auto", padding: "3px 9px", borderRadius: "999px", fontSize: "11px", cursor: "pointer", background: copiado ? "rgba(16,185,129,0.16)" : "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: copiado ? "#6ee7b7" : "var(--text-muted)" }}
+          >
+            {copiado ? "Copiado" : "Copiar"}
+          </button>
+        </div>
+        <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "rgba(0,0,0,0.22)", padding: "10px 12px", borderRadius: "8px" }}>
+          {analise.resposta}
+        </p>
+      </div>
+
+      {analise.sugestoes?.length ? (
+        <div>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
+            Também pode servir para {lead.name?.split(" ")[0] || "este contato"}
+          </span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+            {analise.sugestoes.map((s) => (
+              <Link key={s.id} to={`/imoveis/${s.id}`} style={chipStyle("#e8cf7a")}>
+                <IconHome /> {s.title || "Imóvel"}
+                {s.neighborhood ? ` · ${s.neighborhood}` : ""}
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function IconeFaisca() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2l1.9 5.8L20 9.7l-5.1 3.4L16 19l-4-3.2L8 19l1.1-5.9L4 9.7l6.1-1.9z" />
+    </svg>
   );
 }
 

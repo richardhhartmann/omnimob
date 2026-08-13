@@ -22,6 +22,30 @@ chamadoRouter.use(requireTenant);
 
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "URGENTE"];
 
+/* ── Suporte prioritário por plano ───────────────────────────────────────────
+   A prioridade que chega no corpo vem da CATEGORIA, não de um seletor: "algo
+   não funciona" é objetivamente mais urgente que "tenho uma ideia" (ver
+   `prioridadeDaCategoria` em utils/suporte.js). Ela diz a NATUREZA do problema.
+
+   O plano entra por cima disso, empurrando o chamado alguns degraus para cima
+   na mesma escala: Profissional sobe um, Premium sobe dois. É por isso que é um
+   DESLOCAMENTO e não um piso — com piso, todo chamado de Premium viraria
+   URGENTE e a fila do Premium perderia qualquer ordem interna. Somando, a
+   natureza do problema continua ordenando dentro de cada plano, e o plano
+   ordena entre eles.
+
+   Na prática: uma dúvida de Premium (BAIXA +2) empata com um problema de Básico
+   (ALTA +0). Que é exatamente o que "suporte prioritário" significa — e é
+   aplicado no SERVIDOR, porque o corpo da requisição é do cliente. */
+const DEGRAUS_POR_PLANO = { BASICO: 0, PROFISSIONAL: 1, PREMIUM: 2 };
+
+function prioridadeComPlano(prioridade, plano) {
+  const base = PRIORIDADES.indexOf(prioridade);
+  if (base < 0) return "MEDIA";
+  const degraus = DEGRAUS_POR_PLANO[String(plano || "").toUpperCase()] ?? 0;
+  return PRIORIDADES[Math.min(base + degraus, PRIORIDADES.length - 1)];
+}
+
 const abrirSchema = z.object({
   titulo: z.string().trim().min(4, "Escreva um assunto.").max(140),
   descricao: z.string().trim().min(15, "Descreva o que aconteceu.").max(4000),
@@ -69,6 +93,7 @@ chamadoRouter.post("/", async (req, res) => {
     const chamado = await prisma.chamado.create({
       data: {
         ...parsed.data,
+        prioridade: prioridadeComPlano(parsed.data.prioridade, req.tenant.plano),
         tenantId: req.tenant.id,
         usuarioId: usuario?.id ?? null,
         usuarioNome: usuario ? `${usuario.nome} (${usuario.login})` : "",

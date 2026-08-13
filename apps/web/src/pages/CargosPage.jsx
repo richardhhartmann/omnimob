@@ -1,3 +1,4 @@
+import { useOutletContext } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
@@ -6,17 +7,29 @@ import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { useConfirm } from "../components/ConfirmModal";
 import { ModalCiencia } from "../components/ModalCiencia";
 import { planoLiberaRedes } from "../utils/planos";
+import { IconeRelatorios } from "../utils/iconesRelatorios";
+import {
+  House, PencilSimple, Buildings, UserSquare, UserCircle, Shield, ShareNetwork,
+} from "@phosphor-icons/react";
 
+/* Cada permissão carrega o ÍCONE do lugar que ela abre — o mesmo da barra
+   lateral e do painel inicial. Marcar "Ver Relatórios" e reconhecer ali o
+   gráfico que aparece no menu é o que liga a caixa de seleção à consequência
+   dela; só o texto obriga a pessoa a traduzir sozinha.
+
+   `verConfiguracoes` não está na lista, e é de propósito — ver o comentário
+   logo abaixo. */
 const PERMISSOES = [
-  { key: "acessarPainel",     label: "Acessar Painel" },
-  { key: "editarPagina",      label: "Editar Vitrine" },
-  { key: "gerenciarImoveis",  label: "Gerenciar Imóveis" },
-  { key: "gerenciarLeads",    label: "Gerenciar Leads" },
-  { key: "gerenciarUsuarios", label: "Gerenciar Usuários" },
-  { key: "gerenciarClientes", label: "Gerenciar Clientes" },
-  { key: "gerenciarCargos",   label: "Gerenciar Cargos" },
-  { key: "verRelatorios",     label: "Ver Relatórios" },
-  { key: "publicarRedes",     label: "Publicar em Redes" },
+  { key: "acessarPainel",     label: "Acessar Painel",     Icon: House },
+  { key: "editarPagina",      label: "Editar Vitrine",     Icon: PencilSimple },
+  { key: "gerenciarImoveis",  label: "Gerenciar Imóveis",  Icon: Buildings },
+  { key: "gerenciarUsuarios", label: "Gerenciar Usuários", Icon: UserSquare },
+  { key: "gerenciarClientes", label: "Gerenciar Clientes", Icon: UserCircle },
+  { key: "gerenciarCargos",   label: "Gerenciar Cargos",   Icon: Shield },
+  /* "Ver Relatórios" absorveu o antigo "Gerenciar Leads": ela abre a página
+     Relatórios inteira — leads, relatório mensal, funil e comissões. */
+  { key: "verRelatorios",     label: "Ver Relatórios",     Icon: IconeRelatorios },
+  { key: "publicarRedes",     label: "Publicar em Redes",  Icon: ShareNetwork },
 ];
 
 /* `verConfiguracoes` NÃO está na lista acima, e é de propósito: ela não é uma
@@ -68,6 +81,11 @@ function emptyForm() {
 }
 
 export function CargosPage({ session, onSessionUpdate }) {
+  /* Aviso de sucesso no mesmo canal do resto do painel (o toast do
+     AdminLayout, via contexto do Outlet). Antes esta tela só falava quando dava
+     ERRADO — e um `alert()` do navegador no caso de exclusão. Salvar em
+     silêncio deixa a dúvida de sempre: gravou? */
+  const showToast = useOutletContext()?.showToast;
   const tenantSlug = session?.tenant?.slug;
   /* Uma lista só para a tela inteira: formulário, selos e a contagem de
      "sem permissões" precisam concordar sobre o que existe neste plano. */
@@ -93,7 +111,14 @@ export function CargosPage({ session, onSessionUpdate }) {
 
   useEffect(() => {
     if (!tenantSlug) return;
-    api.listCargos(tenantSlug).then(setCargos).catch(() => {}).finally(() => setInitialLoading(false));
+    api.listCargos(tenantSlug)
+      .then((lista) => {
+        setCargos(lista);
+        const n = Array.isArray(lista) ? lista.length : 0;
+        showToast?.(n === 1 ? "1 cargo carregado." : `${n} cargos carregados.`);
+      })
+      .catch(() => {})
+      .finally(() => setInitialLoading(false));
   }, [tenantSlug]);
 
   const stats = useMemo(() => ({
@@ -155,7 +180,10 @@ export function CargosPage({ session, onSessionUpdate }) {
       atualizarSessaoSeProprioCargoFoi(updated);
     } catch (err) {
       setForm(form); // reverte
-      alert(err.message);
+      /* Era `alert()`. Aqui o toast importa mais que nos outros: a caixa de
+         seleção VOLTA sozinha ao estado anterior, e sem aviso a pessoa vê o
+         próprio clique se desfazer sem explicação. */
+      showToast?.(err.message, "error");
     } finally {
       setSaving(false);
     }
@@ -201,14 +229,17 @@ export function CargosPage({ session, onSessionUpdate }) {
         const updated = await api.updateCargo(tenantSlug, editando.id, { descricao: form.descricao });
         setCargos((prev) => prev.map((c) => c.id === updated.id ? { ...c, descricao: updated.descricao } : c));
         atualizarSessaoSeProprioCargoFoi({ ...session?.usuario?.cargo, descricao: updated.descricao });
+        showToast?.(`Cargo "${updated.descricao}" atualizado.`);
         setView("list");
       } else {
         const created = await api.createCargo(tenantSlug, form);
         setCargos((prev) => [...prev, created]);
+        showToast?.(`Cargo "${created.descricao}" criado.`);
         setView("list");
       }
     } catch (err) {
       setError(err.message);
+      showToast?.(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -219,8 +250,10 @@ export function CargosPage({ session, onSessionUpdate }) {
     try {
       await api.deleteCargo(tenantSlug, c.id);
       setCargos((prev) => prev.filter((x) => x.id !== c.id));
+      showToast?.(`Cargo "${c.descricao}" excluído.`);
     } catch (err) {
-      alert(err.message);
+      // Era `alert()` — caixa do navegador no meio de um painel que tem toast.
+      showToast?.(err.message, "error");
     }
   }
 
@@ -275,7 +308,7 @@ export function CargosPage({ session, onSessionUpdate }) {
               )}
             </div>
             <div data-tour="cargo-permissoes" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px" }}>
-              {permissoesVisiveis.map(({ key, label }) => {
+              {permissoesVisiveis.map(({ key, label, Icon }) => {
                 const locked = LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario;
                 const checked = locked ? true : Boolean(form[key]);
                 const isAutoSaving = editando !== null;
@@ -311,6 +344,13 @@ export function CargosPage({ session, onSessionUpdate }) {
                       disabled={loading || locked || saving}
                       style={{ accentColor: "#6366f1", width: "14px", height: "14px", flexShrink: 0 }}
                     />
+                    {Icon ? (
+                      <Icon
+                        size={16}
+                        weight={checked ? "fill" : "regular"}
+                        style={{ flexShrink: 0, color: checked ? "#a5b4fc" : "var(--text-muted)" }}
+                      />
+                    ) : null}
                     {label}
                   </label>
                 );

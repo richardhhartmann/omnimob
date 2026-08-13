@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnGerenciar, BtnNovo, BtnVoltar } from "../components/ActionIcons";
 import { useConfirm } from "../components/ConfirmModal";
@@ -171,6 +172,8 @@ function TiposContratoCard({ tenantSlug }) {
 }
 
 export function TiposImovelPage({ session }) {
+  // Mesmo canal de aviso do resto do painel. Ver o comentário em CargosPage.
+  const showToast = useOutletContext()?.showToast;
   const tenantSlug = session?.tenant?.slug;
   const [tipos, setTipos] = useState([]);
   const [view, setView] = useState("list"); // "list" | "tipoForm" | "atributos" | "atributoForm"
@@ -185,7 +188,15 @@ export function TiposImovelPage({ session }) {
 
   useEffect(() => {
     if (!tenantSlug) return;
-    api.getTiposImovel(tenantSlug).then(setTipos).catch(() => {});
+    api.getTiposImovel(tenantSlug)
+      .then((lista) => {
+        setTipos(lista);
+        const n = Array.isArray(lista) ? lista.length : 0;
+        showToast?.(
+          n === 1 ? "1 tipo de imóvel carregado." : `${n} tipos de imóvel carregados.`,
+        );
+      })
+      .catch(() => {});
   }, [tenantSlug]);
 
   // ─── Tipo CRUD ────────────────────────────────────────────────────────────
@@ -215,9 +226,11 @@ export function TiposImovelPage({ session }) {
       if (editandoTipo) {
         const updated = await api.updateTipoImovel(tenantSlug, editandoTipo.id, tipoForm);
         setTipos((prev) => prev.map((t) => t.id === updated.id ? { ...t, descricao: updated.descricao, areaFields: updated.areaFields } : t));
+        showToast?.(`Tipo "${updated.descricao}" atualizado.`);
       } else {
         const created = await api.createTipoImovel(tenantSlug, tipoForm);
         setTipos((prev) => [...prev, { ...created, atributos: [] }]);
+        showToast?.(`Tipo "${created.descricao}" criado.`);
       }
       setView("list");
     } catch (err) {
@@ -232,8 +245,9 @@ export function TiposImovelPage({ session }) {
     try {
       await api.deleteTipoImovel(tenantSlug, t.id);
       setTipos((prev) => prev.filter((x) => x.id !== t.id));
+      showToast?.(`Tipo "${t.descricao}" excluído.`);
     } catch (err) {
-      alert(err.message);
+      showToast?.(err.message, "error");
     }
   }
 
@@ -270,12 +284,14 @@ export function TiposImovelPage({ session }) {
           t.id === tipoAtivo.id ? { ...t, atributos: t.atributos.map((a) => a.id === updated.id ? updated : a) } : t
         ));
         setTipoAtivo((prev) => ({ ...prev, atributos: prev.atributos.map((a) => a.id === updated.id ? updated : a) }));
+        showToast?.(`Atributo "${updated.descricao}" atualizado.`);
       } else {
         const created = await api.createAtributo(tenantSlug, tipoAtivo.id, payload);
         setTipos((prev) => prev.map((t) =>
           t.id === tipoAtivo.id ? { ...t, atributos: [...t.atributos, created] } : t
         ));
         setTipoAtivo((prev) => ({ ...prev, atributos: [...prev.atributos, created] }));
+        showToast?.(`Atributo "${created.descricao}" criado.`);
       }
       setView("atributos");
     } catch (err) {
@@ -293,8 +309,9 @@ export function TiposImovelPage({ session }) {
         t.id === tipoAtivo.id ? { ...t, atributos: t.atributos.filter((x) => x.id !== a.id) } : t
       ));
       setTipoAtivo((prev) => ({ ...prev, atributos: prev.atributos.filter((x) => x.id !== a.id) }));
+      showToast?.(`Atributo "${a.descricao}" excluído.`);
     } catch (err) {
-      alert(err.message);
+      showToast?.(err.message, "error");
     }
   }
 

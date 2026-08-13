@@ -334,6 +334,7 @@ Painel lateral sticky (272px, `top: 56px`, `height: calc(100vh - 56px)`).
 | `npm test` | Suíte de integração (ver acima) |
 | `npm run subdominios` | **Confere** `<slug>.omnimob.app` de cada imobiliária na Vercel e diz o que está faltando ou pendente de verificação. Ensaio por padrão; `-- --aplicar` cadastra os que faltam |
 | `npm run faxina` | Trials vencidos: desativa e remove. Ensaio por padrão; `--aplicar` executa |
+| `npm run relatorio` | Relatório mensal por e-mail aos clientes Profissional/Premium. Ensaio por padrão; `--aplicar` envia. `--mes=7 --ano=2026` escolhe o período |
 | `npm run stripe:limpar -- --slug=…` | Cancela assinaturas do slug no Stripe |
 | `npm run prisma:seed:dev` | Imobiliárias de exemplo + catálogos |
 

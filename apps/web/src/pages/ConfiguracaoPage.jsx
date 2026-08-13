@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
 import { planoInfo, PLANOS } from "../utils/planos";
@@ -382,6 +382,16 @@ function TabLink({ active, label, icone, cor, onClick }) {
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function ConfiguracaoPage({ session, onSessionUpdate }) {
+  /* Toast SÓ NO ERRO, e é decisão, não esquecimento.
+
+     Esta tela salva sozinha 1,5s depois de a digitação parar, e já tem
+     indicador próprio de "Salvando…/Salvo". Um toast por gravação bem-sucedida
+     dispararia a cada pausa dentro de um campo de texto — dez avisos para
+     escrever um slogan. O indicador cobre o caso bom.
+
+     Falha é outra história: ela é rara, e o indicador de erro é discreto demais
+     para algo que significa "o que você acabou de escrever não está salvo". */
+  const showToast = useOutletContext()?.showToast;
   const tenantSlug = session?.tenant?.slug;
   const [tab, setTab] = useState("perfil");
   const [form, setForm] = useState(EMPTY);
@@ -649,8 +659,9 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           });
         }
         debounceRef.current = setTimeout(() => setSaveStatus("idle"), 3000);
-      } catch {
+      } catch (err) {
         setSaveStatus("error");
+        showToast?.(err?.message || "Não foi possível salvar as configurações.", "error");
       }
     }, 1500);
   }, [form]);

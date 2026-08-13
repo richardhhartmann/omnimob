@@ -27,7 +27,7 @@ export const ETAPA_BOAS_VINDAS = "boas-vindas";
  */
 export function montarFluxoTour({ cargo, tenantSlug }) {
   const podeImoveis  = Boolean(cargo?.gerenciarImoveis);
-  const podeLeads    = Boolean(cargo?.gerenciarLeads);
+  const podeLeads    = Boolean(cargo?.verRelatorios);
   const podeClientes = Boolean(cargo?.gerenciarClientes);
   const podeUsuarios = Boolean(cargo?.gerenciarUsuarios);
   const podeCargos   = Boolean(cargo?.gerenciarCargos);

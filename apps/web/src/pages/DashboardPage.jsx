@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import {
@@ -17,6 +17,8 @@ import { PropertyManagement } from "../components/PropertyForm";
 import { PropertyList } from "../components/PropertyList";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { spawnRipple } from "../utils/rippleDrop";
+import { ReescritaEmMassa } from "../components/ReescritaEmMassa";
+import { IconeRelatorios } from "../utils/iconesRelatorios";
 
 // ─── Landing page ─────────────────────────────────────────────────────────────
 
@@ -50,7 +52,7 @@ function HomePage({ session }) {
       cargo?.gerenciarImoveis
         ? api.listProperties(tenantSlug, { limit: 500 }).catch(() => null)
         : Promise.resolve(null),
-      cargo?.gerenciarLeads
+      cargo?.verRelatorios
         ? api.listLeads(tenantSlug, { page: 1, limit: 100 }).catch(() => null)
         : Promise.resolve(null),
     ]).then(([propsResult, leadsResult]) => {
@@ -63,7 +65,7 @@ function HomePage({ session }) {
     });
   }, [tenantSlug]);
 
-  const showKpis = cargo?.gerenciarImoveis || cargo?.gerenciarLeads;
+  const showKpis = cargo?.gerenciarImoveis || cargo?.verRelatorios;
 
   const cards = [
     cargo?.gerenciarImoveis && {
@@ -80,11 +82,14 @@ function HomePage({ session }) {
       onClick: () => navigate("/imoveis"),
       accent: "#6366f1",
     },
-    cargo?.gerenciarLeads && {
-      icon: <Users size={32} weight="duotone" />,
-      title: "Leads",
-      description: "Acompanhe os contatos interessados nos imóveis.",
-      onClick: () => navigate("/leads"),
+    /* Um atalho só para tudo que é acompanhamento — leads, relatório mensal,
+       funil e comissões. Segue "Ver Relatórios": quem tem a permissão alcança a
+       página inteira, e quem não tem não vê o atalho. */
+    cargo?.verRelatorios && {
+      icon: <IconeRelatorios size={32} weight="duotone" />,
+      title: "Relatórios",
+      description: "Leads, relatório mensal, funil de vendas e comissões.",
+      onClick: () => navigate("/relatorios"),
       accent: "#10b981",
     },
     cargo?.gerenciarClientes && {
@@ -215,6 +220,11 @@ export function ImovelListPage({ session }) {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  /* Só a PRIMEIRA carga avisa quantos imóveis vieram. `loadProperties` também
+     roda depois de excluir, ativar e reescrever em massa — e essas ações já têm
+     o toast delas. Sem esta trava, cada exclusão daria dois avisos seguidos: o
+     da exclusão e um "12 imóveis carregados" logo atrás. */
+  const jaContou = useRef(false);
 
   async function loadProperties() {
     if (!tenantSlug) { setProperties([]); return; }
@@ -222,9 +232,20 @@ export function ImovelListPage({ session }) {
     setError("");
     try {
       const result = await api.listProperties(tenantSlug);
-      setProperties(result.properties ?? result);
+      const lista = result.properties ?? result;
+      setProperties(lista);
+      if (!jaContou.current) {
+        jaContou.current = true;
+        const n = lista.length;
+        showToast?.(
+          n === 0 ? "Nenhum imóvel cadastrado ainda."
+          : n === 1 ? "1 imóvel carregado."
+          : `${n} imóveis carregados.`,
+        );
+      }
     } catch (err) {
       setError(err.message);
+      showToast?.(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -269,6 +290,24 @@ export function ImovelListPage({ session }) {
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+
+      {/* Só no Premium — o componente devolve null nos outros planos. Fica
+          acima da lista porque age sobre ela, e não sobre um imóvel. */}
+      {properties.length > 0 ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "14px" }}>
+          <ReescritaEmMassa
+            session={session}
+            properties={properties}
+            aoConcluir={(salvos) => {
+              loadProperties();
+              showToast?.(
+                salvos === 1 ? "1 descrição reescrita." : `${salvos} descrições reescritas.`,
+              );
+            }}
+          />
+        </div>
+      ) : null}
+
       <PropertyList
         properties={properties}
         onDelete={handleDelete}

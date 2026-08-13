@@ -78,7 +78,16 @@ export function UsuariosPage({ session }) {
     Promise.all([
       api.listUsuarios(tenantSlug),
       api.listCargos(tenantSlug),
-    ]).then(([u, c]) => { setUsuarios(u); setCargos(c); }).catch(() => {}).finally(() => setInitialLoading(false));
+    ]).then(([u, c]) => {
+      setUsuarios(u);
+      setCargos(c);
+      // Roda uma vez por entrada na tela (a dependência é só o slug), então
+      // não precisa da trava de "primeira carga" que Clientes e Imóveis usam.
+      const n = Array.isArray(u) ? u.length : 0;
+      showToast?.(
+        n === 1 ? "1 usuário carregado." : `${n} usuários carregados.`,
+      );
+    }).catch(() => {}).finally(() => setInitialLoading(false));
   }, [tenantSlug]);
 
   const stats = useMemo(() => ({
@@ -158,6 +167,7 @@ export function UsuariosPage({ session }) {
         };
         const updated = await api.updateUsuario(tenantSlug, editando.id, payload);
         setUsuarios((prev) => prev.map((u) => u.id === updated.id ? updated : u));
+        showToast?.(`${updated.nome} atualizado.`);
       } else {
         // Novo usuário: sem senha; ele define a própria no primeiro acesso.
         const created = await api.createUsuario(tenantSlug, {
@@ -168,10 +178,12 @@ export function UsuariosPage({ session }) {
           ativo: form.ativo,
         });
         setUsuarios((prev) => [...prev, created]);
+        showToast?.(`${created.nome} cadastrado.`);
       }
       setView("list");
     } catch (err) {
       setError(err.message);
+      showToast?.(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -182,9 +194,11 @@ export function UsuariosPage({ session }) {
       if (u.ativo) {
         await api.desativarUsuario(tenantSlug, u.id);
         setUsuarios((prev) => prev.map((x) => x.id === u.id ? { ...x, ativo: false } : x));
+        showToast?.(`${u.nome} foi desativado.`);
       } else {
         const updated = await api.updateUsuario(tenantSlug, u.id, { ativo: true });
         setUsuarios((prev) => prev.map((x) => x.id === updated.id ? updated : x));
+        showToast?.(`${updated.nome} foi reativado.`);
       }
     } catch (err) {
       showToast ? showToast(err.message, "error") : alert(err.message);

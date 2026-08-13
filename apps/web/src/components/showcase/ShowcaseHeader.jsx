@@ -70,7 +70,6 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
           <Link to={`/vitrine/${tenantSlug}#destaques`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Imóveis</Link>
           <Link to={`/vitrine/${tenantSlug}#destaques`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Destaques</Link>
           <Link to={`/vitrine/${tenantSlug}#footer`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.3s ease" }}>Sobre nós</Link>
-          <Link to={`/login?tenant=${tenantSlug}`} className="luxury-nav-link" style={{ color: dynamicColor, textDecoration: "none", fontSize: "14px", fontWeight: "500", opacity: 0.7, transition: "all 0.3s ease" }}>Acesso</Link>
         </nav>
 
         <div style={{ minWidth: "180px", display: "flex", justifyContent: "flex-end" }}>

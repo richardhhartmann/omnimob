@@ -437,3 +437,76 @@ export function emailRecuperarSenha({ nome, link, imobiliaria }) {
 
   return { subject, body, html };
 }
+
+// ─── 8. Relatório mensal da imobiliária ──────────────────────────────────────
+
+/* Vai para quem assina Profissional ou Premium, no começo de cada mês, com o
+   fechamento do mês anterior.
+
+   Não é só informação: é o e-mail que faz o plano LEMBRAR de si. Uma assinatura
+   que nunca escreve some da cabeça de quem paga, e some primeiro na hora de
+   cortar custo. Por isso ele fecha com o caminho para o painel — a mensagem
+   quer terminar dentro do produto, não nela mesma. */
+export function emailRelatorioMensal({ imobiliaria, relatorio, base }) {
+  const r = relatorio;
+  const painel = `${String(base || "").replace(/\/+$/, "")}/`;
+  const subject = `Omnimob · ${imobiliaria}: seu ${r.periodo.rotulo} em números`;
+
+  const sinal = (v) => (v > 0 ? `+${v}` : String(v));
+  const compara =
+    r.variacaoVisitas === null
+      ? "Primeiro mês com movimento registrado."
+      : `${sinal(r.variacaoVisitas)}% de visitas em relação ao mês anterior.`;
+
+  const body = [
+    `${imobiliaria} — ${r.periodo.rotulo}`,
+    "",
+    `Visitas à vitrine: ${r.visitas}`,
+    `Leads recebidos:   ${r.leads}`,
+    `Vendas no mês:     ${r.vendas}`,
+    `Imóveis ativos:    ${r.imoveisAtivos}`,
+    r.conversao !== null ? `Conversão:         ${r.conversao}% das visitas viraram lead` : "",
+    "",
+    compara,
+    "",
+    r.destaques.length ? "Imóveis mais vistos:" : "",
+    ...r.destaques.map((d, i) => `  ${i + 1}. ${d.title}${d.local ? ` (${d.local})` : ""} — ${d.visitas} visitas`),
+    "",
+    `Painel: ${painel}`,
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+
+  const html = layoutEmail({
+    preheader: `${r.visitas} visitas e ${r.leads} leads em ${r.periodo.rotulo}.`,
+    conteudo: [
+      eyebrow("● RELATÓRIO MENSAL"),
+      titulo(`${esc(imobiliaria)} em ${esc(r.periodo.rotulo)}`),
+      paragrafo(compara),
+      dados(
+        [
+          { rotulo: "Visitas à vitrine", valor: String(r.visitas) },
+          { rotulo: "Leads recebidos", valor: String(r.leads) },
+          { rotulo: "Vendas no mês", valor: String(r.vendas) },
+          { rotulo: "Imóveis ativos", valor: String(r.imoveisAtivos) },
+          r.conversao !== null
+            ? { rotulo: "Visitas que viraram lead", valor: `${r.conversao}%` }
+            : null,
+        ].filter(Boolean),
+      ),
+      r.destaques.length
+        ? divisor() +
+          paragrafo(forte("Imóveis mais vistos no mês")) +
+          itens(
+            r.destaques.map(
+              (d) => `${esc(d.title)}${d.local ? ` — ${esc(d.local)}` : ""}  ·  ${d.visitas} visitas`,
+            ),
+          )
+        : "",
+      botao("Abrir o painel", painel),
+    ].join(""),
+    rodape: "Você recebe este resumo porque sua assinatura inclui relatório mensal.",
+  });
+
+  return { subject, body, html };
+}

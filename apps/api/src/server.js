@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import { prisma } from "./db.js";
 import { adminRouter } from "./routes/adminRoutes.js";
 import { aiRouter } from "./routes/aiRoutes.js";
+import { vendaRouter } from "./routes/vendaRoutes.js";
 import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
 import { chamadoRouter } from "./routes/chamadoRoutes.js";
@@ -16,6 +17,7 @@ import { publicRouter } from "./routes/publicRoutes.js";
 import { previaRouter } from "./routes/previaRoutes.js";
 import { stripeWebhookRouter } from "./routes/stripeWebhookRoutes.js";
 import { iniciarFaxinaAutomatica } from "./services/faxinaScheduler.js";
+import { iniciarRelatorioMensal } from "./services/relatorioScheduler.js";
 import { socialRouter } from "./routes/socialRoutes.js";
 import { socialWebhookRouter } from "./routes/socialWebhookRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
@@ -159,6 +161,7 @@ app.use("/api/cargos", cargoRouter);
 app.use("/api/clientes", clienteRouter);
 app.use("/api/social", socialRouter);
 app.use("/api/ai", aiRouter);
+app.use("/api/vendas", vendaRouter);
 app.use("/public", publicRouter);
 /* Prévia de link para robôs de rede social. Montado ANTES de qualquer coisa que
    pudesse capturar `/previa/*`, e fora do `publicRouter` porque devolve HTML, e
@@ -175,4 +178,5 @@ app.listen(port, () => {
   console.log(`API rodando em http://localhost:${port}`);
   // Só liga com FAXINA_AUTOMATICA=true — ver o porquê em faxinaScheduler.js.
   iniciarFaxinaAutomatica();
+  iniciarRelatorioMensal();
 });

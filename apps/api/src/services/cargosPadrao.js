@@ -14,11 +14,21 @@
 
 export const CARGO_ADMIN = "Administrador";
 
+/* `gerenciarLeads` SAIU desta lista.
+
+   Leads deixaram de ser uma tela própria: viraram um item dentro de
+   "Relatórios", junto do relatório mensal, do funil e das comissões. Duas
+   permissões para a mesma tela produziriam o estado sem sentido de alguém ver
+   o menu e não ver o conteúdo — ou o contrário. Quem manda agora é
+   `verRelatorios`, e quem a tem alcança tudo que está lá dentro.
+
+   A COLUNA continua no schema, e de propósito: ela guarda o que cada cargo
+   tinha antes, e derrubá-la é migração destrutiva sem volta. Ela simplesmente
+   não é mais lida nem escrita. */
 export const PERMISSOES = [
   "acessarPainel",
   "editarPagina",
   "gerenciarImoveis",
-  "gerenciarLeads",
   "gerenciarUsuarios",
   "gerenciarClientes",
   "gerenciarCargos",
@@ -35,15 +45,17 @@ export const CARGOS_PADRAO = [
   { descricao: CARGO_ADMIN, permite: PERMISSOES },
   {
     descricao: "Gerente",
-    permite: ["acessarPainel", "editarPagina", "gerenciarImoveis", "gerenciarLeads", "gerenciarUsuarios", "gerenciarClientes", "verRelatorios", "publicarRedes"],
+    permite: ["acessarPainel", "editarPagina", "gerenciarImoveis", "gerenciarUsuarios", "gerenciarClientes", "verRelatorios", "publicarRedes"],
   },
   {
     descricao: "Corretor",
-    permite: ["acessarPainel", "gerenciarImoveis", "gerenciarLeads", "gerenciarClientes", "verRelatorios", "publicarRedes"],
+    permite: ["acessarPainel", "gerenciarImoveis", "gerenciarClientes", "verRelatorios", "publicarRedes"],
   },
   {
     descricao: "Assistente Comercial",
-    permite: ["acessarPainel", "gerenciarLeads", "gerenciarClientes"],
+    // Ganhou verRelatorios no lugar do antigo gerenciarLeads: é o cargo que
+    // atende o interessado, e sem ela perderia a tela de leads.
+    permite: ["acessarPainel", "verRelatorios", "gerenciarClientes"],
   },
   {
     descricao: "Marketing",

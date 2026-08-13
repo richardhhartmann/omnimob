@@ -276,7 +276,7 @@ adminRouter.get("/chamados", async (req, res) => {
       where,
       orderBy: [{ resolvido: "asc" }, { criadoEm: "desc" }],
       take: 300,
-      include: { tenant: { select: { name: true, slug: true } } },
+      include: { tenant: { select: { name: true, slug: true, plano: true } } },
     });
 
     res.json(
@@ -295,6 +295,10 @@ adminRouter.get("/chamados", async (req, res) => {
         tenantId: c.tenantId,
         tenantNome: c.tenant?.name || "—",
         tenantSlug: c.tenant?.slug || "",
+        // O plano ATUAL do tenant. A prioridade gravada no chamado já embute o
+        // plano de quando ele foi aberto (ver prioridadeComPlano em
+        // chamadoRoutes); isto aqui é para a tela poder mostrar de quem é.
+        tenantPlano: c.tenant?.plano || "BASICO",
       })),
     );
   } catch (err) {

@@ -5,12 +5,20 @@ import { Alert, Button, Eyebrow, Reveal } from "../../styles/omnimobKit";
 /* ────────────────────────────────────────────────────────────────────────────
    Caixa de entrada do suporte.
 
-   Ordem: abertos primeiro, depois por data — a mesma que a API devolve. Não
-   ordenamos por prioridade na frente porque a prioridade não é escolhida pela
-   pessoa que abriu (ver `prioridadeDaCategoria` em utils/suporte.js): ela é
-   derivada da categoria, e serve para colorir, não para furar fila. O que fura
-   fila é estar aberto há mais tempo.
+   Ordem: abertos primeiro, depois por PRIORIDADE, e só então por idade.
+
+   A prioridade não é escolhida por quem abre — ela é a categoria do problema
+   (ver `prioridadeDaCategoria` em utils/suporte.js) SOMADA aos degraus do plano
+   do tenant (ver `prioridadeComPlano` em chamadoRoutes.js): Profissional sobe
+   um degrau, Premium sobe dois. É por isso que ela ordena a fila: ela responde
+   exatamente a pergunta desta tela, que é "quem eu atendo primeiro".
    ──────────────────────────────────────────────────────────────────────────── */
+
+const PLANO_META = {
+  PREMIUM:      { label: "Premium",      cor: "#e8cf7a", fundo: "rgba(212,175,55,0.14)", borda: "rgba(212,175,55,0.34)" },
+  PROFISSIONAL: { label: "Profissional", cor: "#a5b4fc", fundo: "rgba(129,140,248,0.12)", borda: "rgba(129,140,248,0.28)" },
+  BASICO:       { label: "Básico",       cor: "#94a3b8", fundo: "rgba(148,163,184,0.10)", borda: "rgba(148,163,184,0.24)" },
+};
 
 const PRIORIDADE_META = {
   URGENTE: { label: "Urgente", cor: "#fca5a5", fundo: "rgba(248,113,113,0.14)", borda: "rgba(248,113,113,0.32)" },
@@ -71,13 +79,31 @@ export function AdminChamadosPage({ aoContarAbertos }) {
 
   const visiveis = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return chamados.filter((c) => {
+    const filtrados = chamados.filter((c) => {
       if (filtro === "abertos" && c.resolvido) return false;
       if (filtro === "resolvidos" && !c.resolvido) return false;
       if (!q) return true;
       return [c.titulo, c.descricao, c.tenantNome, c.tenantSlug, c.usuario, String(c.numero)]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q));
+    });
+
+    /* Agora a prioridade ORDENA, e antes ela só coloria (o comentário do topo
+       do arquivo explicava por quê: derivada da categoria, ela não deveria
+       furar fila). O que mudou foi o significado dela: desde o suporte
+       prioritário, a prioridade gravada soma a categoria E o plano do tenant
+       (ver `prioridadeComPlano` em chamadoRoutes.js). Ela deixou de ser só
+       "que tipo de problema é" e passou a ser "quem atender primeiro" — que é
+       justamente o critério desta fila.
+
+       Empate continua sendo desempatado por idade: entre dois chamados de mesmo
+       peso, atende-se quem está esperando há mais tempo. */
+    const PESO = { URGENTE: 3, ALTA: 2, MEDIA: 1, BAIXA: 0 };
+    return filtrados.sort((a, b) => {
+      if (a.resolvido !== b.resolvido) return a.resolvido ? 1 : -1;
+      const d = (PESO[b.prioridade] ?? 1) - (PESO[a.prioridade] ?? 1);
+      if (d !== 0) return d;
+      return new Date(a.criadoEm) - new Date(b.criadoEm);
     });
   }, [chamados, filtro, busca]);
 
@@ -170,6 +196,17 @@ export function AdminChamadosPage({ aoContarAbertos }) {
                 <span className="dl-pill" style={{ background: pm.fundo, color: pm.cor, borderColor: pm.borda }}>
                   {pm.label}
                 </span>
+                {/* De quem é o chamado. Sem isto, a fila reordenada fica sem
+                    explicação: uma dúvida no topo parece erro até se ver que ela
+                    é de um Premium. */}
+                {(() => {
+                  const plm = PLANO_META[c.tenantPlano] || PLANO_META.BASICO;
+                  return (
+                    <span className="dl-pill" style={{ background: plm.fundo, color: plm.cor, borderColor: plm.borda }}>
+                      {plm.label}
+                    </span>
+                  );
+                })()}
                 {c.resolvido ? (
                   <span className="dl-pill ch-pill--ok">Resolvido</span>
                 ) : null}

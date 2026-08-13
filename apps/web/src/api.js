@@ -236,6 +236,80 @@ export const api = {
       headers: { "x-tenant-slug": tenantSlug },
     }),
 
+  // Resumo, temperatura, resposta pronta e imóveis do acervo para este lead.
+  // Só no Premium — a API responde 403 nos demais planos.
+  analisarLeadIA: (tenantSlug, leadId) =>
+    request(`/api/leads/${leadId}/ia`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  /* ── Reescrita em massa (Premium) ──
+     Dois passos de propósito: o POST só GERA e devolve antes/depois, o PUT
+     salva o que a pessoa aprovou. Ver o comentário em aiRoutes.js. */
+  reescreverEmMassa: (tenantSlug, ids) =>
+    request(`/api/ai/imovel/massa`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ ids }),
+    }),
+
+  salvarReescritaEmMassa: (tenantSlug, itens) =>
+    request(`/api/ai/imovel/massa`, {
+      method: "PUT",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ itens }),
+    }),
+
+  /* ── Funil de vendas e comissões (Profissional+) ── */
+  listVendas: (tenantSlug, filtros = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(filtros).forEach(([k, v]) => { if (v) p.set(k, v); });
+    const qs = p.toString();
+    return request(`/api/vendas${qs ? `?${qs}` : ""}`, {
+      headers: { "x-tenant-slug": tenantSlug },
+    });
+  },
+
+  resumoVendas: (tenantSlug, filtros = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(filtros).forEach(([k, v]) => { if (v) p.set(k, v); });
+    const qs = p.toString();
+    return request(`/api/vendas/resumo${qs ? `?${qs}` : ""}`, {
+      headers: { "x-tenant-slug": tenantSlug },
+    });
+  },
+
+  criarVenda: (tenantSlug, dados) =>
+    request(`/api/vendas`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(dados),
+    }),
+
+  removerVenda: (tenantSlug, id) =>
+    request(`/api/vendas/${id}`, {
+      method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  // ── Relatório mensal (Profissional+) ──
+  relatorioMensal: (tenantSlug, { ano, mes } = {}) => {
+    const p = new URLSearchParams();
+    if (ano && mes) { p.set("ano", ano); p.set("mes", mes); }
+    const qs = p.toString();
+    return request(`/api/tenants/me/relatorio-mensal${qs ? `?${qs}` : ""}`, {
+      headers: { "x-tenant-slug": tenantSlug },
+    });
+  },
+
+  enviarRelatorioMensal: (tenantSlug, { ano, mes } = {}) =>
+    request(`/api/tenants/me/relatorio-mensal/enviar`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ ano, mes }),
+    }),
+
   // ─── Usuários ────────────────────────────────────────────────────────────
   listUsuarios: (tenantSlug) =>
     request("/api/usuarios", { headers: { "x-tenant-slug": tenantSlug } }),
