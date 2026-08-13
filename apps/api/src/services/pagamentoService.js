@@ -29,11 +29,46 @@ const API = "https://api.stripe.com/v1";
    o plano simplesmente sumir da tela, sem erro nenhum: melhor tolerar. */
 const env = (...nomes) => nomes.map((n) => process.env[n]).find(Boolean) || "";
 
+/* Dois preços por plano: a cobrança mensal e a anual.
+
+   O preço ANUAL é outro objeto no Stripe (`recurring.interval = year`), não um
+   desconto aplicado sobre o mensal — quem decide o valor é o painel do Stripe,
+   e o código só lê. É o que mantém a página e a fatura contando a mesma
+   história: se alguém mexer no preço lá, a landing acompanha sem deploy.
+
+   As variáveis do anual são NOVAS e precisam ser criadas no ambiente (dev e
+   Render). Enquanto elas não existirem, o plano simplesmente não oferece a
+   opção anual — a mensal continua funcionando como sempre. Nada quebra por
+   falta delas, o botão de "anual" é que não aparece.
+
+     STRIPE_PRICE_BASICO_ANUAL        (ou STRIPE_PRICE_BASIC_ANNUAL)
+     STRIPE_PRICE_PROFISSIONAL_ANUAL  (ou STRIPE_PRICE_PRO_ANNUAL)
+     STRIPE_PRICE_PREMIUM_ANUAL       (ou STRIPE_PRICE_PREMIUM_ANNUAL) */
 const PRECOS = {
-  BASICO: env("STRIPE_PRICE_BASICO", "STRIPE_PRICE_BASIC"),
-  PROFISSIONAL: env("STRIPE_PRICE_PROFISSIONAL", "STRIPE_PRICE_PRO"),
-  PREMIUM: env("STRIPE_PRICE_PREMIUM"),
+  BASICO: {
+    mensal: env("STRIPE_PRICE_BASICO", "STRIPE_PRICE_BASIC"),
+    anual: env("STRIPE_PRICE_BASICO_ANUAL", "STRIPE_PRICE_BASIC_ANNUAL"),
+  },
+  PROFISSIONAL: {
+    mensal: env("STRIPE_PRICE_PROFISSIONAL", "STRIPE_PRICE_PRO"),
+    anual: env("STRIPE_PRICE_PROFISSIONAL_ANUAL", "STRIPE_PRICE_PRO_ANNUAL"),
+  },
+  PREMIUM: {
+    mensal: env("STRIPE_PRICE_PREMIUM"),
+    anual: env("STRIPE_PRICE_PREMIUM_ANUAL", "STRIPE_PRICE_PREMIUM_ANNUAL"),
+  },
 };
+
+/** Períodos aceitos. Qualquer outra coisa vinda do cliente vira "mensal". */
+export const PERIODOS = ["mensal", "anual"];
+export function normalizarPeriodo(valor) {
+  return PERIODOS.includes(String(valor)) ? String(valor) : "mensal";
+}
+
+/** O id de preço do Stripe para um plano num período. */
+function idDoPreco(plano, periodo) {
+  return PRECOS[plano]?.[normalizarPeriodo(periodo)] || "";
+}
 
 export function pagamentoConfigurado() {
   return Boolean(SECRET);
@@ -88,42 +123,68 @@ export async function diagnosticarPagamento() {
     conta = { erro: erro.message };
   }
 
+  /* Uma linha por plano E período — `PREMIUM/anual` é um preço diferente de
+     `PREMIUM/mensal` e falha por conta própria. Chave achatada porque o valor
+     desta função é ser lida por gente. */
   const planos = {};
-  for (const [plano, precoId] of Object.entries(PRECOS)) {
-    if (!precoId) {
-      planos[plano] = { ok: false, detalhe: "Nenhum ID de preço configurado." };
-      continue;
-    }
+  for (const [plano, porPeriodo] of Object.entries(PRECOS)) {
+    for (const periodo of PERIODOS) {
+      const rotulo = `${plano}/${periodo}`;
+      const precoId = porPeriodo[periodo];
+      if (!precoId) {
+        planos[rotulo] = {
+          ok: false,
+          opcional: periodo === "anual",
+          detalhe:
+            periodo === "anual"
+              ? `Nenhum ID configurado (STRIPE_PRICE_${plano}_ANUAL). O plano segue só no mensal.`
+              : "Nenhum ID de preço configurado.",
+        };
+        continue;
+      }
 
-    const contaDoPreco = fragmentoDeConta(precoId);
-    const mesmaConta = contaDaChave && contaDoPreco ? contaDoPreco.startsWith(contaDaChave.slice(0, 8)) : null;
+      const contaDoPreco = fragmentoDeConta(precoId);
+      const mesmaConta = contaDaChave && contaDoPreco ? contaDoPreco.startsWith(contaDaChave.slice(0, 8)) : null;
 
-    try {
-      const preco = await stripe(`/prices/${encodeURIComponent(precoId)}`, { method: "GET" });
-      planos[plano] = {
-        ok: true,
-        precoId,
-        ativo: preco.active,
-        valor: preco.unit_amount != null ? preco.unit_amount / 100 : null,
-        moeda: preco.currency,
-        recorrencia: preco.recurring?.interval || null,
-        modoDoPreco: preco.livemode ? "live" : "test",
-      };
-    } catch (erro) {
-      planos[plano] = {
-        ok: false,
-        precoId,
-        detalhe: erro.message,
-        mesmaConta,
-        diagnostico:
-          mesmaConta === false
-            ? "Este preço pertence a OUTRA conta Stripe (fragmento diferente do da chave). Use a chave da conta onde ele foi criado."
-            : "Preço não encontrado nesta conta/modo. Confira se foi criado no mesmo modo da chave.",
-      };
+      try {
+        const preco = await stripe(`/prices/${encodeURIComponent(precoId)}`, { method: "GET" });
+        const esperado = periodo === "anual" ? "year" : "month";
+        planos[rotulo] = {
+          ok: true,
+          precoId,
+          ativo: preco.active,
+          valor: preco.unit_amount != null ? preco.unit_amount / 100 : null,
+          moeda: preco.currency,
+          recorrencia: preco.recurring?.interval || null,
+          modoDoPreco: preco.livemode ? "live" : "test",
+          /* Preço anual apontando para um `interval: month` cobraria doze vezes
+             o valor do ano. Não dá erro em lugar nenhum — só na fatura. */
+          alerta:
+            preco.recurring?.interval && preco.recurring.interval !== esperado
+              ? `Este preço é ${preco.recurring.interval}ly, mas está configurado como ${periodo}. A cobrança sairia no ciclo errado.`
+              : undefined,
+        };
+      } catch (erro) {
+        planos[rotulo] = {
+          ok: false,
+          precoId,
+          detalhe: erro.message,
+          mesmaConta,
+          diagnostico:
+            mesmaConta === false
+              ? "Este preço pertence a OUTRA conta Stripe (fragmento diferente do da chave). Use a chave da conta onde ele foi criado."
+              : "Preço não encontrado nesta conta/modo. Confira se foi criado no mesmo modo da chave.",
+        };
+      }
     }
   }
 
   const algumForaDaConta = Object.values(planos).some((p) => p.mesmaConta === false);
+  /* Anual ainda não cadastrado não é falha de configuração — é uma opção que
+     não está à venda. Sem esta ressalva o diagnóstico gritaria enquanto as
+     variáveis novas não existissem. */
+  const pendentes = Object.values(planos).filter((p) => !p.ok && !p.opcional);
+  const cicloErrado = Object.entries(planos).filter(([, p]) => p.alerta);
 
   return {
     configurado: true,
@@ -133,14 +194,21 @@ export async function diagnosticarPagamento() {
     planos,
     leitura: algumForaDaConta
       ? "Há preço criado em outra conta Stripe. Compare o `conta.id` acima com a conta aberta no painel onde os preços aparecem — sandbox e conta ativada são contas distintas."
-      : Object.values(planos).every((p) => p.ok)
-        ? `Chave e preços na mesma conta (${conta?.id || "?"}), modo ${modo}.`
-        : "Preço não encontrado, mas o fragmento da conta bate: confira se ele foi arquivado ou criado no outro modo desta mesma conta.",
+      : cicloErrado.length
+        ? `Preço com recorrência trocada: ${cicloErrado.map(([r]) => r).join(", ")}. Confira o intervalo no painel do Stripe.`
+        : pendentes.length === 0
+          ? `Chave e preços na mesma conta (${conta?.id || "?"}), modo ${modo}.`
+          : "Preço não encontrado, mas o fragmento da conta bate: confira se ele foi arquivado ou criado no outro modo desta mesma conta.",
   };
 }
 
-export function planoTemPreco(plano) {
-  return Boolean(PRECOS[plano]);
+export function planoTemPreco(plano, periodo) {
+  return periodo ? Boolean(idDoPreco(plano, periodo)) : Boolean(idDoPreco(plano, "mensal"));
+}
+
+/** Períodos que um plano realmente pode cobrar hoje (o anual só quando existe). */
+export function periodosDoPlano(plano) {
+  return PERIODOS.filter((periodo) => Boolean(idDoPreco(plano, periodo)));
 }
 
 /* A API do Stripe é form-urlencoded e aceita aninhamento por colchetes
@@ -197,12 +265,14 @@ async function stripe(caminho, { method = "POST", dados, idempotencia } = {}) {
  * @param {object} args
  * @param {object} args.tenant           tenant que está assinando
  * @param {string} args.plano            BASICO | PROFISSIONAL | PREMIUM
+ * @param {string} args.periodo          mensal | anual (padrão mensal)
  * @param {string} args.tokenPagamento   PaymentMethod (`pm_...`) vindo do Elements
- * @returns {Promise<{ assinaturaId, clienteId, proximoVencimento, valorMensal, statusStripe }>}
+ * @returns {Promise<{ assinaturaId, clienteId, proximoVencimento, valorMensal, valorCobrado, periodo, statusStripe }>}
  * @throws  {Error} `.code`: PROVEDOR_NAO_CONFIGURADO | TOKEN_AUSENTE |
- *                  PLANO_SOB_CONSULTA | RECUSADO | PENDENTE | PROVEDOR_FALHOU
+ *                  PLANO_SOB_CONSULTA | PERIODO_INDISPONIVEL | RECUSADO |
+ *                  PENDENTE | PROVEDOR_FALHOU
  */
-export async function criarAssinatura({ tenant, plano, tokenPagamento }) {
+export async function criarAssinatura({ tenant, plano, periodo, tokenPagamento }) {
   if (!pagamentoConfigurado()) {
     const err = new Error(
       "Cobrança automática ainda não está conectada. Fale com o time para fechar o plano.",
@@ -215,10 +285,20 @@ export async function criarAssinatura({ tenant, plano, tokenPagamento }) {
     err.code = "TOKEN_AUSENTE";
     throw err;
   }
-  const preco = PRECOS[plano];
+  const periodoEscolhido = normalizarPeriodo(periodo);
+  const preco = idDoPreco(plano, periodoEscolhido);
   if (!preco) {
-    const err = new Error("Este plano é fechado sob consulta. Fale com o time.");
-    err.code = "PLANO_SOB_CONSULTA";
+    /* Sem preço para ESTE período. Duas causas, e a mensagem distingue: o plano
+       nunca teve cobrança automática (sob consulta), ou o anual ainda não foi
+       cadastrado no ambiente — que é erro de configuração nosso, não decisão
+       comercial, e o cliente não deve ler "fale com o time" por isso. */
+    const temMensal = Boolean(idDoPreco(plano, "mensal"));
+    const err = new Error(
+      temMensal && periodoEscolhido === "anual"
+        ? "A cobrança anual deste plano ainda não está disponível. Escolha mensal ou fale com o time."
+        : "Este plano é fechado sob consulta. Fale com o time.",
+    );
+    err.code = temMensal && periodoEscolhido === "anual" ? "PERIODO_INDISPONIVEL" : "PLANO_SOB_CONSULTA";
     throw err;
   }
 
@@ -243,9 +323,12 @@ export async function criarAssinatura({ tenant, plano, tokenPagamento }) {
       default_payment_method: tokenPagamento,
       payment_behavior: "error_if_incomplete", // falha na hora em vez de nascer pendente
       expand: ["latest_invoice.payment_intent"],
-      metadata: { tenantId: tenant.id, slug: tenant.slug, plano },
+      metadata: { tenantId: tenant.id, slug: tenant.slug, plano, periodo: periodoEscolhido },
     },
-    idempotencia: `assinatura-${tenant.id}-${plano}`,
+    /* O período entra na chave de idempotência: sem ele, quem assinasse o
+       mensal e trocasse para o anual no mesmo tenant receberia de volta a
+       assinatura ANTERIOR, silenciosamente, em vez de uma nova. */
+    idempotencia: `assinatura-${tenant.id}-${plano}-${periodoEscolhido}`,
   });
 
   const intent = assinatura?.latest_invoice?.payment_intent;
@@ -260,11 +343,23 @@ export async function criarAssinatura({ tenant, plano, tokenPagamento }) {
     throw err;
   }
 
+  /* O valor cobrado é o do preço contratado — no anual, o ano inteiro de uma
+     vez. `tenant.valorMensal` é uma coluna com "mensal" no nome e é lida como
+     tal na tela e no e-mail, então o anual é dividido por 12 antes de ir para
+     lá. `valorCobrado` guarda o número que realmente sai no cartão, para quem
+     precisar dele. */
+  const valorCobrado = (assinatura.items?.data?.[0]?.price?.unit_amount ?? 0) / 100;
+
   return {
     assinaturaId: assinatura.id,
     clienteId: cliente.id,
     statusStripe: assinatura.status,
-    valorMensal: (assinatura.items?.data?.[0]?.price?.unit_amount ?? 0) / 100,
+    periodo: periodoEscolhido,
+    valorCobrado,
+    valorMensal:
+      periodoEscolhido === "anual"
+        ? Math.round((valorCobrado / 12) * 100) / 100
+        : valorCobrado,
     /* Nas versões recentes da API o `current_period_end` saiu da assinatura e
        passou para o item — a chave antiga volta undefined e a data da próxima
        cobrança sumia da tela e do e-mail. Lemos as duas, na ordem nova. */
@@ -394,32 +489,79 @@ function formatarBRL(centavos, moeda) {
 }
 
 /**
- * @returns {Promise<{ [plano: string]: { rotulo: string, valor: number } }>}
+ * Economia do plano anual, em reais, em percentual e em meses grátis.
+ *
+ * Vive separado (e exportado) porque é o número que a landing ANUNCIA: "2,5
+ * meses grátis", "economize R$ 372,50". Sendo função pura sobre os dois valores
+ * que o Stripe cobra, dá para conferir a conta sem nenhuma chamada de rede — e
+ * é impossível a página prometer um abatimento que a fatura não pratica.
+ *
+ * Devolve null quando não há anual, ou quando ele não é mais barato: aí não há
+ * vantagem para anunciar, e um selo de "economize R$ -30" seria pior que nada.
+ */
+export function economiaDoAnual(mensal, anual) {
+  if (!(mensal > 0) || !(anual > 0)) return null;
+  const cheio = mensal * 12;
+  if (anual >= cheio) return null;
+  return {
+    valor: Math.round((cheio - anual) * 100) / 100,
+    percentual: Math.round((1 - anual / cheio) * 100),
+    mesesGratis: Math.round(((cheio - anual) / mensal) * 10) / 10,
+  };
+}
+
+/**
+ * @returns {Promise<{ [plano: string]: {
+ *            mensal?: { rotulo: string, valor: number, intervalo: string },
+ *            anual?:  { rotulo: string, valor: number, intervalo: string },
+ *            economia?: { valor: number, percentual: number, mesesGratis: number },
+ *          } }>}
  *          Só os planos com preço configurado E existente no Stripe.
  */
 export async function precosDosPlanos() {
   if (!pagamentoConfigurado()) return {};
   if (cachePrecos.dados && Date.now() - cachePrecos.em < CACHE_MS) return cachePrecos.dados;
 
+  /* Um par por plano: { mensal, anual }. O anual pode faltar — enquanto a
+     variável não existir no ambiente, o plano volta com `anual: null` e a
+     página não oferece a opção. */
   const saida = {};
-  await Promise.all(
-    Object.entries(PRECOS)
-      .filter(([, id]) => Boolean(id))
-      .map(async ([plano, id]) => {
-        try {
-          const preco = await stripe(`/prices/${id}`, { method: "GET" });
-          const porMes = preco.recurring?.interval === "month";
-          saida[plano] = {
-            valor: (preco.unit_amount ?? 0) / 100,
-            rotulo: `${formatarBRL(preco.unit_amount, preco.currency)}${porMes ? "/mês" : ""}`,
-          };
-        } catch (erro) {
-          // Preço apagado ou id errado no .env: melhor sumir da lista do que
-          // oferecer um plano que vai falhar na hora de cobrar.
-          console.warn(`[pagamento] preço do plano ${plano} indisponível:`, erro.message);
-        }
-      }),
-  );
+  const pedidos = [];
+  for (const [plano, porPeriodo] of Object.entries(PRECOS)) {
+    for (const periodo of PERIODOS) {
+      const id = porPeriodo[periodo];
+      if (!id) continue;
+      pedidos.push(
+        (async () => {
+          try {
+            const preco = await stripe(`/prices/${id}`, { method: "GET" });
+            const intervalo = preco.recurring?.interval;
+            const sufixo = intervalo === "month" ? "/mês" : intervalo === "year" ? "/ano" : "";
+            saida[plano] = saida[plano] || {};
+            saida[plano][periodo] = {
+              valor: (preco.unit_amount ?? 0) / 100,
+              rotulo: `${formatarBRL(preco.unit_amount, preco.currency)}${sufixo}`,
+              intervalo: intervalo || null,
+            };
+          } catch (erro) {
+            // Preço apagado ou id errado no .env: melhor sumir da lista do que
+            // oferecer um plano que vai falhar na hora de cobrar.
+            console.warn(`[pagamento] preço ${periodo} do plano ${plano} indisponível:`, erro.message);
+          }
+        })(),
+      );
+    }
+  }
+  await Promise.all(pedidos);
+
+  /* Economia do anual, calculada a partir do que o Stripe REALMENTE cobra —
+     nunca de um percentual escrito à mão. A página exibe este número, então
+     mexer no preço lá dentro corrige o texto da landing sozinho, e é impossível
+     anunciar um desconto que a fatura não pratica. */
+  for (const dados of Object.values(saida)) {
+    const economia = economiaDoAnual(dados.mensal?.valor, dados.anual?.valor);
+    if (economia) dados.economia = economia;
+  }
 
   cachePrecos = { em: Date.now(), dados: saida };
   return saida;

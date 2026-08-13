@@ -108,13 +108,19 @@ body {
   margin: 0 auto;
 }
 
-/* Editor da vitrine: usa toda a largura da coluna ao lado da sidebar (sem cap a 1200px). */
+/* Editor da vitrine: usa toda a largura da coluna ao lado da sidebar (sem cap a 1200px).
+
+   O respiro vira variável porque a barra de ferramentas precisa CANCELÁ-LO para
+   encostar nas bordas — e dois números soltos em arquivos diferentes divergem na
+   primeira vez que alguém ajustar um deles. */
 .main-content--editor-vitrine {
+  --editor-respiro-x: 24px;
+  --editor-respiro-y: 20px;
   max-width: none;
   margin: 0;
   min-width: 0;
   align-self: stretch;
-  padding: 20px 24px 32px;
+  padding: var(--editor-respiro-y) var(--editor-respiro-x) 32px;
 }
 
 .main-content--editor-vitrine .showcase-container {
@@ -1398,6 +1404,17 @@ button:disabled {
 }
 
 .showcase-editor-topbar {
+  /* Encosta no topo da área do editor.
+
+     Ela nascia dentro do respiro do `.main-content--editor-vitrine` e sobrava
+     uma faixa de fundo acima, fazendo a barra ler como um cartão solto em vez
+     da barra de ferramentas da tela. A margem negativa desfaz esse respiro.
+
+     SÓ NO EIXO VERTICAL, e isto é o ponto: a primeira versão cancelava também
+     o respiro lateral, e aí a barra avançava para dentro da coluna da sidebar
+     e aparecia cortada. O respiro horizontal não é decoração — é a calha entre
+     o menu e o conteúdo. */
+  margin-top: calc(var(--editor-respiro-y, 0px) * -1);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -1515,6 +1532,31 @@ body:has(.showcase-theme-light):not(:has(.showcase-editor-full)) {
   border: 1px solid rgba(239, 68, 68, 0.55) !important;
   color: #fecaca !important;
   z-index: 6;
+}
+
+/* ── Fileira de ações da peça ────────────────────────────────────────────────
+   Os ícones eram posicionados um a um com `right` na mão: 8px o de remover,
+   58px o de travar, 80px o de duplicar. Com 28px de largura cada, 58 e 80 se
+   sobrepõem em 6px — foi o empilhamento que apareceu nos widgets, que são os
+   únicos com três botões.
+
+   Contar pixel a pixel só funciona enquanto ninguém acrescenta um botão. Numa
+   fileira flex a conta é do navegador, e acrescentar o quarto não quebra nada. */
+.builder-block-acoes {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 6;
+}
+
+/* Dentro da fileira eles deixam de se posicionar sozinhos. */
+.builder-block-acoes .builder-delete-icon {
+  position: static;
+  top: auto;
+  right: auto;
 }
 
 .builder-delete-icon:hover {
@@ -1812,6 +1854,12 @@ body:has(.showcase-theme-light):not(:has(.showcase-editor-full)) {
   font-size: 28px;
   padding: 0;
   line-height: 1;
+  /* O "+" descia porque o glifo era posicionado pela LINHA DE BASE dentro de
+     uma caixa de 52px — e a base fica abaixo do meio. Centralizar por flex
+     alinha a caixa do texto, não a base, e o sinal para no centro ótico. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: 0 8px 26px rgba(99, 102, 241, 0.45);
 }
 
@@ -2711,7 +2759,7 @@ input[type="checkbox"].sw::before {
   right: 0.3em;
   bottom: 0.3em;
   transform: translateX(150%);
-  background-color: #59d102;
+  background-color: #818cf8;
   border-radius: inherit;
   transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
   /* Anula o halo do checkbox comum, que aqui não faz sentido. */

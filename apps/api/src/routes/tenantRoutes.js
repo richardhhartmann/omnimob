@@ -4,7 +4,12 @@ import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
-import { criarAssinatura, precosDosPlanos, agendarCancelamentoDoSlug } from "../services/pagamentoService.js";
+import {
+  criarAssinatura,
+  precosDosPlanos,
+  agendarCancelamentoDoSlug,
+  normalizarPeriodo,
+} from "../services/pagamentoService.js";
 import { fidelizarTrial } from "../services/trialService.js";
 import { sendEmail } from "../services/notificationService.js";
 import { emailAssinaturaConfirmada, emailRelatorioMensal } from "../services/emailTemplates.js";
@@ -505,16 +510,18 @@ tenantRouter.post(
   requireTenant,
   requirePermissao("gerenciarUsuarios"),
   async (req, res) => {
-    const { plano, tokenPagamento } = req.body || {};
+    const { plano, periodo, tokenPagamento } = req.body || {};
     if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
       return res.status(400).json({ error: "Plano inválido." });
     }
+    // Período desconhecido não é erro: cai no mensal, que é o que sempre houve.
+    const periodoEscolhido = normalizarPeriodo(periodo);
 
     try {
       const tenant = await prisma.tenant.findUnique({ where: { id: req.tenant.id } });
       if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
 
-      const assinatura = await criarAssinatura({ tenant, plano, tokenPagamento });
+      const assinatura = await criarAssinatura({ tenant, plano, periodo: periodoEscolhido, tokenPagamento });
 
       const atualizado = await fidelizarTrial(tenant.id, {
         plano,
@@ -541,8 +548,12 @@ tenantRouter.post(
           urlVitrine: enderecoDaVitrine(tenant, (process.env.APP_URL || "").replace(/\/+$/, "")),
           imobiliaria: tenant.name,
           plano: info?.nome || plano,
-          valorRotulo: assinatura.valorMensal
-            ? `R$ ${assinatura.valorMensal.toFixed(2).replace(".", ",")}/mês`
+          /* No anual o que foi cobrado é o ano inteiro; anunciar o valor
+             mensal aqui faria o e-mail contradizer a fatura do cartão. */
+          valorRotulo: assinatura.valorCobrado
+            ? `R$ ${assinatura.valorCobrado.toFixed(2).replace(".", ",")}/${
+                assinatura.periodo === "anual" ? "ano" : "mês"
+              }`
             : "conforme contratado",
           proximaCobranca: assinatura.proximoVencimento
             ? assinatura.proximoVencimento.toLocaleDateString("pt-BR")
@@ -569,7 +580,11 @@ tenantRouter.post(
     } catch (err) {
       // Falta de provedor e plano sob consulta não são erro do cliente: são
       // caminhos previstos, e a interface oferece falar com o time.
-      if (err.code === "PROVEDOR_NAO_CONFIGURADO" || err.code === "PLANO_SOB_CONSULTA") {
+      if (
+        err.code === "PROVEDOR_NAO_CONFIGURADO" ||
+        err.code === "PLANO_SOB_CONSULTA" ||
+        err.code === "PERIODO_INDISPONIVEL"
+      ) {
         return res.status(503).json({ error: err.message, code: err.code });
       }
       if (err.code === "TOKEN_AUSENTE" || err.code === "RECUSADO") {

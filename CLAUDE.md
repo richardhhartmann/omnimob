@@ -106,8 +106,18 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | — | Google AI Studio / `gemini-2.5-flash` | idem |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | `sk_test_…` | **`sk_live_…`** |
 | `STRIPE_PRICE_BASIC` / `_PRO` / `_PREMIUM` | — | preços de teste | preços live |
+| `STRIPE_PRICE_BASICO_ANUAL` / `STRIPE_PRICE_PROFISSIONAL_ANUAL` / `STRIPE_PRICE_PREMIUM_ANUAL` | — | preços **anuais** de teste (opcionais) | preços anuais live |
 | `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
+
+**Sobre o preço anual:** cada plano tem dois preços no Stripe — o mensal
+(`interval: month`) e o anual (`interval: year`), objetos separados no painel.
+As variáveis do anual são **opcionais**: sem elas o plano segue vendendo só o
+mensal e o alternador some da landing, sem erro nenhum. O desconto exibido
+(“2,5 meses grátis”, “economize R$ …”) é **calculado** a partir dos dois valores
+lidos do Stripe — não existe percentual escrito no código, então mexer no preço
+lá corrige o texto da página sem deploy. Aceitam também a grafia em inglês
+(`STRIPE_PRICE_BASIC_ANNUAL`, `_PRO_ANNUAL`, `_PREMIUM_ANNUAL`).
 
 **Sobre o e-mail:** o `notificationService` prefere o Resend (HTTPS) e só cai no
 SMTP se não houver `RESEND_API_KEY`. Isso não é preferência — **SMTP de saída não

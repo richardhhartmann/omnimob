@@ -122,14 +122,14 @@ function HomePage({ session }) {
     },
     cargo?.editarPagina && {
       icon: <PencilSimple size={32} weight="duotone" />,
-      title: "Editar página",
+      title: "Editar Página",
       description: "Personalize a página pública da imobiliária.",
       onClick: () => navigate(`/vitrine/${tenantSlug}/editar`),
       accent: "#8b5cf6",
     },
     {
       icon: <ArrowSquareOut size={32} weight="duotone" />,
-      title: "Ver página",
+      title: "Ver Página",
       description: "Veja sua página pública como um cliente veria.",
       // Endereço público de verdade: domínio da imobiliária quando existe.
       onClick: () => window.open(baseDaVitrine(session?.tenant), "_blank"),

@@ -6,6 +6,7 @@ import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { planoLiberaIA } from "../utils/planos";
+import { gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -113,8 +114,14 @@ export function LeadsPage({ session }) {
     try {
       const result = await api.listLeads(tenantSlug, { page: 1, limit: 100 });
       setData(result);
-      // Atualiza o "último total visto" para sumir o badge na sidebar
-      try { localStorage.setItem(`domus_leads_seen_${tenantSlug}`, String(result.total ?? (result.leads?.length ?? 0))); } catch {}
+      /* Atualiza o "último total visto" para sumir o badge na sidebar. Chaveado
+         pelo ID da imobiliária, e não pelo slug — que é reutilizável entre
+         empresas. Precisa casar com a leitura no AdminLayout. */
+      gravarNoTenant(
+        CHAVES.leadsVistos,
+        session?.tenant?.id,
+        String(result.total ?? (result.leads?.length ?? 0)),
+      );
     } catch (err) {
       setError(err.message);
     } finally {

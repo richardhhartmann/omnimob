@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
@@ -12,6 +12,10 @@ import {
   normalizeShowcaseConfig,
   sectionSurfaceStyle,
 } from "../utils/showcaseConfig";
+import { DragDropProvider } from "@dnd-kit/react";
+import { lerDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
+import { AlcaDeArrasto } from "../components/builder/AlcaDeArrasto";
+import { SENSORES_EDITOR, idDoBloco, lerId, deltaParaLayout } from "../components/builder/dndEditor";
 import { BuilderSidePanel } from "../components/builder/BuilderSidePanel";
 import { OnboardingOverlay } from "../components/builder/OnboardingOverlay";
 import { useConfirm } from "../components/ConfirmModal";
@@ -287,6 +291,148 @@ function cascadePushLayout(layoutObj, allBlockKeys) {
   return Object.fromEntries(allBlockKeys.map(k => [k, { ...layoutObj[k], ...blocks[k] }]));
 }
 
+/* ── Física entre TODAS as peças, blocos e widgets juntos ────────────────────
+   `cascadePushLayout` só conhece os seis blocos fixos. Widgets viviam num array
+   à parte, sem colisão nenhuma — nem contra bloco, nem entre si. Era daí que
+   saía o "uma peça dentro da outra": não havia nada impedindo.
+
+   Esta função põe os dois no MESMO espaço. A regra é a mesma de sempre — quem
+   está mais acima empurra quem está abaixo, e só quando eles se cruzam na
+   horizontal — mas agora vale para o tabuleiro inteiro.
+
+   `ancora` é a peça que a pessoa está segurando: ela não é empurrada por
+   ninguém. Sem isso, arrastar um bloco para cima de outro faria o próprio bloco
+   arrastado saltar para baixo, fugindo do ponteiro. */
+function empurrarTudo({ blocos, chavesDeBloco, widgets, ancora }) {
+  const pecas = [];
+  for (const k of chavesDeBloco) {
+    const b = blocos[k] || {};
+    pecas.push({ id: `b:${k}`, chave: k, tipo: "bloco", x: b.x ?? 0, y: b.y ?? 0, w: b.w ?? 100, h: b.h ?? 200 });
+  }
+  for (const w of widgets) {
+    if (w.hidden) continue;
+    pecas.push({ id: `w:${w.id}`, chave: w.id, tipo: "widget", x: w.x ?? 0, y: w.y ?? 1080, w: w.w ?? 50, h: w.h ?? 200 });
+  }
+
+  /* Peças que terminaram encostadas em alguém — a borda de baixo de uma na
+     borda de cima da outra. É o que a interface acende para mostrar que o
+     empurrão aconteceu ali, e não num lugar arbitrário. */
+  const encostadas = new Set();
+  const TOLERANCIA_CONTATO = 1.5;
+
+  /* ── A âncora também é sólida ──────────────────────────────────────────────
+     A peça que a pessoa segura não é empurrada — senão ela fugiria do ponteiro.
+     Só que o empurrão da cascata age numa direção só, para BAIXO: arrastando
+     para CIMA contra outra peça, não havia nada para deslocar, e a âncora
+     atravessava. "Forçando um pouco, entram uma na outra" era exatamente isso.
+
+     Aqui ela é expulsa de qualquer sobreposição antes da cascata, indo para o
+     lado MAIS PRÓXIMO — desce se estiver quase embaixo, sobe se estiver quase
+     em cima. Escolher pela menor distância é o que faz o contato parecer
+     encosto e não teleporte: a peça para na borda que ela encontrou. */
+  const alvo = pecas.find((p) => p.id === ancora);
+  if (alvo) {
+    for (let passe = 0; passe < pecas.length + 2; passe++) {
+      let corrigiu = false;
+      for (const outra of pecas) {
+        if (outra.id === alvo.id) continue;
+        if (alvo.x + alvo.w <= outra.x + 0.5 || outra.x + outra.w <= alvo.x + 0.5) continue;
+        const cruzaY = alvo.y < outra.y + outra.h - 0.5 && outra.y < alvo.y + alvo.h - 0.5;
+        if (!cruzaY) continue;
+        const paraBaixo = outra.y + outra.h - alvo.y;        // quanto falta para passar por baixo
+        const paraCima = alvo.y + alvo.h - outra.y;          // quanto falta para passar por cima
+        alvo.y = paraBaixo <= paraCima ? outra.y + outra.h : Math.max(0, outra.y - alvo.h);
+        encostadas.add(alvo.id);
+        encostadas.add(outra.id);
+        corrigiu = true;
+      }
+      if (!corrigiu) break;
+    }
+  }
+
+  const maxPasses = pecas.length + 2;
+  for (let passe = 0; passe < maxPasses; passe++) {
+    const ordenadas = [...pecas].sort((a, b) => a.y - b.y);
+    let mudou = false;
+    for (let i = 0; i < ordenadas.length; i++) {
+      const a = ordenadas[i];
+      for (let j = i + 1; j < ordenadas.length; j++) {
+        const b = ordenadas[j];
+        // Sem cruzamento horizontal não há o que empurrar: são colunas vizinhas.
+        if (a.x + a.w <= b.x + 0.5 || b.x + b.w <= a.x + 0.5) continue;
+        const baseDeA = a.y + a.h;
+        // Quem a pessoa segura não cede lugar — mas ENCOSTAR ela encosta, e o
+        // indicador precisa saber disso para acender dos dois lados.
+        if (b.id === ancora) {
+          if (Math.abs(baseDeA - b.y) <= TOLERANCIA_CONTATO || baseDeA > b.y + 0.5) {
+            encostadas.add(a.id); encostadas.add(b.id);
+          }
+          continue;
+        }
+        if (baseDeA > b.y + 0.5) {
+          b.y = baseDeA;
+          mudou = true;
+          encostadas.add(a.id);
+          encostadas.add(b.id);
+        } else if (Math.abs(baseDeA - b.y) <= TOLERANCIA_CONTATO) {
+          // Já estavam coladas: contato sem empurrão, e vale acender igual.
+          encostadas.add(a.id);
+          encostadas.add(b.id);
+        }
+      }
+    }
+    if (!mudou) break;
+  }
+
+  const novosBlocos = { ...blocos };
+  const novosWidgets = widgets.map((w) => ({ ...w }));
+  for (const p of pecas) {
+    if (p.tipo === "bloco") {
+      novosBlocos[p.chave] = { ...(blocos[p.chave] || {}), x: p.x, y: p.y, w: p.w, h: p.h };
+    } else {
+      const alvo = novosWidgets.find((w) => w.id === p.chave);
+      if (alvo) { alvo.x = p.x; alvo.y = p.y; alvo.w = p.w; alvo.h = p.h; }
+    }
+  }
+  return { blocos: novosBlocos, widgets: novosWidgets, encostadas };
+}
+
+/* ── Assentar o layout na abertura ───────────────────────────────────────────
+   A física só rodava DURANTE um gesto. Layout que já chegava sobreposto —
+   povoamento do seed, configuração salva por uma versão antiga do editor,
+   qualquer coisa gravada antes de existir colisão — abria sobreposto e
+   continuava assim até alguém arrastar cada peça na mão.
+
+   Aqui ele é assentado uma vez, na carga: as peças descem até parar de se
+   cruzar, na mesma regra do arrasto. Sem âncora, porque não há peça sendo
+   segurada — o que estiver mais acima manda, que é a leitura natural de quem
+   olha a página de cima para baixo.
+
+   Assenta os DOIS layouts. O mobile tem posições próprias e sofre do mesmo mal;
+   deixá-lo de fora significaria consertar o desktop e a pessoa descobrir a
+   bagunça ao trocar para o celular. */
+function assentarLayout(cfg) {
+  const arrumar = (chaveLayout, widgets) => {
+    const blocos = cfg[chaveLayout] || {};
+    const chaves = Object.keys(blocos).filter((k) => !(cfg.hiddenBlocks || []).includes(k));
+    if (!chaves.length) return { blocos, widgets };
+    return empurrarTudo({ blocos, chavesDeBloco: chaves, widgets, ancora: null });
+  };
+
+  /* Os widgets são um array só, compartilhado pelos dois layouts. O desktop
+     manda na posição final deles: é onde a vitrine é montada, e resolver duas
+     vezes deixaria o resultado dependendo da ordem em que rodou. */
+  const desktop = arrumar("layout", cfg.widgets || []);
+  const mobile = arrumar("mobileLayout", desktop.widgets);
+
+  return {
+    ...cfg,
+    layout: desktop.blocos,
+    mobileLayout: mobile.blocos,
+    widgets: desktop.widgets,
+  };
+}
+
 function coerceLayoutNumber(value, fallback) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const n = parseFloat(value);
@@ -307,6 +453,9 @@ function detectTheme(primaryColor, secondaryColor) {
 export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const { confirm, modal: confirmModal } = useConfirm();
   const tenantSlug = session?.tenant?.slug || "";
+  /* Identidade da imobiliária para o armazenamento local. O slug muda de dono
+     ao longo do tempo; o id, não. Ver `utils/chaveDoTenant.js`. */
+  const tenantId = session?.tenant?.id || "";
   const initializedRef = useRef(false);
 
   // Carrega Google Fonts ao montar
@@ -324,6 +473,10 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   const canvasContainerRef = useRef(null);
   const actionRef = useRef(null);
   const dragStateRef = useRef(null);
+  /* O conjunto de contatos é calculado DENTRO do updater do estado, que precisa
+     ser puro. Ele fica numa ref e só vira estado no fim do quadro — escrever
+     estado de dentro de um updater é o caminho curto para render em laço. */
+  const contatosRef = useRef(null);
   const formRef = useRef(null);
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
@@ -365,6 +518,9 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   // Widget drag-to-canvas
   const [isDraggingWidget, setIsDraggingWidget] = useState(false);
   const [newWidgetId, setNewWidgetId] = useState(null);
+  /* Peças cujas bordas estão se tocando AGORA. Vira uma classe no bloco, que
+     acende a borda pontilhada no ponto do encontro — ver `.is-encostado`. */
+  const [encostados, setEncostados] = useState([]);
 
   // Ao trocar de preview (desktop/mobile), reempilha aquele modo se ainda estiver
   // pendente de um reset — assim o mobile também fica sem sobreposição.
@@ -459,14 +615,22 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     return () => container.removeEventListener("wheel", handler);
   });
 
-  // Carregar snapshots do histórico ao montar
+  /* Carregar snapshots do histórico ao montar.
+
+     Chaveado pelo ID da imobiliária, e nunca pelo slug. Este era o pior dos
+     quatro casos do mesmo defeito: com slug, a empresa que assinasse um
+     endereço liberado por outra abria o editor e encontrava os LAYOUTS SALVOS
+     da anterior — com botão de restaurar. Configuração de uma imobiliária
+     dentro da tela de outra. Ver `utils/chaveDoTenant.js`. */
   useEffect(() => {
-    if (!tenantSlug) return;
+    const raw = lerDoTenant(CHAVES.historicoEditor, tenantId);
+    if (!raw) return;
     try {
-      const raw = localStorage.getItem(`domus-builder-history-${tenantSlug}`);
-      if (raw) setHistorySnapshots(JSON.parse(raw));
-    } catch {}
-  }, [tenantSlug]);
+      setHistorySnapshots(JSON.parse(raw));
+    } catch {
+      /* JSON corrompido: começa vazio em vez de derrubar o editor */
+    }
+  }, [tenantId]);
 
   useEffect(() => {
     async function loadEditorData() {
@@ -485,7 +649,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           secondaryColor: data.secondaryColor || "#d4af37",
           showcaseHeadline: data.showcaseHeadline || "",
           showcaseSubheadline: data.showcaseSubheadline || "",
-          showcaseConfig: normalizeShowcaseConfig(data.showcaseConfig),
+          showcaseConfig: assentarLayout(normalizeShowcaseConfig(data.showcaseConfig)),
         });
         setPreviewProperties(showcase.properties || []);
         const indexes = {};
@@ -852,10 +1016,20 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           if (Math.abs(nextX - cx) <= snapThreshPct) { nextX = clamp(cx, 0, 100 - startBlock.w); snapLineX = cx; break; }
         }
         setSnapLines({ x: snapLineX, y: null });
-        updateShowcaseConfig((prev) => ({
-          ...prev,
-          widgets: prev.widgets.map((w) => w.id === widgetId ? { ...w, x: nextX, y: nextY } : w),
-        }));
+        updateShowcaseConfig((prev) => {
+          const movidos = prev.widgets.map((w) => w.id === widgetId ? { ...w, x: nextX, y: nextY } : w);
+          /* Mesma física dos blocos: o widget arrastado é a âncora e empurra
+             quem estiver embaixo — inclusive os blocos fixos. */
+          const chaves = Object.keys(prev[layoutKeyAtual()] || {});
+          const fisica = empurrarTudo({
+            blocos: prev[layoutKeyAtual()] || {},
+            chavesDeBloco: chaves,
+            widgets: movidos,
+            ancora: `w:${widgetId}`,
+          });
+          contatosRef.current = fisica.encostadas;
+          return { ...prev, [layoutKeyAtual()]: fisica.blocos, widgets: fisica.widgets };
+        });
       }
     };
 
@@ -947,7 +1121,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         const newSnap = { id: Date.now(), label: snapLabel, timestamp: new Date().toLocaleString("pt-BR"), data: JSON.stringify(formRef.current) };
         setHistorySnapshots((prev) => {
           const next = [newSnap, ...prev].slice(0, 10);
-          try { localStorage.setItem(`domus-builder-history-${tenantSlug}`, JSON.stringify(next)); } catch {}
+          gravarNoTenant(CHAVES.historicoEditor, tenantId, JSON.stringify(next));
           return next;
         });
       } catch (err) {
@@ -1069,7 +1243,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     const newSnap = { id: Date.now(), label: "Versão manual", timestamp: new Date().toLocaleString("pt-BR"), data: JSON.stringify(formRef.current) };
     setHistorySnapshots((prev) => {
       const next = [newSnap, ...prev].slice(0, 10);
-      try { localStorage.setItem(`domus-builder-history-${tenantSlug}`, JSON.stringify(next)); } catch {}
+      gravarNoTenant(CHAVES.historicoEditor, tenantId, JSON.stringify(next));
       return next;
     });
   }
@@ -1080,12 +1254,18 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
     setShowHistory(false);
   }
 
-  function startBuilderAction(blockKey, mode, event) {
-    if (!canvasRef.current) return;
+  /* ── Instantâneo do gesto ─────────────────────────────────────────────────
+     Tudo que o arrasto precisa saber e que NÃO muda durante ele: onde o bloco
+     estava, onde estão os outros, a largura do canvas e o zoom.
+
+     Isolado do `startBuilderAction` porque agora tem dois donos: o resize, que
+     continua nosso e nasce no pointerdown, e o arrasto, que passou a nascer no
+     `onDragStart` do dnd-kit. A conta é a mesma nos dois — o que muda é só
+     quem avisa que o gesto começou. */
+  function prepararGesto(blockKey, mode) {
+    if (!canvasRef.current) return null;
     // Feature 2: bloco travado — não permite arrastar/redimensionar
-    if ((normalizeShowcaseConfig(formRef.current?.showcaseConfig).lockedBlocks || []).includes(blockKey)) return;
-    event.preventDefault();
-    pushHistory();
+    if ((normalizeShowcaseConfig(formRef.current?.showcaseConfig).lockedBlocks || []).includes(blockKey)) return null;
     const isMobile = previewMode === "mobile";
     const curLayout = isMobile ? showcaseConfig.mobileLayout : layout;
     const layoutKey = isMobile ? "mobileLayout" : "layout";
@@ -1109,99 +1289,265 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         h: coerceLayoutNumber(block.h, defaults.h),
       };
     });
-    actionRef.current = {
-      blockKey, mode, startX: event.clientX, startY: event.clientY,
-      startBlock, canvasWidth: rect.width, staticBlocks,
+    return {
+      blockKey, mode, startBlock, canvasWidth: rect.width, staticBlocks,
       lastValidX: startBlock.x, lastValidY: startBlock.y,
       lastValidW: startBlock.w, lastValidH: startBlock.h,
       isMobile, layoutKey,
       zoom: isMobile ? 1 : canvasZoomRef.current,
     };
+  }
+
+  /* ── O movimento ──────────────────────────────────────────────────────────
+     Recebe o deslocamento JÁ convertido para as unidades do layout e aplica
+     colisão, encaixe e cascata. Não sabe de onde veio o gesto — do ponteiro
+     pelo dnd-kit, do teclado pelo dnd-kit, ou do resize nosso. */
+  function aplicarGesto(action, dxPercent, dyPx) {
+    if (!action || !canvasRef.current) return;
+
+    const checkCollision = (testRect) => {
+      for (const other of action.staticBlocks) {
+        if (
+          testRect.left < other.x + other.w - 0.1 &&
+          testRect.right > other.x + 0.1 &&
+          testRect.top < other.y + other.h - 0.1 &&
+          testRect.bottom > other.y + 0.1
+        ) return true;
+      }
+      return false;
+    };
+
+    if (action.mode === "resize") {
+      const nextW = clamp(action.startBlock.w + dxPercent, 20, 100 - action.startBlock.x);
+      const nextH = Math.max(120, action.startBlock.h + dyPx);
+      let finalW = action.lastValidW;
+      let finalH = action.lastValidH;
+      const rectTestW = { left: action.startBlock.x, right: action.startBlock.x + nextW, top: action.startBlock.y, bottom: action.startBlock.y + finalH };
+      if (!checkCollision(rectTestW)) finalW = nextW;
+      const rectTestH = { left: action.startBlock.x, right: action.startBlock.x + finalW, top: action.startBlock.y, bottom: action.startBlock.y + nextH };
+      if (!checkCollision(rectTestH)) finalH = nextH;
+      action.lastValidW = finalW;
+      action.lastValidH = finalH;
+      setSnapCenterActive(false);
+      setSnapTopActive(false);
+      updateShowcaseConfig((prev) => ({
+        ...prev,
+        [action.layoutKey]: { ...prev[action.layoutKey], [action.blockKey]: { ...prev[action.layoutKey]?.[action.blockKey], w: finalW, h: finalH } },
+      }));
+      return;
+    }
+
+    let nextX = clamp(action.startBlock.x + dxPercent, 0, 100 - action.startBlock.w);
+    const center = nextX + action.startBlock.w / 2;
+    const thresholdPct = (10 / Math.max(action.canvasWidth, 1)) * 100;
+    let snapped = false;
+    let snapLineX = null;
+    if (Math.abs(center - 50) <= thresholdPct) {
+      nextX = clamp(50 - action.startBlock.w / 2, 0, 100 - action.startBlock.w);
+      snapped = true; snapLineX = 50;
+    } else {
+      for (const cx of [0, 25, 75, 100 - action.startBlock.w]) {
+        if (Math.abs(nextX - cx) <= thresholdPct * 1.4) { nextX = clamp(cx, 0, 100 - action.startBlock.w); snapLineX = cx; break; }
+      }
+    }
+    let nextY = action.startBlock.y + dyPx;
+    let snappedTop = false;
+    let snapLineY = null;
+    if (nextY <= 15) {
+      nextY = 0; snappedTop = true;
+    } else {
+      for (const other of action.staticBlocks) {
+        if (Math.abs(nextY - other.y) <= 14) { nextY = other.y; snapLineY = other.y; break; }
+        if (Math.abs(nextY - (other.y + other.h)) <= 14) { nextY = other.y + other.h; snapLineY = other.y + other.h; break; }
+      }
+    }
+
+    const finalX = nextX;
+    const finalY = Math.max(0, nextY);
+    action.lastValidX = finalX;
+    action.lastValidY = finalY;
+    setSnapCenterActive(snapped);
+    setSnapTopActive(snappedTop);
+    setSnapLines({ x: snapLineX, y: snapLineY });
+    updateShowcaseConfig((prev) => {
+      const prevLayout = prev[action.layoutKey] || {};
+      const allKeys = [...action.staticBlocks.map(b => b.key), action.blockKey];
+      const withMoved = { ...prevLayout, [action.blockKey]: { ...prevLayout[action.blockKey], x: finalX, y: finalY } };
+      /* Blocos E widgets no mesmo empurrão: sem isso, arrastar um bloco por
+         cima de um widget encaixava um dentro do outro, porque widget não
+         participava de colisão nenhuma. O bloco arrastado é a âncora. */
+      const fisica = empurrarTudo({
+        blocos: withMoved,
+        chavesDeBloco: allKeys,
+        widgets: prev.widgets || [],
+        ancora: `b:${action.blockKey}`,
+      });
+      contatosRef.current = fisica.encostadas;
+      return { ...prev, [action.layoutKey]: fisica.blocos, widgets: fisica.widgets };
+    });
+  }
+
+  /* Qual mapa de layout está em edição. Widgets não têm layout mobile próprio,
+     mas a física precisa saber contra QUAIS posições de bloco comparar — e no
+     modo mobile elas são outras. */
+  function layoutKeyAtual() {
+    return previewMode === "mobile" ? "mobileLayout" : "layout";
+  }
+
+  /* Leva o resultado da física (quem encostou em quem) para o estado que a
+     interface lê. Só escreve quando a lista MUDA: durante um arrasto isto é
+     chamado a cada quadro, e escrever o mesmo array toda vez seria um render
+     por movimento do mouse sem nada novo na tela. */
+  /* Classe do realce de contato, por peça. */
+  function classeContato(id) {
+    return encostados.includes(id) ? " is-encostado" : "";
+  }
+
+  function publicarContatos() {
+    const conj = contatosRef.current;
+    const lista = conj ? Array.from(conj) : [];
+    setEncostados((antes) => {
+      if (antes.length === lista.length && antes.every((x, i) => x === lista[i])) return antes;
+      return lista;
+    });
+  }
+
+  /* ── Alinhar o `h` guardado com a altura que a peça REALMENTE ocupa ────────
+     O `h` do layout entra no CSS como `min-height`: o conteúdo pode passar
+     disso, e passa — medido no editor, um bloco de imóveis declarava 640px e
+     desenhava 1051. A física trabalhava sobre a caixa declarada, então duas
+     peças "separadas" nos números apareciam encaixadas na tela. Era isso, e não
+     o povoamento, que deixava a vitrine conflitada já na abertura.
+
+     Aqui as alturas reais são medidas no DOM e devolvidas ao layout, e só então
+     o empurrão vale — porque agora a caixa guardada é a caixa que se vê, que é
+     também a borda tracejada onde o contato acende.
+
+     `useLayoutEffect` e não `useEffect`: a correção precisa entrar antes de o
+     navegador pintar, senão a pessoa vê o layout torto por um quadro e as peças
+     saltando em seguida. */
+  const alturasAjustadasRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!initializedRef.current || alturasAjustadasRef.current) return;
+    if (!canvasRef.current) return;
+
+    const medidas = {};
+    canvasRef.current.querySelectorAll("[data-reflow-key]").forEach((el) => {
+      const chave = el.getAttribute("data-reflow-key");
+      const altura = Math.ceil(el.getBoundingClientRect().height / (canvasZoomRef.current || 1));
+      if (chave && altura > 0) medidas[chave] = altura;
+    });
+    if (!Object.keys(medidas).length) return;
+
+    alturasAjustadasRef.current = true;
+    updateShowcaseConfig((prev) => {
+      const chaveLayout = previewMode === "mobile" ? "mobileLayout" : "layout";
+      const blocos = { ...(prev[chaveLayout] || {}) };
+      const widgets = (prev.widgets || []).map((w) => ({ ...w }));
+      let mudou = false;
+      for (const [chave, alturaReal] of Object.entries(medidas)) {
+        /* Widgets vêm marcados com "w:<id>" e moram noutro lugar do config.
+           Eles precisam da mesma correção — e eram justamente os que sobravam
+           desencontrados quando só os blocos eram medidos: a borda tracejada
+           ficava num lugar e a caixa da física noutro, então o miolo do widget
+           é que parecia empurrar. */
+        /* Widgets já vinham marcados como "widget-<id>" (o mesmo `widgetKey`
+           que identifica o bloco ativo) — eu tinha acrescentado um segundo
+           `data-reflow-key`, e JSX com atributo repetido fica com o último,
+           calado. Agora usa o que já existe, e há um só. */
+        if (chave.startsWith("widget-")) {
+          const alvo = widgets.find((w) => w.id === chave.slice("widget-".length));
+          if (alvo && alturaReal > (alvo.h ?? 0) + 2) { alvo.h = alturaReal; mudou = true; }
+          continue;
+        }
+        const atual = blocos[chave];
+        if (!atual) continue;
+        // Só CRESCE. Encolher aqui brigaria com quem definiu uma altura maior
+        // de propósito para deixar respiro no bloco.
+        if (alturaReal > (atual.h ?? 0) + 2) {
+          blocos[chave] = { ...atual, h: alturaReal };
+          mudou = true;
+        }
+      }
+      if (!mudou) return prev;
+      const fisica = empurrarTudo({
+        blocos,
+        chavesDeBloco: Object.keys(blocos).filter((k) => !(prev.hiddenBlocks || []).includes(k)),
+        widgets,
+        ancora: null,
+      });
+      return { ...prev, [chaveLayout]: fisica.blocos, widgets: fisica.widgets };
+    });
+  });
+
+  function limparGuias() {
+    setSnapCenterActive(false);
+    setSnapTopActive(false);
+    setSnapLines({ x: null, y: null });
+  }
+
+  /* ── Handlers do dnd-kit ──────────────────────────────────────────────────
+     O ciclo start → move → end substitui os `addEventListener` de pointermove
+     que existiam aqui. O delta vem de `operation.transform`, em pixels, e
+     `deltaParaLayout` faz a única tradução que importa: para % no eixo X e
+     para px sem zoom no eixo Y. */
+  function aoIniciarArrasto(event) {
+    const alvo = lerId(event.operation.source?.id);
+    if (!alvo || alvo.tipo !== "bloco") return;
+    const action = prepararGesto(alvo.chave, "drag");
+    if (!action) return;
+    pushHistory();
+    actionRef.current = action;
+  }
+
+  function aoMoverArrasto(event) {
+    const action = actionRef.current;
+    if (!action) return;
+    const { dxPercent, dyPx } = deltaParaLayout(
+      event.operation.transform,
+      action.canvasWidth,
+      action.zoom,
+    );
+    aplicarGesto(action, dxPercent, dyPx);
+    publicarContatos();
+  }
+
+  function aoTerminarArrasto() {
+    limparGuias();
+    actionRef.current = null;
+    // O realce some ao soltar: ele conta o que está acontecendo agora, não o
+    // que aconteceu. Deixá-lo aceso viraria decoração permanente.
+    contatosRef.current = null;
+    setEncostados([]);
+  }
+
+  /* Redimensionar continua nosso: o dnd-kit não faz resize, e não finge que
+     faz. O gesto nasce no pointerdown da alça do canto, usa o MESMO
+     `prepararGesto`/`aplicarGesto` do arrasto, e a única diferença é a fonte do
+     delta — aqui os pixels vêm do próprio ponteiro. */
+  function startBuilderAction(blockKey, mode, event) {
+    const action = prepararGesto(blockKey, mode);
+    if (!action) return;
+    event.preventDefault();
+    pushHistory();
+    actionRef.current = action;
+
+    const startX = event.clientX;
+    const startY = event.clientY;
 
     const onMove = (moveEvent) => {
-      const action = actionRef.current;
-      if (!action || !canvasRef.current) return;
-      const canvasRect = canvasRef.current.getBoundingClientRect();
-      const dxPx = moveEvent.clientX - action.startX;
-      const dyPx = (moveEvent.clientY - action.startY) / (action.zoom || 1);
-      const dxPercent = (dxPx / Math.max(canvasRect.width, 1)) * 100;
-
-      const checkCollision = (testRect) => {
-        for (const other of action.staticBlocks) {
-          if (
-            testRect.left < other.x + other.w - 0.1 &&
-            testRect.right > other.x + 0.1 &&
-            testRect.top < other.y + other.h - 0.1 &&
-            testRect.bottom > other.y + 0.1
-          ) return true;
-        }
-        return false;
-      };
-
-      if (action.mode === "resize") {
-        const nextW = clamp(action.startBlock.w + dxPercent, 20, 100 - action.startBlock.x);
-        const nextH = Math.max(120, action.startBlock.h + dyPx);
-        let finalW = action.lastValidW;
-        let finalH = action.lastValidH;
-        const rectTestW = { left: action.startBlock.x, right: action.startBlock.x + nextW, top: action.startBlock.y, bottom: action.startBlock.y + finalH };
-        if (!checkCollision(rectTestW)) finalW = nextW;
-        const rectTestH = { left: action.startBlock.x, right: action.startBlock.x + finalW, top: action.startBlock.y, bottom: action.startBlock.y + nextH };
-        if (!checkCollision(rectTestH)) finalH = nextH;
-        action.lastValidW = finalW;
-        action.lastValidH = finalH;
-        setSnapCenterActive(false);
-        setSnapTopActive(false);
-        updateShowcaseConfig((prev) => ({
-          ...prev,
-          [action.layoutKey]: { ...prev[action.layoutKey], [action.blockKey]: { ...prev[action.layoutKey]?.[action.blockKey], w: finalW, h: finalH } },
-        }));
-        return;
-      }
-
-      let nextX = clamp(action.startBlock.x + dxPercent, 0, 100 - action.startBlock.w);
-      const center = nextX + action.startBlock.w / 2;
-      const thresholdPct = (10 / Math.max(canvasRect.width, 1)) * 100;
-      let snapped = false;
-      let snapLineX = null;
-      if (Math.abs(center - 50) <= thresholdPct) {
-        nextX = clamp(50 - action.startBlock.w / 2, 0, 100 - action.startBlock.w);
-        snapped = true; snapLineX = 50;
-      } else {
-        for (const cx of [0, 25, 75, 100 - action.startBlock.w]) {
-          if (Math.abs(nextX - cx) <= thresholdPct * 1.4) { nextX = clamp(cx, 0, 100 - action.startBlock.w); snapLineX = cx; break; }
-        }
-      }
-      let nextY = action.startBlock.y + dyPx;
-      let snappedTop = false;
-      let snapLineY = null;
-      if (nextY <= 15) {
-        nextY = 0; snappedTop = true;
-      } else {
-        for (const other of action.staticBlocks) {
-          if (Math.abs(nextY - other.y) <= 14) { nextY = other.y; snapLineY = other.y; break; }
-          if (Math.abs(nextY - (other.y + other.h)) <= 14) { nextY = other.y + other.h; snapLineY = other.y + other.h; break; }
-        }
-      }
-
-      const finalX = nextX;
-      const finalY = Math.max(0, nextY);
-      action.lastValidX = finalX;
-      action.lastValidY = finalY;
-      setSnapCenterActive(snapped);
-      setSnapTopActive(snappedTop);
-      setSnapLines({ x: snapLineX, y: snapLineY });
-      updateShowcaseConfig((prev) => {
-        const prevLayout = prev[action.layoutKey] || {};
-        const allKeys = [...action.staticBlocks.map(b => b.key), action.blockKey];
-        const withMoved = { ...prevLayout, [action.blockKey]: { ...prevLayout[action.blockKey], x: finalX, y: finalY } };
-        return { ...prev, [action.layoutKey]: cascadePushLayout(withMoved, allKeys) };
-      });
+      const atual = actionRef.current;
+      if (!atual) return;
+      const { dxPercent, dyPx } = deltaParaLayout(
+        { x: moveEvent.clientX - startX, y: moveEvent.clientY - startY },
+        atual.canvasWidth,
+        atual.zoom,
+      );
+      aplicarGesto(atual, dxPercent, dyPx);
     };
 
     const onUp = () => {
-      setSnapCenterActive(false);
-      setSnapTopActive(false);
-      setSnapLines({ x: null, y: null });
+      limparGuias();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       actionRef.current = null;
@@ -1236,16 +1582,26 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
           const yPx = (e.clientY - rect.top) / canvasZoomRef.current;
           const newId = `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           pushHistory();
-          updateShowcaseConfig((prev) => ({
-            ...prev,
-            widgets: [...prev.widgets, {
+          updateShowcaseConfig((prev) => {
+            const novo = {
               id: newId,
               type: template.type, title: template.title, content: template.content,
               ctaLabel: template.ctaLabel || "", ctaUrl: template.ctaUrl || "",
               backgroundColor: "", color: "",
               x: Math.max(0, Math.min(xPct, 60)), y: Math.max(0, yPx), w: 40, h: 200, hidden: false, locked: false,
-            }],
-          }));
+            };
+            /* O widget recém-solto é a âncora: ele fica ONDE a pessoa soltou, e
+               quem estava ali desce. O contrário — empurrar o novo para um vão
+               livre — faria a peça aparecer longe de onde foi mirada. */
+            const chaves = Object.keys(prev[layoutKeyAtual()] || {});
+            const fisica = empurrarTudo({
+              blocos: prev[layoutKeyAtual()] || {},
+              chavesDeBloco: chaves,
+              widgets: [...prev.widgets, novo],
+              ancora: `w:${newId}`,
+            });
+            return { ...prev, [layoutKeyAtual()]: fisica.blocos, widgets: fisica.widgets };
+          });
           setNewWidgetId(newId);
           setTimeout(() => setNewWidgetId(null), 700);
           setWidgetMenuOpen(false);
@@ -1366,14 +1722,18 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       {isBlockVisible("header") ? (
         <section
           data-reflow-key="header"
-          className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}${multiSelection.has("header") && activeBlock !== "header" ? " multi-selected" : ""}`}
+          className={`builder-block${sectionBgClass("header")} ${activeBlock === "header" ? "is-active" : ""}${multiSelection.has("header") && activeBlock !== "header" ? " multi-selected" : ""}${classeContato("b:header")}`}
           style={{ ...mergedBlockWrapper("header"), zIndex: 9999, ...(showcaseConfig.lockedBlocks?.includes("header") ? { cursor: "not-allowed" } : {}) }}
           onClick={(e) => handleBlockClick("header", e)}
         >
-          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("header", "drag", event)} style={{ cursor: showcaseConfig.lockedBlocks?.includes("header") ? "not-allowed" : undefined }}>
+          <AlcaDeArrasto
+            id={idDoBloco("header")}
+            travado={showcaseConfig.lockedBlocks?.includes("header")}
+            className="builder-block-handle"
+          >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Cabeçalho
-          </div>
+          </AlcaDeArrasto>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("header"); }} title={showcaseConfig.lockedBlocks?.includes("header") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
             {showcaseConfig.lockedBlocks?.includes("header") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
           </button>
@@ -1413,11 +1773,15 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("title") ? (
-        <section data-reflow-key="title" className={`builder-block${sectionBgClass("title")} ${activeBlock === "title" ? "is-active" : ""}${multiSelection.has("title") && activeBlock !== "title" ? " multi-selected" : ""}`} style={mergedBlockWrapper("title")} onClick={(e) => handleBlockClick("title", e)}>
-          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("title", "drag", event)}>
+        <section data-reflow-key="title" className={`builder-block${sectionBgClass("title")} ${activeBlock === "title" ? "is-active" : ""}${multiSelection.has("title") && activeBlock !== "title" ? " multi-selected" : ""}${classeContato("b:title")}`} style={mergedBlockWrapper("title")} onClick={(e) => handleBlockClick("title", e)}>
+          <AlcaDeArrasto
+            id={idDoBloco("title")}
+            travado={showcaseConfig.lockedBlocks?.includes("title")}
+            className="builder-block-handle"
+          >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Hero / Título
-          </div>
+          </AlcaDeArrasto>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("title"); }} title={showcaseConfig.lockedBlocks?.includes("title") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
             {showcaseConfig.lockedBlocks?.includes("title") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
           </button>
@@ -1436,11 +1800,15 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("highlights") ? (
-        <section data-reflow-key="highlights" className={`builder-block${sectionBgClass("highlights")} ${activeBlock === "highlights" ? "is-active" : ""}${multiSelection.has("highlights") && activeBlock !== "highlights" ? " multi-selected" : ""}`} style={mergedBlockWrapper("highlights")} onClick={(e) => handleBlockClick("highlights", e)}>
-          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("highlights", "drag", event)}>
+        <section data-reflow-key="highlights" className={`builder-block${sectionBgClass("highlights")} ${activeBlock === "highlights" ? "is-active" : ""}${multiSelection.has("highlights") && activeBlock !== "highlights" ? " multi-selected" : ""}${classeContato("b:highlights")}`} style={mergedBlockWrapper("highlights")} onClick={(e) => handleBlockClick("highlights", e)}>
+          <AlcaDeArrasto
+            id={idDoBloco("highlights")}
+            travado={showcaseConfig.lockedBlocks?.includes("highlights")}
+            className="builder-block-handle"
+          >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Destaques
-          </div>
+          </AlcaDeArrasto>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("highlights"); }} title={showcaseConfig.lockedBlocks?.includes("highlights") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
             {showcaseConfig.lockedBlocks?.includes("highlights") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
           </button>
@@ -1490,11 +1858,15 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       ) : null}
 
       {isBlockVisible("properties") ? (
-        <section data-reflow-key="properties" className={`builder-block${sectionBgClass("properties")} ${activeBlock === "properties" ? "is-active" : ""}${multiSelection.has("properties") && activeBlock !== "properties" ? " multi-selected" : ""}`} style={mergedBlockWrapper("properties")} onClick={(e) => handleBlockClick("properties", e)}>
-          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("properties", "drag", event)}>
+        <section data-reflow-key="properties" className={`builder-block${sectionBgClass("properties")} ${activeBlock === "properties" ? "is-active" : ""}${multiSelection.has("properties") && activeBlock !== "properties" ? " multi-selected" : ""}${classeContato("b:properties")}`} style={mergedBlockWrapper("properties")} onClick={(e) => handleBlockClick("properties", e)}>
+          <AlcaDeArrasto
+            id={idDoBloco("properties")}
+            travado={showcaseConfig.lockedBlocks?.includes("properties")}
+            className="builder-block-handle"
+          >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Lista de Imóveis
-          </div>
+          </AlcaDeArrasto>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("properties"); }} title={showcaseConfig.lockedBlocks?.includes("properties") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
             {showcaseConfig.lockedBlocks?.includes("properties") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
           </button>
@@ -1564,7 +1936,7 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
             <section
               key={widget.id}
               data-reflow-key={widgetKey}
-              className={`builder-block ${isActiveWidget ? "is-active" : ""} ${widget.id === newWidgetId ? "widget-entering" : ""}`}
+              className={`builder-block ${isActiveWidget ? "is-active" : ""} ${widget.id === newWidgetId ? "widget-entering" : ""}${classeContato(`w:${widget.id}`)}`}
               style={{
                 position: "absolute",
                 left: `${widget.x ?? 0}%`,
@@ -1585,17 +1957,22 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
                 {(widget.title || "Widget").replace(/<[^>]*>/g, "").slice(0, 28)}
               </div>
+              {/* Ações da peça, numa fileira só: o espaçamento é do flex, e não
+                  de um `right` calculado à mão para cada botão — que era o que
+                  fazia os três se empilharem. */}
+              <div className="builder-block-acoes">
               {/* Botão travar widget */}
-              <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockWidget(widget.id); }} title={widget.locked ? "Destravar widget" : "Travar widget"} style={{ right: "58px" }}>
+              <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockWidget(widget.id); }} title={widget.locked ? "Destravar widget" : "Travar widget"}>
                 {widget.locked ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
               </button>
               {/* Botão duplicar widget */}
-              <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); duplicateWidget(widget.id); }} title="Duplicar widget" style={{ right: "80px" }}>
+              <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); duplicateWidget(widget.id); }} title="Duplicar widget">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               </button>
               <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); removeWidgetById(widget.id); }} title="Remover widget">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
+              </div>
               {widget.locked && <div style={{ position: "absolute", inset: 0, background: "rgba(99,102,241,0.06)", pointerEvents: "none", borderRadius: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.15 }}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>}
               <div className="highlight-mini-toolbar" onPointerDown={(e) => e.stopPropagation()}>
                 <label className="builder-color-mini">Fundo<input type="color" value={widget.backgroundColor || "#1e293b"} onChange={(e) => updateWidgetById(widget.id, "backgroundColor", e.target.value)} style={{ width: "20px", height: "20px" }} /></label>
@@ -1669,14 +2046,18 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         <section
           id="footer"
           data-reflow-key="footer"
-          className={`builder-block${sectionBgClass("footer")} ${activeBlock === "footer" ? "is-active" : ""}${multiSelection.has("footer") && activeBlock !== "footer" ? " multi-selected" : ""}`}
+          className={`builder-block${sectionBgClass("footer")} ${activeBlock === "footer" ? "is-active" : ""}${multiSelection.has("footer") && activeBlock !== "footer" ? " multi-selected" : ""}${classeContato("b:footer")}`}
           style={mergedBlockWrapper("footer")}
           onClick={(e) => handleBlockClick("footer", e)}
         >
-          <div className="builder-block-handle" onPointerDown={(event) => startBuilderAction("footer", "drag", event)}>
+          <AlcaDeArrasto
+            id={idDoBloco("footer")}
+            travado={showcaseConfig.lockedBlocks?.includes("footer")}
+            className="builder-block-handle"
+          >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             Rodapé
-          </div>
+          </AlcaDeArrasto>
           <button type="button" className="builder-delete-icon" onClick={(e) => { e.stopPropagation(); toggleLockBlock("footer"); }} title={showcaseConfig.lockedBlocks?.includes("footer") ? "Destravar bloco" : "Travar bloco"} style={{ right: "36px" }}>
             {showcaseConfig.lockedBlocks?.includes("footer") ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>}
           </button>
@@ -1743,6 +2124,16 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
   );
 
   return (
+    /* O provedor envolve o editor inteiro, e não só o canvas: as alças vivem
+       dentro dos blocos, mas o sensor de TECLADO precisa alcançar o foco onde
+       quer que ele esteja — inclusive quando a pessoa chega no bloco pelo Tab
+       vindo do painel lateral. */
+    <DragDropProvider
+      sensors={SENSORES_EDITOR}
+      onDragStart={aoIniciarArrasto}
+      onDragMove={aoMoverArrasto}
+      onDragEnd={aoTerminarArrasto}
+    >
     <div
       className={`showcase-body showcase-editor-full ${isLightMode ? "showcase-theme-light" : ""} page-transition`}
       style={{ ...previewStyle, display: "flex", flexDirection: "column", minHeight: "100vh" }}
@@ -1777,6 +2168,20 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         @keyframes canvasDropPulse { 0%,100% { border-color: var(--accent); opacity: 1; } 50% { border-color: rgba(99,102,241,0.35); opacity: 0.7; } }
         @keyframes widgetDrop { 0% { opacity: 0; transform: scale(0.82) translateY(-14px); } 65% { transform: scale(1.04) translateY(3px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
         .widget-entering { animation: widgetDrop 0.52s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+        /* ── Bordas em contato ──
+           A peça já tem borda tracejada; o contato ACENDE a que existe, em vez
+           de desenhar uma segunda linha por cima. É a diferença entre "algo
+           apareceu aqui" e "esta borda encostou".
+
+           O brilho externo é curto de propósito: ele marca a linha do encontro,
+           e um halo largo faria duas peças coladas virarem uma mancha só. */
+        .builder-block.is-encostado {
+          border-style: dashed !important;
+          border-color: var(--accent, #6366f1) !important;
+          box-shadow: 0 0 0 1px rgba(99,102,241,0.35), 0 0 12px -2px rgba(99,102,241,0.55);
+          transition: border-color 0.12s ease, box-shadow 0.12s ease;
+        }
       `}</style>
 
       {textSelection
@@ -2110,7 +2515,16 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
       {dragState ? (
         <div style={{
           position: "fixed", left: dragState.x, top: dragState.y,
-          transform: "translate(-50%, -65%) rotate(-2.5deg)",
+          /* O ponteiro é a QUINA SUPERIOR ESQUERDA do widget que vai nascer —
+             é isso que `startWidgetDrag` grava ao soltar (x/y saem direto da
+             posição do ponteiro no canvas). O fantasma agora mostra a mesma
+             coisa.
+
+             Antes era `translate(-50%, -65%)`: o cartão flutuava 65% da própria
+             altura ACIMA do cursor, então a pessoa mirava num lugar e o widget
+             nascia bem abaixo. O leve deslocamento e a inclinação ficam só para
+             o cursor não sumir sob o cartão. */
+          transform: "translate(10px, 10px) rotate(-2.5deg)",
           pointerEvents: "none", zIndex: 99999, background: "#0d1829",
           padding: "16px", borderRadius: "16px",
           border: "1.5px solid var(--accent)",
@@ -2207,5 +2621,6 @@ export function ShowcaseEditorPage({ session, onLogout, onSessionUpdate }) {
         document.body
       ) : null}
     </div>
+    </DragDropProvider>
   );
 }

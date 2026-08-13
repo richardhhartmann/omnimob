@@ -32,6 +32,9 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   const [aberto, setAberto] = useState(false);
   const [passo, setPasso] = useState(1);
   const [plano, setPlano] = useState("");
+  /* Mensal ou anual. Só aparece quando o provedor tem preço anual cadastrado —
+     ver `temAnual` mais abaixo. */
+  const [periodo, setPeriodo] = useState("mensal");
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState("");
   const [concluido, setConcluido] = useState(null);
@@ -94,7 +97,11 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
        depois (pagamento diferido), então o Stripe precisa saber de antemão o
        que será cobrado para escolher os meios de pagamento e os campos certos.
        Sem eles o Payment Element se recusa a montar. */
-    const valor = precosVivos[plano]?.valor;
+    /* Plano sem preço anual cai no mensal — o mesmo que o servidor faria. É o
+       que impede o Elements de ser montado com valor nulo enquanto o alternador
+       está no anual e aquele plano ainda não tem preço lá. */
+    const escolhido = precosVivos[plano]?.[periodo] || precosVivos[plano]?.mensal;
+    const valor = escolhido?.valor;
     if (valor == null) {
       setFalha("Não consegui ler o valor do plano. Volte e escolha de novo.");
       return undefined;
@@ -133,7 +140,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
       if (elemento) elemento.destroy();
       elementsRef.current = null;
     };
-  }, [passo, plano, precosVivos]);
+  }, [passo, plano, periodo, precosVivos]);
 
   if (!situacao?.emTrial) return null;
 
@@ -141,8 +148,16 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
      plano sem preço daria 503 na hora de cobrar, depois de a pessoa já ter
      digitado o cartão. Sem provedor, mostramos todos e o caminho é o time. */
   const temProvedor = Object.keys(precosVivos).length > 0;
-  const planosOfertaveis = temProvedor ? PLANOS.filter((p) => precosVivos[p.key]) : PLANOS;
-  const precoDe = (chave) => precosVivos[chave]?.rotulo || PRECOS_RESERVA[chave];
+  const planosOfertaveis = temProvedor ? PLANOS.filter((p) => precosVivos[p.key]?.mensal) : PLANOS;
+  /* O período que este plano REALMENTE consegue cobrar. Quem não tem preço
+     anual cadastrado segue no mensal em silêncio, em vez de sumir da lista por
+     causa de uma opção que nem é a principal. */
+  const periodoDe = (chave) => (precosVivos[chave]?.[periodo] ? periodo : "mensal");
+  const precoDe = (chave) =>
+    precosVivos[chave]?.[periodoDe(chave)]?.rotulo || PRECOS_RESERVA[chave];
+  const economiaDe = (chave) =>
+    periodoDe(chave) === "anual" ? precosVivos[chave]?.economia || null : null;
+  const temAnual = Object.values(precosVivos).some((p) => p?.anual);
   const nomeDoPlano = (chave) => PLANOS.find((p) => p.key === chave)?.nome || chave;
   /* O plano em que o teste está rodando. Deixou de ser sempre o Premium — vem
      da escolha feita na landing —, então tanto o texto quanto a etiqueta "SEU
@@ -206,7 +221,11 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
         tokenPagamento = paymentMethod.id;
       }
 
-      const resposta = await api.assinarPlano(tenantSlug, { plano, tokenPagamento });
+      const resposta = await api.assinarPlano(tenantSlug, {
+        plano,
+        periodo: precosVivos[plano]?.[periodo] ? periodo : "mensal",
+        tokenPagamento,
+      });
       /* A situação guardada acabou de ficar velha: era "em teste" e agora é
          assinante. Sem descartar, quem remontasse dentro da janela ainda leria
          o estado antigo — inclusive o modal de boas-vindas, que decide por ele
@@ -303,6 +322,26 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                         descer tira o que você vinha usando no teste.</>}
                 </p>
 
+                {temAnual ? (
+                  <div className="tv-periodo" role="radiogroup" aria-label="Forma de cobrança">
+                    {[
+                      { chave: "mensal", rotulo: "Mensal" },
+                      { chave: "anual", rotulo: "Anual" },
+                    ].map((op) => (
+                      <button
+                        key={op.chave}
+                        type="button"
+                        role="radio"
+                        aria-checked={periodo === op.chave}
+                        className={`tv-periodo__opt${periodo === op.chave ? " is-on" : ""}`}
+                        onClick={() => setPeriodo(op.chave)}
+                      >
+                        {op.rotulo}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
                 <div className="tv-planos">
                   {planosOfertaveis.map((p) => (
                     <button
@@ -315,7 +354,14 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                         <span className="tv-plano__nome">{p.nome}</span>
                         {p.key === situacao.plano ? <span className="tv-plano__tag">SEU TESTE</span> : null}
                       </span>
-                      <span className="tv-plano__preco">{precoDe(p.key)}</span>
+                      <span className="tv-plano__preco">
+                        {precoDe(p.key)}
+                        {economiaDe(p.key)?.mesesGratis >= 0.5 ? (
+                          <span className="tv-plano__economia">
+                            {String(economiaDe(p.key).mesesGratis).replace(".", ",")} meses grátis
+                          </span>
+                        ) : null}
+                      </span>
                       <span className="tv-plano__desc">{p.descricao}</span>
                     </button>
                   ))}
@@ -561,8 +607,34 @@ const CSS = `
   padding: 2px 7px; border-radius: 999px; color: #d4af37;
   background: rgba(212,175,55,0.12); border: 1px solid rgba(212,175,55,0.3);
 }
-.tv-plano__preco { font-size: 12.5px; font-weight: 600; color: #818cf8; }
+.tv-plano__preco { font-size: 12.5px; font-weight: 600; color: #818cf8; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tv-plano__economia {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8px; letter-spacing: 0.09em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; color: #34d399;
+  background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.3);
+}
 .tv-plano__desc { font-size: 12px; line-height: 1.5; color: #64748b; }
+
+/* Alternador mensal / anual do passo 2. Dois botões dentro de uma cápsula, no
+   mesmo desenho dos cartões de plano logo abaixo — é a mesma escolha, num grão
+   mais fino. */
+.tv-periodo {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+  padding: 4px; margin-bottom: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09);
+}
+.ds-shell .tv-periodo__opt, .tv-periodo__opt {
+  padding: 7px 10px; border-radius: 999px; border: 0; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  background: transparent; color: #94a3b8;
+  box-shadow: none; transform: none;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.tv-periodo__opt:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; box-shadow: none; transform: none; }
+.tv-periodo__opt.is-on { background: rgba(129,140,248,0.18); color: #c7d2fe; }
+.tv-periodo__opt:active { scale: 1; }
 
 .tv-pagamento {
   padding: 14px 16px; border-radius: 12px; margin-bottom: 16px;

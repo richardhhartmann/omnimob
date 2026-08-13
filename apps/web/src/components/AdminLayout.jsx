@@ -11,6 +11,7 @@ import { AjudaModal } from "./AjudaModal";
 import { corDeTextoPara } from "./adminUi";
 import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
 import { IconeRelatorios } from "../utils/iconesRelatorios";
+import { lerDoTenant, CHAVES } from "../utils/chaveDoTenant";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
@@ -150,6 +151,10 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const location  = useLocation();
   const navigate  = useNavigate();
   const tenantSlug = session?.tenant?.slug  || "";
+  /* O que identifica a imobiliária para o armazenamento local. NÃO é o slug —
+     ele é reutilizável entre empresas ao longo do tempo. Ver
+     `utils/chaveDoTenant.js` para o estrago que isso causava. */
+  const tenantId   = session?.tenant?.id    || "";
   const tenantName = session?.tenant?.name  || "Omnimob";
   const userInitial = session?.usuario?.nome?.charAt(0)?.toUpperCase() || "U";
   const userName    = session?.usuario?.nome || "";
@@ -250,16 +255,17 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     function checkLeads() {
       api.listLeads(tenantSlug, { page: 1, limit: 1 }).then((result) => {
         const total = result.total ?? (result.leads?.length ?? 0);
-        try {
-          const seen = parseInt(localStorage.getItem(`domus_leads_seen_${tenantSlug}`) || "0", 10);
-          setLeadsBadge(Math.max(0, total - seen));
-        } catch { setLeadsBadge(0); }
+        // Por ID e não por slug: com slug, a imobiliária que herda um endereço
+        // livre herdava junto o contador de "já vistos" da anterior, e leads
+        // novos não acendiam o marcador. Ver utils/chaveDoTenant.js.
+        const seen = parseInt(lerDoTenant(CHAVES.leadsVistos, tenantId) || "0", 10);
+        setLeadsBadge(Math.max(0, total - (Number.isFinite(seen) ? seen : 0)));
       }).catch(() => {});
     }
     checkLeads();
     window.addEventListener("focus", checkLeads);
     return () => window.removeEventListener("focus", checkLeads);
-  }, [tenantSlug, canSeeLeads]);
+  }, [tenantSlug, tenantId, canSeeLeads]);
   useEffect(() => { if (isLeads) setLeadsBadge(0); }, [isLeads]);
 
   // ── Grupos de navegação ───────────────────────────────────────────────────────
@@ -303,8 +309,8 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
              gerir gente — e, do outro lado, o Editor de Vitrine entrava numa
              tela com plano, cobrança e cancelamento de assinatura. */
           cargo?.verConfiguracoes && { key: "config", Icon: GearSix, label: "Configurações", active: isConfiguracoes, onClick: () => navigate("/configuracoes") },
-          cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar página", active: isShowcaseEditor, href: showcaseEditorLink },
-          { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver página", href: showcaseLink, external: true },
+          cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar Página", active: isShowcaseEditor, href: showcaseEditorLink },
+          { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver Página", href: showcaseLink, external: true },
         ].filter(Boolean),
       },
     ];
@@ -326,6 +332,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
           primeiro se resolver — inclusive quando ele decide não aparecer. */}
       <BoasVindasModal
         tenantSlug={tenantSlug}
+        tenantId={tenantId}
         aoResolver={marcarContaResolvida}
         /* A ficha preenchida ali dentro traz cores e logo. Sem repassar a
            sessão adiante, o painel só mostraria a identidade nova no próximo

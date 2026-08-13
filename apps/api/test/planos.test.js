@@ -11,6 +11,7 @@ import { leadRouter } from "../src/routes/leadRoutes.js";
 import { chamadoRouter } from "../src/routes/chamadoRoutes.js";
 import { aiRouter } from "../src/routes/aiRoutes.js";
 import { tenantRouter } from "../src/routes/tenantRoutes.js";
+import { economiaDoAnual, normalizarPeriodo } from "../src/services/pagamentoService.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O que cada plano libera.
@@ -209,4 +210,46 @@ test("reescrita em massa: só Premium, e não toca no imóvel de outra imobiliá
 
   const depois = await prisma.property.findUnique({ where: { id: doVizinho.imovel.id } });
   assert.equal(depois.description, ORIGINAL, "a descrição do vizinho tem de continuar a mesma");
+});
+
+/* ── A conta do desconto anual ────────────────────────────────────────────────
+   A landing anuncia "2,5 meses grátis" e "economize R$ 372,50". Esses números
+   não estão escritos em lugar nenhum: saem dos dois preços que o Stripe cobra.
+   Se a conta mudar, a página passa a prometer um abatimento diferente do que a
+   fatura pratica — e ninguém percebe, porque nada quebra.
+
+   Sem rede: `economiaDoAnual` é pura, e é exatamente por isso que ela existe
+   separada de `precosDosPlanos`. */
+test("desconto anual: a economia sai dos preços, não de um percentual escrito", () => {
+  // Os três planos como o cliente vai cadastrar: paga 9,5 meses, leva 12.
+  for (const [mensal, anual] of [[99, 940.5], [199, 1890.5], [149, 1415.5]]) {
+    const e = economiaDoAnual(mensal, anual);
+    assert.equal(e.mesesGratis, 2.5, `${mensal} → ${anual} deveria dar 2,5 meses grátis`);
+    assert.equal(e.valor, Math.round((mensal * 12 - anual) * 100) / 100);
+    // 9,5/12 = 20,83%. Vira 21 arredondado — e NÃO 25, que é o número que a
+    // gente costuma dizer de cabeça. O teste existe para isso não virar texto
+    // fixo na página.
+    assert.equal(e.percentual, 21);
+  }
+});
+
+test("desconto anual: sem vantagem real, não há selo", () => {
+  assert.equal(economiaDoAnual(149, null), null, "sem preço anual não há economia");
+  assert.equal(economiaDoAnual(149, 1788), null, "anual igual a 12x não é desconto");
+  assert.equal(economiaDoAnual(149, 1900), null, "anual mais caro que 12x não vira selo");
+  assert.equal(economiaDoAnual(0, 100), null, "mensal zerado não divide");
+});
+
+/* ── O período escolhido chega inteiro no provedor ────────────────────────────
+   `normalizarPeriodo` é a única porta entre o que o cliente manda no corpo da
+   requisição e o preço que será cobrado. Qualquer coisa que ela deixe passar
+   além de mensal/anual viraria `PRECOS[plano][lixo]` — undefined — e o erro
+   sairia como "plano sob consulta", escondendo a causa. */
+test("período: só mensal e anual passam; o resto cai no mensal", () => {
+  assert.equal(normalizarPeriodo("anual"), "anual");
+  assert.equal(normalizarPeriodo("mensal"), "mensal");
+  assert.equal(normalizarPeriodo(undefined), "mensal");
+  assert.equal(normalizarPeriodo("ANUAL"), "mensal", "não é case-insensitive de propósito");
+  assert.equal(normalizarPeriodo("constructor"), "mensal", "nada de chave herdada de Object");
+  assert.equal(normalizarPeriodo("__proto__"), "mensal");
 });

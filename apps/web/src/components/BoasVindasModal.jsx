@@ -6,6 +6,7 @@ import { PLANOS } from "../utils/planos";
 import { IconeCheck, IconeEstrela } from "./Icones.jsx";
 import { PerfilInicialPasso, PERFIL_INICIAL_CSS } from "./PerfilInicialPasso.jsx";
 import { DominioVitrine } from "./DominioVitrine.jsx";
+import { chaveDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Boas-vindas de quem acabou de assinar, no primeiro acesso ao painel.
@@ -25,14 +26,25 @@ import { DominioVitrine } from "./DominioVitrine.jsx";
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* Chave separada por modo: quem viu as boas-vindas do teste e depois assina
-   precisa ver as de assinante também — é outra mensagem, em outro momento. */
-const chaveVisto = (slug, modo) => `domus_boas_vindas_${modo}_${slug}`;
+   precisa ver as de assinante também — é outra mensagem, em outro momento.
+
+   Amarrada ao ID da imobiliária, e não ao slug. Slug é reutilizável: uma
+   empresa cancela, o endereço fica livre, outra assina e escolhe o mesmo — e o
+   navegador entregava a marca de "já viu" da anterior, deixando a nova sem o
+   modal de primeiro acesso. Ver `utils/chaveDoTenant.js`. */
+const chaveVisto = (tenantId, modo) => chaveDoTenant(`${CHAVES.boasVindasVisto}_${modo}`, tenantId);
 
 /* Qual versão se aplica a esta imobiliária, da última vez que perguntamos:
    "teste", "assinante" ou "nenhum". Guardado só para decidir se o véu de espera
    precisa aparecer — ver `esperando`, mais abaixo. Nunca substitui a resposta do
    servidor: o modal em si continua saindo do `/me/trial` de agora. */
-const chaveModo = (slug) => `domus_boas_vindas_modo_${slug}`;
+const chaveModo = (tenantId) => chaveDoTenant(CHAVES.boasVindasModo, tenantId);
+
+/* Lê uma chave que pode ser nula (sem id) sem derrubar a tela. */
+const ler = (chave) => {
+  if (!chave) return null;
+  try { return localStorage.getItem(chave); } catch { return null; }
+};
 
 // Duração da saída. Precisa bater com a das animações no CSS.
 const SAIDA_MS = 260;
@@ -115,7 +127,7 @@ function listar(itens) {
   return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
 }
 
-export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
+export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarTenant }) {
   const navigate = useNavigate();
   const [dados, setDados] = useState(null);
   const [modo, setModo] = useState(null); // "assinante" | "teste"
@@ -162,21 +174,14 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
      véu eterno que existia antes. */
   const [esperando, setEsperando] = useState(() => {
     if (!tenantSlug) return false;
-    try {
-      const modoConhecido = localStorage.getItem(chaveModo(tenantSlug));
-      // Nem teste nem assinante: não há boas-vindas para esta conta.
-      if (modoConhecido === "nenhum") return false;
-      if (modoConhecido && localStorage.getItem(chaveVisto(tenantSlug, modoConhecido))) return false;
-      /* Sem modo guardado (acesso anterior a esta versão): cai no critério
-         antigo, que continua correto quando fecha — quem viu as duas não verá
-         mais nenhuma. */
-      return !(
-        localStorage.getItem(chaveVisto(tenantSlug, "teste")) &&
-        localStorage.getItem(chaveVisto(tenantSlug, "assinante"))
-      );
-    } catch {
-      return true;
-    }
+    const modoConhecido = ler(chaveModo(tenantId));
+    // Nem teste nem assinante: não há boas-vindas para esta conta.
+    if (modoConhecido === "nenhum") return false;
+    if (modoConhecido && ler(chaveVisto(tenantId, modoConhecido))) return false;
+    /* Sem modo guardado (acesso anterior a esta versão): cai no critério
+       antigo, que continua correto quando fecha — quem viu as duas não verá
+       mais nenhuma. */
+    return !(ler(chaveVisto(tenantId, "teste")) && ler(chaveVisto(tenantId, "assinante")));
   });
 
   useEffect(() => {
@@ -187,20 +192,20 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
         const qual = r?.assinaturaAtiva ? "assinante" : r?.emTrial ? "teste" : null;
         /* Grava o modo ANTES de qualquer saída: é justamente para os acessos em
            que nada é exibido que o próximo precisa saber que não haverá véu. */
-        try { localStorage.setItem(chaveModo(tenantSlug), qual || "nenhum"); } catch { /* sem storage */ }
+        gravarNoTenant(CHAVES.boasVindasModo, tenantId, qual || "nenhum");
         if (!qual) { aoResolver?.(); return; }
-        try {
-          if (localStorage.getItem(chaveVisto(tenantSlug, qual))) { aoResolver?.(); return; }
-        } catch {
-          /* navegador sem storage: mostra, e no pior caso mostra de novo */
-        }
+        /* Sem id não há como saber se esta conta já viu — e mostrar de novo é
+           melhor que esconder o primeiro acesso de quem nunca viu. */
+        if (ler(chaveVisto(tenantId, qual))) { aoResolver?.(); return; }
         setDados(r);
         setModo(qual);
         setAberto(true);
       })
       .catch(() => { aoResolver?.(); })
       .finally(() => setEsperando(false));
-  }, [tenantSlug]);
+    // `tenantId` entra junto: ele é quem decide a chave de "já viu", e trocar de
+    // imobiliária sem refazer esta consulta deixaria a decisão presa na anterior.
+  }, [tenantSlug, tenantId]);
 
   useEffect(() => {
     if (!aberto) return undefined;
@@ -231,11 +236,8 @@ export function BoasVindasModal({ tenantSlug, aoResolver, aoAtualizarTenant }) {
 
   function fechar() {
     if (saindo) return; // clique duplo não deve reiniciar a saída
-    try {
-      localStorage.setItem(chaveVisto(tenantSlug, modo), "1");
-    } catch {
-      /* sem storage o modal volta na próxima entrada — aceitável */
-    }
+    // Sem storage (ou sem id) o modal volta na próxima entrada — aceitável.
+    gravarNoTenant(`${CHAVES.boasVindasVisto}_${modo}`, tenantId, "1");
     /* Desmonta só depois da animação. Tirar do DOM na hora cortaria o
        fechamento pela metade — o elemento sumiria antes de terminar. */
     setSaindo(true);

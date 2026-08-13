@@ -21,7 +21,7 @@ import {
    logo abaixo. */
 const PERMISSOES = [
   { key: "acessarPainel",     label: "Acessar Painel",     Icon: House },
-  { key: "editarPagina",      label: "Editar Vitrine",     Icon: PencilSimple },
+  { key: "editarPagina",      label: "Editar Página",     Icon: PencilSimple },
   { key: "gerenciarImoveis",  label: "Gerenciar Imóveis",  Icon: Buildings },
   { key: "gerenciarUsuarios", label: "Gerenciar Usuários", Icon: UserSquare },
   { key: "gerenciarClientes", label: "Gerenciar Clientes", Icon: UserCircle },

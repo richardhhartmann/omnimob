@@ -689,9 +689,25 @@ const FAQ = [
 // Preço é informação de marketing e não existe em planos.js, então fica mapeado
 // aqui — ajuste à vontade.
 const PRECOS = {
-  BASICO: { price: "R$ 99", per: "/mês", nota: "cobrado mensalmente" },
-  PROFISSIONAL: { price: "R$ 199", per: "/mês", nota: "cobrado mensalmente" },
-  PREMIUM: { price: "Sob consulta", per: "", nota: "cobrado mensalmente" },
+  BASICO: { price: "R$ --", per: "/mês", nota: "cobrado mensalmente" },
+  PROFISSIONAL: { price: "R$ --", per: "/mês", nota: "cobrado mensalmente" },
+  PREMIUM: { price: "--", per: "", nota: "cobrado mensalmente" },
+};
+
+const formatarBRL = (valor) =>
+  Number(valor || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    // Centavos redondos viram "R$ 372" em vez de "R$ 372,00"; quebrados
+    // mantêm as casas. Preço com centavo pendurado à toa parece erro.
+    minimumFractionDigits: Number.isInteger(Number(valor)) ? 0 : 2,
+  });
+
+/* Rodapé do preço, por período. O anual é cobrado de uma vez — dizer isso na
+   própria etiqueta evita a leitura de que "R$ 1.415,50/ano" seja parcelado. */
+const NOTA_DO_PERIODO = {
+  mensal: "cobrado mensalmente",
+  anual: "cobrado uma vez por ano",
 };
 
 // Linhas da tabela comparativa. As linhas "Tudo do Plano X" existem só para os
@@ -752,8 +768,14 @@ const PLANS_BASE = PLANOS.map((p) => ({
 }));
 
 /* Busca os preços vigentes uma vez por carga da página. Falha de rede não
-   quebra nada: fica com os valores de reserva. */
-function usePrecosVigentes() {
+   quebra nada: fica com os valores de reserva.
+
+   O provedor devolve um par por plano — `{ mensal, anual, economia }` — e a
+   economia vem CALCULADA lá, a partir do que o Stripe cobra de verdade nos dois
+   preços. Nada de percentual escrito à mão aqui: se o valor mudar no painel, a
+   página passa a anunciar o desconto novo sem deploy, e é impossível prometer
+   um abatimento que a fatura não pratica. */
+function usePrecosVigentes(periodo) {
   const [precos, setPrecos] = useState(null);
   useEffect(() => {
     let vivo = true;
@@ -766,16 +788,89 @@ function usePrecosVigentes() {
     };
   }, []);
 
-  return useMemo(
+  /* Existe alguma cobrança anual de verdade? Enquanto as variáveis do Stripe
+     não forem criadas, não existe — e oferecer a escolha seria vender o que a
+     cobrança recusa. Antes da resposta chegar (ou sem provedor configurado) o
+     alternador aparece, porque aí a página está em modo de reserva e nenhum
+     preço dela é uma promessa. */
+  const respondeu = precos != null && Object.keys(precos).length > 0;
+  const temAnual = !respondeu || Object.values(precos).some((p) => p?.anual);
+
+  const planos = useMemo(
     () =>
       PLANS_BASE.map((p) => {
         const vivo = precos?.[p.key];
-        if (!vivo) return p;
+        // Plano sem preço anual cadastrado continua mostrando o mensal: some a
+        // vantagem, não o plano.
+        const doPeriodo = vivo?.[periodo] || vivo?.mensal;
+        const nota = NOTA_DO_PERIODO[doPeriodo && periodo === "anual" && vivo?.anual ? "anual" : "mensal"];
+        if (!doPeriodo) return { ...p, nota };
         // O rótulo do Stripe já vem inteiro ("R$ 199,00/mês"), então o sufixo
         // separado (`per`) sai de cena para não duplicar o "/mês".
-        return { ...p, price: vivo.rotulo, per: "", valor: vivo.valor };
+        return {
+          ...p,
+          price: doPeriodo.rotulo,
+          per: "",
+          valor: doPeriodo.valor,
+          nota,
+          economia: periodo === "anual" && vivo?.anual ? vivo.economia || null : null,
+        };
       }),
-    [precos],
+    [precos, periodo],
+  );
+
+  return { planos, temAnual };
+}
+
+/* Desconto do anual em palavras. Prefere os MESES GRÁTIS ao percentual: "2,5
+   meses grátis" é a mesma conta dita de um jeito que a pessoa consegue conferir
+   de cabeça, e é assim que a oferta foi desenhada (paga 9,5, leva 12). */
+function selosDaEconomia(economia) {
+  if (!economia) return null;
+  const meses = economia.mesesGratis;
+  if (meses >= 0.5) {
+    const texto = Number.isInteger(meses)
+      ? String(meses)
+      : String(meses).replace(".", ",");
+    return `${texto} ${meses >= 2 ? "meses grátis" : "mês grátis"}`;
+  }
+  return economia.percentual > 0 ? `${economia.percentual}% off` : null;
+}
+
+/* Alternador mensal / anual.
+   Um grupo de rádio de verdade (não dois botões): são opções mutuamente
+   exclusivas de um mesmo campo, e é o que faz as setas do teclado andarem entre
+   elas sem nenhum código nosso. */
+function PeriodoToggle({ valor, aoTrocar, selo }) {
+  return (
+    <div className="dl-periodo" role="radiogroup" aria-label="Forma de cobrança">
+      <span className="dl-periodo__pilula" data-em={valor} aria-hidden="true" />
+      {[
+        { chave: "mensal", rotulo: "Mensal" },
+        { chave: "anual", rotulo: "Anual" },
+      ].map((op) => (
+        <button
+          key={op.chave}
+          type="button"
+          role="radio"
+          aria-checked={valor === op.chave}
+          tabIndex={valor === op.chave ? 0 : -1}
+          className={`dl-periodo__opt${valor === op.chave ? " is-on" : ""}`}
+          onClick={() => aoTrocar(op.chave)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              aoTrocar(valor === "mensal" ? "anual" : "mensal");
+            }
+          }}
+        >
+          {op.rotulo}
+          {op.chave === "anual" && selo ? (
+            <span className="dl-periodo__selo dl-mono">{selo}</span>
+          ) : null}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -2163,6 +2258,14 @@ function Planos({ planos, aoTestar }) {
             <div className="dl-plan__price">
               <strong>{p.price}</strong>
               {p.per ? <span>{p.per}</span> : null}
+              {/* A economia fica COLADA no preço, não no alternador: é aqui que
+                  o olho para para comparar, e o valor em reais só existe por
+                  plano — no alternador caberia, no máximo, a média. */}
+              {p.economia?.valor > 0 ? (
+                <span className="dl-plan__economia dl-mono">
+                  economize {formatarBRL(p.economia.valor)}
+                </span>
+              ) : null}
             </div>
             <span className="dl-mono dl-plan__nota">{p.nota}</span>
 
@@ -2644,8 +2747,22 @@ export function OmnimobLandingPage() {
   const [planoDesejado, setPlanoDesejado] = useState("");
   const abrirTeste = (plano = "") => { setPlanoDesejado(plano); setTrialAberto(true); };
 
+  /* Mensal ou anual. Começa no mensal de propósito: é o menor número da tela,
+     e abrir no anual faria o cartão anunciar quatro dígitos para quem só quer
+     saber quanto custa. */
+  const [periodo, setPeriodo] = useState("mensal");
+
   // Valores vigentes no provedor; enquanto não chegam, valem os de reserva.
-  const PLANS = usePrecosVigentes();
+  const { planos: PLANS, temAnual } = usePrecosVigentes(periodo);
+
+  /* O selo do alternador é o melhor desconto entre os planos — um número só
+     para uma escolha só. Por plano, a economia em reais aparece no cartão. */
+  const seloPeriodo = useMemo(() => {
+    const melhor = PLANS.map((p) => p.economia)
+      .filter(Boolean)
+      .sort((x, y) => (y.mesesGratis || 0) - (x.mesesGratis || 0))[0];
+    return selosDaEconomia(melhor);
+  }, [PLANS]);
 
   const vantaRef = useRef(null);
 
@@ -2924,6 +3041,10 @@ export function OmnimobLandingPage() {
           <SectionHead eyebrow="PLANOS" eyebrowTone={GOLD} strong="Escolha o plano ideal" soft="para sua imobiliária.">
             Sem fidelidade, cancele quando quiser.
           </SectionHead>
+
+          {temAnual ? (
+            <PeriodoToggle valor={periodo} aoTrocar={setPeriodo} selo={seloPeriodo} />
+          ) : null}
 
           <Planos planos={PLANS} aoTestar={abrirTeste} />
         </div>
@@ -4501,10 +4622,88 @@ ${editorCSS()}
 }
 .dl-plan__name { font-size: 26px; font-weight: 700; letter-spacing: -0.035em; color: var(--strong); }
 .dl-plan__desc { font-size: 13px; line-height: 1.7; color: var(--subtle); margin-top: 8px; min-height: 66px; }
-.dl-plan__price { margin-top: 18px; display: flex; align-items: baseline; gap: 6px; }
+.dl-plan__price { margin-top: 18px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .dl-plan__price strong { font-size: 34px; font-weight: 700; letter-spacing: -0.045em; color: var(--strong); }
 .dl-plan__price span { font-size: 13px; color: var(--subtle); }
 .dl-plan__nota { color: var(--placeholder); font-size: 9px; margin-top: 6px; display: block; }
+/* Economia do anual, ao lado do preço. Em verde-menta, a mesma cor dos ✓ da
+   lista: nesta página o menta já quer dizer "isto está incluído". */
+.dl-plan__economia {
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--mint);
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--mint) 32%, transparent);
+  background: color-mix(in srgb, var(--mint) 12%, transparent);
+  white-space: nowrap;
+}
+
+/* ── Alternador mensal / anual ──────────────────────────────────────────────
+   A pílula que marca a opção é UM elemento que desliza, não um fundo aceso em
+   cada botão: assim a troca é um movimento (o olho segue a peça) em vez de um
+   pisca-apaga em dois lugares. Ela vive atrás do texto e não recebe clique. */
+.dl-periodo {
+  position: relative;
+  /* Grade de duas colunas IGUAIS, não flex: o botão "Anual" carrega o selo de
+     desconto e é bem mais largo que "Mensal". Em flex, cada um ficaria do
+     tamanho do próprio conteúdo e a pílula de 50% pararia no meio do texto.
+     O minmax de zero a 1fr força a metade exata: sem esse zero o piso da
+     coluna é o conteúdo, e a desigualdade volta.
+
+     fit-content + margin auto centraliza sem depender do pai: a seção não
+     define alinhamento para os filhos dela. */
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch; width: fit-content;
+  margin: 26px auto 0;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  isolation: isolate;
+}
+.dl-periodo__pilula {
+  position: absolute; z-index: -1;
+  top: 4px; bottom: 4px; left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background: var(--strong);
+  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dl-periodo__pilula[data-em="anual"] { transform: translateX(100%); }
+.dl-periodo__opt {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 22px;
+  border: 0; background: transparent;
+  font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--subtle);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.28s ease;
+  justify-content: center; white-space: nowrap;
+}
+.dl-periodo__opt.is-on { color: var(--bg); }
+.dl-periodo__opt:not(.is-on):hover { color: var(--strong); }
+.dl-periodo__selo {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--mint) 18%, transparent);
+  color: var(--mint);
+  transition: background 0.28s ease, color 0.28s ease;
+}
+/* Selecionado, o botão fica claro e o menta some no fundo — o selo troca para
+   o negativo do próprio botão. */
+.dl-periodo__opt.is-on .dl-periodo__selo {
+  background: color-mix(in srgb, var(--bg) 16%, transparent);
+  color: var(--bg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-periodo__pilula { transition: none; }
+}
+@media (max-width: 520px) {
+  .dl-periodo { width: 100%; }
+  .dl-periodo__opt { padding: 9px 12px; font-size: 12px; }
+  .dl-periodo__selo { font-size: 8px; padding: 2px 5px; }
+}
 /* Respiro maior antes do botão: separa a lista do CTA sem precisar de régua. */
 /* O painel guarda o respiro e o esticão; a lista, só o desenho das linhas.
    Trocado de lugar porque no celular são DUAS listas dentro do mesmo painel, e

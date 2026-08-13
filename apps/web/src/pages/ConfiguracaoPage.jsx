@@ -1158,7 +1158,11 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                         {PLANOS.map((p) => {
                           const ehAtual = p.key === atual.key;
                           const subindo = p.nivel > atual.nivel;
-                          const preco = cobranca?.precos?.[p.key]?.rotulo;
+                          /* Sempre o mensal, mesmo para quem assinou o anual:
+                             esta tela troca o que o tenant USA, não o que ele
+                             paga (ver a rota /me/plano), e o valor mensal é a
+                             única forma de comparar três planos numa linha. */
+                          const preco = cobranca?.precos?.[p.key]?.mensal?.rotulo;
                           const ocupado = Boolean(trocandoPlano);
                           return (
                             <div
