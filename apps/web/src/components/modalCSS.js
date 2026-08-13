@@ -136,6 +136,27 @@ export const MODAL_CSS = `
 .dl-root .pm-botao--primario:hover { background: #e6e6ee; color: #0a0a0b; }
 .dl-root .pm-botao:disabled { opacity: 0.55; cursor: default; }
 
+/* ── Botão de ação em vidro especular ──
+   Mesma divisão do .dl-btn--especular da landing: as classes .pm-botao seguem
+   mandando no layout da linha de ações, e este modificador manda na aparência.
+   .pm-botao continua intacto para a TrialConfirmarPage, que reusa este CSS. */
+.dl-root .pm-botao--especular {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 100%), transparent);
+  border: 1px solid color-mix(in srgb, var(--sb-base-color) 45%, transparent);
+  color: var(--sb-text-color);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  overflow: visible;
+  text-decoration: none;
+}
+.dl-root .pm-botao--especular:hover {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 160%), transparent);
+  border-color: color-mix(in srgb, var(--sb-base-color) 72%, transparent);
+  color: var(--sb-text-color);
+}
+/* O canvas do brilho estoura 20px por lado, e a .pm-caixa rola (overflow-y),
+   o que já recorta os dois eixos. Não é problema: o respiro dela é de 34px, e
+   os botões nunca chegam a menos que isso da borda. */
+
 .pm-feito { text-align: center; display: grid; justify-items: center; gap: 12px; padding: 10px 0; }
 .pm-feito__marca {
   width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center;

@@ -8,6 +8,113 @@ import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { MODAL_CSS } from "./modalCSS";
 import { SelectCustom } from "./SelectCustom";
 import { IconeEnvelope } from "./Icones.jsx";
+import SpecularButton from "./SpecularButton";
+
+/* Botão de ação do modal, no mesmo vidro especular dos botões da landing — é
+   dela que este modal é aberto, e um botão de outro idioma no meio do caminho
+   denuncia a emenda.
+
+   As classes .pm-botao ficam: o layout das linhas de ação (.pm-acoes, e a regra
+   que estica os três para largura cheia no celular) pendura nelas. O modificador
+   --especular é quem vence a aparência, sem tocar em .pm-botao — que a
+   TrialConfirmarPage também usa, e essa página não estava no pedido. */
+function BotaoModal({ primario = false, className = "", children, ...resto }) {
+  const cfg = primario
+    ? { tint: "#ffffff", tintOpacity: 0.16, textColor: "#f6f6f8", lineColor: "#ffffff", baseColor: "#8a8a95", intensity: 1.35 }
+    : { tint: "#ffffff", tintOpacity: 0.03, textColor: "#e7e7ec", lineColor: "#ffffff", baseColor: "#4a4a52", intensity: 0.85 };
+  return (
+    <SpecularButton
+      className={`pm-botao${primario ? " pm-botao--primario" : ""} pm-botao--especular${className ? ` ${className}` : ""}`}
+      radius={999}
+      /* Curto de propósito: dentro do modal os botões ficam a centímetros uns
+         dos outros, e o alcance de 250 da landing acenderia os três de uma vez —
+         some justamente a informação de qual deles o cursor está mirando. */
+      proximity={140}
+      {...cfg}
+      {...resto}
+    >
+      {children}
+    </SpecularButton>
+  );
+}
+
+/* O desenho de cada perfil, num tamanho só de parâmetro: ele aparece duas vezes
+   no cartão — pequeno na pastilha do ícone e gigante na marca-d'água do fundo —
+   e duplicar o path seria duas coisas para manter em sincronia. */
+function Desenho({ tipo, tamanho }) {
+  const comum = {
+    width: tamanho, height: tamanho, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round",
+  };
+  return tipo === "nova" ? (
+    <svg {...comum}>
+      <path d="M3 21h18" /><path d="M5 21V8l7-5 7 5v13" />
+      <path d="M10 21v-6h4v6" />
+    </svg>
+  ) : (
+    <svg {...comum}>
+      <rect x="3" y="8" width="8" height="13" rx="1" />
+      <rect x="13" y="3" width="8" height="18" rx="1" />
+      <path d="M6 12h2M6 16h2M16 7h2M16 11h2M16 15h2" />
+    </svg>
+  );
+}
+
+/* As duas portas, lado a lado.
+
+   A etiqueta e o rótulo da ação são novos, e existem pelo mesmo motivo: no
+   celular o cartão vira meia tela, e "ícone + título + parágrafo + seta solta"
+   é pouco para esse tamanho — sobrava ar no meio e a seta boiava sem dizer para
+   onde levava.
+
+   As duas portas continuam simétricas de propósito: mesma etiqueta em forma,
+   mesma cor, mesmo peso de ação. Um cartão dourado e outro roxo daria a
+   entender que recomendamos um dos caminhos, e a escolha é do cliente. */
+const PERFIS = [
+  {
+    chave: "nova",
+    tag: "DO ZERO",
+    titulo: "Estou abrindo agora",
+    texto: "Vou começar do zero com a Omnimob. Quero cadastrar meus primeiros imóveis e colocar a vitrine no ar.",
+    acao: "Começar do zero",
+  },
+  {
+    chave: "existente",
+    tag: "JÁ EM OPERAÇÃO",
+    titulo: "Já tenho uma imobiliária",
+    texto: "Já opero, com carteira e clientes em outro sistema ou em planilhas. Quero trazer isso para a Omnimob.",
+    acao: "Trazer minha base",
+  },
+];
+
+/* As duas portas do primeiro passo, no mesmo vidro. Diferente dos botões de
+   ação, o cartão tem layout PRÓPRIO — uma grade de quatro linhas (ícone,
+   título, texto, seta) — e por isso vai com `envolver={false}`: dentro do
+   invólucro de rótulo os quatro filhos viravam um item de grade só, e a seta
+   ancorada na última linha perdia o pé do cartão.
+
+   O alcance é maior que o dos botões de ação porque o alvo também é: são dois
+   cartões grandes lado a lado (ou um sobre o outro no celular), e com 140 a luz
+   só aparecia quando o cursor já estava quase dentro. */
+function OpcaoPerfil({ children, ...resto }) {
+  return (
+    <SpecularButton
+      className="tm-opcao tm-opcao--especular"
+      envolver={false}
+      radius={16}
+      tint="#ffffff"
+      tintOpacity={0.05}
+      textColor="#e7e7ec"
+      lineColor="#ffffff"
+      baseColor="#4a4a52"
+      intensity={1.05}
+      proximity={230}
+      {...resto}
+    >
+      {children}
+    </SpecularButton>
+  );
+}
 
 /* ────────────────────────────────────────────────────────────────────────────
    Teste grátis com auto-atendimento — a ÚNICA porta de entrada da landing.
@@ -365,23 +472,20 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
             <div className="pm-acoes tm-acoes">
               {provedor ? (
                 <>
-                  <button type="button" className="pm-botao" onClick={aoFechar}>
-                    Entendi
-                  </button>
-                  <a
-                    className="pm-botao pm-botao--primario"
+                  <BotaoModal onClick={aoFechar}>Entendi</BotaoModal>
+                  <BotaoModal
+                    as="a"
+                    primario
                     href={provedor.url}
                     target="_blank"
                     rel="noreferrer"
                     onClick={aoFechar}
                   >
                     Abrir {provedor.nome}
-                  </a>
+                  </BotaoModal>
                 </>
               ) : (
-                <button type="button" className="pm-botao pm-botao--primario" onClick={aoFechar}>
-                  Entendi
-                </button>
+                <BotaoModal primario onClick={aoFechar}>Entendi</BotaoModal>
               )}
             </div>
           </div>
@@ -394,36 +498,27 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
             </p>
 
             <div className="tm-escolha">
-              <button type="button" className="tm-opcao" onClick={() => escolherPerfil("nova")}>
-                <span className="tm-opcao__icone" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 21h18" /><path d="M5 21V8l7-5 7 5v13" />
-                    <path d="M10 21v-6h4v6" />
-                  </svg>
-                </span>
-                <span className="tm-opcao__titulo">Estou abrindo agora</span>
-                <span className="tm-opcao__texto">
-                  Vou começar do zero com a Omnimob. Quero cadastrar meus primeiros imóveis e colocar
-                  a vitrine no ar.
-                </span>
-                <span className="tm-opcao__seta" aria-hidden="true">→</span>
-              </button>
-
-              <button type="button" className="tm-opcao" onClick={() => escolherPerfil("existente")}>
-                <span className="tm-opcao__icone" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="8" width="8" height="13" rx="1" />
-                    <rect x="13" y="3" width="8" height="18" rx="1" />
-                    <path d="M6 12h2M6 16h2M16 7h2M16 11h2M16 15h2" />
-                  </svg>
-                </span>
-                <span className="tm-opcao__titulo">Já tenho uma imobiliária</span>
-                <span className="tm-opcao__texto">
-                  Já opero, com carteira e clientes em outro sistema ou em planilhas. Quero trazer
-                  isso para a Omnimob.
-                </span>
-                <span className="tm-opcao__seta" aria-hidden="true">→</span>
-              </button>
+              {PERFIS.map((p) => (
+                <OpcaoPerfil key={p.chave} onClick={() => escolherPerfil(p.chave)}>
+                  {/* Marca-d'água: o mesmo desenho do ícone, gigante e sangrando
+                      pelo canto. Idioma emprestado do cartão de canal da landing
+                      (.bc-canal__marca), e existe só no celular — é lá que o
+                      cartão vira meia tela e sobra o vazio que ela preenche. */}
+                  <span className="tm-opcao__marca" aria-hidden="true">
+                    <Desenho tipo={p.chave} tamanho={190} />
+                  </span>
+                  <span className="tm-opcao__icone" aria-hidden="true">
+                    <Desenho tipo={p.chave} tamanho={22} />
+                  </span>
+                  <span className="dl-mono tm-opcao__tag">{p.tag}</span>
+                  <span className="tm-opcao__titulo">{p.titulo}</span>
+                  <span className="tm-opcao__texto">{p.texto}</span>
+                  <span className="tm-opcao__acao">
+                    <span className="tm-opcao__rotulo">{p.acao}</span>
+                    <span className="tm-opcao__seta" aria-hidden="true">→</span>
+                  </span>
+                </OpcaoPerfil>
+              ))}
             </div>
 
             <p className="tm-rodape">
@@ -522,22 +617,17 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
               {falha ? <p className="pm-falha">{falha}</p> : null}
 
               <div className="pm-acoes pm-acoes--tres">
-                <button type="button" className="pm-botao" onClick={() => setPasso("dados")} disabled={criando}>
+                <BotaoModal onClick={() => setPasso("dados")} disabled={criando}>
                   Voltar
-                </button>
+                </BotaoModal>
                 {/* Pular não pode custar o teste: quem não sabe responder agora
                     ainda assim merece o ambiente. O time pergunta depois. */}
-                <button type="button" className="pm-botao" onClick={() => criar(false)} disabled={criando}>
+                <BotaoModal onClick={() => criar(false)} disabled={criando}>
                   Pular por enquanto
-                </button>
-                <button
-                  type="button"
-                  className="pm-botao pm-botao--primario"
-                  onClick={() => criar(true)}
-                  disabled={criando}
-                >
+                </BotaoModal>
+                <BotaoModal primario onClick={() => criar(true)} disabled={criando}>
                   {criando ? "Preparando ambiente…" : "Começar o teste"}
-                </button>
+                </BotaoModal>
               </div>
             </div>
           </>
@@ -686,21 +776,21 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
               {falha ? <p className="pm-falha">{falha}</p> : null}
 
               <div className="pm-acoes">
-                <button type="button" className="pm-botao" onClick={() => setPasso("perfil")} disabled={criando}>
+                <BotaoModal onClick={() => setPasso("perfil")} disabled={criando}>
                   Voltar
-                </button>
+                </BotaoModal>
                 {/* Desligado enquanto o endereço não fecha: seguir com um slug
                     ocupado só adiaria a mesma recusa para o fim do cadastro. */}
-                <button
+                <BotaoModal
+                  primario
                   type="submit"
-                  className="pm-botao pm-botao--primario"
                   disabled={criando || slug.estado === "indisponivel" || slug.estado === "checando"}
                 >
                   {criando
                     ? "Preparando ambiente…"
                     : slug.estado === "checando" ? "Verificando endereço…"
                     : perfil === "existente" ? "Próximo" : "Começar o teste"}
-                </button>
+                </BotaoModal>
               </div>
             </form>
           </>
@@ -792,17 +882,67 @@ const CSS = `${MODAL_CSS}
    ─────────────────────────────────────────────────────────────────────── */
 .tm-escolha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 22px; }
 .dl-root .tm-opcao {
+  /* Quatro linhas no desktop — ícone, título, texto elástico e ação —, que é o
+     arranjo que este cartão sempre teve. A etiqueta e o rótulo da ação existem
+     no HTML mas ficam escondidos aqui: eles são para o celular, onde o cartão
+     vira meia tela. Num cartão de 239px eles seriam aperto, não acabamento. */
   display: grid; grid-template-rows: auto auto 1fr auto; gap: 8px; text-align: left;
   width: 100%; padding: 18px 18px 14px; border-radius: 16px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--line);
   color: inherit; font-family: inherit; box-shadow: none; transform: none;
+  position: relative;
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+/* Etiqueta e rótulo da ação: peças de celular, ligadas lá embaixo. Escondidas
+   com display:none, e não com visibilidade — assim elas nem ocupam linha na
+   grade, e as quatro linhas do desktop continuam sendo quatro. */
+.tm-opcao__tag, .tm-opcao__rotulo { display: none; }
+.tm-opcao__tag {
+  font-size: 9px; letter-spacing: 0.14em; color: var(--placeholder);
+  transition: color 0.18s ease;
+}
+.tm-opcao:hover .tm-opcao__tag { color: var(--gold); }
+/* No desktop sobra só a seta aqui dentro, que é como o cartão sempre foi. */
+.tm-opcao__acao { display: flex; align-items: center; gap: 8px; }
+.tm-opcao__rotulo {
+  font-weight: 600; color: var(--subtle);
+  transition: color 0.18s ease;
+}
+/* Fora do celular a marca-d'água não entra: no cartão de 239px ela não seria
+   textura de fundo, seria o fundo. */
+.tm-opcao__marca { display: none; }
+/* O recorte mora AQUI, e não no cartão. O cartão precisa de overflow visível
+   para o canvas do brilho especular passar 20px além da borda (é assim que a
+   luz vaza para fora); recortar lá decepava o efeito. Esta camada é absoluta,
+   cobre o cartão inteiro e recorta só a si mesma. */
+.tm-opcao--especular .tm-opcao__marca {
+  position: absolute; inset: 0; z-index: 0;
+  overflow: hidden; border-radius: inherit; pointer-events: none;
 }
 .dl-root .tm-opcao:hover {
   background: var(--surface-2); border-color: var(--accent-soft);
   transform: translateY(-2px); box-shadow: none;
 }
 .dl-root .tm-opcao:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+
+/* ── Cartão em vidro especular ──
+   Mesma divisão dos outros: .tm-opcao segue mandando na GRADE (as quatro
+   linhas, o respiro, a altura igual entre os dois) e este modificador manda na
+   aparência. Vale nos dois formatos — no celular os cartões viram meia tela
+   cada, e o traço da beirada é o que continua dizendo onde um acaba e o outro
+   começa quando eles ficam sem preenchimento sólido. */
+.dl-root .tm-opcao--especular {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 100%), transparent);
+  border: 1px solid color-mix(in srgb, var(--sb-base-color) 45%, transparent);
+  color: var(--sb-text-color);
+  overflow: visible;
+}
+/* O translateY do hover fica: ele é o gesto de "cartão levantando", e não
+   disputa nada com a luz. O que sai é a troca de preenchimento. */
+.dl-root .tm-opcao--especular:hover {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 190%), transparent);
+  border-color: color-mix(in srgb, var(--sb-base-color) 78%, transparent);
+}
 .tm-opcao__icone {
   width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
   background: rgba(99,102,241,0.14); border: 1px solid rgba(99,102,241,0.3);
@@ -863,14 +1003,62 @@ const CSS = `${MODAL_CSS}
      E o conteúdo cresce junto com o cartão: um botão de meia tela com ícone e
      título de tamanho de cartãozinho pareceria um cartão pequeno esticado. */
   .dl-root .tm-opcao {
-    grid-template-rows: repeat(4, auto); align-content: center;
-    gap: 10px; padding: 18px;
+    grid-template-rows: repeat(5, auto); align-content: center;
+    gap: 10px; padding: 22px;
   }
   .tm-opcao__icone { width: 48px; height: 48px; border-radius: 14px; }
   .tm-opcao__icone svg { width: 25px; height: 25px; }
-  .tm-opcao__titulo { font-size: 17px; }
+  .tm-opcao__tag { display: block; font-size: 9.5px; letter-spacing: 0.16em; }
+  .tm-opcao__rotulo { display: block; }
+  .tm-opcao__titulo { font-size: 19px; }
   .tm-opcao__texto { font-size: 13px; line-height: 1.6; }
-  .tm-opcao__seta { font-size: 17px; }
+
+  /* ── Marca-d'água ──
+     O mesmo desenho do ícone, gigante, ancorado na quina de baixo e sangrando
+     para fora dela. Só aqui: é neste formato que o cartão vira meia tela e
+     sobra o vazio que ela ocupa — no cartão de 239px do desktop ela deixaria de
+     ser textura e viraria o fundo.
+
+     A opacidade é baixa a ponto de o desenho não competir com o texto por cima:
+     o que se lê é uma sombra de relevo, não um segundo ícone. */
+  .tm-opcao__marca { display: block; }
+  .tm-opcao__marca svg {
+    position: absolute; right: -46px; bottom: -52px;
+    color: var(--accent-soft); opacity: 0.10;
+    transition: opacity 0.28s ease, color 0.28s ease, transform 0.35s var(--ease-out, ease);
+  }
+  /* Acompanha a pastilha do ícone, que já vira dourada ao toque — as duas juntas
+     fazem o cartão inteiro responder, em vez de só o cantinho de cima. */
+  .tm-opcao:hover .tm-opcao__marca svg,
+  .tm-opcao:active .tm-opcao__marca svg {
+    color: var(--gold); opacity: 0.16; transform: translate(-6px, -6px);
+  }
+
+  /* ── Linha de ação ──
+     Vira uma pastilha de verdade: o rótulo diz para onde o cartão leva e a seta
+     ganha um disco, como nos botões da landing. Num alvo de meia tela, uma seta
+     solta de 17px era o único sinal de que aquilo era clicável. */
+  /* justify-self, e não align-self: o cartão é uma GRADE de uma coluna, então
+     quem encolhe a pastilha até o tamanho do conteúdo é o eixo em linha.
+     Esticada, ela viraria uma barra de ponta a ponta do cartão. */
+  .tm-opcao__acao {
+    margin-top: 4px; justify-self: start;
+    padding: 9px 8px 9px 16px; border-radius: 999px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10);
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+  .tm-opcao:hover .tm-opcao__acao,
+  .tm-opcao:active .tm-opcao__acao {
+    background: rgba(212,175,55,0.12); border-color: rgba(212,175,55,0.34);
+  }
+  .tm-opcao__rotulo { font-size: 13px; color: var(--strong); }
+  .tm-opcao__seta {
+    width: 22px; height: 22px; border-radius: 999px;
+    display: grid; place-items: center; font-size: 13px; line-height: 1;
+    background: rgba(255,255,255,0.10); color: var(--strong);
+  }
+  .tm-opcao:hover .tm-opcao__seta { background: rgba(212,175,55,0.22); color: var(--gold); }
+
   .tm-rodape { margin-top: 14px; font-size: 11px; }
 
   /* ── Endereço da vitrine ──

@@ -31,6 +31,7 @@ import BounceCards from "../components/BounceCards";
 import LineSidebar from "../components/LineSidebar";
 import Counter from "../components/Counter";
 import GhostCursor from "../components/GhostCursor";
+import SpecularButton from "../components/SpecularButton";
 import { TrialModal } from "../components/TrialModal";
 import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
 import { IconeCheck, IconeX } from "../components/Icones.jsx";
@@ -40,7 +41,7 @@ import {
   GOLD,
   MINT,
   ROSE,
-  Button,
+  Arrow,
   OmnimobStyles,
   Eyebrow,
   LOGO_LOCKUP_HEADER_SRC,
@@ -52,6 +53,70 @@ import {
   reduzirMovimento,
   useReveal,
 } from "../styles/omnimobKit";
+
+/* ── Botões da landing ───────────────────────────────────────────────────────
+   Todo botão desta página é um SpecularButton: vidro escuro com uma luz
+   correndo pela borda conforme o cursor se aproxima.
+
+   O `Button` aqui é LOCAL, e não mais o do kit, de propósito. O do kit é usado
+   por outras nove telas (login, admin, recuperação de senha), e o pedido era
+   esta página — trocar lá dentro levaria o efeito, e o custo dele, para telas
+   que ninguém pediu.
+
+   ── Sobre a hierarquia ──
+   As variantes do kit distinguiam os botões pelo PREENCHIMENTO: `primary` era
+   branco sólido, `ghost` era quase transparente, e a página se apoia nisso em
+   vários lugares (o par do hero, o cartão de plano em destaque). O especular é
+   um botão de vidro: se todos virassem vidro igual, essa leitura se perderia.
+
+   Ela é preservada pelo que o efeito tem de próprio — o véu de fundo, o alcance
+   e a intensidade da luz. Quem é o caminho principal acende mais forte e de
+   mais longe; o secundário responde de perto e de leve. Mesma pergunta que o
+   preenchimento respondia ("qual destes é o daqui?"), com o vocabulário novo. */
+const ESPECULAR = {
+  primary: { tint: "#ffffff", tintOpacity: 0.16, textColor: "#f6f6f8", lineColor: "#ffffff", baseColor: "#8a8a95", intensity: 1.35, proximity: 320 },
+  accent:  { tint: ACCENT,    tintOpacity: 0.30, textColor: "#ffffff", lineColor: "#c7c9ff", baseColor: "#6366f1", intensity: 1.30, proximity: 300 },
+  ghost:   { tint: "#ffffff", tintOpacity: 0.04, textColor: "#e7e7ec", lineColor: "#ffffff", baseColor: "#4a4a52", intensity: 0.85, proximity: 210 },
+  outline: { tint: "#ffffff", tintOpacity: 0.03, textColor: "#e7e7ec", lineColor: "#ffffff", baseColor: "#4a4a52", intensity: 0.85, proximity: 210 },
+  danger:  { tint: "#f87171", tintOpacity: 0.12, textColor: "#fca5a5", lineColor: "#fecaca", baseColor: "#f87171", intensity: 1.05, proximity: 240 },
+
+  /* ── As duas variantes de SEÇÃO CLARA ──
+     Atenção ao nome, que engana: no kit, `dark` e `light` não dizem o tom do
+     botão em relação ao tema da página, e sim que os dois são feitos para o
+     fundo CLARO do CTA final — `dark` é o botão escuro cheio, `light` é o de
+     contorno. As duas primeiras versões deste mapa trataram `dark` como "botão
+     de tema escuro" e o rótulo branco sumiu dentro da névoa clara da seção.
+
+     Por isso aqui o véu é quase opaco em vez do vidro dos outros: sobre um
+     fundo claro, translucidez suficiente para ver a névoa atravessando come o
+     contraste do rótulo — e é o preenchimento escuro que dá ao brilho branco
+     uma superfície onde aparecer. */
+  dark:    { tint: "#0a0a0b", tintOpacity: 0.90, textColor: "#f6f6f8", lineColor: "#ffffff", baseColor: "#0a0a0b", intensity: 1.35, proximity: 300 },
+  light:   { tint: "#0c121a", tintOpacity: 0.06, textColor: "#0c121a", lineColor: "#0c121a", baseColor: "#0c121a", intensity: 1.20, proximity: 260 },
+};
+
+function Button({ as = "a", variant = "primary", arrow = true, className = "", children, ...rest }) {
+  const cfg = ESPECULAR[variant] || ESPECULAR.primary;
+  return (
+    <SpecularButton
+      as={as}
+      /* As classes do kit ficam: quarenta regras da página penduram largura,
+         posição e respiro nelas (.dl-btn--block, .dl-btn--sm, a largura do par
+         do hero, o CTA do cabeçalho). O que o CSS do especular precisa vencer é
+         só a aparência, e é o que .dl-btn--especular faz. */
+      className={`dl-btn dl-btn--${variant} dl-btn--especular${className ? ` ${className}` : ""}`}
+      radius={999}
+      shineSize={10}
+      shineFade={40}
+      thickness={1}
+      {...cfg}
+      {...rest}
+    >
+      {children}
+      {arrow ? <Arrow /> : null}
+    </SpecularButton>
+  );
+}
 
 /* ────────────────────────────────────────────────────────────────────────────
    Landing pública da Omnimob.
@@ -2433,9 +2498,16 @@ function ParedeDeDestaques() {
             </span>
             <h3>{aberto.title || aberto.label}</h3>
             <p>{aberto.detalhe || aberto.desc}</p>
-            <button type="button" className="dl-porque__fechar" onClick={() => setAberto(null)}>
+            <Button
+              as="button"
+              type="button"
+              variant="ghost"
+              arrow={false}
+              className="dl-porque__fechar"
+              onClick={() => setAberto(null)}
+            >
               Fechar
-            </button>
+            </Button>
           </Reveal>
         </div>
       ) : null}
@@ -3206,6 +3278,48 @@ const CSS = `
     0 0 26px var(--bg), 0 0 26px var(--bg),
     0 0 52px var(--bg);
 }
+
+/* ── Botão especular ─────────────────────────────────────────────────────────
+   O elemento carrega as DUAS marcações: dl-btn + dl-btn--<variante> (que é onde
+   quarenta regras desta página penduram largura, respiro e posição) e
+   specular-button (a aparência). Aqui a segunda ganha da primeira no que é
+   aparência, e só nisso.
+
+   Os seletores são pesados de propósito: as variantes do kit vêm prefixadas com
+   .dl-root para vencerem a regra global de button do styles.css, então qualquer
+   coisa menor que isso perde para elas. */
+.dl-root .dl-btn--especular {
+  /* Preenchimento e borda passam a ser os do especular (variáveis escritas no
+     style inline pelo componente). Sem isto, o branco sólido do --primary ou o
+     roxo do --accent ficariam POR CIMA do vidro e não sobraria efeito nenhum. */
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 100%), transparent);
+  border: 1px solid color-mix(in srgb, var(--sb-base-color) 45%, transparent);
+  color: var(--sb-text-color);
+  /* O brilho já é o realce do hover; a sombra colorida das variantes viraria
+     uma segunda luz por baixo dele, com outra forma. */
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  overflow: visible;
+}
+/* Estados de hover das variantes: o que acende agora é a borda, não o fundo. */
+.dl-root .dl-btn--especular:hover {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 160%), transparent);
+  border-color: color-mix(in srgb, var(--sb-base-color) 72%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+}
+/* A seta herda a cor do texto da variante em vez da pastilha escura do kit —
+   sobre vidro, um disco preto no meio do botão lê como buraco. */
+.dl-root .dl-btn--especular .dl-btn__arrow {
+  background: color-mix(in srgb, var(--sb-text-color) 14%, transparent);
+}
+/* O rótulo é irmão do canvas e precisa ficar por cima dele; como o conteúdo do
+   botão (texto + seta) mora nesse rótulo, é ele que carrega o alinhamento. */
+.dl-root .dl-btn--especular .specular-button__label {
+  display: inline-flex; align-items: center; gap: inherit;
+}
+/* O canvas estoura a caixa em 20px por lado (o PAD do componente). Dentro de
+   um trilho com recorte — o carrossel de planos — essa sobra seria decepada;
+   lá o respiro do trilho já reserva o espaço vertical. */
+.dl-root .dl-btn--especular .specular-button__fx { inset: -20px; }
 
 /* ── Hero ──
    O topo abre espaço para o cabeçalho, que é fixo e não ocupa mais fluxo. */
@@ -4300,13 +4414,12 @@ ${editorCSS()}
 }
 .dl-porque__caixa h3 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--strong); }
 .dl-porque__caixa p { font-size: 14px; line-height: 1.75; color: var(--subtle); }
-.dl-porque__fechar {
+/* Virou um Button (variante ghost), então preenchimento, borda e cor vêm do
+   vidro especular. O que sobra aqui é o encaixe dele no painel. */
+.dl-root .dl-porque__fechar {
   align-self: flex-start; margin-top: 4px;
-  background: transparent; color: var(--subtle);
-  border: 1px solid var(--line); border-radius: 999px;
-  padding: 8px 16px; font-size: 13px; cursor: pointer;
+  padding: 8px 16px; font-size: 13px;
 }
-.dl-porque__fechar:hover { color: var(--strong); border-color: var(--accent-soft); }
 
 .dl-fcard {
   flex: 0 0 auto; width: 268px; min-height: 168px; padding: 22px 24px;
@@ -4425,13 +4538,26 @@ ${editorCSS()}
    depois do primeiro toque, e o carrossel já tem o dono do destaque, que é o
    cartão em foco. */
 @media (hover: hover) and (pointer: fine) and (min-width: 641px) {
-  /* O botão de contorno assume o mesmo preenchimento do botão do plano em
-     destaque. A regra precisa de três classes para vencer .dl-root .dl-btn--
-     outline, que já pesa duas. */
-  .dl-root .dl-plan:hover .dl-btn--outline {
-    background: #fff; color: #0a0a0b; border-color: #fff;
+  /* Ler a lista de um plano já é considerá-lo, e o botão acender antes de o
+     cursor chegar nele é o que transforma a leitura em clique.
+
+     Antes isso era preenchimento: o botão de contorno virava branco sólido ao
+     passar o mouse pelo cartão. Com o vidro especular, o branco chapado ficava
+     POR CIMA do efeito — o botão do plano em destaque era o único dos três sem
+     brilho nenhum, justamente o que mais deveria ter.
+
+     Agora quem acende é a mesma coisa que o resto da página usa para acender:
+     o véu sobe e a beirada clareia. Os três continuam distinguíveis, e o do
+     cartão sob o mouse é o mais claro dos três.
+
+     Três classes porque é o peso de .dl-root .dl-btn--especular:hover, que esta
+     regra precisa vencer. */
+  .dl-root .dl-plan:hover .dl-btn--especular {
+    background: color-mix(in srgb, var(--sb-tint) 22%, transparent);
+    border-color: color-mix(in srgb, var(--sb-base-color) 95%, transparent);
+    color: #ffffff;
   }
-  .dl-plan:hover .dl-btn--outline .dl-btn__arrow { background: rgba(0,0,0,0.10); }
+  .dl-plan:hover .dl-btn--especular .dl-btn__arrow { background: rgba(255,255,255,0.18); }
 }
 
 /* ── Fundo em ondas da seção de planos ──
