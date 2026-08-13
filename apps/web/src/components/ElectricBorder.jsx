@@ -22,9 +22,9 @@ import "./ElectricBorder.css";
 const ElectricBorder = ({
   children,
   color = "#5227FF",
-  speed = 1,
-  chaos = 0.12,
-  borderRadius = 24,
+  speed = 0.5,
+  chaos = 0.75,
+  borderRadius = 20,
   className,
   style,
 }) => {
@@ -149,14 +149,14 @@ const ElectricBorder = ({
     const reduzido =
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const octaves = 15
-    const lacunarity = 1.6;
-    const gain = 0.7;
+    const octaves = 15;
+    const lacunarity = 2;
+    const gain = 0.75;
     const amplitude = chaos;
-    const frequency = 20;
+    const frequency = 15;
     const baseFlatness = 1;
-    const displacement = 60;
-    const borderOffset = 60;
+    const displacement = 20;
+    const borderOffset = 100;
 
     /* offsetWidth/Height, e NÃO getBoundingClientRect.
 
