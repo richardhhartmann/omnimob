@@ -134,6 +134,11 @@ const RECURSOS = [
 
 // De quantos em quantos milissegundos o carrossel avança sozinho.
 const RECURSO_INTERVALO = 3000;
+/* No carrossel do celular cada passo troca a tela E o texto ao lado dela; no
+   desktop troca só a moldura, com as seis abas sempre à vista. Três segundos
+   ali é ritmo de vitrine, aqui seria menos tempo do que a frase leva para ser
+   lida. */
+const RECURSO_INTERVALO_CARROSSEL = 5200;
 
 /* Quantos cartões distintos existem em cada esteira da tela "imóveis". A lista
    é renderizada duas vezes seguidas e o percurso da animação é exatamente uma
@@ -1184,8 +1189,15 @@ function Tela({ tipo }) {
    são listas: elas acabam onde o conteúdo acaba, e é assim que devem acabar. */
 const TELAS_CHEIAS = new Set(["imoveis", "vitrine", "tenants"]);
 
-// Mock do painel dentro de uma moldura de navegador (seção de recursos).
-function BrowserMock({ recurso, indice }) {
+/* Mock do painel dentro de uma moldura de navegador (seção de recursos).
+
+   `vazio` desenha a moldura sem a tela dentro. Serve ao carrossel do celular,
+   onde os seis mocks existem ao mesmo tempo: cada tela é um punhado de peças
+   animadas (a de imóveis sozinha são três esteiras correndo), e seis delas
+   desenhando de uma vez para mostrar uma é o tipo de custo que só aparece no
+   aparelho de quem visita. A moldura fica — ela é quem reserva a altura, e sem
+   isso o trilho pularia ao entrar cada vizinha. */
+function BrowserMock({ recurso, indice, vazio = false, painelId = "dl-tela-recurso" }) {
   return (
     <figure className="dl-browser-wrap">
       <figcaption className="dl-mono dl-browser-cap">▪ {recurso.legenda}</figcaption>
@@ -1202,10 +1214,10 @@ function BrowserMock({ recurso, indice }) {
           <div
             className={`dl-browser__tela${TELAS_CHEIAS.has(recurso.tela) ? " is-cheia" : ""}`}
             key={indice}
-            id="dl-tela-recurso"
+            id={painelId}
             role="tabpanel"
           >
-            <Tela tipo={recurso.tela} />
+            {vazio ? null : <Tela tipo={recurso.tela} />}
           </div>
         </div>
       </div>
@@ -1215,12 +1227,30 @@ function BrowserMock({ recurso, indice }) {
 
 /* Recursos: as células da esquerda são abas e o mock da direita é o painel.
    Enquanto ninguém clicar, avança sozinho de 3 em 3 segundos, em ciclo. O
-   primeiro clique entrega o controle ao usuário e a rotação para de vez. */
+   primeiro clique entrega o controle ao usuário e a rotação para de vez.
+
+   ── No celular é outro arranjo, não o mesmo espremido ──
+
+   Aqui já houve um painel grudado no topo enquanto as seis abas passavam por
+   baixo. Ele lia como tela travada, e o motivo é estrutural: numa seção de
+   ~2.100px, quase metade da altura visível ficava imóvel por dois scrolls e
+   meio, e a única coisa que se mexia era o conteúdo dentro da moldura. Sem um
+   segundo eixo de movimento, "preso de propósito" e "quebrado" são a mesma
+   imagem.
+
+   Virou carrossel: um recurso por cartão, com o mock e o texto dele juntos,
+   arrastando na horizontal. É o mesmo gesto da seção de planos, logo abaixo —
+   e o que rola na vertical volta a rolar de verdade. */
 function Recursos() {
   const [ref, visivel] = useReveal();
   const [ativo, setAtivo] = useState(0);
   const [manual, setManual] = useState(false);
   const botoes = useRef([]);
+  const trilhoRef = useRef(null);
+  // O passo automático lê o índice de dentro do intervalo; em estado ele leria
+  // sempre o valor da montagem e o carrossel ficaria pulando entre 0 e 1.
+  const ativoRef = useRef(0);
+  ativoRef.current = ativo;
 
   const emMobile = useMedia("(max-width: 860px)");
 
@@ -1241,6 +1271,21 @@ function Recursos() {
     botoes.current[proximo]?.focus();
   }
 
+  /* Centraliza o cartão no trilho. A conta sai de getBoundingClientRect, e não
+     de offsetLeft, porque offsetLeft é medido a partir do primeiro ancestral
+     posicionado — que aqui não é o trilho. */
+  function irPara(i) {
+    const trilho = trilhoRef.current;
+    const cartao = trilho?.children?.[i];
+    if (!trilho || !cartao) return;
+    const t = trilho.getBoundingClientRect();
+    const c = cartao.getBoundingClientRect();
+    const alvo = trilho.scrollLeft + (c.left - t.left) - (t.width - c.width) / 2;
+    const semMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    trilho.scrollTo({ left: alvo, behavior: semMovimento ? "auto" : "smooth" });
+  }
+
+  // Rotação automática do painel no desktop.
   useEffect(() => {
     if (emMobile || manual || !visivel) return undefined;
     const id = setInterval(
@@ -1250,47 +1295,103 @@ function Recursos() {
     return () => clearInterval(id);
   }, [emMobile, manual, visivel]);
 
+  /* Passo automático do carrossel: só enquanto a seção está à vista e ninguém
+     tocou. Mais lento que o do desktop porque aqui cada passo troca a tela E o
+     texto — o do desktop troca só a moldura, com as seis abas sempre à vista. */
   useEffect(() => {
-    if (!emMobile || !visivel) return undefined;
-    
+    if (!emMobile || manual || !visivel) return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const id = setInterval(() => {
+      const proximo = (ativoRef.current + 1) % RECURSOS.length;
+      setAtivo(proximo);
+      irPara(proximo);
+    }, RECURSO_INTERVALO_CARROSSEL);
+    return () => clearInterval(id);
+  }, [emMobile, manual, visivel]);
+
+  /* Quem manda no ponto aceso é a posição real do trilho, não o clique: assim
+     arrastar com o dedo acende o ponto certo, e o passo automático não precisa
+     avisar ninguém. */
+  useEffect(() => {
+    const trilho = trilhoRef.current;
+    if (!trilho || !emMobile) return undefined;
     let quadro = 0;
-    
     const aoRolar = () => {
       cancelAnimationFrame(quadro);
       quadro = requestAnimationFrame(() => {
-        const linhaGatilho = window.innerHeight * 0.65;
-        let menorDist = Infinity;
-        let melhorIndice = -1;
-
-        botoes.current.forEach((btn, i) => {
-          if (!btn) return;
-          const rect = btn.getBoundingClientRect();
-          
-          if (rect.bottom > 0 && rect.top < window.innerHeight) {
-            const centroBotao = rect.top + (rect.height / 2);
-            const dist = Math.abs(centroBotao - linhaGatilho);
-            
-            if (dist < menorDist) {
-              menorDist = dist;
-              melhorIndice = i;
-            }
-          }
+        const meio = trilho.getBoundingClientRect().left + trilho.clientWidth / 2;
+        let perto = 0;
+        let menor = Infinity;
+        Array.from(trilho.children).forEach((cartao, i) => {
+          const r = cartao.getBoundingClientRect();
+          const dist = Math.abs(r.left + r.width / 2 - meio);
+          if (dist < menor) { menor = dist; perto = i; }
         });
-
-        if (melhorIndice !== -1) {
-          setAtivo((prev) => prev !== melhorIndice ? melhorIndice : prev);
-        }
+        setAtivo(perto);
       });
     };
-
-    window.addEventListener("scroll", aoRolar, { passive: true });
-    aoRolar();
-
+    trilho.addEventListener("scroll", aoRolar, { passive: true });
     return () => {
-      window.removeEventListener("scroll", aoRolar);
+      trilho.removeEventListener("scroll", aoRolar);
       cancelAnimationFrame(quadro);
     };
-  }, [emMobile, visivel]);
+  }, [emMobile]);
+
+  if (emMobile) {
+    return (
+      <div className="dl-rec-caixa" ref={ref}>
+        {/* Os pontos vêm ANTES do trilho: um cartão é mais alto que a tela, e
+            embaixo eles só apareceriam depois de rolar o cartão inteiro — tarde
+            demais para o que eles servem, que é avisar na chegada que há seis. */}
+        <div className="dl-rec-pontos">
+          {RECURSOS.map((f, i) => (
+            <button
+              key={f.title}
+              type="button"
+              className={`dl-rec-ponto${i === ativo ? " is-on" : ""}`}
+              aria-label={`Ver ${f.title}`}
+              aria-current={i === ativo}
+              onClick={() => { setManual(true); setAtivo(i); irPara(i); }}
+            />
+          ))}
+        </div>
+
+        <div
+          className="dl-rec-trilho"
+          ref={trilhoRef}
+          // Pointerdown e não scroll: rolagem também é disparada pelo passo
+          // automático, e aí ele se desligaria sozinho no primeiro movimento.
+          onPointerDown={() => setManual(true)}
+        >
+          {RECURSOS.map((f, i) => (
+            <article
+              key={f.title}
+              className={`dl-rec-slide${i === ativo ? " is-atual" : ""}`}
+            >
+              {/* Só a tela em foco e as duas vizinhas são desenhadas de fato —
+                  ver o `vazio` do BrowserMock. Uma de cada lado é o bastante:
+                  o encaixe do trilho não deixa passar mais de um cartão por
+                  gesto, então a próxima já chega pronta. */}
+              <BrowserMock
+                recurso={f}
+                indice={i}
+                vazio={Math.abs(i - ativo) > 1}
+                painelId={`dl-tela-recurso-${i}`}
+              />
+              <div className="dl-rec-slide__texto">
+                <span className="dl-feature__icon" aria-hidden="true">
+                  <f.Icon size={17} weight="duotone" />
+                </span>
+                <span className="dl-mono dl-index">[{String(i + 1).padStart(2, "0")}]</span>
+                <h3 className="dl-feature__title">{f.title}</h3>
+                <p className="dl-feature__desc">{f.desc}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dl-split" ref={ref}>
@@ -1595,6 +1696,10 @@ function EditorAoVivo() {
    porque carrossel que continua andando embaixo do dedo é armadilha.
    ────────────────────────────────────────────────────────────────────────── */
 const CARROSSEL = "(max-width: 640px)";
+/* Onde o leque de canais deixa de caber na tela — ver BaralhoDeCanais. Bate com
+   o ponto em que o próprio BounceCards.css já encolhe a peça, que era o sinal
+   de que ali o arranjo já estava no limite. */
+const LEQUE_APERTADO = "(max-width: 900px)";
 const INTERVALO_PLANO = 5000;
 
 /* Cor de cada plano no carrossel. Uma escala que sobe junto com os planos: azul
@@ -1968,7 +2073,12 @@ function Planos({ planos, aoTestar }) {
                 color={BORDA_ELETRICA[p.key]}
                 speed={1}
                 chaos={0.06}
-                borderRadius={0}
+                /* Acompanha o canto do cartão. No desktop os três dividem UMA
+                   moldura e a célula não tem canto próprio — daí o zero. No
+                   carrossel cada cartão é fechado em si, com 18px de raio, e um
+                   traçado reto contornando canto arredondado sobra nas quatro
+                   quinas. */
+                borderRadius={emCarrossel ? 18 : 0}
               />
             ) : null}
             {/* A coroa fica pendurada na borda de cima do topo de linha, metade
@@ -2152,6 +2262,15 @@ function FumacaQuandoVisivel() {
 function BaralhoDeCanais() {
   const caixaRef = useRef(null);
   const [largura, setLargura] = useState(1000);
+  /* O leque abre os nove canais lado a lado, girados: ele precisa de largura, e
+     abaixo de ~900px os das duas pontas ficam cortados pela borda da tela.
+     Medido: sobram -2px a 900, -22 a 860, -68 a 768 e -102 a 700 — ou seja, não
+     é um problema só de celular, é de tudo que não é desktop. Daí o corte em
+     900 e não no ponto do carrossel (640).
+
+     Abaixo dele a mesma lista vira esteira: um laço que corre sozinho e cabe em
+     qualquer largura, porque não tenta mostrar tudo de uma vez. */
+  const semEspacoParaLeque = useMedia(LEQUE_APERTADO);
 
   useEffect(() => {
     const el = caixaRef.current;
@@ -2161,38 +2280,55 @@ function BaralhoDeCanais() {
     return () => ro.disconnect();
   }, []);
 
+  const cartao = (it) => (
+    <span
+      className={`bc-canal${it.texto ? " bc-canal--claro" : ""}`}
+      style={{ "--canal-cor": it.cor, "--canal-tinta": it.texto || "#fff" }}
+    >
+      <span className="bc-canal__marca" aria-hidden="true">
+        <it.Icon size={86} weight="fill" />
+      </span>
+      <span className="bc-canal__texto">
+        <span className="bc-canal__tipo">{it.type}</span>
+        <span className="bc-canal__nome">{it.curto || it.name}</span>
+      </span>
+    </span>
+  );
+
   const pecas = useMemo(
-    () => INTEGRACOES.map((it) => ({
-      key: it.name,
-      content: (
-        <span
-          className={`bc-canal${it.texto ? " bc-canal--claro" : ""}`}
-          style={{ "--canal-cor": it.cor, "--canal-tinta": it.texto || "#fff" }}
-        >
-          <span className="bc-canal__marca" aria-hidden="true">
-            <it.Icon size={86} weight="fill" />
-          </span>
-          <span className="bc-canal__texto">
-            <span className="bc-canal__tipo">{it.type}</span>
-            <span className="bc-canal__nome">{it.curto || it.name}</span>
-          </span>
-        </span>
-      ),
-    })),
+    () => INTEGRACOES.map((it) => ({ key: it.name, content: cartao(it) })),
     [],
   );
 
   return (
     <div className="dl-baralho" ref={caixaRef}>
-      <BounceCards
-        items={pecas}
-        containerWidth={Math.max(320, largura)}
-        containerHeight={largura < 700 ? 220 : 280}
-        animationDelay={0.15}
-        animationStagger={0.05}
-        easeType="elastic.out(1, 0.62)"
-        inclinacao={largura < 700 ? 6 : 9}
-      />
+      {semEspacoParaLeque ? (
+        /* A lista sai DUAS vezes e o percurso da animação é exatamente uma
+           cópia: na virada, o cartão n assume o lugar do cartão n+8 e o laço
+           fecha sem emenda visível. É a mesma mecânica da esteira do acervo.
+
+           aria-hidden porque logo abaixo vem a mesma lista em texto — e aqui
+           cada canal aparece duas vezes, que é o preço de fechar o laço. */
+        <div className="dl-canais-esteira" aria-hidden="true">
+          <div className="dl-canais-esteira__fila">
+            {[...INTEGRACOES, ...INTEGRACOES].map((it, i) => (
+              <span className="dl-canais-esteira__item" key={`${it.name}-${i}`}>
+                {cartao(it)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <BounceCards
+          items={pecas}
+          containerWidth={Math.max(320, largura)}
+          containerHeight={largura < 700 ? 220 : 280}
+          animationDelay={0.15}
+          animationStagger={0.05}
+          easeType="elastic.out(1, 0.62)"
+          inclinacao={largura < 700 ? 6 : 9}
+        />
+      )}
 
       {/* A mesma lista, em texto, para leitor de tela e para busca: o baralho é
           um monte de peças giradas e sobrepostas, e a ordem visual dele não
@@ -2260,8 +2396,12 @@ function ParedeDeDestaques() {
           variance={0.45}
           parallax={0}
           lift={emMobile ? 0 : 26}
-          fade={0.28}
-          dim={0.62}
+          fade={emMobile ? 0.42 : 0.28}
+          /* A peça no celular fica bem mais apagada. Numa tela estreita cabem
+             três colunas do tamanho de meia tela cada, então a parede deixa de
+             ser textura ao fundo e vira um mural de cartões legíveis brigando
+             com o título — que é o único texto da seção. */
+          dim={emMobile ? 1 : 0.62}
           overlayColor="transparent"
         />
       </div>
@@ -3031,11 +3171,40 @@ const CSS = `
    O blur é baixo de propósito: a partir de uns 14px as letras viram uma
    mancha dourada sem forma, e o que se quer é justamente reconhecê-las. */
 .dl-section--ghost .dl-callout {
-  background: rgba(20,20,22,0.58);
+  background: rgba(20,20,22,0.72);
   backdrop-filter: blur(9px) saturate(140%);
   -webkit-backdrop-filter: blur(9px) saturate(140%);
   border-color: rgba(255,255,255,0.10);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* Legibilidade por cima do rastro.
+
+   Fora do callout o texto da seção não tem fundo nenhum: é letra transparente
+   direto sobre o canvas. E o miolo da palavra — o "bili" de "+ visibilidade." —
+   é justamente onde a coluna de leitura cruza a faixa da fumaça: o halo chega
+   ali no auge do brilho e o cinza do lead perde o contraste.
+
+   O remédio é um halo escuro em volta de cada glifo, na cor do próprio fundo.
+   Sobre o preto ele é invisível (é a mesma cor) e só se manifesta quando há
+   brilho atrás — que é exatamente onde precisa aparecer. Escurecer a fumaça
+   resolveria também, mas a fumaça é o efeito; quem tem de ceder é o fundo
+   imediato das letras, não a seção inteira.
+
+   As camadas são cumulativas de propósito, e repetidas de propósito: uma
+   sombra só, por mais opaca, ainda deixa o dourado vazar entre as hastes finas
+   de letras como "i" e "l". Repetir o mesmo raio soma opacidade — é o jeito de
+   passar de "escurece um pouco" para "abre um buraco no brilho". Ser generoso
+   aqui não custa nada fora do halo, porque a sombra é da cor do fundo. */
+.dl-section--ghost .dl-eyebrow,
+.dl-section--ghost .dl-h2,
+.dl-section--ghost .dl-head__desc,
+.dl-section--ghost .dl-callout p {
+  text-shadow:
+    0 0 4px var(--bg), 0 0 4px var(--bg),
+    0 0 12px var(--bg), 0 0 12px var(--bg),
+    0 0 26px var(--bg), 0 0 26px var(--bg),
+    0 0 52px var(--bg);
 }
 
 /* ── Hero ──
@@ -3944,6 +4113,46 @@ ${editorCSS()}
   overflow: visible;
   margin-top: clamp(8px, 2vw, 20px);
 }
+/* ── Esteira dos canais (celular) ──
+   O leque vira um laço que corre sozinho. A lista é renderizada duas vezes e o
+   percurso é exatamente uma cópia: -50% da fila inteira, que é o comprimento de
+   uma cópia — daí a emenda cair sempre no mesmo pixel e não se ver.
+
+   translateX em porcentagem da PRÓPRIA fila (e não em px), para o laço fechar
+   igual em qualquer largura de tela e sem ninguém medir nada em JS. */
+.dl-canais-esteira {
+  --canal-vao: 12px;
+  width: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.dl-canais-esteira__fila {
+  display: flex;
+  gap: var(--canal-vao);
+  width: max-content;
+  animation: dlCanaisEsteira 34s linear infinite;
+}
+@keyframes dlCanaisEsteira {
+  from { transform: translateX(0); }
+  /* Metade da fila é uma cópia inteira da lista; o vão a mais é o que separa a
+     última peça da cópia da primeira peça da seguinte, e sem ele a emenda
+     andaria 12px a cada volta. */
+  to { transform: translateX(calc(-50% - var(--canal-vao) / 2)); }
+}
+.dl-canais-esteira__item {
+  flex: 0 0 132px;
+  height: 168px;
+  border-radius: 18px;
+  display: block;
+  box-shadow: 0 14px 30px -18px rgba(0,0,0,0.85);
+}
+/* Parada com "reduzir movimento": a esteira é movimento constante e não há
+   versão estática dela — o que fica é a faixa parada, legível do mesmo jeito. */
+@media (prefers-reduced-motion: reduce) {
+  .dl-canais-esteira__fila { animation: none; }
+}
+
 /* Lista de acesso: existe para leitor de tela e busca, não para os olhos. */
 .dl-baralho__lista {
   position: absolute;
@@ -4492,36 +4701,68 @@ ${editorCSS()}
   .dl-menu__inner { grid-template-columns: 1fr; gap: 46px; align-content: start; padding-top: 108px; }
   .dl-menu__ghost { font-size: 11rem; }
 }
-/* ── Tablet estreito ──
-   As abas de recursos já estão empilhadas sobre o painel desde os 1024px, e é
-   aqui que a distância entre um e outro começa a incomodar. */
+/* ── Tablet estreito e celular: recursos viram carrossel ──
+   As abas já estão empilhadas sobre o painel desde os 1024px, e daqui para
+   baixo o arranjo em duas partes deixa de fazer sentido: cada recurso passa a
+   ser um cartão fechado, com a tela dele e o texto dele, e o gesto é arrastar
+   de lado. Ver o comentário no componente Recursos para o porquê. */
 @media (max-width: 860px) {
-  /* Coluna de flex, e não mais grade: item de grade fica preso à própria
-     célula, que aqui tem a altura do painel — ele descolaria do topo no
-     primeiro rolar. Em flex, quem contém o sticky é a coluna inteira, então o
-     painel acompanha as seis abas até a última. */
-  .dl-split { display: flex; flex-direction: column; gap: 16px; }
-  /* O painel vem primeiro e fica preso no alto enquanto as abas passam por
-     baixo. É o que devolve sentido ao toque: a tela muda à vista de quem
-     tocou. O fundo é obrigatório — sem ele o conteúdo rolaria por trás da
-     legenda, que não tem superfície própria. */
-  .dl-split__tela {
-    order: -1; position: sticky; top: 58px; z-index: 2;
-    padding: 10px 0; background: var(--bg);
+  .dl-rec-caixa { display: flex; flex-direction: column; }
+
+  /* Os pontos entram POR DENTRO da folga de cima do trilho (margem negativa):
+     a folga existe para a sombra dos cartões não ser decepada, e sem a margem
+     ela viraria um vão morto entre o cabeçalho e o carrossel. */
+  .dl-rec-pontos {
+    display: flex; justify-content: center; gap: 6px;
+    margin: 4px 0 -22px; position: relative; z-index: 1;
   }
-  /* Preso no topo, o painel não pode comer a tela inteira: o que sobra é para
-     as abas, que são o conteúdo desta seção.
+  .dl-root .dl-rec-ponto {
+    width: 24px; height: 26px; padding: 0; border: 0; border-radius: 0;
+    background: none; box-shadow: none; transform: none; cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .dl-root .dl-rec-ponto:hover { background: none; box-shadow: none; transform: none; }
+  .dl-rec-ponto::before {
+    content: ""; width: 7px; height: 7px; border-radius: 999px;
+    background: rgba(255,255,255,0.24);
+    transition: width 0.35s var(--ease-out), background 0.35s ease;
+  }
+  .dl-rec-ponto.is-on::before { width: 20px; background: var(--accent-soft); }
 
-     Altura FIXA, e não um teto: cada recurso tem uma tela de altura diferente,
-     então com teto o painel grudado mudava de tamanho a cada troca. Isso
-     empurrava tudo que vem embaixo, o que mexia na rolagem, o que trocava o
-     recurso de novo — o tremor entre as células ao rolar. Com altura fixa a
-     troca de tela não move um pixel do que está em volta.
+  /* Mesma mecânica do trilho de planos: o respiro das pontas é metade do que
+     sobra depois do cartão, e é MARGEM dos cartões das pontas, não padding do
+     trilho — com padding, a largura do cartão passaria a ser porcentagem do que
+     sobrou depois dele e o primeiro e o último nunca parariam no centro. */
+  .dl-rec-trilho {
+    --dl-cartao: 84%;
+    --dl-ponta: 8%; /* (100 - 84) / 2 */
+    display: flex; gap: 12px; align-items: flex-start;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    padding: 28px 0 10px;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .dl-rec-trilho::-webkit-scrollbar { display: none; }
+  .dl-rec-slide {
+    flex: 0 0 var(--dl-cartao); scroll-snap-align: center;
+    display: flex; flex-direction: column;
+    /* Recuado até virar o cartão do meio. Brilho e não opacidade: opacidade
+       deixaria passar o fundo da seção por dentro da moldura do navegador. */
+    filter: brightness(0.55); transform: scale(0.97);
+    transition: filter 0.45s var(--ease-out), transform 0.45s var(--ease-out);
+  }
+  .dl-rec-slide.is-atual { filter: none; transform: none; }
+  .dl-rec-slide:first-child { margin-left: var(--dl-ponta); }
+  .dl-rec-slide:last-child { margin-right: var(--dl-ponta); }
 
-     O "flex: 0 0 auto" é o que faz a altura valer: como item de uma coluna de
-     flex, a medida da moldura vinha do flex-basis, e uma altura declarada ao
-     lado de "flex: 1" é simplesmente ignorada no eixo principal. */
-  .dl-browser { flex: 0 0 auto; height: min(468px, 42vh); max-height: none; }
+  /* Altura FIXA, e não um teto: cada recurso tem uma tela de altura diferente,
+     e com teto os seis cartões do trilho teriam alturas diferentes — o encaixe
+     lateral passaria por molduras que sobem e descem. */
+  .dl-rec-slide .dl-browser { flex: 0 0 auto; height: min(420px, 38vh); max-height: none; }
+
+  .dl-rec-slide__texto { padding: 16px 2px 0; }
+  .dl-rec-slide__texto .dl-feature__icon { margin-bottom: 10px; }
+  .dl-rec-slide__texto .dl-index { display: block; margin-bottom: 6px; }
 }
 
 @media (max-width: 640px) {
@@ -4611,9 +4852,29 @@ ${editorCSS()}
   .dl-section--ghost { display: none; }
   #editor, #integracoes, #planos { background: var(--bg); }
   #recursos, #porque, #faq { background: var(--bg-alt); }
-  /* A seção de recursos deixa de ser a base: o painel grudado no topo tem de
-     acompanhar o fundo dela, senão aparece um retângulo escuro sobre o claro. */
-  .dl-split__tela { background: var(--bg-alt); }
+
+  /* ── Véu da parede de destaques ──
+     A elipse do desktop é medida em porcentagem da seção, e numa tela de 390px
+     ela vira uma mancha de ~225px: cobre o título e para ali, com os cartões
+     acesos encostando nas duas laterais. Aqui ela abre para além da seção
+     (110% × 96%) e o miolo opaco vai mais longe antes de cair — o que sobra de
+     parede à mostra passa a ser a franja de cima e de baixo, não o meio.
+
+     E não some no hover: :hover em tela de toque fica grudado depois do
+     primeiro toque, então o véu sumiria de vez ao encostar na seção. */
+  .dl-porque__fundo::after {
+    background: radial-gradient(
+      ellipse 110% 96% at 50% 50%,
+      rgba(10, 10, 11, 0.94) 0%,
+      rgba(10, 10, 11, 0.88) 42%,
+      rgba(10, 10, 11, 0.62) 72%,
+      rgba(10, 10, 11, 0.26) 100%
+    );
+  }
+  .dl-porque:hover .dl-porque__fundo::after { opacity: 1; }
+  /* Mesmo motivo: o recuo do cabeçalho no hover é um gesto de mouse. No celular
+     ele apagava o título ao primeiro toque, sem forma de trazer de volta. */
+  .dl-porque:hover .dl-porque__frente { opacity: 1; filter: none; }
 
   /* ── Integrações ──
      O preenchimento pela cor da marca é um hover, e hover não existe no

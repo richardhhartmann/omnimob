@@ -158,10 +158,21 @@ const ElectricBorder = ({
     const displacement = 60;
     const borderOffset = 60;
 
+    /* offsetWidth/Height, e NÃO getBoundingClientRect.
+
+       O rect é a caixa depois de todo transform — do elemento e dos pais. O
+       cartão de plano no carrossel do celular entra em cena animando
+       `scale(0.965) → none` em 0.45s, e é exatamente aí que este componente é
+       montado: a primeira medida pegava a caixa ENCOLHIDA. O ResizeObserver
+       não conserta depois porque transform não muda a caixa de layout — ele
+       nunca dispara. Resultado: o traçado ficava uns 3,5% menor que o cartão
+       para sempre, desenhado por dentro da borda em vez de sobre ela.
+
+       offsetWidth/Height são a caixa de layout, imunes a transform, e é o mesmo
+       que o ResizeObserver reporta — as duas medidas passam a concordar. */
     const updateSize = () => {
-      const rect = container.getBoundingClientRect();
-      const width = rect.width + borderOffset * 2;
-      const height = rect.height + borderOffset * 2;
+      const width = container.offsetWidth + borderOffset * 2;
+      const height = container.offsetHeight + borderOffset * 2;
 
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = width * dpr;
