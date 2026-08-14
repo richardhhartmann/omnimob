@@ -512,8 +512,8 @@ export function economiaDoAnual(mensal, anual) {
 
 /**
  * @returns {Promise<{ [plano: string]: {
- *            mensal?: { rotulo: string, valor: number, intervalo: string },
- *            anual?:  { rotulo: string, valor: number, intervalo: string },
+ *            mensal?: { rotulo: string, numero: string, sufixo: string, valor: number, intervalo: string },
+ *            anual?:  { rotulo: string, numero: string, sufixo: string, valor: number, intervalo: string },
  *            economia?: { valor: number, percentual: number, mesesGratis: number },
  *          } }>}
  *          Só os planos com preço configurado E existente no Stripe.
@@ -538,8 +538,16 @@ export async function precosDosPlanos() {
             const intervalo = preco.recurring?.interval;
             const sufixo = intervalo === "month" ? "/mês" : intervalo === "year" ? "/ano" : "";
             saida[plano] = saida[plano] || {};
+            /* `rotulo` inteiro para quem só quer imprimir; `numero` e `sufixo`
+               separados para quem desenha os dois em tamanhos diferentes (a
+               landing põe o valor em 34px e o "/mês" pequeno ao lado). Partido
+               aqui e não no navegador porque quem monta a string é este arquivo:
+               separar lá seria adivinhar onde o número termina, e a moeda pode
+               mudar de formato. */
             saida[plano][periodo] = {
               valor: (preco.unit_amount ?? 0) / 100,
+              numero: formatarBRL(preco.unit_amount, preco.currency),
+              sufixo,
               rotulo: `${formatarBRL(preco.unit_amount, preco.currency)}${sufixo}`,
               intervalo: intervalo || null,
             };

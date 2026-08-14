@@ -686,13 +686,11 @@ const FAQ = [
 
 // ── Planos ──────────────────────────────────────────────────────────────────
 
-// Preço é informação de marketing e não existe em planos.js, então fica mapeado
-// aqui — ajuste à vontade.
-const PRECOS = {
-  BASICO: { price: "R$ --", per: "/mês", nota: "cobrado mensalmente" },
-  PROFISSIONAL: { price: "R$ --", per: "/mês", nota: "cobrado mensalmente" },
-  PREMIUM: { price: "--", per: "", nota: "cobrado mensalmente" },
-};
+/* Não existe tabela de preços escrita aqui — nem de reserva. O único preço que
+   esta página exibe é o que /public/planos leu do provedor; até ele chegar, o
+   cartão mostra um esqueleto. Um valor de reserva economizaria o esqueleto e
+   custaria o pior erro possível numa página de vendas: anunciar, por um
+   instante, um preço que não é o que será cobrado. */
 
 const formatarBRL = (valor) =>
   Number(valor || 0).toLocaleString("pt-BR", {
@@ -752,23 +750,33 @@ function incluiRecurso(planKey, recurso) {
   return planoInfo(planKey).nivel >= (NIVEL_MINIMO[exigido] ?? 0);
 }
 
-/* Preços de reserva: valem só até a resposta do provedor chegar (ou se ele não
-   estiver configurado). O valor exibido de verdade vem de /public/planos, para a
-   página nunca anunciar um preço diferente do que será cobrado. */
+/* O preço NUNCA é inventado aqui. Ele só existe depois que /public/planos
+   responde — até lá o cartão mostra um esqueleto, e não um "R$ --" que parece
+   preço e não é. Se a resposta vier sem preço para o plano (provedor desligado,
+   ou plano sem cobrança automática), o cartão diz "Sob consulta", que é a
+   verdade: aquele plano se fecha falando com o time. */
 const PLANS_BASE = PLANOS.map((p) => ({
   key: p.key,
   name: p.nome,
   desc: p.descricao,
-  price: PRECOS[p.key]?.price ?? "",
-  per: PRECOS[p.key]?.per ?? "",
-  nota: PRECOS[p.key]?.nota ?? "",
+  price: "",
+  per: "",
+  nota: "",
+  carregando: true,
   linhas: LINHAS_PLANO.map((r) => ({ label: r.label, incluso: incluiRecurso(p.key, r) })),
   resumo: resumoDoPlano(p.key),
   highlight: p.key === "PROFISSIONAL",
 }));
 
-/* Busca os preços vigentes uma vez por carga da página. Falha de rede não
-   quebra nada: fica com os valores de reserva.
+/* Busca os preços vigentes uma vez por carga da página.
+
+   Três estados, e cada um mostra uma coisa diferente no cartão:
+     `null`  — ainda não respondeu: esqueleto no lugar do preço;
+     `{}`    — respondeu sem preço nenhum (provedor desligado): "Sob consulta";
+     com dados — o preço de verdade, com "/mês" ou "/ano".
+
+   Falha de rede cai no segundo caso, não no primeiro: esqueleto eterno faria a
+   página parecer travada, e o que aconteceu é que não há preço para mostrar.
 
    O provedor devolve um par por plano — `{ mensal, anual, economia }` — e a
    economia vem CALCULADA lá, a partir do que o Stripe cobra de verdade nos dois
@@ -788,38 +796,44 @@ function usePrecosVigentes(periodo) {
     };
   }, []);
 
+  const carregando = precos == null;
+
   /* Existe alguma cobrança anual de verdade? Enquanto as variáveis do Stripe
      não forem criadas, não existe — e oferecer a escolha seria vender o que a
-     cobrança recusa. Antes da resposta chegar (ou sem provedor configurado) o
-     alternador aparece, porque aí a página está em modo de reserva e nenhum
-     preço dela é uma promessa. */
-  const respondeu = precos != null && Object.keys(precos).length > 0;
-  const temAnual = !respondeu || Object.values(precos).some((p) => p?.anual);
+     cobrança recusa. Durante o carregamento o alternador já aparece, senão ele
+     surgiria depois do resto e empurraria os cartões para baixo. */
+  const temAnual = carregando || Object.values(precos).some((p) => p?.anual);
 
   const planos = useMemo(
     () =>
       PLANS_BASE.map((p) => {
+        if (carregando) return p; // p.carregando = true; o cartão desenha o esqueleto
         const vivo = precos?.[p.key];
         // Plano sem preço anual cadastrado continua mostrando o mensal: some a
         // vantagem, não o plano.
         const doPeriodo = vivo?.[periodo] || vivo?.mensal;
-        const nota = NOTA_DO_PERIODO[doPeriodo && periodo === "anual" && vivo?.anual ? "anual" : "mensal"];
-        if (!doPeriodo) return { ...p, nota };
-        // O rótulo do Stripe já vem inteiro ("R$ 199,00/mês"), então o sufixo
-        // separado (`per`) sai de cena para não duplicar o "/mês".
+        if (!doPeriodo) {
+          return { ...p, carregando: false, price: "Sob consulta", per: "", nota: "fale com o time" };
+        }
+        const ehAnual = periodo === "anual" && Boolean(vivo?.anual);
         return {
           ...p,
-          price: doPeriodo.rotulo,
-          per: "",
+          carregando: false,
+          /* Número e sufixo separados: o valor vai grande, o "/mês" pequeno ao
+             lado. Vêm partidos do servidor — ver o comentário em
+             `precosDosPlanos`. O `rotulo` inteiro fica de reserva para o caso de
+             uma resposta antiga, ainda sem os campos novos. */
+          price: doPeriodo.numero || doPeriodo.rotulo,
+          per: doPeriodo.numero ? doPeriodo.sufixo || "" : "",
           valor: doPeriodo.valor,
-          nota,
-          economia: periodo === "anual" && vivo?.anual ? vivo.economia || null : null,
+          nota: NOTA_DO_PERIODO[ehAnual ? "anual" : "mensal"],
+          economia: ehAnual ? vivo.economia || null : null,
         };
       }),
-    [precos, periodo],
+    [precos, periodo, carregando],
   );
 
-  return { planos, temAnual };
+  return { planos, temAnual, carregando };
 }
 
 /* Desconto do anual em palavras. Prefere os MESES GRÁTIS ao percentual: "2,5
@@ -2255,19 +2269,53 @@ function Planos({ planos, aoTestar }) {
             {p.highlight ? <span className="dl-plan__tag dl-mono">● MAIS POPULAR</span> : null}
             <h3 className="dl-plan__name">{p.name}</h3>
             <p className="dl-plan__desc">{p.desc}</p>
-            <div className="dl-plan__price">
-              <strong>{p.price}</strong>
-              {p.per ? <span>{p.per}</span> : null}
-              {/* A economia fica COLADA no preço, não no alternador: é aqui que
-                  o olho para para comparar, e o valor em reais só existe por
-                  plano — no alternador caberia, no máximo, a média. */}
-              {p.economia?.valor > 0 ? (
-                <span className="dl-plan__economia dl-mono">
-                  economize {formatarBRL(p.economia.valor)}
-                </span>
-              ) : null}
+            {/* Enquanto o preço não chega, um esqueleto no lugar dele. O bloco
+                mantém a altura nos dois estados, então a chegada do valor não
+                empurra a lista de recursos para baixo.
+
+                `aria-busy` + o texto para leitor de tela: visualmente o brilho
+                do esqueleto já diz "está vindo", mas quem ouve a página não vê
+                brilho nenhum — sem isso, o cartão simplesmente não teria preço. */}
+            <div className="dl-plan__price" aria-busy={p.carregando || undefined}>
+              {p.carregando ? (
+                <>
+                  {/* Um <strong> de verdade, com um espaço dentro: ele herda o
+                      tamanho do preço e portanto ocupa EXATAMENTE a mesma linha
+                      que o valor vai ocupar. Casar altura na mão (34px? 41px?)
+                      erraria no primeiro ajuste de tipografia. */}
+                  <strong className="dl-esqueleto dl-esqueleto--preco" aria-hidden="true">
+                    &nbsp;
+                  </strong>
+                  <span className="dl-so-leitor">Carregando o preço…</span>
+                </>
+              ) : (
+                <>
+                  <strong>{p.price}</strong>
+                  {p.per ? <span>{p.per}</span> : null}
+                </>
+              )}
             </div>
-            <span className="dl-mono dl-plan__nota">{p.nota}</span>
+            {/* A economia fica logo abaixo do preço — é aqui que o olho para
+                para comparar, e o valor em reais só existe por plano (no
+                alternador caberia, no máximo, a média).
+
+                Em LINHA PRÓPRIA, e não ao lado do valor: colada ao preço ela
+                cabia no Básico e quebrava no Premium, cujo número é maior. Com
+                um cartão quebrado e dois não, as listas de recursos dos três
+                deixavam de começar na mesma altura. */}
+            {!p.carregando && p.economia?.valor > 0 ? (
+              <span className="dl-plan__economia dl-mono">
+                economize {formatarBRL(p.economia.valor)}
+              </span>
+            ) : null}
+            {/* Mesma ideia na etiqueta de baixo: a própria classe da nota, para
+                a margem e a altura de linha serem as mesmas. */}
+            <span
+              className={`dl-mono dl-plan__nota${p.carregando ? " dl-esqueleto dl-esqueleto--nota" : ""}`}
+              aria-hidden={p.carregando || undefined}
+            >
+              {p.carregando ? " " : p.nota}
+            </span>
 
             <PlanoRecursos
               id={`plano-lista-${p.key}`}
@@ -4629,12 +4677,75 @@ ${editorCSS()}
 /* Economia do anual, ao lado do preço. Em verde-menta, a mesma cor dos ✓ da
    lista: nesta página o menta já quer dizer "isto está incluído". */
 .dl-plan__economia {
+  /* O align-self existe porque o cartão é uma coluna flex: sem ele a etiqueta
+     esticaria de ponta a ponta em vez de acompanhar o próprio texto. */
+  align-self: flex-start;
+  margin-top: 8px;
   font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--mint);
   padding: 3px 8px; border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--mint) 32%, transparent);
   background: color-mix(in srgb, var(--mint) 12%, transparent);
   white-space: nowrap;
+}
+
+/* ── Esqueleto de carregamento ──────────────────────────────────────────────
+   Uma barra com brilho passando, no lugar do que ainda não chegou. Herda a
+   tipografia do elemento que substitui (por isso é aplicada NO próprio <strong>
+   do preço, não num div à parte): assim a altura da linha é a mesma antes e
+   depois, e a chegada do valor não empurra o cartão.
+
+   A cor transparente esconde o espaço que dá corpo à linha; a largura mínima em
+   ch faz a barra crescer junto com a fonte. */
+.dl-esqueleto {
+  position: relative;
+  display: inline-block;
+  color: transparent;
+  user-select: none;
+}
+/* A barra visível vive numa pseudo-camada, centrada na linha. O elemento mantém
+   a ALTURA do texto que substitui — é o que garante zero salto quando o preço
+   chega —, mas o que se vê tem a espessura de uma linha escrita, e não a caixa
+   de linha inteira (que num número de 34px é um bloco alto demais). */
+.dl-esqueleto::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%; transform: translateY(-50%);
+  height: 62%;
+  border-radius: 7px;
+  background-color: color-mix(in srgb, var(--strong) 9%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 20%,
+    color-mix(in srgb, var(--strong) 12%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: dlEsqueleto 1.4s ease-in-out infinite;
+}
+.dl-esqueleto--preco { min-width: 5.2ch; }
+/* Largura explícita, não mínima: a nota é filha direta do cartão, que estica os
+   filhos: com min-width a barra iria de ponta a ponta. */
+.dl-esqueleto--nota { width: 16ch; }
+.dl-esqueleto--nota::before { border-radius: 4px; height: 72%; }
+@keyframes dlEsqueleto {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+/* Sem movimento, a barra vira um bloco parado — ainda diz "tem algo vindo aqui",
+   que é o essencial. */
+@media (prefers-reduced-motion: reduce) {
+  .dl-esqueleto::before { animation: none; }
+}
+
+/* Texto só para leitor de tela: sai da página sem sair da árvore de
+   acessibilidade. Um display none o tiraria das duas. */
+.dl-so-leitor {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 
 /* ── Alternador mensal / anual ──────────────────────────────────────────────
