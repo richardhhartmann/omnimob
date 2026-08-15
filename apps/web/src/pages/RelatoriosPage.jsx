@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { LeadsPage } from "./LeadsPage";
 import { RelatorioMensal } from "../components/RelatorioMensal";
 import { FunilDeVendas, Comissoes } from "../components/FunilVendas";
@@ -130,8 +130,21 @@ const TITULO = {
   COMISSOES: "Comissões",
 };
 
+/* Chave da view no endereço. Curta e em minúsculas porque aparece na barra do
+   navegador — `?ver=funil` é legível, `?view=FUNIL` é código vazando. */
+const POR_PARAMETRO = { leads: "LEADS", mensal: "MENSAL", funil: "FUNIL", comissoes: "COMISSOES" };
+export const PARAMETRO_DE = { LEADS: "leads", MENSAL: "mensal", FUNIL: "funil", COMISSOES: "comissoes" };
+
 export function RelatoriosPage({ session }) {
-  const [view, setView] = useState("MENU");
+  /* ── A view mora na URL ────────────────────────────────────────────────────
+     Era `useState`, e o preço disso era não conseguir mandar "olha o funil" por
+     mensagem, nem deixar o menu lateral abrir um relatório específico — ele só
+     sabia levar ao índice. O botão Voltar do navegador passa a funcionar entre
+     os cartões, que é o que qualquer pessoa espera de algo que trocou a tela. */
+  const [parametros, setParametros] = useSearchParams();
+  const view = POR_PARAMETRO[parametros.get("ver")] || "MENU";
+  const setView = (proxima) =>
+    setParametros(proxima === "MENU" ? {} : { ver: PARAMETRO_DE[proxima] });
 
   const conteudo =
     view === "LEADS" ? <LeadsPage session={session} />

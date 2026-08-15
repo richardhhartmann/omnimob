@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { TrialAviso } from "./TrialAviso";
 import { BoasVindasModal } from "./BoasVindasModal";
+import { PulsoTrialModal } from "./PulsoTrialModal";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
 import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
@@ -10,7 +11,7 @@ import { TourDeTela } from "./TourDeTela";
 import { AjudaModal } from "./AjudaModal";
 import { corDeTextoPara } from "./adminUi";
 import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
-import { IconeRelatorios } from "../utils/iconesRelatorios";
+import { IconeRelatorios, ICONES_RELATORIOS } from "../utils/iconesRelatorios";
 import { lerDoTenant, CHAVES } from "../utils/chaveDoTenant";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -32,6 +33,8 @@ import {
   XCircle,
   WarningCircle,
   Question,
+  PlusCircle,
+  Tag,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -224,6 +227,12 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
   // ── Estado ativo ──────────────────────────────────────────────────────────────
   const p = location.pathname;
+  /* "Gerenciar Imóveis" e "Relatórios" são ÍNDICES: cada um abre uma tela de
+     cartões e a escolhida vive em `?ver=`. É o que permite ao submenu apontar
+     para o destino final em vez de largar a pessoa no índice para escolher de
+     novo. Sem parâmetro, o índice é o que está aberto — e nenhum subitem fica
+     aceso, porque nenhum deles é onde a pessoa está. */
+  const ver = new URLSearchParams(location.search).get("ver");
   const isDashboard     = p === "/";
   const isImovelNovo    = p === "/imoveis/novo" || p === "/tipos-imovel";
   const isImovelList    = p === "/imoveis";
@@ -278,7 +287,14 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       {
         label: "IMÓVEIS",
         itens: cargo?.gerenciarImoveis ? [
-          { key: "imoveis-novo", Icon: Buildings, label: "Gerenciar Imóveis", active: isImovelNovo, onClick: () => navigate("/imoveis/novo") },
+          {
+            key: "imoveis-novo", Icon: Buildings, label: "Gerenciar Imóveis",
+            active: isImovelNovo, onClick: () => navigate("/imoveis/novo"),
+            subitens: [
+              { key: "imovel-form", Icon: PlusCircle, label: "Novo Imóvel", active: p === "/imoveis/novo" && ver === "novo", onClick: () => navigate("/imoveis/novo?ver=novo") },
+              { key: "imovel-tipos", Icon: Tag, label: "Categoria de Imóvel", active: p === "/tipos-imovel", onClick: () => navigate("/tipos-imovel") },
+            ],
+          },
           { key: "imoveis-lista", Icon: SquaresFour, label: "Portfólio Ativo", active: isImovelList || isInsights, onClick: () => navigate("/imoveis") },
         ] : [],
       },
@@ -289,7 +305,16 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
              mensal, funil e comissões. O rótulo é "Relatórios" e o destino é a
              página que reúne os quatro — cada recurso novo entra LÁ DENTRO, e não
              como mais uma linha nesta barra. */
-          cargo?.verRelatorios && { key: "leads", Icon: IconeRelatorios, label: "Relatórios", active: isLeads, onClick: () => navigate("/relatorios"), badge: leadsBadge },
+          cargo?.verRelatorios && {
+            key: "leads", Icon: IconeRelatorios, label: "Relatórios",
+            active: isLeads, onClick: () => navigate("/relatorios"), badge: leadsBadge,
+            subitens: [
+              { key: "rel-leads", Icon: ICONES_RELATORIOS.LEADS, label: "Leads", active: ver === "leads", onClick: () => navigate("/relatorios?ver=leads") },
+              { key: "rel-mensal", Icon: ICONES_RELATORIOS.MENSAL, label: "Relatório mensal", active: ver === "mensal", onClick: () => navigate("/relatorios?ver=mensal") },
+              { key: "rel-funil", Icon: ICONES_RELATORIOS.FUNIL, label: "Funil de vendas", active: ver === "funil", onClick: () => navigate("/relatorios?ver=funil") },
+              { key: "rel-comissoes", Icon: ICONES_RELATORIOS.COMISSOES, label: "Comissões", active: ver === "comissoes", onClick: () => navigate("/relatorios?ver=comissoes") },
+            ],
+          },
           cargo?.gerenciarClientes && { key: "clientes", Icon: UserCircle, label: "Clientes", active: isClientes, onClick: () => navigate("/clientes") },
         ].filter(Boolean),
       },
@@ -319,6 +344,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     cargo, navigate, leadsBadge, showcaseEditorLink, showcaseLink,
     isDashboard, isImovelNovo, isImovelList, isInsights, isLeads,
     isClientes, isUsuarios, isCargos, isConfiguracoes, isShowcaseEditor,
+    p, ver,
   ]);
 
   const c = collapsed;
@@ -357,6 +383,18 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         globalAtivo={tourGlobalAtivo}
         pronto={contaResolvida}
         pedido={pedidoTour}
+      />
+
+      {/* Pergunta espontânea de quem está em teste. Vem por último na fila e
+          por um motivo: os três acima são de ENTRADA (recepção, tour, tour de
+          tela) e disputam o primeiro minuto de uso; este só acorda depois de a
+          pessoa ter cadastrado ou editado alguma coisa. `pronto` cobre o
+          encontro entre eles — enquanto o tour global estiver na tela, nenhuma
+          pergunta sobe por cima. */}
+      <PulsoTrialModal
+        tenantSlug={tenantSlug}
+        tenantId={tenantId}
+        pronto={contaResolvida && !tourGlobalAtivo}
       />
 
       <AjudaModal
@@ -411,18 +449,49 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                     : <span className="ds-group__label">{grupo.label}</span>
                 ) : null}
                 {grupo.itens.map((item) => (
-                  <NavItem
-                    key={item.key}
-                    Icon={item.Icon}
-                    label={item.label}
-                    active={item.active}
-                    onClick={item.onClick}
-                    href={item.href}
-                    external={item.external}
-                    badge={item.badge}
-                    collapsed={c}
-                    tourId={`nav-${item.key}`}
-                  />
+                  <div key={item.key}>
+                    <NavItem
+                      Icon={item.Icon}
+                      label={item.label}
+                      active={item.active}
+                      onClick={item.onClick}
+                      href={item.href}
+                      external={item.external}
+                      badge={item.badge}
+                      collapsed={c}
+                      tourId={`nav-${item.key}`}
+                    />
+
+                    {/* Submenu do índice. Fica fora do DOM quando a barra está
+                        recolhida — em 64px não há onde escrever "Relatório
+                        mensal", e a dica lateral já cobre o nome do pai.
+
+                        `aria-hidden` e `tabIndex: -1` quando fechado: o bloco
+                        continua no DOM para poder animar, e sem isso o Tab
+                        entraria em itens invisíveis. */}
+                    {item.subitens?.length && !c ? (
+                      <div className={`ds-sub${item.active ? " is-open" : ""}`} aria-hidden={!item.active}>
+                        <div className="ds-sub__inner">
+                          <span className="ds-sub__rail" aria-hidden="true" />
+                          {item.subitens.map((sub, si) => (
+                            <button
+                              key={sub.key}
+                              type="button"
+                              className={`ds-subitem${sub.active ? " is-active" : ""}`}
+                              style={{ "--i": si }}
+                              tabIndex={item.active ? 0 : -1}
+                              onClick={sub.onClick}
+                            >
+                              <span className="ds-subitem__icon">
+                                <sub.Icon size={14} weight={sub.active ? "fill" : "regular"} />
+                              </span>
+                              <span className="ds-subitem__label">{sub.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             ))}
@@ -654,6 +723,108 @@ const CSS = `
   background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0;
 }
 
+/* ── Submenu do índice ───────────────────────────────────────────────────────
+   Abre sozinho quando o item pai está ativo — nada de clique extra para
+   revelar. Quem chegou em Relatórios já demonstrou que quer o que tem lá
+   dentro; pedir mais um clique para VER as opções seria cobrar duas vezes.
+
+   A animação é de grade, não de altura: 'grid-template-rows' interpola de 0fr
+   a 1fr e o navegador anima até a altura natural do conteúdo. É o jeito de
+   abrir algo de altura desconhecida sem medir nada em JavaScript e sem cravar
+   um 'max-height' chutado, que ou corta a lista ou deixa a saída lenta quando o
+   valor é generoso demais.
+
+   Três coisas acontecem juntas, e é a soma delas que dá o movimento: a caixa
+   cresce, o fio vertical desce da esquerda e os itens entram um após o outro
+   deslizando da margem. O escalonamento é pelo --i que o JSX injeta.
+   ────────────────────────────────────────────────────────────────────────── */
+.ds-sub {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ds-sub.is-open { grid-template-rows: 1fr; }
+
+/* O respiro vem de MARGEM nos filhos, não de padding aqui.
+
+   Com padding, o bloco fechado media 5px em vez de 0: a faixa da grade colapsa
+   para altura zero, mas o padding é somado por fora da caixa de conteúdo
+   esticada — sobrava uma tira vazia sob todo item de índice que não estivesse
+   ativo. Margem fica DENTRO da área recortada e some junto. */
+.ds-sub__inner {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ds-sub__inner .ds-subitem:first-of-type { margin-top: 3px; }
+.ds-sub__inner .ds-subitem:last-of-type { margin-bottom: 2px; }
+
+/* O fio que liga o item pai aos filhos. Alinhado com o CENTRO do ícone do pai:
+   ele tem 16px e começa nos 10px de padding do item, então o meio cai em 18px.
+   Desce ao abrir e recolhe ao fechar. */
+.ds-sub__rail {
+  position: absolute;
+  left: 18px;
+  top: 4px;
+  bottom: 6px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(129,140,248,0.45), var(--s-sep));
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1) 0.04s;
+}
+.ds-sub.is-open .ds-sub__rail { transform: scaleY(1); }
+
+.ds-shell .ds-subitem {
+  position: relative;
+  display: flex; align-items: center; gap: 9px;
+  /* justify-content explícito, e não por herança.
+
+     O seletor global de button no styles.css declara justify-content: center.
+     O item PAI escapa disso porque o rótulo dele ocupa a sobra (flex: 1) —
+     aqui não ocupava, e o par ícone+texto ia parar no meio da barra, com uma
+     folga à esquerda que parecia recuo de hierarquia mas era centralização.
+
+     (Sem crases neste comentário: ele vive dentro de um template literal, e uma
+     crase aqui encerra a string e derruba o build.) */
+  justify-content: flex-start;
+  width: 100%; padding: 6px 10px 6px 26px; border-radius: 8px;
+  font-family: inherit; font-size: 12.5px; font-weight: 500; text-align: left;
+  color: var(--s-text); background: transparent;
+  border: 1px solid transparent; box-shadow: none;
+  cursor: pointer; white-space: nowrap; overflow: hidden;
+  opacity: 0; transform: translateX(-10px);
+  transition:
+    opacity 0.26s ease,
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+/* O atraso escalonado vale só na ENTRADA. Aplicado dos dois lados, fechar
+   ficaria com o último item sumindo um quarto de segundo depois do primeiro —
+   o que lê como travamento, não como acabamento. */
+.ds-sub.is-open .ds-subitem {
+  opacity: 1;
+  transform: translateX(0);
+  transition-delay: calc(var(--i) * 55ms);
+}
+
+.ds-shell .ds-subitem:hover {
+  background: var(--s-hover); color: var(--s-strong);
+  box-shadow: none; transform: translateX(0); border-color: transparent;
+}
+.ds-shell .ds-subitem.is-active {
+  color: var(--s-strong);
+  background: rgba(129,140,248,0.08);
+}
+.ds-subitem__icon { display: flex; flex-shrink: 0; color: currentColor; }
+.ds-subitem.is-active .ds-subitem__icon { color: #fff; }
+.ds-subitem__label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
 /* ── Rodapé ── */
 .ds-foot {
   padding: 8px; flex-shrink: 0;
@@ -703,5 +874,10 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) {
   .ds-side { transition: none; }
   .ds-toast { animation: none; }
+  /* O submenu continua abrindo e fechando — só deixa de deslizar. */
+  .ds-sub,
+  .ds-sub__rail,
+  .ds-shell .ds-subitem { transition: none; }
+  .ds-sub.is-open .ds-subitem { transition-delay: 0ms; }
 }
 `;

@@ -33,6 +33,32 @@ function separarLogin(login, slug) {
   return { base: login, temSufixo: false };
 }
 
+/* O login como ele aparece na lista.
+
+   O sufixo da imobiliária sai em tom mais fraco: junto, "richard-paper" lê como
+   um texto hifenizado qualquer; separado, lê como "richard, da paper" — que é o
+   que ele é. Quem precisa passar a credencial para alguém enxerga as duas
+   partes de uma vez.
+
+   Logins sem sufixo (os anteriores à regra, como o `admin` do seed) aparecem
+   como estão. Colar um `-slug` decorativo neles mostraria uma credencial que
+   NÃO funciona na tela de acesso — o oposto do que esta linha existe para
+   fazer. */
+function LoginDoUsuario({ login, slug }) {
+  const { base, temSufixo } = separarLogin(login, slug);
+  return (
+    <span
+      style={{ fontSize: "12px", color: "var(--text-muted)" }}
+      title={`Login de acesso: ${login}`}
+    >
+      @{base}
+      {temSufixo ? (
+        <span style={{ opacity: 0.62 }}>-{slug}</span>
+      ) : null}
+    </span>
+  );
+}
+
 function juntarLogin(base, slug, temSufixo) {
   const limpa = base.trim();
   if (!temSufixo || !slug) return limpa;
@@ -408,7 +434,7 @@ export function UsuariosPage({ session }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: "600", fontSize: "15px" }}>{u.nome}</span>
-                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>@{u.login}</span>
+                    <LoginDoUsuario login={u.login} slug={tenantSlug} />
                     {/* Sem isto a linha do próprio usuário parece apenas ter
                         perdido um botão; a marca explica a falta. */}
                     {u.id === meuId ? <Chip color="#6366f1">você</Chip> : null}

@@ -1009,13 +1009,22 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
   );
 }
 
-export function PropertyManagement({ onSubmitProperty, disabled, initialData }) {
-  const [view, setView] = useState(initialData?.id ? "PROPERTY" : "MENU");
+export function PropertyManagement({ onSubmitProperty, disabled, initialData, logoUrl }) {
   const navigate = useNavigate();
+  /* ── Qual das duas telas está aberta vive na URL, não num `useState` ────────
+     Era estado interno, e isso tinha dois custos: não dava para mandar link do
+     formulário para ninguém, e o menu lateral não tinha como abrir "Novo
+     Imóvel" — ele só sabia levar até o menu de escolha, de onde a pessoa
+     precisava clicar de novo.
 
-  useEffect(() => {
-    if (initialData?.id) setView("PROPERTY");
-  }, [initialData?.id]);
+     Com `?ver=novo` no endereço, o submenu da barra lateral aponta para cá
+     direto, o botão Voltar do navegador funciona entre as duas telas, e a
+     edição (que chega com `initialData`) continua abrindo o formulário sem
+     depender de parâmetro nenhum. */
+  const [parametros, setParametros] = useSearchParams();
+  const view = initialData?.id || parametros.get("ver") === "novo" ? "PROPERTY" : "MENU";
+  const abrirFormulario = () => setParametros({ ver: "novo" });
+  const voltarAoMenu = () => setParametros({});
 
   return (
     <div className="management-container">
@@ -1028,7 +1037,7 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
           <div className="grid grid-2" style={{ gap: "32px", maxWidth: "800px", margin: "0 auto" }}>
             {[
               {
-                onClick: () => setView("PROPERTY"),
+                onClick: abrirFormulario,
                 tourId: "imovel-menu-novo",
                 icon: <IconHome />,
                 title: "Novo Imóvel",
@@ -1097,7 +1106,8 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData }) 
           onSubmit={onSubmitProperty}
           disabled={disabled}
           initialData={initialData}
-          onCancelEdit={() => setView("MENU")}
+          onCancelEdit={voltarAoMenu}
+          logoUrl={logoUrl}
         />
       )}
     </div>
@@ -1314,7 +1324,7 @@ function ComSkeleton({ active, radius = "10px", style, children }) {
   );
 }
 
-export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) {
+export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, logoUrl }) {
   const { confirm, modal: confirmModal } = useConfirm();
   const [form, setForm] = useState(EMPTY);
   const [step, setStep] = useState(0);
@@ -2490,6 +2500,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit }) 
                       ? "Envie ao menos uma foto do imóvel — a IA vai preencher título, descrição e os detalhes automaticamente a partir delas."
                       : "Selecione ou arraste uma ou mais fotos para esta página."}
                   </p>
+                  {/* A marca é aplicada no envio, não aqui — então a miniatura
+                      da lista mostra a foto limpa. Sem este aviso, a pessoa só
+                      descobriria a logo depois de publicar. */}
                   <label htmlFor="foto-upload" style={{
                     display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 24px",
                     borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer",

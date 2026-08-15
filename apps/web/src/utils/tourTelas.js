@@ -689,19 +689,21 @@ function tourVitrineEditor() {
         lado: "bottom",
       },
       {
-        alvo: '[data-tour="vitrine-posicoes"]',
-        titulo: "Errou? Nada aqui é definitivo",
+        alvo: '[data-tour="vitrine-biblioteca"]',
+        titulo: "Tudo o que dá para acrescentar mora aqui",
         texto:
-          "<strong>Posições</strong> devolve o layout ao padrão sem tocar nas suas cores e textos. " +
-          "E Ctrl+Z desfaz movimento por movimento, como em qualquer editor.",
-        lado: "bottom",
+          "<strong>Adicionar</strong> traz a biblioteca de peças — depoimento, números, horários, CTA. " +
+          "Clique para pôr no fim da página ou arraste para soltar num ponto exato. " +
+          "<strong>Camadas</strong> lista a página inteira, para selecionar, ocultar ou travar sem caçar no canvas.",
+        lado: ["right", "bottom"],
       },
       {
-        alvo: '[data-tour="vitrine-historico"]',
-        titulo: "Tudo salva sozinho",
+        alvo: '[data-tour="vitrine-acoes"]',
+        titulo: "Errou? Nada aqui é definitivo",
         texto:
           "Não existe botão de salvar: cada ajuste vai para o banco em segundos. " +
-          "O <strong>Histórico</strong> guarda as versões anteriores, para voltar atrás se uma ideia não vingar.",
+          "Neste menu ficam o <strong>Histórico</strong> de versões e o <strong>Resetar posições</strong>, " +
+          "que devolve o layout ao padrão sem tocar nas suas cores e textos. E Ctrl+Z desfaz movimento por movimento.",
         lado: "bottom",
       },
       {

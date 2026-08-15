@@ -52,3 +52,25 @@ export function esquecerTrialStatus(tenantSlug) {
   if (tenantSlug) cache.delete(tenantSlug);
   else cache.clear();
 }
+
+/* ─── Aviso de mudança ───────────────────────────────────────────────────────
+   Descartar o cache não basta quando a situação muda com a tela de pé. O caso
+   concreto: a pesquisa do painel dá sete dias a mais de teste, e o selo da
+   barra lateral continua anunciando o prazo velho até alguém recarregar a
+   página — logo depois de o produto ter prometido o contrário.
+
+   Quem mudou a situação chama `avisarMudancaDeTrial`; quem MOSTRA a situação
+   assina e busca de novo. */
+const assinantes = new Set();
+
+export function ouvirMudancaDeTrial(fn) {
+  assinantes.add(fn);
+  return () => assinantes.delete(fn);
+}
+
+export function avisarMudancaDeTrial(tenantSlug) {
+  esquecerTrialStatus(tenantSlug);
+  assinantes.forEach((fn) => {
+    try { fn(tenantSlug); } catch { /* um ouvinte quebrado não cala os outros */ }
+  });
+}

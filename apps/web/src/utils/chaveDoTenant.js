@@ -60,4 +60,5 @@ export const CHAVES = {
   boasVindasModo: "domus_boas_vindas_modo",
   leadsVistos: "domus_leads_seen",
   historicoEditor: "domus_builder_history",
+  pulsoTrial: "domus_pulso_trial",
 };

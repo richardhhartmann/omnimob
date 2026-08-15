@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
-import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
+import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader.jsx";
+import { ShowcaseFooter } from "../components/showcase/ShowcaseFooter.jsx";
+import { classeDeAparencia, estiloDoTema, linkWhatsApp } from "../components/showcase/tema.js";
 import { Panorama360 } from "../components/Panorama360";
 import { comodidadesAtivas } from "../utils/comodidades";
 import { tipoContratoInfo } from "../utils/tiposContrato";
@@ -40,6 +42,8 @@ export function ShowcasePropertyPage({ slugFixo }) {
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
   const thumbsRef = useRef(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Ponteiro sobre a galeria segura o auto-avanço (ver o efeito mais abaixo).
+  const [pausado, setPausado] = useState(false);
   const [lightboxClosing, setLightboxClosing] = useState(false);
 
   useEffect(() => {
@@ -99,11 +103,25 @@ export function ShowcasePropertyPage({ slugFixo }) {
   const current360 = Boolean(images[carouselIndex]?.is360); // foto atual é panorâmica 360°?
 
   function goTo(i) {
-    const next = (i + images.length) % images.length;
-    setCarouselIndex(next);
-    const thumb = thumbsRef.current?.children[next];
-    if (thumb) thumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    setCarouselIndex((i + images.length) % images.length);
   }
+
+  /* A faixa de miniaturas acompanha a foto — rolando SÓ ELA, no eixo X.
+
+     Antes isto era `thumb.scrollIntoView({ block: "nearest" })` dentro do
+     `goTo`, e `scrollIntoView` não escolhe o contêiner: ele rola todos os
+     ancestrais roláveis, a janela inclusive. Com o auto-avanço ligado, quem
+     estivesse lendo a descrição era puxado de volta para a galeria a cada cinco
+     segundos. `scrollTo` no próprio elemento da faixa mexe só na faixa. */
+  useEffect(() => {
+    const faixa = thumbsRef.current;
+    const alvo = faixa?.children[carouselIndex];
+    if (!faixa || !alvo) return;
+    faixa.scrollTo({
+      left: alvo.offsetLeft - (faixa.clientWidth - alvo.clientWidth) / 2,
+      behavior: "smooth",
+    });
+  }, [carouselIndex]);
 
   function openLightbox() { setLightboxClosing(false); setLightboxOpen(true); }
   function closeLightbox() {
@@ -131,31 +149,41 @@ export function ShowcasePropertyPage({ slugFixo }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxOpen, carouselIndex]);
 
-  // Carrossel (modo normal): passa para a próxima foto automaticamente a cada 5s.
-  // Pausa quando o lightbox está aberto (lá a navegação é manual). A barrinha de
-  // progresso do carrossel, keyed por carouselIndex, dura os mesmos 5s.
-  useEffect(() => {
-    // Não auto-avança enquanto o usuário explora uma foto 360°.
-    if (lightboxOpen || images.length <= 1 || current360) return;
-    const t = setTimeout(() => goTo(carouselIndex + 1), 5000);
-    return () => clearTimeout(t);
-  }, [lightboxOpen, carouselIndex, images.length, current360]);
+  /* ── Auto-avanço do carrossel ──────────────────────────────────────────────
+     Intervalo, e não um `setTimeout` reagendado a cada índice.
 
+     A versão anterior tinha `carouselIndex` nas dependências: qualquer coisa
+     que mudasse o índice — ou qualquer re-render que passasse por ali — limpava
+     o relógio e começava a contagem do zero. Bastava uma atualização de estado
+     a cada menos de cinco segundos para o cronômetro nunca chegar ao fim, e a
+     foto ficava parada sem erro nenhum aparecer.
+
+     Com intervalo e atualização funcional (`(i) => i + 1`), o relógio não
+     depende do índice atual: ele só é recriado quando algo que realmente
+     interessa muda — pausa, quantidade de fotos ou modo 360.
+
+     Pausa em três situações: lightbox aberto (lá a navegação é manual), foto
+     panorâmica (a pessoa está explorando aquela) e ponteiro sobre a galeria —
+     ninguém quer que a foto troque no instante em que foi olhar um detalhe. */
+  useEffect(() => {
+    if (lightboxOpen || pausado || images.length <= 1 || current360) return undefined;
+    const id = setInterval(() => {
+      setCarouselIndex((i) => (i + 1) % images.length);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [lightboxOpen, pausado, images.length, current360]);
+
+  /* Esta página NÃO usa o layout do construtor — ela tem estrutura própria
+     (galeria, ficha, formulário de contato, sugestões) e continua assim. O que
+     ela compartilha são os elementos globais: o tema da imobiliária, o
+     cabeçalho e o endereço de WhatsApp — as três coisas que apareciam
+     recalculadas aqui, em `ShowcasePage` e no editor. */
   const showcaseConfig = normalizeShowcaseConfig(tenant?.showcaseConfig);
   const isLightMode = showcaseConfig.appearanceMode === "light";
-  const globalFont = showcaseConfig.globalFont || "Inter";
   const primaryColor = tenant?.primaryColor || "#6366f1";
-  const themeStyle = {
-    "--accent": primaryColor,
-    "--accent-hover": primaryColor,
-    "--tenant-secondary": tenant?.secondaryColor || "#d4af37",
-    "--showcase-font": `'${globalFont}', system-ui, sans-serif`,
-    fontFamily: `'${globalFont}', system-ui, sans-serif`,
-  };
+  const themeStyle = estiloDoTema(tenant, showcaseConfig);
 
-  const headerWhatsappHref = tenant?.whatsapp
-    ? `https://wa.me/${String(tenant.whatsapp).replace(/\D/g, "")}?text=${encodeURIComponent(`Olá, tenho interesse nos imóveis da ${tenant?.name || tenantSlug}.`)}`
-    : null;
+  const headerWhatsappHref = linkWhatsApp({ ...tenant, name: tenant?.name || tenantSlug });
   const whatsappHref = tenant?.whatsapp && property
     ? `https://wa.me/${String(tenant.whatsapp).replace(/\D/g, "")}?text=${encodeURIComponent(`Olá, tenho interesse no imóvel "${property?.title}" (${property?.city}/${property?.state}).`)}`
     : null;
@@ -185,16 +213,18 @@ export function ShowcasePropertyPage({ slugFixo }) {
   });
 
   const stat = (icon, label, value) => value ? (
-    <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "16px", background: "rgba(255,255,255,0.04)", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.07)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--text-muted)", fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em" }}>{icon} {label}</div>
-      <div style={{ fontSize: "20px", fontWeight: "800", color: isLightMode ? "#0f172a" : "#fff", letterSpacing: "-0.4px", lineHeight: 1 }}>{value}</div>
+    <div className="prop-stat">
+      <div className="prop-stat__rotulo">{icon} {label}</div>
+      <div className="prop-stat__valor">{value}</div>
     </div>
   ) : null;
 
-  const inputStyle = { width: "100%", padding: "11px 14px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: isLightMode ? "#0f172a" : "#fff", fontSize: "13px", boxSizing: "border-box", outline: "none" };
+  /* Classe, e não objeto inline: os campos usavam fundo branco a 5% cravado no
+     JSX, o que no modo CLARO vira branco sobre branco — e estilo inline não tem
+     como ser corrigido por folha de estilo. */
 
   return (
-    <div className={`showcase-body ${isLightMode ? "showcase-theme-light" : ""}`} style={themeStyle}>
+    <div className={`showcase-body ${classeDeAparencia(showcaseConfig)}`} style={themeStyle}>
       <style>{`
         .showcase-body span[style*="color"], .showcase-body font[color] { -webkit-text-fill-color: currentcolor !important; -webkit-background-clip: initial !important; background: none !important; }
         .prop-thumb { transition: opacity 0.2s, border-color 0.2s; }
@@ -219,6 +249,133 @@ export function ShowcasePropertyPage({ slugFixo }) {
         .prop-carousel-progress { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.22); z-index: 4; }
         .prop-carousel-progress-fill { height: 100%; background: var(--accent, #818cf8); transform-origin: left; animation: propLbProgress 5s linear; }
         @media (prefers-reduced-motion: reduce) { .prop-lightbox, .prop-lightbox-stage, .prop-lightbox-img { animation: none; } }
+
+        /* ── Palco da foto ── */
+        .prop-palco { position: relative; width: 100%; height: 520px; border-radius: 20px; overflow: hidden; background: rgba(0,0,0,0.3); }
+        @media (max-width: 640px) { .prop-palco { height: 320px; border-radius: 16px; } }
+
+        /* ── Grade de conteúdo ──
+           A coluna do formulário tinha largura fixa (1fr 380px) sem nenhum
+           ponto de quebra: num tablet de 768px sobravam ~300px para a ficha do
+           imóvel, com o título de 32px quebrando em cinco linhas. Abaixo de
+           1020px as duas viram uma coluna só e o cartão perde a fixação — um
+           elemento sticky numa coluna única é só um bloco que fica para trás. */
+        .prop-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 40px; align-items: start; }
+        @media (max-width: 1020px) {
+          .prop-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+          .prop-aside { position: static; }
+        }
+
+        /* ── Cartão do formulário ──
+           Duas camadas de luz em vez de uma cor chapada: um degradê vertical
+           quase imperceptível e um fio claro na borda de cima (o inset). É o que
+           dá volume de vidro sem recorrer a sombra pesada. */
+        .prop-aside {
+          position: sticky; top: 88px;
+          display: flex; flex-direction: column; gap: 14px;
+          padding: 26px; border-radius: 22px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02));
+          border: 1px solid rgba(255,255,255,0.09);
+          box-shadow: 0 28px 60px -34px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.08);
+          -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+        }
+        .prop-aside__preco {
+          display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+          padding-bottom: 16px;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .prop-aside__preco-rotulo {
+          width: 100%;
+          font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .prop-aside__preco-valor { font-size: 27px; font-weight: 800; letter-spacing: -0.8px; color: var(--accent); }
+        .prop-aside__contrato { margin-left: auto; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+        .prop-aside__titulo { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+        .prop-aside__sub { font-size: 13px; color: var(--text-muted); margin: 0; }
+        .prop-aside__prova { font-size: 11px; color: var(--text-muted); text-align: center; margin: 0; }
+
+        .prop-campo {
+          width: 100%; padding: 11px 14px; box-sizing: border-box;
+          border-radius: 10px; border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.05); color: inherit;
+          font-family: inherit; font-size: 13px; outline: none;
+          transition: border-color 0.18s ease, background 0.18s ease;
+        }
+        .prop-campo::placeholder { color: var(--text-muted); opacity: 0.75; }
+        .prop-campo:focus { border-color: var(--accent); background: rgba(255,255,255,0.08); }
+        .prop-campo--area { resize: vertical; min-height: 80px; }
+
+        /* ── Blocos da ficha ── */
+        .prop-stat, .prop-bloco, .prop-comodidade {
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 14px;
+          transition: border-color 0.2s ease, background 0.2s ease;
+        }
+        .prop-stat { display: flex; flex-direction: column; gap: 6px; padding: 16px; }
+        .prop-stat:hover, .prop-comodidade:hover { border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); }
+        .prop-stat__rotulo {
+          display: flex; align-items: center; gap: 6px;
+          font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .prop-stat__valor { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; line-height: 1; }
+        .prop-bloco { padding: 20px; }
+        .prop-comodidade { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+
+        /* ── Sugestões: todos os cartões da mesma altura ──
+           grid-auto-rows: 1fr iguala as FAIXAS; o resto da corrente precisa
+           esticar junto, senão o cartão continua do tamanho do próprio texto
+           dentro de uma faixa alta. Daí o height 100% no link e no artigo, e o
+           corpo em coluna com o preço empurrado para a base. */
+        .sug-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); grid-auto-rows: 1fr; gap: 20px; }
+        /* color: inherit e nao a cor de link. O titulo tinha cor explicita no
+           JSX; ao virar classe sem cor, ele passou a herdar do proprio <a> e
+           saia em indigo sobre o cartao. */
+        .sug-link { display: block; height: 100%; text-decoration: none; color: inherit; }
+        .sug-card {
+          display: flex; flex-direction: column; height: 100%;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 16px; overflow: hidden;
+        }
+        .sug-card.is-lancamento { border: 1.5px solid #f59e0b; box-shadow: 0 0 18px rgba(245,158,11,0.2); }
+        .sug-card__foto { height: 170px; flex-shrink: 0; overflow: hidden; }
+        .sug-card__foto img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
+        .sug-card:hover .sug-card__foto img { transform: scale(1.05); }
+        .sug-card__corpo { display: flex; flex-direction: column; flex: 1; padding: 16px; }
+        .sug-card__titulo {
+          color: var(--text-main);
+          font-size: 14px; font-weight: 700; margin: 4px 0 6px;
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .sug-card__local { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+        .sug-card__fichas { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+        .sug-card__fichas span { font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 5px; }
+        .sug-card__preco { margin: auto 0 0; font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+
+        /* ── Modo claro ──
+           Os fundos acima são branco translúcido: sobre o claro eles somem. O
+           mesmo valia para os campos do formulário, que eram branco a 5% cravado
+           no JSX — invisíveis contra o cartão claro, e sem conserto possível por
+           folha de estilo enquanto fossem inline. */
+        .showcase-theme-light .prop-aside {
+          background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.76));
+          border-color: rgba(15,23,42,0.09);
+          box-shadow: 0 22px 50px -30px rgba(15,23,42,0.35), inset 0 1px 0 rgba(255,255,255,0.9);
+        }
+        .showcase-theme-light .prop-aside__preco { border-bottom-color: rgba(15,23,42,0.09); }
+        .showcase-theme-light .prop-campo { background: rgba(15,23,42,0.04); border-color: rgba(15,23,42,0.12); }
+        .showcase-theme-light .prop-campo:focus { background: rgba(15,23,42,0.06); }
+        .showcase-theme-light .prop-stat,
+        .showcase-theme-light .prop-bloco,
+        .showcase-theme-light .prop-comodidade,
+        .showcase-theme-light .sug-card { background: rgba(15,23,42,0.035); border-color: rgba(15,23,42,0.08); }
+        .showcase-theme-light .prop-stat:hover,
+        .showcase-theme-light .prop-comodidade:hover { background: rgba(15,23,42,0.055); border-color: rgba(15,23,42,0.16); }
+        .showcase-theme-light .sug-card__fichas span { background: rgba(15,23,42,0.05); }
+
       `}</style>
 
       {/* ── Header ── */}
@@ -257,7 +414,11 @@ export function ShowcasePropertyPage({ slugFixo }) {
             {/* ── CAROUSEL ── */}
             <div style={{ marginBottom: "32px" }}>
               {/* Main image */}
-              <div style={{ position: "relative", width: "100%", height: "520px", borderRadius: "20px", overflow: "hidden", background: "rgba(0,0,0,0.3)" }}>
+              <div
+                className="prop-palco"
+                onPointerEnter={() => setPausado(true)}
+                onPointerLeave={() => setPausado(false)}
+              >
                 {current360 ? (
                   <Panorama360 key={`pano-${carouselIndex}`} src={images[carouselIndex]?.url} height={520} />
                 ) : (
@@ -270,7 +431,7 @@ export function ShowcasePropertyPage({ slugFixo }) {
                   />
                 )}
                 {/* Timer de auto-avanço (barra de progresso) — some no modo 360 */}
-                {images.length > 1 && !lightboxOpen && !current360 && (
+                {images.length > 1 && !lightboxOpen && !current360 && !pausado && (
                   <div className="prop-carousel-progress"><div key={carouselIndex} className="prop-carousel-progress-fill" /></div>
                 )}
                 {/* Gradient overlay bottom */}
@@ -323,7 +484,7 @@ export function ShowcasePropertyPage({ slugFixo }) {
             </div>
 
             {/* ── CONTENT GRID ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "40px", alignItems: "start" }}>
+            <div className="prop-grid">
               {/* Left: property info */}
               <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
                 {/* Title + price */}
@@ -358,7 +519,7 @@ export function ShowcasePropertyPage({ slugFixo }) {
                 )}
 
                 {/* Location */}
-                <div style={{ padding: "20px", borderRadius: "14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                <div className="prop-bloco">
                   <p style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)", marginBottom: "12px" }}>Localização</p>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", color: isLightMode ? "#334155" : "#cbd5e1" }}>
                     <span style={{ color: primaryColor, marginTop: "2px", flexShrink: 0 }}><IcPin /></span>
@@ -381,7 +542,7 @@ export function ShowcasePropertyPage({ slugFixo }) {
                       </p>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px" }}>
                         {ativas.map((c) => (
-                          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", background: "rgba(255,255,255,0.04)", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.07)" }}>
+                          <div key={c.key} className="prop-comodidade">
                             <c.Icone size={21} style={{ flexShrink: 0, color: "var(--accent, #818cf8)" }} />
                             <span style={{ fontSize: "14px", fontWeight: "600", color: isLightMode ? "#0f172a" : "#fff" }}>{c.label}</span>
                           </div>
@@ -393,15 +554,25 @@ export function ShowcasePropertyPage({ slugFixo }) {
               </div>
 
               {/* Right: lead form */}
-              <div style={{ position: "sticky", top: "80px", background: "rgba(255,255,255,0.03)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "20px", padding: "28px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div>
-                  <p style={{ fontSize: "17px", fontWeight: "700", color: isLightMode ? "#0f172a" : "#fff", margin: "0 0 4px" }}>Tenho interesse</p>
-                  <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>Preencha e nossa equipe entrará em contato.</p>
+              <aside className="prop-aside">
+                {/* O valor abre o cartão. Quem chega até aqui já decidiu
+                    perguntar — ver o preço no alto do formulário evita a
+                    subida de volta para conferir antes de escrever. */}
+                <div className="prop-aside__preco">
+                  <span className="prop-aside__preco-rotulo">Valor</span>
+                  <strong className="prop-aside__preco-valor">
+                    R$ {Number(property.price).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </strong>
+                  {contratoInfo ? <span className="prop-aside__contrato" style={{ color: contratoInfo.cor }}>{contratoInfo.label}</span> : null}
                 </div>
-                <input placeholder="Seu nome" value={interestForm.name} onChange={(e) => setInterestForm((p) => ({ ...p, name: e.target.value }))} style={inputStyle} />
-                <input type="email" placeholder="E-mail" value={interestForm.email} onChange={(e) => setInterestForm((p) => ({ ...p, email: e.target.value }))} style={inputStyle} />
-                <input placeholder="WhatsApp / Telefone" value={interestForm.phone} onChange={(e) => setInterestForm((p) => ({ ...p, phone: e.target.value }))} style={inputStyle} />
-                <textarea placeholder="Mensagem (opcional)" value={interestForm.message} onChange={(e) => setInterestForm((p) => ({ ...p, message: e.target.value }))} rows={3} style={{ ...inputStyle, resize: "vertical", minHeight: "80px" }} />
+                <div>
+                  <p className="prop-aside__titulo">Tenho interesse</p>
+                  <p className="prop-aside__sub">Preencha e nossa equipe entrará em contato.</p>
+                </div>
+                <input className="prop-campo" placeholder="Seu nome" value={interestForm.name} onChange={(e) => setInterestForm((p) => ({ ...p, name: e.target.value }))} />
+                <input className="prop-campo" type="email" placeholder="E-mail" value={interestForm.email} onChange={(e) => setInterestForm((p) => ({ ...p, email: e.target.value }))} />
+                <input className="prop-campo" placeholder="WhatsApp / Telefone" value={interestForm.phone} onChange={(e) => setInterestForm((p) => ({ ...p, phone: e.target.value }))} />
+                <textarea className="prop-campo prop-campo--area" placeholder="Mensagem (opcional)" value={interestForm.message} onChange={(e) => setInterestForm((p) => ({ ...p, message: e.target.value }))} rows={3} />
                 <button type="button" onClick={handleInterest} disabled={sendingInterest} style={{ padding: "13px", borderRadius: "12px", background: primaryColor, color: "#fff", fontWeight: "700", fontSize: "14px", border: "none", cursor: "pointer", boxShadow: `0 4px 18px ${primaryColor}44`, transition: "opacity 0.2s", opacity: sendingInterest ? 0.7 : 1 }}>
                   {sendingInterest ? "Enviando..." : "Enviar interesse"}
                 </button>
@@ -412,11 +583,11 @@ export function ShowcasePropertyPage({ slugFixo }) {
                   </a>
                 )}
                 {property.leadCount > 0 && (
-                  <p style={{ fontSize: "11px", color: "var(--text-muted)", textAlign: "center", margin: 0 }}>
+                  <p className="prop-aside__prova">
                     {property.leadCount} pessoa{property.leadCount !== 1 ? "s" : ""} já demonstrou interesse
                   </p>
                 )}
-              </div>
+              </aside>
             </div>
 
             {/* ── SUGGESTIONS ── */}
@@ -426,29 +597,33 @@ export function ShowcasePropertyPage({ slugFixo }) {
                   <h2 style={{ fontSize: "22px", fontWeight: "800", color: isLightMode ? "#0f172a" : "#fff", margin: 0, letterSpacing: "-0.4px" }}>Mais imóveis disponíveis</h2>
                   <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "20px" }}>
+                <div className="sug-grid">
                   {suggestions.map((s) => {
                     const sImg = s.images?.[0]?.url || "/property-placeholder.svg";
                     const sLancamento = isLancamento(s.createdAt);
                     return (
-                      <Link key={s.id} to={`/vitrine/${tenantSlug}/imovel/${s.id}`} style={{ textDecoration: "none", display: "block" }}>
-                        <article className="sug-card" style={{ background: "rgba(255,255,255,0.03)", border: sLancamento ? "1.5px solid #f59e0b" : "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", overflow: "hidden", boxShadow: sLancamento ? "0 0 18px rgba(245,158,11,0.2)" : "none" }}>
-                          <div style={{ height: "170px", overflow: "hidden" }}>
-                            <img src={sImg} alt={s.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }} />
+                      <Link key={s.id} to={`/vitrine/${tenantSlug}/imovel/${s.id}`} className="sug-link">
+                        <article className={`sug-card${sLancamento ? " is-lancamento" : ""}`}>
+                          <div className="sug-card__foto">
+                            <img src={sImg} alt={s.title} />
                           </div>
-                          <div style={{ padding: "16px" }}>
+                          <div className="sug-card__corpo">
                             {sLancamento && <span style={{ fontSize: "10px", fontWeight: "800", textTransform: "uppercase", color: "#f59e0b", letterSpacing: "0.06em" }}>Lançamento · </span>}
-                            <h3 style={{ fontSize: "14px", fontWeight: "700", color: isLightMode ? "#0f172a" : "#fff", margin: "4px 0 6px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{s.title}</h3>
+                            <h3 className="sug-card__titulo">{s.title}</h3>
                             {(s.neighborhood || s.city) && (
-                              <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 8px", display: "flex", alignItems: "center", gap: "4px" }}>
+                              <p className="sug-card__local">
                                 <IcPin /> {[s.neighborhood, s.city].filter(Boolean).join(", ")}
                               </p>
                             )}
-                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px" }}>
-                              {s.squareFootage ? <span style={{ fontSize: "11px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: "5px" }}>{s.squareFootage} m²</span> : null}
-                              {s.bedrooms ? <span style={{ fontSize: "11px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: "5px" }}>{s.bedrooms} qtos</span> : null}
+                            <div className="sug-card__fichas">
+                              {s.squareFootage ? <span>{s.squareFootage} m²</span> : null}
+                              {s.bedrooms ? <span>{s.bedrooms} qtos</span> : null}
                             </div>
-                            <p style={{ fontSize: "18px", fontWeight: "800", color: primaryColor, margin: 0, letterSpacing: "-0.5px" }}>
+                            {/* `margin-top: auto` na classe: o preço desce para a
+                                base do cartão, então cartões com uma linha a
+                                menos de endereço não deixam o valor flutuando no
+                                meio. É o que alinha os preços entre si. */}
+                            <p className="sug-card__preco" style={{ color: primaryColor }}>
                               R$ {Number(s.price).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                             </p>
                           </div>
@@ -461,6 +636,30 @@ export function ShowcasePropertyPage({ slugFixo }) {
             )}
           </>
         ) : null}
+      </div>
+
+      {/* ── Rodapé ────────────────────────────────────────────────────────────
+          O MESMO componente da vitrine. A página de imóvel tinha estrutura
+          própria e terminava no ar, depois das sugestões: quem rolava até o fim
+          não encontrava contato, CRECI nem cidade — as informações que fecham
+          uma página de anúncio — e a única saída era o botão Voltar.
+
+          Como é o componente compartilhado, mexer no rodapé da vitrine mexe
+          neste junto; e o que a imobiliária escreveu no editor aparece aqui sem
+          precisar de segunda configuração.
+
+          O invólucro é o MESMO .showcase-container da vitrine, com o respiro
+          vertical zerado (lá o rodapé é um bloco posicionado, e o padding de
+          cima do contêiner não o alcança). Sem ele, o rodapé caía direto no
+          corpo da página e as três colunas se espalhavam pela largura inteira
+          do monitor — mesmo componente, caixa diferente. */}
+      <div className="showcase-container" style={{ paddingBlock: 0 }}>
+        <ShowcaseFooter
+          tenant={tenant}
+          config={showcaseConfig}
+          blockStyles={showcaseConfig.blockStyles}
+          whatsappHref={headerWhatsappHref}
+        />
       </div>
 
       {/* ── Lightbox (galeria em tela cheia) ── */}

@@ -16,6 +16,7 @@ import { api } from "../api";
 import { PropertyManagement } from "../components/PropertyForm";
 import { PropertyList } from "../components/PropertyList";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
+import { comMarcaDagua } from "../utils/marcaDagua";
 import { spawnRipple } from "../utils/rippleDrop";
 import { ReescritaEmMassa } from "../components/ReescritaEmMassa";
 import { IconeRelatorios } from "../utils/iconesRelatorios";
@@ -361,8 +362,24 @@ export function ImovelFormPage({ session }) {
       }
 
       if (targetPropertyId && imageFiles.length > 0) {
+        /* A marca d'água entra AQUI, entre escolher a foto e enviá-la — e não
+           no formulário, nem na entrega.
+
+           No formulário seria cedo: a marcação de 360° pode ser trocada à mão
+           depois de a foto entrar na lista, e uma panorâmica já marcada teria
+           de ser desmarcada. Na entrega seria tarde: a foto ficaria limpa no
+           Cloudinary e a marca valeria só enquanto a URL carregasse a
+           transformação.
+
+           Aqui o `imageIs360` já é definitivo e o arquivo que sobe é o final —
+           o mesmo que a vitrine, a página do imóvel e as redes sociais vão
+           servir, porque as três leem a mesma URL guardada. */
+        const logoUrl = session?.tenant?.logoUrl || "";
         for (let i = 0; i < imageFiles.length; i++) {
-          const uploaded = await uploadToCloudinary(imageFiles[i]);
+          const arquivo = await comMarcaDagua(imageFiles[i], logoUrl, {
+            ehPanoramica: Boolean(imageIs360[i]),
+          });
+          const uploaded = await uploadToCloudinary(arquivo);
           await api.addPropertyImage(tenantSlug, targetPropertyId, { ...uploaded, is360: Boolean(imageIs360[i]) });
         }
       }
@@ -384,6 +401,7 @@ export function ImovelFormPage({ session }) {
         onSubmitProperty={handleSubmit}
         disabled={!tenantSlug || loading}
         initialData={editingProperty}
+        logoUrl={session?.tenant?.logoUrl || ""}
       />
     </>
   );

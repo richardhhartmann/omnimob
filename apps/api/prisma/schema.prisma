@@ -130,6 +130,14 @@ model Tenant {
   migracaoIntencao    Json?     @map("tnt_migracao_intencao")
   migracaoResolvidaEm DateTime? @map("tnt_migracao_resolvida_em")
 
+  /* Quando a imobiliária ganhou o prazo extra de teste, pela pesquisa que
+     aparece no painel (ver `PesquisaTrial`). Coluna própria, e não uma conta
+     em cima do histórico de respostas, porque é ela que impede o segundo
+     esticão: a guarda vira um UPDATE condicional (`trialEstendidoEm: null`),
+     que o Postgres serializa sozinho. Contar linhas de log deixaria dois
+     cliques simultâneos passarem juntos e darem 14 dias de graça. */
+  trialEstendidoEm    DateTime? @map("tnt_trial_estendido_em")
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -142,8 +150,45 @@ model Tenant {
   clientes     Cliente[]
   vendas       Venda[]
   chamados     Chamado[]
+  pesquisas    PesquisaTrial[]
 
   @@map("tb_tenants")
+}
+
+/* Resposta da pesquisa que aparece sozinha durante o teste, depois de a pessoa
+   cadastrar/editar algo (ver `PulsoTrialModal` no web).
+
+   É um HISTÓRICO, não um campo no tenant: a mesma imobiliária pode responder
+   mais de uma vez ao longo do teste, e a sequência é o que tem valor — quem
+   respondeu "estou com dificuldade" na segunda semana depois de ter dito
+   "estou amando" na primeira é exatamente o contato que precisa ser feito
+   antes do vencimento.
+
+   Guarda também o fechamento sem resposta (`escolha: "FECHOU"`), porque é ele
+   que segura a cadência entre um dispositivo e outro — sem essa linha, quem
+   dispensa a pergunta no computador do escritório a receberia de novo no
+   celular alguns minutos depois. */
+model PesquisaTrial {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  // Nome de quem respondeu, copiado no momento da resposta. Sem FK de
+  // propósito: se o usuário for removido a resposta continua fazendo sentido,
+  // e é o texto que o time lê no e-mail de aviso.
+  autor      String   @default("") @map("psq_autor")
+  // AMANDO | NEUTRO | DIFICIL — nulo quando fechou sem dizer nada.
+  sentimento String?  @map("psq_sentimento")
+  // ASSINAR | ESTENDER | DEPOIS | FECHOU
+  escolha    String   @map("psq_escolha")
+  comentario String   @default("") @map("psq_comentario")
+  // Que ação abriu a pergunta ("imovel", "cliente", "vitrine"…). Serve para
+  // saber se a pesquisa está caindo em hora boa ou atrapalhando um fluxo.
+  origem     String   @default("") @map("psq_origem")
+  criadoEm   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, criadoEm])
+  @@map("tb_pesquisa_trial")
 }
 
 // ─── Super Admin (acesso ao painel da Omnimob, fora dos tenants) ────────────────

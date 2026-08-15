@@ -9,11 +9,12 @@ import { IconeLapis, IconeMouse, IconeRedimensionar } from "../Icones.jsx";
 
 export function OnboardingOverlay({ onDismiss }) {
   const tips = [
-    { Icone: IconeMouse, title: "Clique para selecionar", desc: "Clique em qualquer bloco do canvas para editá-lo. Os controles de estilo aparecem no painel direito." },
-    { texto: "⠿", title: "Arraste para mover", desc: "Arraste pelo ícone de seis pontos no topo de cada bloco para reposicioná-lo livremente." },
-    { Icone: IconeRedimensionar, title: "Redimensione", desc: "O triângulo no canto inferior direito de cada bloco permite ajustar largura e altura." },
-    { Icone: IconeLapis, title: "Edição inline", desc: "Clique diretamente no texto do canvas para editar. Selecione palavras para mudar cor e fonte." },
-    { texto: "⌘Z", title: "Desfazer / Refazer", desc: "Ctrl+Z desfaz e Ctrl+Y (ou Ctrl+Shift+Z) refaz qualquer ação no editor." },
+    { Icone: IconeMouse, title: "Clique para selecionar", desc: "Clique em qualquer peça da página para editá-la. As propriedades dela aparecem no painel da direita." },
+    { texto: "⠿", title: "Arraste pela etiqueta", desc: "Cada peça tem uma etiqueta com o nome logo acima dela. É por ali que se arrasta — o miolo fica livre para editar texto." },
+    { Icone: IconeRedimensionar, title: "Redimensione", desc: "Com a peça selecionada, puxe o quadradinho do canto inferior direito para ajustar largura e altura." },
+    { texto: "＋", title: "Acrescente peças", desc: "No painel da esquerda, em Adicionar, clique para pôr no fim da página ou arraste para soltar num ponto exato." },
+    { Icone: IconeLapis, title: "Edição no lugar", desc: "Clique direto no texto para editar. Selecione palavras para mudar cor, fonte e tamanho." },
+    { texto: "⌘Z", title: "Desfazer / Refazer", desc: "Ctrl+Z desfaz e Ctrl+Y (ou Ctrl+Shift+Z) refaz. Tudo salva sozinho — não existe botão de salvar." },
   ];
 
   return createPortal(

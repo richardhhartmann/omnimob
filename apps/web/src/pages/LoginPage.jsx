@@ -12,6 +12,13 @@ import { Alert, Button, OmnimobStyles, Eyebrow, Field, LogoLockup, Reveal, Scall
    Os tokens são sobrescritos em `.lg-root`, então as primitivas do kit se
    adaptam sozinhas. */
 
+/* Avisos de quem chegou ao login por uma ação do produto. A chave viaja no
+   state do roteador (ver `handleLogout` no App) e some depois de lida — sem
+   isso, o recado voltaria a cada F5 e a cada passo para trás. */
+const AVISOS_DE_ENTRADA = {
+  "sessao-encerrada": "Sessão encerrada. Entre novamente para voltar ao painel.",
+};
+
 export function LoginPage({ onLogin }) {
   const [searchParams] = useSearchParams();
   const tenantFromShowcase = searchParams.get("tenant") || "";
@@ -31,6 +38,14 @@ export function LoginPage({ onLogin }) {
   // fluxo o acesso veio — assinatura (padrão) ou liberação do teste grátis.
   const [origem] = useState(recebidas ? local.state?.origem || "assinatura" : null);
   const veioDeAcessoPronto = Boolean(origem);
+  /* Recado de quem chegou aqui por uma AÇÃO, e não digitando o endereço. Hoje
+     só "encerrei a sessão"; a forma é de mapa para o dia em que houver outro
+     ("sua sessão expirou", por exemplo).
+
+     Guardado em estado na montagem pelo mesmo motivo das credenciais: a limpeza
+     logo abaixo apaga `local.state` no re-render, e o aviso precisa continuar
+     de pé enquanto a pessoa lê. */
+  const [aviso] = useState(() => AVISOS_DE_ENTRADA[local.state?.motivo] || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { saindo, sair } = useSaidaDeAuth();
@@ -38,7 +53,7 @@ export function LoginPage({ onLogin }) {
   /* Limpa o state assim que ele é lido: sem isso a senha ficaria no
      history.state do navegador e voltaria a cada F5 ou passo para trás. */
   useEffect(() => {
-    if (!recebidas) return;
+    if (!recebidas && !local.state?.motivo) return;
     navegar(local.pathname + local.search, { replace: true, state: null });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -108,6 +123,7 @@ export function LoginPage({ onLogin }) {
       }
       onSubmit={handleSubmit}
       error={error}
+      aviso={aviso}
       saindo={saindo}
       nota="// imóveis · vitrine · leads · equipe"
       rodape={
@@ -193,6 +209,7 @@ function DefinirSenhaCard({ alvo, onConcluir, onCancelar }) {
       soft="senha para continuar."
       onSubmit={handleSubmit}
       error={error}
+      aviso={aviso}
       saindo={saindo}
     >
       <Field label="Nova senha" hint="Mínimo de 6 caracteres.">
@@ -240,7 +257,7 @@ function DefinirSenhaCard({ alvo, onConcluir, onCancelar }) {
    autenticação parecidas mas nunca iguais — e é justamente na tela de recuperar
    senha, onde a pessoa já desconfia de estar no lugar errado, que qualquer
    diferença visual parece phishing. */
-export function AuthShell({ eyebrow, strong, soft, descricao, error, nota, rodape, onSubmit, saindo, children }) {
+export function AuthShell({ eyebrow, strong, soft, descricao, error, aviso, nota, rodape, onSubmit, saindo, children }) {
   return (
     <div className={`dl-root dl-page lg-root${saindo ? " authx-out" : ""}`}>
       <OmnimobStyles extra={CSS} />
@@ -300,6 +317,11 @@ export function AuthShell({ eyebrow, strong, soft, descricao, error, nota, rodap
             margens, abrindo um vão morto entre o título e os campos. */}
         {descricao ? <p className="lg-sub">{descricao}</p> : null}
 
+        {/* O aviso vem antes do erro e em tom neutro: "sessão encerrada" é o
+            desfecho de algo que a pessoa pediu, não uma falha. Se ela errar a
+            senha em seguida, o erro entra logo abaixo e os dois convivem sem se
+            confundir. */}
+        {aviso ? <Alert tone="info">{aviso}</Alert> : null}
         {error ? <Alert tone="danger">{error}</Alert> : null}
 
         <div className="lg-fields">{children}</div>

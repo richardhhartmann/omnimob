@@ -192,6 +192,17 @@ Modelos principais:
 
 **Entry:** `apps/web/src/main.jsx` → `App.jsx`
 
+**Testes:** `npm test` em `apps/web` (runner nativo do Node). Ao contrário dos da
+API, estes são de **função pura e de renderização isolada** — não encostam no
+banco. `test/loader.mjs` resolve import sem extensão e transpila JSX com o
+esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
+
+| Arquivo | O que guarda |
+|---|---|
+| `test/paridade.test.jsx` | cada peça da vitrine renderizada nos dois modos → HTML idêntico |
+| `test/layout.test.js` | colisão, cascata, independência desktop/mobile, reflow idempotente |
+| `test/normalizacao.test.js` | migração de config antigo, espelho legado, tolerância a lixo |
+
 ### Rotas principais (App.jsx)
 ```
 /login                          → LoginPage
@@ -217,9 +228,25 @@ src/
 │   ├── AdminLayout.jsx
 │   ├── PropertyForm.jsx
 │   ├── PropertyList.jsx
-│   └── builder/
-│       ├── BuilderSidePanel.jsx   — painel lateral do editor (aba Página / aba Bloco)
-│       └── OnboardingOverlay.jsx  — modal de boas-vindas (1ª visita)
+│   ├── showcase/           ← A VITRINE. Fonte de verdade visual das duas telas
+│   │   ├── ShowcaseRenderer.jsx  — ordena, posiciona e desenha as peças
+│   │   ├── ShowcaseHeader/Hero/Highlights/PropertyGrid/PropertyCard/Footer
+│   │   ├── ShowcaseWidget.jsx    — despachante único de tipos de widget
+│   │   ├── widgets/              — um componente por tipo
+│   │   ├── contexto.jsx          — público × editor (texto, links)
+│   │   ├── tema.js               — cores, fonte, breakpoint, link do WhatsApp
+│   │   ├── engine/               — física de layout, sem DOM e sem React
+│   │   ├── useAlturasReais.js    — medição por ResizeObserver
+│   │   └── useLayoutResolvido.js — medir → engine → layout (uso da vitrine)
+│   └── builder/            ← só os CONTROLES de edição (ver seção abaixo)
+│       ├── hooks/          — gesto, histórico, zoom, autosave
+│       ├── canvas/         — moldura da peça, guias, barra de formatação
+│       ├── panels/         — biblioteca/camadas (esquerda) e inspetor (direita)
+│       ├── toolbar/        — barra superior
+│       ├── data/           — biblioteca de peças, templates, paletas
+│       ├── AlcaDeArrasto.jsx     — a alça do dnd-kit
+│       ├── dndEditor.js         — sensores (ponteiro, toque, teclado)
+│       └── OnboardingOverlay.jsx — modal de boas-vindas (1ª visita)
 └── pages/
     ├── LoginPage.jsx
     ├── DashboardPage.jsx
@@ -227,7 +254,7 @@ src/
     ├── PropertyInsightsPage.jsx
     ├── ShowcasePage.jsx
     ├── ShowcasePropertyPage.jsx
-    └── ShowcaseEditorPage.jsx    ← arquivo mais complexo (~1400 linhas)
+    └── ShowcaseEditorPage.jsx    ← só compõe o editor; a lógica mora em components/builder
 ```
 
 **Env vars do web (`.env` em `apps/web`):**
@@ -238,74 +265,178 @@ VITE_CLOUDINARY_UPLOAD_PRESET=domus-app
 
 ---
 
-## Editor de Vitrine (ShowcaseEditorPage)
+## Vitrine e Editor (`components/showcase/` + `components/builder/`)
 
-Esta é a feature mais complexa do produto. Entender ela é entender 70% do frontend.
+A feature mais complexa do produto. Construtor visual onde a imobiliária monta a
+própria vitrine; o resultado é gravado como JSON em `tenant.showcaseConfig`.
 
-### Conceito
-Editor visual drag-and-drop onde o tenant personaliza sua vitrine pública. A configuração final é salva como JSON no campo `tenant.showcaseConfig` no banco.
+### A REGRA MAIS IMPORTANTE: o editor não desenha a vitrine
 
-### Arquitetura interna
+> **What You See Is What You Get.** O mesmo `showcaseConfig`, no mesmo modo,
+> produz a mesma página no editor e no ar.
 
-**Blocos (sections):** `header | title | highlights | properties | widgets | footer`
-Cada bloco tem:
-- Posição absoluta (`x%`, `y px`, `w%`, `h px`) — layout independente para desktop e mobile
-- Estilo visual (cor de fundo, imagem de banner, overlay, brilho, cor de texto)
-- Conteúdo editável inline (contentEditable)
+```
+                showcaseConfig
+                      │
+              ShowcaseRenderer          ← componentes ÚNICOS
+                 │        │
+          ┌──────┘        └──────┐
+       EDITOR                  VITRINE
+    + BuilderPiece            (nada em volta)
+      contorno, alça,
+      seleção, guias
+```
 
-**Estado central:** `form` (useState) contendo todos os campos do tenant + `showcaseConfig` (objeto JSON aninhado)
+`components/showcase/` é a vitrine. `components/builder/` são os **controles**
+que ficam em volta dela. O construtor põe aparato de edição EM VOLTA do
+conteúdo, **nunca no lugar dele** — não existe uma segunda versão de cabeçalho,
+cartão de imóvel ou widget para o editor, e criar uma é o defeito, não a
+solução.
 
-**`showcaseConfig` (dentro de `form.showcaseConfig`):**
+Já houve duas de tudo, e elas divergiram: o bloco de números aparecia como uma
+linha de texto com barras no editor e como uma grade de cartões na página; o CTA
+tinha uma "Configuração do Botão" de um lado e um botão redondo do outro; o
+cartão de imóvel do editor não mostrava selos nem metragem; o cabeçalho tinha
+paddings diferentes; e o celular publicava widgets a 100% de largura mesmo com o
+editor mostrando 49%.
+
+**A diferença entre os dois modos é só COMPORTAMENTO**, e mora num lugar só,
+`showcase/contexto.jsx`:
+
+| Público | Editor |
+|---|---|
+| texto é texto | o mesmo elemento com `contentEditable` |
+| link navega | link sem destino |
+
+Nunca: padding, fonte, estrutura, largura, posição, cores, componentes internos.
+
+Campo que **não aparece como texto** na página publicada (URL de CTA, endereços
+das redes) é editado no **inspetor**, não na prancheta — desenhá-lo no canvas
+significaria mostrar algo que a vitrine não tem.
+
+`npm test` em `apps/web` renderiza cada peça nos dois modos e exige HTML
+idêntico depois de remover as afordâncias de edição. Se alguém acrescentar um
+invólucro ou um padding só de um lado, o teste aponta.
+
+### A regra que organiza tudo
+
+**Uma peça é uma peça.** Os seis blocos fixos (`header`, `title`, `highlights`,
+`properties`, `footer`) e os widgets viram a mesma coisa para a engine:
+
+```js
+{ id: "b:header" | "w:<widgetId>", kind, key, x, y, w, h, locked, hidden }
+```
+
+`x`/`w` em % da largura do canvas, `y`/`h` em pixels. Os adaptadores em
+`engine/pieces.js` (`toPieces` / `applyPieces`) são o único lugar que sabe que
+bloco mora num mapa e widget num array. Antes eram duas físicas separadas — e
+era daí que saía o "widget dentro do bloco": o array não participava de colisão
+nenhuma.
+
+### Camadas
+
+| Pasta | O que é | Não pode |
+|---|---|---|
+| `showcase/engine/` | colisão, cascata, encaixe, reflow, adaptadores | tocar DOM ou React |
+| `showcase/*.jsx` | o desenho da vitrine — as duas telas | saber que existe editor (só o contexto sabe) |
+| `builder/hooks/` | gesto, histórico, zoom, autosave | conter regra de layout |
+| `builder/canvas/` | moldura, guias, barra de formatação | desenhar conteúdo de vitrine |
+| `builder/panels/`, `toolbar/` | biblioteca, camadas, inspetor, barra | conhecer física |
+
+A engine mora em `showcase/` e não em `builder/` por uma razão prática: a
+página pública a usa. Vitrine dependendo de `components/builder/` seria a porta
+para o editor voltar a vazar para dentro dela.
+
+`ShowcaseEditorPage.jsx` só compõe e traduz intenção de interface em chamada de
+engine.
+
+**Biblioteca:** `dnd-kit` — e SÓ como camada de entrada (ponteiro, toque,
+teclado, limiar de ativação), com `feedback: "none"` para ele não mover o
+elemento por conta própria. A geometria é nossa. Ver o cabeçalho de
+`dndEditor.js` para por que não `react-grid-layout`.
+
+**Física (`engine/collision.js`):** a peça arrastada é a **âncora** — ela encosta
+na borda mais próxima da peça que mais invadiu, e quem estiver no caminho desce.
+As duas fases (cascata e afastamento) só **aumentam** `y`; é isso que garante
+convergência e que nada termine sobreposto. Mover para cima nessa etapa parece
+mais gentil e faz o par oscilar — está comentado no arquivo.
+
+**Alturas dinâmicas:** o `h` guardado é `min-height`, e o conteúdo passa disso (o
+bloco de imóveis declara 640px e desenha 1051). `showcase/useAlturasReais.js` mede
+por `ResizeObserver` — que ignora o `transform: scale()` do zoom, ao contrário do
+`getBoundingClientRect()` que havia antes — e o reflow só roda quando a altura
+cresce de verdade. **As duas telas usam a mesma medição e a mesma função de
+resolução** (`ajustarAlturasMedidas`); o que muda é o destino: o editor grava o
+resultado no documento, a vitrine guarda só para renderizar
+(`useLayoutResolvido`). A `ShowcasePage` tinha um algoritmo próprio para isso —
+com deslocamento especial do bloco de imóveis e empilhamento em coluna única no
+celular — e era uma segunda engine, com resultados diferentes.
+
+**Gesto sem tremer:** o arrasto NÃO escreve no `form`. Cada quadro recalcula a
+partir do config congelado no início e entrega o resultado num estado
+transitório; ao soltar, grava uma vez. É o que impede
+`pointermove → setForm → render de dezenas de cartões de imóvel`.
+
+**Undo/redo:** `hooks/useBuilderHistory.js`, duas pilhas, máximo 50. Um gesto =
+uma entrada (registrada no início, não a cada quadro). Ctrl+Z / Ctrl+Y /
+Ctrl+Shift+Z. Os instantâneos do "Histórico de versões" são outra coisa: ficam no
+`localStorage` chaveado pelo **id** do tenant (ver `utils/chaveDoTenant.js`).
+
+**Autosave:** `hooks/useShowcaseAutosave.js`, debounce de 1s sobre o `form`,
+pausado durante o gesto.
+
+### `showcaseConfig` (formato gravado)
+
 ```js
 {
-  layout: { header, title, highlights, properties, widgets, footer }, // posições desktop
-  mobileLayout: { ... },  // posições mobile independentes
-  blockStyles: { header: { backgroundColor, color, backgroundImage, backgroundOverlay, backgroundBrightness }, ... },
+  version: 2,
+  layout:       { header, title, highlights, properties, footer }, // desktop
+  mobileLayout: { ... },                                            // independente
+  blockStyles:  { header: { backgroundColor, color, backgroundImage, backgroundOverlay, backgroundBrightness }, ... },
   highlights: [{ title, description }],
   highlightStyles: [{ backgroundColor, color }],
-  widgets: [{ id, type, title, content, ctaLabel, ctaUrl, backgroundColor, color }],
+  widgets: [{
+    id, type, title, content, ctaLabel, ctaUrl, backgroundColor, color,
+    layout: { desktop: { x, y, w, h }, mobile: { x, y, w, h } },
+    x, y, w, h,          // espelho do desktop, para leitores antigos do JSON
+    hidden, locked,
+  }],
   appearanceMode: "dark" | "light",
-  footerTitle: string,
-  topHeader: { title, subtitle },
-  hiddenBlocks: string[],
+  globalFont, footerTitle, topHeader, hiddenBlocks, lockedBlocks,
 }
 ```
 
-**Utilitário:** `apps/web/src/utils/showcaseConfig.js`
-- `normalizeShowcaseConfig(raw)` — valida e preenche defaults; sempre retorna objeto completo
-- `DEFAULT_LAYOUT` — posições padrão de cada bloco
-- `mergeBlockWrapperStyle`, `sectionSurfaceStyle` — geram inline styles para blocos com/sem banner
+**Compatibilidade:** `normalizeShowcaseConfig()` é a única migração. Widget antigo
+chega com `x/y/w/h` soltos e sai com `layout.desktop`/`layout.mobile`
+preenchidos (mobile começa como cópia do desktop, que é o comportamento de
+antes). Os campos soltos continuam na saída espelhando o desktop — a vitrine
+pública lê por ali. Ao mexer no formato, a migração é dela e de mais ninguém.
 
-**Undo/Redo:** two-stack (undoStackRef / redoStackRef, max 50). `pushHistory()` chamado antes de toda ação discreta. Atalhos Ctrl+Z / Ctrl+Y via `undoFnRef` (evita stale closure).
+### Interface
 
-**Drag & resize:** `startBuilderAction(blockKey, "drag"|"resize", event)` — captura pointerdown, rastreia movimento com `pointermove`. Usa `cascadePushLayout()` ao arrastar (blocos empurram outros em cascata). Resize mantém verificação de colisão.
-
-**Layout mobile independente:** `activeLayout = previewMode === "mobile" ? showcaseConfig.mobileLayout : layout`. Drag/resize em modo mobile atualiza `mobileLayout`; em desktop atualiza `layout`.
-
-**Auto-save:** `useEffect` com debounce de 1000ms no estado `form` → `api.updateTenantProfile()`.
-
-**Temas de cor predefinidos:**
-```js
-CLASSICO:    { primaryColor: "#6366f1", secondaryColor: "#d4af37" }
-PALETA_AZUL: { primaryColor: "#2563eb", secondaryColor: "#f8fafc" }
-ESMERALDA:   { primaryColor: "#10b981", secondaryColor: "#14b8a6" }
-OCEANO:      { primaryColor: "#0ea5e9", secondaryColor: "#38bdf8" }
 ```
-Se as cores não baterem com nenhum preset → `currentTheme === "PERSONALIZADO"`.
+┌──────────────────────────────────────────────────────────────┐
+│ contexto + status        Desktop|Mobile        undo zoom •••  │
+├────────┬──────────────────────────────────┬──────────────────┤
+│ rail   │            prancheta             │    inspetor      │
+│ + peça │  (folha centrada, dots, zoom)    │  página OU peça  │
+│ camadas│                                  │                  │
+└────────┴──────────────────────────────────┴──────────────────┘
+```
 
-### BuilderSidePanel
-Painel lateral sticky (272px, `top: 56px`, `height: calc(100vh - 56px)`).
-- **Aba "Página":** modo dark/light, temas de cor (com card Personalizado), pickers primária/secundária, dados da empresa, restaurar blocos ocultos
-- **Aba "Bloco":** auto-ativa ao clicar num bloco; mostra nome do bloco, botão Ocultar, `BlockStyleSection` (banner URL, cor de fundo bloqueada se tiver banner, sliders overlay/brilho, cor de texto), extras por bloco (highlights: add/remove/cor; widgets: add/remove; properties: info)
+- **Esquerda:** Adicionar (biblioteca, clicar ou arrastar), Camadas (👁/🔒,
+  clique seleciona), Templates. Vira tira de ícones abaixo de 1180px.
+- **Prancheta:** folha centrada sobre fundo neutro, zoom (`Ctrl+roda`, `Ctrl+0`,
+  encaixar na largura), mobile num frame de 430px sem zoom.
+- **Direita:** sem seleção edita a PÁGINA (aparência, fonte, cores, empresa,
+  peças ocultas); com seleção edita a PEÇA (layout X/Y/L/A, aparência, conteúdo,
+  ações). Seções recolhíveis.
+- **Seleção:** contorno fino, etiqueta flutuante com o nome (é ela a alça de
+  arrasto — o miolo fica livre para editar texto), alças pequenas nos cantos,
+  barra contextual com duplicar/travar/ocultar.
 
-### Topbar do editor
-- Status de save (Carregando / Salvando / Salvo)
-- Undo / Redo (icon buttons)
-- Toggle Desktop / Mobile (botão inativo fica 45% opacity)
-- "Copiar Desktop" (visível só em mobile) — copia `layout` → `mobileLayout`
-- "Posições" — reseta layout ativo para DEFAULT_LAYOUT
-- "Resetar Tudo" — confirm dialog, reseta tudo
-- "Ver Página" — link para a vitrine pública em nova aba
+O CSS do editor é escopado em `.editor-shell` no `styles.css` (`editor-*`,
+`builder-piece*`), e não em template literal.
 
 ---
 
@@ -315,7 +446,10 @@ Painel lateral sticky (272px, `top: 56px`, `height: calc(100vh - 56px)`).
 - **Sem Context/Redux** — estado via props drilling ou `useState` local
 - **Sem TypeScript** — JS puro
 - **Português** — toda UX, mensagens de erro, labels, comentários de código
-- **Inline styles JSX** — componentes do editor usam 100% inline styles (sem classes CSS)
+- **Inline styles JSX** — telas antigas usam bastante; no editor de vitrine a
+  regra virou o contrário: classe em `styles.css` para tudo que se repete, inline
+  só para o que é genuinamente dinâmico (`left`, `top`, `width`, `height`,
+  `backgroundImage`, cores do cliente, zoom)
 - **`formRef` pattern** — `useRef` espelhando o `form` state para closures estáveis em event handlers
 - **Multi-tenant por header** — frontend envia `x-tenant-slug` em toda requisição autenticada
 - **Cloudinary** — upload direto do browser (sem passar pelo backend)

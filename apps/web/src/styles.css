@@ -110,17 +110,17 @@ body {
 
 /* Editor da vitrine: usa toda a largura da coluna ao lado da sidebar (sem cap a 1200px).
 
-   O respiro vira variável porque a barra de ferramentas precisa CANCELÁ-LO para
-   encostar nas bordas — e dois números soltos em arquivos diferentes divergem na
-   primeira vez que alguém ajustar um deles. */
+   Sem respiro nenhum, e isso é deliberado: o editor é uma ferramenta de tela
+   cheia com barras próprias, e cada pixel de padding aqui virava uma calha
+   escura entre a sidebar e a barra de ferramentas — as duas paravam de parecer
+   a mesma tela. O espaçamento interno é do `.editor-shell`, que sabe onde ele
+   deve existir (em volta da prancheta) e onde não deve (nas barras). */
 .main-content--editor-vitrine {
-  --editor-respiro-x: 24px;
-  --editor-respiro-y: 20px;
   max-width: none;
   margin: 0;
   min-width: 0;
   align-self: stretch;
-  padding: var(--editor-respiro-y) var(--editor-respiro-x) 32px;
+  padding: 0;
 }
 
 .main-content--editor-vitrine .showcase-container {
@@ -673,6 +673,8 @@ button:disabled {
 }
 
 .showcase-title-section {
+  container-type: inline-size;
+  container-name: hero;
   text-align: center;
   margin-bottom: 80px;
   animation: titleFadeIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -702,6 +704,26 @@ button:disabled {
   margin: 0 auto;
   line-height: 1.7;
   font-weight: 300;
+}
+
+/* Título de 56px numa coluna de 350px (celular) ocupava quatro linhas e comia a
+   dobra inteira antes do primeiro imóvel. Escala pela largura da COLUNA, então
+   o preview mobile do editor mostra exatamente o mesmo tamanho que o aparelho. */
+@container hero (max-width: 760px) {
+  .showcase-title-section h2 { font-size: 42px; }
+}
+
+@container hero (max-width: 560px) {
+  .showcase-title-section { margin-bottom: 48px; }
+  .showcase-title-section h2 { font-size: 34px; letter-spacing: -0.5px; margin-bottom: 14px; }
+  .showcase-title-section p { font-size: 15px; line-height: 1.6; }
+}
+
+/* 340 e não 380: o preview mobile do editor tem 390px de coluna e um celular de
+   390px tem 350px. Com o corte em 380 os dois caíam em degraus diferentes e o
+   preview mentia meio passo; em 340 eles compartilham o mesmo degrau. */
+@container hero (max-width: 340px) {
+  .showcase-title-section h2 { font-size: 28px; }
 }
 
 .showcase-highlights {
@@ -748,6 +770,20 @@ button:disabled {
   font-weight: 400;
 }
 
+/* ── O cinza do texto secundário no modo claro ───────────────────────────────
+   `--text-muted` é o slate-400 (#94a3b8), escolhido para fundo escuro. No modo
+   claro ele fica em 2,6:1 contra o #f8fafc — abaixo do mínimo legível — e vale
+   para TODO texto secundário da vitrine: subtítulo do hero, descrição dos
+   destaques, texto do cartão, colunas do rodapé.
+
+   Redefinir a variável dentro do tema claro conserta os quatro de uma vez, sem
+   tocar em nenhum componente. O escopo é a vitrine clara; o painel admin, que
+   é sempre escuro, não é alcançado. */
+.showcase-theme-light {
+  --text-main: #0f172a;
+  --text-muted: #475569;
+}
+
 .showcase-theme-light .showcase-title-section h2 {
   color: #0f172a;
 }
@@ -765,14 +801,27 @@ button:disabled {
 }
 
 /* Grid de Imóveis de Luxo */
+/* `min(360px, 100%)` e não `360px` cravado: num celular de 390px a coluna de
+   conteúdo tem ~350px, e uma trilha de 360px estourava a caixa — o cartão saía
+   recortado à direita (sem barra de rolagem, porque `.showcase-body` recorta o
+   eixo X). Com o `min()`, a trilha nunca passa da largura disponível. */
 .property-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 32px;
   padding: 16px 0;
 }
 
+@media (max-width: 520px) {
+  .property-grid { gap: 20px; }
+}
+
 .property-card-luxury {
+  /* Consulta de contêiner, e não media query: a mesma coluna estreita acontece
+     num celular de verdade e no preview mobile do editor, que vive numa janela
+     larga. Media query olharia a JANELA e o preview mentiria. */
+  container-type: inline-size;
+  container-name: cartao;
   background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -876,7 +925,22 @@ button:disabled {
   letter-spacing: 0.5px;
 }
 
+/* ── A largura do rodape mora NELE, e nao em quem o coloca na pagina ─────────
+   O componente e o mesmo nas duas telas, mas o resultado nao era: na vitrine
+   ele cai dentro do .showcase-container (max 1400px, centrado) e na pagina de
+   imovel estava pendurado direto no corpo — espalhando as tres colunas pela
+   largura inteira do monitor, com quase dois mil pixels de vao entre elas.
+
+   1360px e exatamente o que o .showcase-container deixa livre (1400 menos os
+   20px de respiro de cada lado). Na vitrine o limite nunca chega a valer,
+   porque a caixa de fora ja e menor ou igual — entao nada muda la. Na pagina de
+   imovel ele passa a valer, e as duas ficam iguais.
+
+   Com o limite aqui dentro, a proxima pagina que usar este rodape acerta a
+   largura sem precisar saber de nada. */
 .showcase-footer {
+  max-width: 1360px;
+  margin-inline: auto;
   padding: 60px 40px 20px;
 }
 
@@ -1009,10 +1073,42 @@ button:disabled {
 }
 
 /* Badge de Destaque */
+/* ── As quinas da foto do imóvel ─────────────────────────────────────────────
+   São até três selos ao mesmo tempo: situação (lançamento ou andamento da
+   obra), tipo de contrato e permuta. Cada um tem um canto fixo, senão dois
+   deles caem no mesmo lugar — e caíam: `is-status` e `is-contrato` disputavam o
+   alto à direita, o que acontece em todo imóvel novo que tenha tipo de
+   contrato. */
+.featured-badge.is-status { top: 15px; left: 15px; right: auto; }
+.featured-badge.is-contrato { top: 15px; right: 15px; left: auto; }
+.featured-badge.is-permuta {
+  top: auto;
+  bottom: 15px;
+  left: 15px;
+  right: auto;
+  background: rgba(99, 102, 241, 0.85);
+  border-color: transparent;
+}
+
+.featured-badge.is-lancamento {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff;
+  border: none;
+}
+
+/* Numa coluna estreita os selos podem cobrir metade da foto; encolhem junto. */
+@container cartao (max-width: 300px) {
+  .featured-badge { font-size: 9px; padding: 5px 9px; }
+}
+
 .featured-badge {
   position: absolute;
   top: 15px;
   right: 15px;
+  max-width: calc(100% - 30px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: color-mix(in srgb, var(--tenant-secondary, #d4af37) 75%, transparent);
   color: #fff;
   padding: 6px 12px;
@@ -1024,6 +1120,22 @@ button:disabled {
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
+
+/* Fichas do cartão: metragem, quartos, vagas e comodidades. */
+.card-ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.card-ficha.is-comodidade { gap: 5px; padding: 5px 10px; border-radius: 999px; }
+
+.showcase-theme-light .card-ficha { background: rgba(15, 23, 42, 0.05); }
 
 /* Área de Informações (Metade de Baixo) */
 .card-info-wrapper {
@@ -1193,16 +1305,24 @@ button:disabled {
   -webkit-text-fill-color: initial;
 }
 
+/* ── Por que `.widget-card *` saiu daqui ─────────────────────────────────────
+   Era um `color: #0f172a !important` em TODO descendente do cartão de widget.
+   Ele resolvia o caso simples (texto claro ilegível no fundo claro) e destruía
+   todo o resto: o número do bloco de estatísticas perdia a cor da marca, o
+   nome no depoimento perdia o acento, e — o pior — o rótulo do botão de CTA e
+   os botões de redes sociais, que são texto BRANCO sobre fundo colorido,
+   viravam azul-escuro sobre verde e sobre índigo.
+
+   A raiz do problema eram duas variáveis pensadas para fundo escuro. Com
+   `--text-main` e `--text-muted` redefinidas no tema claro (logo acima), tudo
+   que herda cor fica legível sozinho, e quem declara a própria cor — accent,
+   branco sobre botão — continua com ela. */
 .showcase-theme-light .showcase-title-section:not(.showcase-title-section--custom-text) p,
 .showcase-theme-light .card-location,
 .showcase-theme-light .stat-item,
 .showcase-theme-light .detail-description,
 .showcase-theme-light .detail-location,
-.showcase-theme-light .highlight-box p,
-.showcase-theme-light .widget-card *,
-.showcase-theme-light .widget-testimonial-content,
-.showcase-theme-light .widget-card h3,
-.showcase-theme-light .widget-card p {
+.showcase-theme-light .highlight-box p {
   color: #0f172a !important;
 }
 
@@ -1401,51 +1521,6 @@ button:disabled {
   min-height: 100vh;
 }
 
-.showcase-editor-topbar {
-  /* Encosta no topo da área do editor.
-
-     Ela nascia dentro do respiro do `.main-content--editor-vitrine` e sobrava
-     uma faixa de fundo acima, fazendo a barra ler como um cartão solto em vez
-     da barra de ferramentas da tela. A margem negativa desfaz esse respiro.
-
-     SÓ NO EIXO VERTICAL, e isto é o ponto: a primeira versão cancelava também
-     o respiro lateral, e aí a barra avançava para dentro da coluna da sidebar
-     e aparecia cortada. O respiro horizontal não é decoração — é a calha entre
-     o menu e o conteúdo. */
-  margin-top: calc(var(--editor-respiro-y, 0px) * -1);
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: rgba(15, 23, 42, 0.92);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-}
-
-.showcase-editor-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.showcase-editor-actions button,
-.showcase-editor-actions .link-button,
-.showcase-editor-actions .button-secondary {
-  width: auto;
-  padding: 8px 12px;
-  font-size: 12px;
-}
-
-.editor-status {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
 .editor-theme-tag {
   font-size: 12px;
   color: #fff;
@@ -1468,18 +1543,30 @@ button:disabled {
   border-radius: 6px;
 }
 
+/* ── O realce de campo editável NÃO pode ocupar espaço ──────────────────────
+   Isto tinha `border: 1px dashed` mais `padding: 2px 4px`. Como o mesmo
+   componente desenha a vitrine publicada (onde a classe não existe), cada texto
+   editável ficava 8px mais largo e 4px mais alto dentro do editor do que na
+   página real — em todos os títulos, destaques, widgets e no rodapé.
+
+   `outline` não entra no fluxo: ele é pintado por fora da caixa e não desloca
+   nada. O realce continua igual aos olhos e some do cálculo de layout. */
 .editable-inline {
-  border: 1px dashed transparent;
-  padding: 2px 4px;
   border-radius: 6px;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: outline-color 0.2s ease, background 0.2s ease;
+  outline: 1px dashed transparent;
+  outline-offset: 3px;
 }
 
 .editable-inline:hover,
 .editable-inline:focus {
-  border-color: rgba(255, 255, 255, 0.35);
+  outline-color: rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.06);
-  outline: none;
+}
+
+.showcase-theme-light .editable-inline:hover,
+.showcase-theme-light .editable-inline:focus {
+  outline-color: rgba(15, 23, 42, 0.35);
 }
 
 .small-inline {
@@ -1506,123 +1593,77 @@ body:has(.showcase-theme-light):not(:has(.showcase-editor-full)) {
   background-image: none !important;
 }
 
-.builder-block {
-  position: absolute;
-  padding: 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  /* overflow:auto criava “faixas” estreitas com scroll interno; no preview o bloco deve acompanhar o conteúdo */
-  overflow: visible;
-  box-sizing: border-box;
-}
+/* ── Cor aplicada pela barra de formatação ───────────────────────────────────
+   O `execCommand` escreve a cor num `<span style="color:…">` (ou num `<font>`
+   antigo) dentro do texto. Onde o container usa recorte de fundo para pintar
+   texto, o `-webkit-text-fill-color` herdado vence o `color` do span e a cor
+   escolhida simplesmente não aparece.
 
-.builder-delete-icon {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px !important;
-  height: 28px;
-  border-radius: 8px;
-  padding: 0 !important;
-  font-size: 13px !important;
-  line-height: 1;
-  background: rgba(239, 68, 68, 0.18) !important;
-  border: 1px solid rgba(239, 68, 68, 0.55) !important;
-  color: #fecaca !important;
-  z-index: 6;
-}
+   Isto vivia numa tag `<style>` dentro da `ShowcasePage` e noutra dentro do
+   editor. Duas cópias da mesma correção é como uma delas fica para trás — e o
+   sintoma seria "a cor funciona no editor e some na página". Uma regra só, no
+   arquivo, valendo para os dois. */
+/* ── E o que este seletor NÃO pode alcançar ──────────────────────────────────
+   Ele pegava QUALQUER `<span>` da vitrine cujo `style` inline contivesse a
+   palavra "color" — e `background-color`, `border-color` contêm. O selo de tipo
+   de contrato do cartão de imóvel é exatamente isso:
 
-/* ── Fileira de ações da peça ────────────────────────────────────────────────
-   Os ícones eram posicionados um a um com `right` na mão: 8px o de remover,
-   58px o de travar, 80px o de duplicar. Com 28px de largura cada, 58 e 80 se
-   sobrepõem em 6px — foi o empilhamento que apareceu nos widgets, que são os
-   únicos com três botões.
+     <span style="background:#10b981;color:#fff;border-color:transparent">
 
-   Contar pixel a pixel só funciona enquanto ninguém acrescenta um botão. Numa
-   fileira flex a conta é do navegador, e acrescentar o quarto não quebra nada. */
-.builder-block-acoes {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  z-index: 6;
-}
+   e o `background: none !important` apagava o fundo dele. Resultado no ar:
+   "VENDA" em letras brancas soltas sobre a foto, sem a pílula colorida, em todo
+   imóvel com tipo de contrato definido.
 
-/* Dentro da fileira eles deixam de se posicionar sozinhos. */
-.builder-block-acoes .builder-delete-icon {
-  position: static;
-  top: auto;
-  right: auto;
-}
-
-.builder-delete-icon:hover {
-  background: rgba(239, 68, 68, 0.32) !important;
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-.widget-delete {
-  top: 10px;
-  right: 10px;
-}
-
-.showcase-theme-light .builder-block {
-  border-color: rgba(15, 23, 42, 0.2);
-}
-
-.builder-block-handle {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  width: fit-content;
-  font-size: 11px;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: #fff;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  padding: 6px 10px;
-  margin-bottom: 10px;
-  cursor: grab;
-}
-
-.builder-resize-handle {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 14px;
-  height: 14px;
-  border-right: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
-  cursor: nwse-resize;
-}
-
-/* Não usar !important na cor: o seletor "Texto" do bloco aplica cor via style inline */
-.editor-headline.editable-inline {
-  background: none !important;
-  -webkit-text-fill-color: currentColor;
-}
-
-.showcase-theme-light .showcase-title-section:not(.showcase-title-section--custom-text) .editor-headline.editable-inline {
-  color: #0f172a;
-  -webkit-text-fill-color: #0f172a;
+   Duas correções: o `background: none` saiu (o problema real era só o
+   `-webkit-text-fill-color`, que é o que vence a cor do span dentro de um texto
+   com recorte de fundo), e o seletor passa longe de quem declara o próprio
+   fundo. */
+.showcase-body span[style*="color"]:not([style*="background"]),
+.showcase-body font[color] {
+  -webkit-text-fill-color: currentcolor !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
 }
 
 .showcase-theme-light .highlight-box h3 {
   color: #0f172a;
 }
 
+/* ── O palco: onde as peças posicionadas vivem ───────────────────────────────
+   A vitrine e a prancheta do editor usam o MESMO cálculo de posição (ver
+   `ShowcaseRenderer`). O que muda entre as duas é só até onde um bloco com
+   banner pode vazar: na página publicada, até a borda da JANELA; no editor, até
+   a borda da FOLHA.
+
+   Por isso a sangria é variável, e não um `100vw` escrito no componente — com o
+   valor cravado, o editor precisaria de um cálculo próprio, e seria a primeira
+   coisa a divergir. */
+.showcase-palco {
+  --sangria-x: calc(50% - 50vw);
+  --sangria-w: 100vw;
+}
+
+/* Dentro da prancheta, a sangria é a largura da folha. Os 20px são o padding
+   lateral do `.showcase-container`, que é o que separa a borda do papel da
+   coluna de conteúdo. */
+.editor-canvas-surface.showcase-palco {
+  --sangria-x: -20px;
+  --sangria-w: calc(100% + 40px);
+}
+
+/* `visible`, e não `auto`: com `auto` um bloco cujo conteúdo passa da altura
+   declarada ganha barra de rolagem interna na vitrine e transborda livremente
+   no editor — a mesma peça, duas caixas diferentes. Hoje a altura cresce até o
+   conteúdo nos dois lados, então não há o que rolar. */
 .showcase-layout-block {
   position: absolute;
-  overflow: auto;
+  overflow: visible;
+  box-sizing: border-box;
 }
 
 /* Banner de secção (editor + vitrine): imagem + overlay + brilho sem filtrar o texto */
 .showcase-layout-block.showcase-section-has-bg,
-.builder-block.showcase-section-has-bg {
+.builder-piece.showcase-section-has-bg {
   overflow: hidden;
 }
 
@@ -1655,148 +1696,9 @@ body:has(.showcase-theme-light):not(:has(.showcase-editor-full)) {
   z-index: 2;
 }
 
-.showcase-section-has-bg .builder-block-handle,
-.showcase-section-has-bg .builder-delete-icon,
-.showcase-section-has-bg .builder-block-toolbar,
-.showcase-section-has-bg .builder-resize-handle {
+.showcase-section-has-bg .builder-piece-chrome,
+.showcase-section-has-bg .builder-piece-handle {
   z-index: 5;
-}
-
-.builder-snap-guide {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: rgba(236, 72, 153, 0.9);
-  box-shadow: 0 0 14px rgba(236, 72, 153, 0.55);
-  pointer-events: none;
-  z-index: 15;
-}
-
-.editor-mode-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.editor-mode-group button {
-  padding: 6px 10px;
-  font-size: 11px;
-}
-
-.editor-mode-group button.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.editor-toolbar-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.builder-block-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.showcase-theme-light .builder-block-toolbar {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(15, 23, 42, 0.12);
-}
-
-.builder-toolbar-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--text-muted);
-}
-
-.builder-color-mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.builder-color-mini input[type="color"] {
-  width: 28px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.builder-toolbar-clear {
-  width: auto;
-  padding: 4px 8px;
-  font-size: 10px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: var(--text-muted);
-}
-
-.builder-toolbar-clear:hover {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.45);
-}
-
-.builder-highlight-actions {
-  margin-bottom: 8px;
-}
-
-.builder-highlight-actions button {
-  width: auto;
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-.highlight-box-editable {
-  position: relative;
-}
-
-.highlight-mini-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.showcase-theme-light .highlight-mini-toolbar {
-  background: rgba(15, 23, 42, 0.06);
-}
-
-.builder-remove-highlight {
-  width: auto;
-  padding: 4px 8px;
-  font-size: 10px;
-  background: rgba(239, 68, 68, 0.25);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #fecaca;
-}
-
-.builder-remove-highlight:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .widget-grid {
@@ -1832,55 +1734,6 @@ body:has(.showcase-theme-light):not(:has(.showcase-editor-full)) {
   color: var(--text-muted);
   font-size: 14px;
   line-height: 1.6;
-}
-
-.widget-fab-shell {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-}
-
-.widget-fab-button {
-  width: 52px;
-  height: 52px;
-  border-radius: 999px;
-  font-size: 28px;
-  padding: 0;
-  line-height: 1;
-  /* O "+" descia porque o glifo era posicionado pela LINHA DE BASE dentro de
-     uma caixa de 52px — e a base fica abaixo do meio. Centralizar por flex
-     alinha a caixa do texto, não a base, e o sinal para no centro ótico. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8px 26px rgba(99, 102, 241, 0.45);
-}
-
-.widget-fab-menu {
-  width: 240px;
-  border-radius: 12px;
-  padding: 10px;
-  background: rgba(15, 23, 42, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  display: grid;
-  gap: 8px;
-}
-
-.widget-fab-menu p {
-  color: var(--text-muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.widget-fab-menu button {
-  width: 100%;
-  justify-content: flex-start;
 }
 
 @keyframes chicEntrance {
@@ -2792,3 +2645,1287 @@ input[type="checkbox"].sw:focus-visible {
   outline-offset: 3px;
 }
 input[type="checkbox"].sw:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   EDITOR DE VITRINE
+   ════════════════════════════════════════════════════════════════════════════
+
+   Um vocabulário próprio, escopado em `.editor-shell`. Ele existe porque o
+   editor é a única tela do produto que não é "um formulário sobre fundo de
+   vidro": é uma ferramenta, e ferramenta tem densidade, hierarquia e cinza
+   neutro no lugar de gradiente.
+
+   O escopo também é uma trava prática. O styles.css tem um `button { width:
+   100%; padding: 14px 20px; background: var(--accent) }` global — ótimo para
+   uma tela de cadastro, impraticável numa barra com quinze controles. Em vez de
+   salpicar !important, o editor reinicia o botão uma vez e constrói a partir
+   daí.
+
+   As cores da imobiliária (--accent) ficam DENTRO da prancheta. O chrome usa
+   --ed-accent, que é sempre o roxo da Omnimob: uma imobiliária de tema laranja
+   não deve pintar a barra de ferramentas de laranja — a ferramenta é nossa, a
+   página é dela.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.editor-shell {
+  /* O fundo da prancheta é mais ESCURO que a página desenhada — o contrário do
+     Figma, e de propósito: a vitrine já é escura, e um chão claro em volta
+     brilharia mais que o próprio trabalho. Escuro embaixo, a folha sobe. */
+  --ed-bg: #050507;
+  --ed-panel: #0e0e14;
+  --ed-panel-2: #131320;
+  --ed-line: rgba(255, 255, 255, 0.07);
+  --ed-line-strong: rgba(255, 255, 255, 0.13);
+  --ed-text: #e6e8ee;
+  --ed-muted: #7e879a;
+  --ed-accent: #818cf8;
+  --ed-accent-soft: rgba(129, 140, 248, 0.14);
+  --ed-danger: #f87171;
+
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ed-bg);
+  color: var(--ed-text);
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+}
+
+/* Reinício do botão dentro do editor. Tudo o que vier depois constrói em cima
+   disto, e nada precisa desfazer o botão global peça por peça. */
+.editor-shell button,
+.editor-format-bar button,
+.editor-ghost button,
+.editor-modal button {
+  width: auto;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.editor-shell button:hover,
+.editor-modal button:hover {
+  transform: none;
+}
+
+/* ── Barra superior ───────────────────────────────────────────────────────── */
+
+.editor-topbar {
+  flex-shrink: 0;
+  height: 52px;
+  display: grid;
+  /* Três faixas: contexto, modo, ações. O `1fr auto 1fr` mantém o alternador
+     desktop/mobile no CENTRO ÓPTICO da tela mesmo quando os dois lados têm
+     larguras diferentes — que é o normal, já que "Salvando…" muda de tamanho. */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--ed-panel);
+  border-bottom: 1px solid var(--ed-line);
+}
+
+.editor-topbar-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.editor-topbar-side.is-end { justify-content: flex-end; }
+
+.editor-topbar-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.editor-topbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.editor-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ed-muted);
+  white-space: nowrap;
+}
+
+.editor-save-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.editor-save-status.is-salvando { color: #cbd5e1; }
+.editor-save-status.is-salvando .editor-save-dot { animation: editorPulse 1.1s ease-in-out infinite; opacity: 1; }
+.editor-save-status.is-salvo { color: #4ade80; }
+.editor-save-status.is-erro { color: var(--ed-danger); }
+
+@keyframes editorPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.editor-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1px solid var(--ed-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.editor-zoom-valor {
+  min-width: 42px;
+  height: 26px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ed-muted);
+  cursor: pointer;
+}
+
+.editor-zoom-valor:hover { color: var(--ed-text); }
+
+/* ── Botões e ícones ──────────────────────────────────────────────────────── */
+
+.editor-icon-button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: var(--ed-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.editor-icon-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ed-text);
+}
+
+.editor-icon-button:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.editor-icon-button.is-danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--ed-danger);
+}
+
+.editor-icon-button.is-ghost { width: 24px; height: 24px; }
+
+.editor-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--ed-line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ed-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-button:hover { background: rgba(255, 255, 255, 0.08); }
+
+.editor-button.is-primary {
+  background: var(--ed-accent);
+  border-color: transparent;
+  color: #0b0b12;
+  text-decoration: none;
+}
+
+.editor-button.is-primary:hover { background: #9aa2fa; }
+
+.editor-button.is-accent {
+  background: var(--ed-accent-soft);
+  border-color: rgba(129, 140, 248, 0.32);
+  color: #b9c0fb;
+}
+
+.editor-button.is-quiet {
+  background: transparent;
+  color: var(--ed-muted);
+  font-weight: 500;
+}
+
+.editor-button.is-quiet:hover { color: var(--ed-text); background: rgba(255, 255, 255, 0.05); }
+
+.editor-button.is-danger {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.25);
+  color: #fca5a5;
+}
+
+.editor-button.is-dashed {
+  width: 100%;
+  background: transparent;
+  border-style: dashed;
+  color: var(--ed-muted);
+}
+
+.editor-button.is-dashed:hover { color: var(--ed-text); border-color: var(--ed-accent); }
+
+.editor-chip-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--ed-line);
+  color: var(--ed-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-chip-action:hover { color: var(--ed-text); border-color: var(--ed-line-strong); }
+.editor-chip-action em { font-style: normal; opacity: 0.6; }
+
+/* Alternador segmentado (escuro/claro, desktop/mobile). */
+.editor-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1px solid var(--ed-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.editor-segmented button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--ed-muted);
+  cursor: pointer;
+}
+
+.editor-segmented button:hover { color: var(--ed-text); }
+
+.editor-segmented button.is-active {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  font-weight: 600;
+}
+
+.editor-segmented.is-compact button { padding: 0 12px; }
+
+/* Menu "•••" — ações raras e as destrutivas, longe do caminho de quem edita. */
+.editor-menu { position: relative; }
+
+.editor-menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  min-width: 218px;
+  padding: 5px;
+  border-radius: 11px;
+  border: 1px solid var(--ed-line-strong);
+  background: var(--ed-panel-2);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  animation: fadeIn 0.14s ease both;
+}
+
+.editor-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--ed-text);
+  cursor: pointer;
+}
+
+.editor-menu-item:hover { background: rgba(255, 255, 255, 0.06); }
+.editor-menu-item.is-danger { color: #fca5a5; }
+.editor-menu-item.is-danger:hover { background: rgba(248, 113, 113, 0.12); }
+.editor-menu-spacer { width: 13px; }
+.editor-menu-sep { height: 1px; margin: 5px 8px; border: 0; background: var(--ed-line); }
+
+.editor-alerta {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.1);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+/* ── Espaço de trabalho ───────────────────────────────────────────────────── */
+
+.editor-workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.editor-rail,
+.editor-inspector {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--ed-panel);
+}
+
+.editor-rail { width: 252px; border-right: 1px solid var(--ed-line); }
+.editor-rail.is-collapsed { width: 50px; }
+.editor-rail.is-collapsed .editor-rail-tab { justify-content: center; padding: 0; }
+.editor-inspector { width: 292px; border-left: 1px solid var(--ed-line); }
+.editor-inspector.is-collapsed { width: 40px; align-items: center; padding-top: 10px; gap: 14px; }
+
+.editor-rail-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-bottom: 1px solid var(--ed-line);
+}
+
+.editor-rail.is-collapsed .editor-rail-tabs { border-bottom: none; }
+
+.editor-rail-tab {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--ed-muted);
+  cursor: pointer;
+}
+
+.editor-rail-tab:hover { background: rgba(255, 255, 255, 0.05); color: var(--ed-text); }
+
+.editor-rail-tab.is-active {
+  background: var(--ed-accent-soft);
+  color: #c3c8fc;
+  font-weight: 600;
+}
+
+.editor-rail-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  margin-top: 4px;
+  border-radius: 8px;
+  color: var(--ed-muted);
+  cursor: pointer;
+}
+
+.editor-rail-toggle:hover { background: rgba(255, 255, 255, 0.05); color: var(--ed-text); }
+
+.editor-rail-body,
+.editor-inspector-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+.editor-hint {
+  margin: 0 0 12px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ed-muted);
+}
+
+.editor-hint b { color: #cbd5e1; font-weight: 600; }
+
+.editor-section { margin-bottom: 16px; }
+
+.editor-section-title {
+  margin: 0 0 8px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #8b93a5;
+}
+
+/* ── Biblioteca de peças ──────────────────────────────────────────────────── */
+
+.editor-lib-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.editor-lib-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 10px;
+  border: 1px solid var(--ed-line);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--ed-muted);
+  cursor: grab;
+  text-align: left;
+}
+
+.editor-lib-card:hover {
+  border-color: rgba(129, 140, 248, 0.45);
+  background: rgba(129, 140, 248, 0.07);
+  color: var(--ed-text);
+}
+
+.editor-lib-preview {
+  display: block;
+  height: 34px;
+  padding: 7px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #8b94a8;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.editor-lib-nome {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: inherit;
+  pointer-events: none;
+}
+
+/* ── Camadas ──────────────────────────────────────────────────────────────── */
+
+.editor-layer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px 1px 2px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.editor-layer:hover { background: rgba(255, 255, 255, 0.04); }
+
+.editor-layer.is-active {
+  background: var(--ed-accent-soft);
+  border-color: rgba(129, 140, 248, 0.3);
+}
+
+.editor-layer.is-hidden .editor-layer-nome { opacity: 0.4; text-decoration: line-through; }
+
+.editor-layer-nome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 6px;
+  font-size: 12.5px;
+  color: var(--ed-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.editor-layer-nome span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-layer-tipo {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: #6b7385;
+  flex-shrink: 0;
+}
+
+.editor-layer-tipo.is-widget { border-radius: 50%; background: var(--ed-accent); }
+
+/* ── Templates ────────────────────────────────────────────────────────────── */
+
+.editor-template-grid { display: grid; gap: 9px; }
+
+.editor-template-card {
+  display: block;
+  padding: 9px;
+  border-radius: 11px;
+  border: 1px solid var(--ed-line);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  text-align: left;
+}
+
+.editor-template-card:hover { border-color: rgba(129, 140, 248, 0.45); }
+
+.editor-template-nome {
+  display: block;
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ed-text);
+}
+
+.editor-template-desc { display: block; font-size: 11px; color: var(--ed-muted); }
+
+/* ── Inspetor ─────────────────────────────────────────────────────────────── */
+
+.editor-inspector-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--ed-line);
+  flex-shrink: 0;
+}
+
+.editor-inspector-kicker {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8b93a5;
+}
+
+.editor-inspector-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-inspector-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--ed-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.editor-inspector-toggle:hover { background: rgba(255, 255, 255, 0.06); color: var(--ed-text); }
+
+.editor-inspector-vertical {
+  writing-mode: vertical-rl;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8b93a5;
+  user-select: none;
+}
+
+.editor-panel-section {
+  border-bottom: 1px solid var(--ed-line);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+.editor-panel-section:last-child { border-bottom: none; }
+
+.editor-panel-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.editor-panel-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  height: 28px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #8b93a5;
+  cursor: pointer;
+}
+
+.editor-panel-section-toggle:hover { color: var(--ed-text); }
+.editor-panel-section-toggle svg { transition: transform 0.15s ease; }
+
+.editor-panel-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-top: 4px;
+}
+
+.editor-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.editor-field.is-inline { flex: 1; }
+
+.editor-field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ed-muted);
+}
+
+.editor-field-label--split { display: flex; justify-content: space-between; }
+.editor-field-label--split b { color: var(--ed-text); }
+
+.editor-field-row { display: flex; gap: 8px; }
+.editor-field-row > * { flex: 1; min-width: 0; }
+
+.editor-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  border: 1px solid var(--ed-line-strong);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--ed-text);
+  font-size: 12px;
+  outline: none;
+}
+
+.editor-input:focus { border-color: var(--ed-accent); }
+.editor-input[readonly] { color: var(--ed-muted); background: rgba(255, 255, 255, 0.02); }
+
+.editor-number { position: relative; display: block; }
+
+.editor-number em {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-style: normal;
+  font-size: 10px;
+  color: #8b93a5;
+  pointer-events: none;
+}
+
+.editor-number .editor-input { padding-right: 24px; }
+
+.editor-color {
+  position: relative;
+  display: block;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--ed-line-strong);
+  overflow: hidden;
+}
+
+.editor-color input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.editor-range { width: 100%; accent-color: var(--ed-accent); }
+
+.editor-theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+.editor-theme-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--ed-line);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11px;
+  color: var(--ed-muted);
+  cursor: pointer;
+}
+
+.editor-theme-chip:hover { color: var(--ed-text); }
+
+.editor-theme-chip.is-active {
+  border-color: var(--ed-accent);
+  background: var(--ed-accent-soft);
+  color: #fff;
+  font-weight: 600;
+}
+
+.editor-theme-chip.is-full { grid-column: 1 / -1; }
+.editor-theme-dots { display: flex; gap: 3px; flex-shrink: 0; }
+.editor-theme-dots i { width: 9px; height: 9px; border-radius: 50%; }
+
+.editor-hidden-list { display: flex; flex-direction: column; gap: 5px; }
+
+.editor-hidden-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ed-line);
+  font-size: 12px;
+  color: var(--ed-muted);
+  cursor: pointer;
+}
+
+.editor-hidden-item:hover { color: var(--ed-text); border-color: var(--ed-accent); }
+.editor-hidden-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.editor-sublist { display: flex; flex-direction: column; gap: 7px; }
+
+.editor-subitem {
+  padding: 8px;
+  border-radius: 9px;
+  border: 1px solid var(--ed-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.editor-subitem-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ed-text);
+}
+
+.editor-subitem-head > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.editor-actions-grid .editor-button { width: 100%; }
+
+/* ── Prancheta ────────────────────────────────────────────────────────────── */
+
+.editor-stage {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 34px 40px 120px;
+  /* Pontos discretos: dizem "isto é uma área de montagem" sem competir com o
+     conteúdo. Mais contraste que isto e a grade aparece através dos blocos de
+     fundo translúcido da própria vitrine. */
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.editor-stage-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-height: 100%;
+}
+
+.editor-mode-badge {
+  align-self: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(129, 140, 248, 0.3);
+  background: var(--ed-accent-soft, rgba(129, 140, 248, 0.14));
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b9c0fb;
+}
+
+/* Caixa do tamanho JÁ escalado. É ela que o palco centra e que define a área de
+   rolagem — a folha lá dentro só desenha. */
+.editor-paper-wrap {
+  flex-shrink: 0;
+  position: relative;
+}
+
+.editor-paper {
+  border-radius: 14px;
+  /* Sombra longa e fraca: a folha descola do fundo sem virar cartão flutuante.
+     O anel de 1px é o que dá a borda "impressa" — sombra sozinha borra a quina. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 26px 70px rgba(0, 0, 0, 0.5);
+}
+
+.editor-device {
+  border: 8px solid #15151d;
+  border-radius: 32px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 26px 70px rgba(0, 0, 0, 0.55);
+}
+
+/* A folha pinta o próprio fundo, e pinta o MESMO da vitrine publicada. Antes
+   ela era transparente e herdava o fundo de quem estivesse atrás — o que
+   funcionava por acidente, enquanto o editor vivia sobre o fundo do painel.
+   Sobre a prancheta neutra, transparente significaria mostrar a cor errada. */
+.editor-canvas-surface {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background-color: var(--bg-gradient-1);
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 50%, var(--bg-gradient-3) 100%);
+  background-size: 24px 24px, cover;
+}
+
+.showcase-builder-canvas.showcase-theme-light { color: #0f172a; }
+
+/* No modo claro a regra geral do tema (`background-image: none !important`)
+   apaga a grade da prancheta junto com o fundo escuro. O !important aqui é a
+   resposta a um !important, não preferência: sem ele o canvas claro perde os
+   pontos e deixa de parecer área de montagem. */
+.showcase-builder-canvas.showcase-theme-light.editor-canvas-surface {
+  background-image: radial-gradient(circle, rgba(15, 23, 42, 0.07) 1px, transparent 1px) !important;
+  background-size: 24px 24px;
+}
+
+/* ── Peça no canvas ───────────────────────────────────────────────────────── */
+
+.builder-piece {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.builder-piece:hover { border-color: rgba(255, 255, 255, 0.18); }
+.showcase-theme-light .builder-piece:hover { border-color: rgba(15, 23, 42, 0.18); }
+
+.builder-piece.is-selected {
+  border-color: var(--ed-accent, #818cf8);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.3);
+}
+
+.builder-piece.is-multi {
+  border-color: rgba(129, 140, 248, 0.5);
+  border-style: dashed;
+}
+
+/* Contato entre peças: a borda que já existe ACENDE, em vez de aparecer uma
+   segunda linha por cima. O halo é curto de propósito — largo, duas peças
+   coladas viram uma mancha só. */
+.builder-piece.is-encostado {
+  border-style: dashed;
+  border-color: var(--ed-accent, #818cf8);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.3), 0 0 12px -2px rgba(129, 140, 248, 0.5);
+}
+
+.builder-piece--widget { border-radius: 16px; }
+
+.builder-piece-chrome {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: -25px;
+  height: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+  z-index: 7;
+}
+
+.builder-piece-chrome.is-inside { top: 7px; left: 7px; right: 7px; }
+
+.builder-piece:hover > .builder-piece-chrome,
+.builder-piece.is-selected > .builder-piece-chrome {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.builder-piece-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Encolhe em vez de empurrar: num widget de 40% no preview mobile, etiqueta e
+     ações somavam mais que a largura da peça e a fileira transbordava. */
+  min-width: 0;
+  flex: 0 1 auto;
+  height: 21px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ed-line-strong, rgba(255, 255, 255, 0.13));
+  background: rgba(12, 12, 18, 0.94);
+  color: #c6cbd8;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.builder-piece-label span { overflow: hidden; text-overflow: ellipsis; }
+
+.builder-piece.is-selected .builder-piece-label {
+  background: var(--ed-accent, #818cf8);
+  border-color: transparent;
+  color: #0b0b12;
+}
+
+.builder-piece-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 3px;
+  padding: 1px;
+  border-radius: 8px;
+  border: 1px solid var(--ed-line-strong, rgba(255, 255, 255, 0.13));
+  background: rgba(12, 12, 18, 0.94);
+}
+
+.builder-piece-actions .editor-icon-button { width: 22px; height: 19px; border-radius: 5px; }
+
+.builder-piece-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #0b0b12;
+  border: 1.5px solid var(--ed-accent, #818cf8);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.builder-piece.is-selected .builder-piece-handle { opacity: 1; }
+.builder-piece-handle.is-se { right: -5px; bottom: -5px; cursor: nwse-resize; pointer-events: auto; }
+.builder-piece-handle.is-ne { right: -4px; top: -4px; }
+.builder-piece-handle.is-nw { left: -4px; top: -4px; }
+.builder-piece-handle.is-sw { left: -4px; bottom: -4px; }
+
+/* Cantos que NÃO redimensionam: menores, sem preenchimento e translúcidos. A
+   diferença precisa ser visível a um metro de distância, senão continuam sendo
+   uma promessa falsa de gesto. */
+.builder-piece-handle.is-passive {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+  border-width: 1px;
+  opacity: 0;
+}
+
+.builder-piece.is-selected .builder-piece-handle.is-passive { opacity: 0.45; }
+
+/* Cadeado permanente da peça travada. */
+.builder-piece-lock {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--ed-line-strong, rgba(255, 255, 255, 0.13));
+  background: rgba(12, 12, 18, 0.9);
+  color: #9aa2b8;
+  pointer-events: none;
+}
+
+.builder-piece.is-locked {
+  cursor: default;
+  border-color: rgba(255, 255, 255, 0.09);
+  border-style: dashed;
+}
+
+.showcase-theme-light .builder-piece.is-locked { border-color: rgba(15, 23, 42, 0.12); }
+
+@keyframes editorPieceIn {
+  0% { opacity: 0; transform: scale(0.94) translateY(-8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.builder-piece.piece-entering { animation: editorPieceIn 0.36s cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+
+/* ── O cabeçalho dentro da prancheta ─────────────────────────────────────────
+   Na vitrine `.luxury-header-wrapper` é `position: fixed`: ele flutua sobre a
+   página e encolhe ao rolar. Dentro do editor não existe rolagem de página — a
+   prancheta é um retângulo — e um elemento fixo mediria pela JANELA, saindo do
+   papel e cobrindo a barra de ferramentas.
+
+   No fluxo, ele ocupa exatamente a faixa da peça e mostra o estado NÃO rolado,
+   que é como o visitante encontra a página ao chegar. É a mesma solução que a
+   página de detalhe do imóvel já usava. */
+.builder-piece .luxury-header-wrapper {
+  position: relative;
+}
+
+/* A peça do construtor não pode recortar o conteúdo que a vitrine deixa
+   transbordar: as duas precisam ter a mesma caixa. */
+.builder-piece {
+  overflow: visible;
+}
+
+.builder-piece.showcase-section-has-bg {
+  overflow: hidden;
+}
+
+/* Guias de encaixe. */
+.editor-snap-guide {
+  position: absolute;
+  pointer-events: none;
+  /* Acima do cabeçalho, que vem com 9999 do renderizador porque na vitrine ele
+     sobrepõe a página. Com 90, a guia desaparecia por baixo dele justamente
+     quando se arrastava perto do topo — que é onde mais se procura alinhar. */
+  z-index: 10001;
+  background: var(--ed-accent, #818cf8);
+  box-shadow: 0 0 7px rgba(129, 140, 248, 0.75);
+}
+
+.editor-snap-guide.is-vertical { top: 0; bottom: 0; width: 1px; }
+.editor-snap-guide.is-horizontal { left: 0; right: 0; height: 1px; }
+.editor-snap-guide.is-centro { background: #f472b6; box-shadow: 0 0 7px rgba(244, 114, 182, 0.75); }
+
+
+
+
+
+
+
+
+
+
+/* ── Fantasma do arrasto da biblioteca ────────────────────────────────────── */
+
+.editor-ghost {
+  position: fixed;
+  z-index: 99999;
+  width: 176px;
+  padding: 12px;
+  border-radius: 13px;
+  border: 1px solid #818cf8;
+  background: #0d0d16;
+  color: #e6e8ee;
+  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.7);
+  /* O ponteiro é a QUINA SUPERIOR ESQUERDA da peça que vai nascer — é o que a
+     soltura grava. O leve deslocamento existe só para o cursor não sumir sob o
+     cartão; centralizar o fantasma faria a pessoa mirar num lugar e a peça
+     nascer noutro. */
+  transform: translate(10px, 10px) rotate(-2deg);
+  pointer-events: none;
+  opacity: 0.97;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+}
+
+.editor-ghost-preview {
+  display: block;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #8b94a8;
+}
+
+.editor-ghost strong { display: block; margin-top: 9px; font-size: 12.5px; }
+
+.editor-ghost em {
+  display: block;
+  margin-top: 5px;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #818cf8;
+}
+
+/* ── Foco visível ────────────────────────────────────────────────────────────
+   O editor não tinha nenhum: quem navega por Tab percorria trinta controles
+   sem saber onde estava. `:focus-visible` (e não `:focus`) mostra o anel para
+   teclado e não para clique, então o visual em uso com mouse não muda em nada.
+
+   O `outline` fica por fora da caixa e não desloca nada — o mesmo motivo pelo
+   qual o realce de campo editável deixou de usar borda. */
+.editor-shell :is(button, a, input, select, [contenteditable]):focus-visible,
+.showcase-body :is(button, a, input, textarea):focus-visible {
+  outline: 2px solid var(--ed-accent, #818cf8);
+  outline-offset: 2px;
+}
+
+/* A peça selecionada por teclado precisa aparecer mesmo sem hover. */
+.builder-piece:focus-within > .builder-piece-chrome {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Movimento ───────────────────────────────────────────────────────────────
+   O editor tem entrada de peça, pulso do salvamento e transições em quase tudo.
+   Para quem pediu menos movimento no sistema, isso é ruído — e num construtor,
+   onde a pessoa fica horas, é ruído acumulado. */
+@media (prefers-reduced-motion: reduce) {
+  .editor-shell *,
+  .showcase-body * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Aviso de tela estreita — escondido por padrão, aparece só quando é verdade. */
+.editor-aviso-estreito { display: none; }
+
+@media (max-width: 760px) {
+  .editor-aviso-estreito {
+    display: block;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 9px 14px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #c3c8fc;
+    background: var(--ed-accent-soft);
+    border-bottom: 1px solid rgba(129, 140, 248, 0.25);
+  }
+
+  /* O inspetor some antes do canvas: sem ele ainda dá para escrever e mover; */
+  /* sem canvas não sobra nada para editar.                                   */
+  .editor-inspector { display: none; }
+  .editor-stage { padding: 16px 12px 80px; }
+}
+
+/* ── Barra de formatação e modais ─────────────────────────────────────────── */
+
+.editor-format-bar {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #13131c;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+
+.editor-format-cor input[type="color"] {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.editor-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.editor-modal {
+  width: 420px;
+  max-width: 92vw;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0e0e15;
+  color: #e6e8ee;
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.6);
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+}
+
+.editor-modal-head { display: flex; align-items: center; justify-content: space-between; }
+.editor-modal-head h3 { margin: 0; font-size: 15px; font-weight: 700; }
+
+.editor-modal-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.editor-modal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.editor-modal-item strong { display: block; font-size: 12.5px; }
+.editor-modal-item span { display: block; margin-top: 2px; font-size: 11px; color: #7e879a; }
+
+/* ── O editor em telas menores ────────────────────────────────────────────── */
+
+/* Notebook: o inspetor encolhe antes do canvas, porque é ele que tem campos
+   redimensionáveis; a prancheta não. */
+@media (max-width: 1400px) {
+  .editor-inspector { width: 264px; }
+  .editor-stage { padding: 26px 24px 100px; }
+}
+
+@media (max-width: 980px) {
+  .editor-topbar { grid-template-columns: auto 1fr auto; padding: 0 10px; }
+  .editor-topbar-title { display: none; }
+  .editor-zoom { display: none; }
+  .editor-inspector { width: 232px; }
+}

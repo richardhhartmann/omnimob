@@ -1,27 +1,39 @@
-import { useEffect, useLayoutEffect, useState } from "react";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 import { api } from "../api";
-import {
-  blockHasBackgroundImage,
-  mergeBlockWrapperStyle,
-  normalizeShowcaseConfig,
-  sectionSurfaceStyle,
-} from "../utils/showcaseConfig";
-import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader";
-import { comodidadesAtivas } from "../utils/comodidades";
-import { tipoContratoInfo } from "../utils/tiposContrato";
+import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { useSeo } from "../utils/seo";
 import { loadShowcaseFonts, setCachedTenant } from "../utils/showcaseFonts";
-import { IconeEstrela } from "../components/Icones.jsx";
+import { VitrineProvider } from "../components/showcase/contexto.jsx";
+import { ShowcaseRenderer } from "../components/showcase/ShowcaseRenderer.jsx";
+import { useLayoutResolvido } from "../components/showcase/useLayoutResolvido.js";
+import { alturaDoConteudo } from "../components/showcase/engine/layoutEngine.js";
+import { classeDeAparencia, estiloDoTema, linkWhatsApp, modoDoViewport } from "../components/showcase/tema.js";
 
-// Elemento interno (sem min-height) usado para medir a altura REAL de cada bloco.
-const SECTION_INNER_SEL = {
-  title: ".showcase-title-section",
-  highlights: ".showcase-highlights",
-  properties: "#destaques",
-  footer: ".showcase-footer",
-};
-const STACK_BLOCK_ORDER = ["header", "title", "highlights", "properties", "footer"];
+/* ────────────────────────────────────────────────────────────────────────────
+   A vitrine pública.
+
+   Esta página não desenha mais nada. Ela busca os dados, resolve o layout com a
+   MESMA engine do editor e entrega tudo ao renderizador compartilhado — o mesmo
+   que o construtor usa. Cabeçalho, título, destaques, grade de imóveis, cartão
+   de imóvel, widgets e rodapé são componentes únicos: alterar um deles muda as
+   duas telas ao mesmo tempo, que é a única forma de a paridade se manter sem
+   alguém precisar lembrar dela.
+
+   O que saiu daqui, e por quê:
+
+     · o bloco condicional que desenhava cada tipo de widget → `ShowcaseWidget`;
+     · a marcação do cartão de imóvel → `ShowcasePropertyCard`;
+     · `sectionCombinedStyle()` → o cálculo de posição do `ShowcaseRenderer`;
+     · `propsShift` — um deslocamento especial só para os blocos abaixo da grade
+       de imóveis, que o editor desconhecia;
+     · `mobileStack` — um empilhamento em coluna única que jogava fora as
+       posições mobile salvas e publicava widgets a 100% de largura mesmo quando
+       o editor mostrava 49%. Era a maior quebra de WYSIWYG do produto;
+     · `widgetPos()` e a medição por `document.querySelector`.
+
+   Tudo isso virou uma chamada a `useLayoutResolvido`.
+   ──────────────────────────────────────────────────────────────────────────── */
 
 export function ShowcasePage({ slugFixo }) {
   /* Em domínio próprio não há slug na URL — ele vem resolvido do host, por
@@ -29,140 +41,75 @@ export function ShowcasePage({ slugFixo }) {
   const { tenantSlug: slugDaRota } = useParams();
   const tenantSlug = slugFixo || slugDaRota;
   const location = useLocation();
+
   const [payload, setPayload] = useState(null);
   const [carouselIndexes, setCarouselIndexes] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
-  const [reflowTick, setReflowTick] = useState(0);
-  // Desktop: ajuste do bloco de imóveis (altura real do grid + deslocamento dos blocos abaixo).
-  const [propsShift, setPropsShift] = useState(null);
-  // Mobile: empilhamento vertical de todas as seções/widgets por conteúdo (coluna única).
-  const [mobileStack, setMobileStack] = useState(null);
-
-  async function loadShowcaseData() {
-    if (!tenantSlug) return;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await api.getPublicShowcase(tenantSlug);
-      setPayload(data);
-      setCachedTenant(tenantSlug, data.tenant);
-      const indexes = {};
-      (data.properties || []).forEach((property) => {
-        indexes[property.id] = 0;
-      });
-      setCarouselIndexes(indexes);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [mode, setMode] = useState(() => modoDoViewport(window.innerWidth));
 
   useEffect(() => {
-    loadShowcaseData();
+    let cancelado = false;
+    async function carregar() {
+      if (!tenantSlug) return;
+      setCarregando(true);
+      setErro("");
+      try {
+        const dados = await api.getPublicShowcase(tenantSlug);
+        if (cancelado) return;
+        setPayload(dados);
+        setCachedTenant(tenantSlug, dados.tenant);
+        const indices = {};
+        (dados.properties || []).forEach((p) => { indices[p.id] = 0; });
+        setCarouselIndexes(indices);
+      } catch (err) {
+        if (!cancelado) setErro(err.message);
+      } finally {
+        if (!cancelado) setCarregando(false);
+      }
+    }
+    carregar();
+    return () => { cancelado = true; };
   }, [tenantSlug]);
 
+  // O modo é decidido pelo MESMO limiar que o editor usa (ver `tema.js`).
   useEffect(() => {
-    const handler = () => {
-      setIsMobileViewport(window.innerWidth < 768);
-      setReflowTick((t) => t + 1);
-    };
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
+    const aoRedimensionar = () => setMode(modoDoViewport(window.innerWidth));
+    window.addEventListener("resize", aoRedimensionar);
+    return () => window.removeEventListener("resize", aoRedimensionar);
   }, []);
 
-  useEffect(() => {
-    loadShowcaseFonts();
-  }, []);
+  useEffect(() => { loadShowcaseFonts(); }, []);
 
-  // Após navegação SPA (e a carga dos dados), rola até a seção do hash (#destaques/#footer).
+  // Após navegação SPA, rola até a seção do hash (#destaques / #footer).
   useEffect(() => {
     if (!payload || !location.hash) return;
     const el = document.getElementById(location.hash.slice(1));
     if (el) requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth" }));
   }, [payload, location.hash]);
 
-  // O layout salvo (posições absolutas) é medido no editor, em larguras diferentes
-  // das do visitante. Aqui medimos o conteúdo real e ajustamos as posições:
-  //  - Desktop: mantém o layout livre, só desloca os blocos abaixo de "imóveis"
-  //    conforme a grade cresce/encolhe (evita sobreposição e vão gigante).
-  //  - Mobile: empilha tudo numa coluna única por conteúdo (os widgets não têm
-  //    posição mobile própria, então cairiam em cima dos cards de imóveis).
-  useLayoutEffect(() => {
-    if (!payload) { setPropsShift(null); setMobileStack(null); return; }
-    const cfg = normalizeShowcaseConfig(payload.tenant?.showcaseConfig);
-    const hidden = cfg.hiddenBlocks || [];
-    const measureInner = (sel) => {
-      const el = sel ? document.querySelector(sel) : null;
-      return el ? Math.ceil(el.getBoundingClientRect().height) : null;
-    };
+  const tenant = payload?.tenant || {};
+  const properties = payload?.properties || [];
 
-    if (isMobileViewport) {
-      setPropsShift(null);
-      const al = cfg.mobileLayout || {};
-      const items = [];
-      for (const k of STACK_BLOCK_ORDER) {
-        if (hidden.includes(k)) continue;
-        const lay = al[k] || {};
-        const h = k === "header" ? (lay.h || 80) : (measureInner(SECTION_INNER_SEL[k]) ?? lay.h ?? 120);
-        items.push({ key: k, y: lay.y ?? 0, h });
-      }
-      for (const w of cfg.widgets || []) {
-        if (w.hidden) continue;
-        items.push({ key: `widget-${w.id}`, y: w.y ?? 1080, h: w.h ?? 200 });
-      }
-      items.sort((a, b) => a.y - b.y);
-      const GAP = 22;
-      let cursor = 0;
-      const stack = {};
-      for (const it of items) {
-        stack[it.key] = { y: cursor, h: it.h };
-        cursor += it.h + GAP;
-      }
-      setMobileStack({ ...stack, __bottom: cursor });
-      return;
-    }
+  /* Memoizado porque é a entrada do `useLayoutResolvido`: um objeto novo a cada
+     render reiniciaria a resolução em laço. */
+  const config = useMemo(
+    () => normalizeShowcaseConfig(tenant.showcaseConfig),
+    [tenant.showcaseConfig]
+  );
 
-    // Desktop
-    setMobileStack(null);
-    if (hidden.includes("properties")) { setPropsShift(null); return; }
-    const propsLayout = (cfg.layout || {}).properties;
-    const gridH = measureInner("#destaques");
-    if (!propsLayout || gridH == null) { setPropsShift(null); return; }
-    const naturalH = gridH + 56;
-    const delta = naturalH - (propsLayout.h || 0);
-    setPropsShift(Math.abs(delta) < 8 ? null : { y: propsLayout.y || 0, h: naturalH, delta });
-  }, [payload, isMobileViewport, reflowTick]);
+  const { layout, registrarPeca } = useLayoutResolvido({ config, mode });
 
-  function nextImage(propertyId, total) {
-    setCarouselIndexes((prev) => ({
-      ...prev,
-      [propertyId]: ((prev[propertyId] || 0) + 1) % total,
-    }));
-  }
+  const nomeVitrine = tenant?.name;
 
-  function prevImage(propertyId, total) {
-    setCarouselIndexes((prev) => ({
-      ...prev,
-      [propertyId]: ((prev[propertyId] || 0) - 1 + total) % total,
-    }));
-  }
-
-  /* SEO da vitrine. Precisa vir ANTES do return antecipado abaixo, porque hook
-     não pode ser condicional. Enquanto o payload não chega o título sai vazio e
-     o useSeo não encosta em nada — deixar o título da Omnimob por um instante é
-     melhor que piscar a aba em branco.
-
-     Sem isto toda vitrine seria indexada com o título e a descrição da
-     Omnimob, competindo entre si pelas mesmas palavras em vez de cada uma
-     aparecer pelo nome da própria imobiliária. */
-  const nomeVitrine = payload?.tenant?.name;
+  /* SEO. Precisa vir ANTES do retorno antecipado abaixo, porque hook não pode
+     ser condicional. Sem isto toda vitrine seria indexada com o título e a
+     descrição da Omnimob, competindo entre si pelas mesmas palavras em vez de
+     cada uma aparecer pelo nome da própria imobiliária. */
   useSeo({
     titulo: nomeVitrine ? `${nomeVitrine} — Imóveis disponíveis` : "",
     descricao:
-      payload?.tenant?.showcaseSubheadline ||
+      tenant?.showcaseSubheadline ||
       (nomeVitrine
         ? `Veja os imóveis disponíveis na ${nomeVitrine}: fotos, localização e contato direto com a imobiliária.`
         : ""),
@@ -171,457 +118,57 @@ export function ShowcasePage({ slugFixo }) {
     caminho: slugFixo ? "/" : `/vitrine/${tenantSlug}`,
     // A primeira foto do acervo diz mais numa prévia de link do que a marca da
     // Omnimob, que não é a dona desta página.
-    imagem: payload?.properties?.[0]?.images?.[0]?.url,
+    imagem: properties?.[0]?.images?.[0]?.url,
   });
 
-  if (!payload && !error) {
+  if (!payload && !erro) {
     return <div style={{ minHeight: "100vh", background: "#0f172a" }} />;
   }
 
-  const tenantName = payload?.tenant?.name || tenantSlug?.toUpperCase() || "Omnimob";
-  const tenant = payload?.tenant || {};
-  const showcaseConfig = normalizeShowcaseConfig(tenant.showcaseConfig);
-  const layout = showcaseConfig.layout;
-  const mobileLayout = showcaseConfig.mobileLayout;
-  const activeLayout = isMobileViewport ? mobileLayout : layout;
-  const blockStyles = showcaseConfig.blockStyles;
-  const hiddenBlocks = showcaseConfig.hiddenBlocks || [];
-  const initialLetter = tenantName.charAt(0).toUpperCase();
-  const properties = payload?.properties || [];
-  const showcaseHeadline = tenant.showcaseHeadline || "Encontre o imovel ideal para seu proximo passo";
-  const showcaseSubheadline =
-    tenant.showcaseSubheadline ||
-    "Compare opcoes, visualize fotos detalhadas, conheca a localizacao e entre em contato com a imobiliaria com um clique.";
-  const whatsappHref = tenant.whatsapp
-    ? `https://wa.me/${String(tenant.whatsapp).replace(/\D/g, "")}?text=${encodeURIComponent(
-        `Ola, tenho interesse nos imoveis da ${tenantName}.`
-      )}`
-    : null;
-  const globalFont = showcaseConfig.globalFont || "Inter";
-  const themeStyle = {
-    "--accent": tenant.primaryColor || "#818cf8",
-    "--accent-hover": tenant.primaryColor || "#6366f1",
-    "--tenant-secondary": tenant.secondaryColor || "#d4af37",
-    "--showcase-font": `'${globalFont}', system-ui, sans-serif`,
-    fontFamily: `'${globalFont}', system-ui, sans-serif`,
-  };
-  const isLightMode = showcaseConfig.appearanceMode === "light";
-  const layoutMax = Math.max(0, ...Object.values(activeLayout).map((block) => (block?.y || 0) + (block?.h || 0)));
-  const widgetMax = showcaseConfig.widgets.length > 0
-    ? Math.max(...showcaseConfig.widgets.filter(w => !w.hidden).map(w => (w.y || 0) + (w.h || 0)))
-    : 0;
-  const canvasHeight = mobileStack
-    ? mobileStack.__bottom + 60
-    : Math.max(1800, layoutMax, widgetMax) + 40 + (propsShift ? propsShift.delta : 0);
+  const nome = nomeVitrine || tenantSlug?.toUpperCase() || "Omnimob";
+  const vitrineTenant = { ...tenant, name: nome };
+  const whatsappHref = linkWhatsApp(vitrineTenant);
 
-  // Desktop: desloca os blocos abaixo de "imóveis" conforme a grade real.
-  function shiftedY(y) {
-    return propsShift && (y || 0) > propsShift.y ? (y || 0) + propsShift.delta : (y || 0);
+  function proximaFoto(id, total) {
+    setCarouselIndexes((prev) => ({ ...prev, [id]: ((prev[id] || 0) + 1) % total }));
   }
-
-  // Posição final do widget (mobile = coluna única empilhada; desktop = layout salvo + shift).
-  function widgetPos(w) {
-    const ms = mobileStack && mobileStack[`widget-${w.id}`];
-    if (ms) return { left: 0, top: ms.y, width: 100, minHeight: ms.h };
-    return { left: w.x ?? 0, top: shiftedY(w.y ?? 1080), width: w.w ?? 50, minHeight: w.h ?? 200 };
+  function fotoAnterior(id, total) {
+    setCarouselIndexes((prev) => ({ ...prev, [id]: ((prev[id] || 0) - 1 + total) % total }));
   }
-
-  function sectionCombinedStyle(key) {
-    const bs = blockStyles[key];
-    const hasBanner = blockHasBackgroundImage(bs);
-    const blockLayout = activeLayout[key] || layout[key];
-
-    let topY = blockLayout.y;
-    let minH = blockLayout.h;
-    const ms = mobileStack && mobileStack[key];
-    if (ms) {
-      topY = ms.y;
-      minH = ms.h;
-    } else if (propsShift) {
-      if (key === "properties") minH = propsShift.h;
-      else topY = shiftedY(blockLayout.y);
-    }
-
-    const layoutPart = {
-      left: hasBanner ? "calc(50% - 50vw)" : `${blockLayout.x}%`,
-      top: `${topY}px`,
-      width: hasBanner ? "100vw" : `${blockLayout.w}%`,
-      maxWidth: hasBanner ? "100vw" : undefined,
-      minHeight: `${minH}px`,
-      boxSizing: hasBanner ? "border-box" : undefined,
-      zIndex: hasBanner ? 0 : 10,
-    };
-
-    if (hasBanner) {
-      return { ...layoutPart, ...sectionSurfaceStyle(bs), backgroundPosition: "top center" };
-    }
-    return { ...layoutPart, ...mergeBlockWrapperStyle(bs) };
-  }
-
-  const titleColor = blockStyles.title?.color;
-  const footerColor = blockStyles.footer?.color;
-  const isVisible = (key) => !hiddenBlocks.includes(key);
-
-  function isLancamento(createdAt) {
-    if (!createdAt) return false;
-    return (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24) <= 30;
-  }
-
-  const IcPin  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
-  const IcArea = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6"/><path d="M3 3l6 6"/><path d="M21 15v6h-6"/><path d="M21 21l-6-6"/></svg>;
-  const IcBed  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4v16"/><path d="M22 8v12"/><path d="M2 8h20"/><rect x="6" y="4" width="12" height="4" rx="1"/></svg>;
-  const IcCar  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="10" width="20" height="10" rx="2"/><path d="m6 10 3-6h6l3 6"/><circle cx="7" cy="17" r="1" fill="currentColor"/><circle cx="17" cy="17" r="1" fill="currentColor"/></svg>;
 
   return (
-    <div className={`showcase-body ${isLightMode ? "showcase-theme-light" : ""}`} style={themeStyle}>
-      {/* ADICIONE ESTE BLOCO DE STYLE AQUI: */}
-      <style>{`
-        .showcase-body span[style*="color"],
-        .showcase-body font[color] {
-          -webkit-text-fill-color: currentcolor !important;
-          -webkit-background-clip: initial !important;
-          background: none !important;
-        }
-      `}</style>
-      
-      <div className="showcase-container showcase-builder-canvas" style={{ minHeight: `${canvasHeight}px`, position: "relative" }}>
-
-        {isVisible("header") ? (
-        <section
-          id="header"
-          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.header) ? " showcase-section-has-bg" : ""}`}
-          style={{
-            ...sectionCombinedStyle("header"),
-            left: "calc(50% - 50vw)",
-            width: "100vw",
-            maxWidth: "100vw",
-            boxSizing: "border-box",
-            zIndex: 9999
-          }}
+    <VitrineProvider modo="public" tenantSlug={tenantSlug}>
+      <div className={`showcase-body ${classeDeAparencia(layout)}`} style={estiloDoTema(tenant, layout)}>
+        <div
+          className="showcase-container showcase-builder-canvas showcase-palco"
+          style={{ minHeight: `${alturaDoConteudo(layout, mode)}px`, position: "relative" }}
         >
-          <ShowcaseHeader
-            tenant={tenant}
+          <ShowcaseRenderer
+            config={layout}
+            mode={mode}
+            tenant={vitrineTenant}
             tenantSlug={tenantSlug}
-            blockStyles={blockStyles}
-            isMobileViewport={isMobileViewport}
+            properties={properties}
+            carouselIndexes={carouselIndexes}
+            onProxima={proximaFoto}
+            onAnterior={fotoAnterior}
+            carregando={carregando}
+            erro={erro}
             whatsappHref={whatsappHref}
-          />
-        </section>
-        ) : null}
-
-        {isVisible("title") ? (   
-        <section
-          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.title) ? " showcase-section-has-bg" : ""}`}
-          style={sectionCombinedStyle("title")}
-        >
-          <section
-            className={`showcase-title-section${titleColor ? " showcase-title-section--custom-text" : ""}`}
-            style={mergeBlockWrapperStyle(blockStyles.title)}
-          >
-            <h2
-              style={
-                titleColor
-                  ? {
-                      color: titleColor,
-                      background: "none",
-                      backgroundImage: "none",
-                      WebkitBackgroundClip: "unset",
-                      backgroundClip: "unset",
-                    }
-                  : undefined
-              }
-              dangerouslySetInnerHTML={{ __html: showcaseHeadline }}
-            />
-            <p style={titleColor ? { color: titleColor } : undefined} dangerouslySetInnerHTML={{ __html: showcaseSubheadline }} />
-          </section>
-        </section>
-        ) : null}
-
-        {isVisible("highlights") ? (
-        <section
-          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.highlights) ? " showcase-section-has-bg" : ""}`}
-          style={sectionCombinedStyle("highlights")}
-        >
-          <section className="showcase-highlights" style={mergeBlockWrapperStyle(blockStyles.highlights)}>
-            {showcaseConfig.highlights.map((item, index) => {
-              const hs = showcaseConfig.highlightStyles[index] || { backgroundColor: "", color: "" };
-              return (
-                <div className="highlight-box" key={`highlight-${index}`} style={mergeBlockWrapperStyle(hs)}>
-                  <h3 style={hs.color ? { color: hs.color } : undefined} dangerouslySetInnerHTML={{ __html: item.title }} />
-                  <p style={hs.color ? { color: hs.color } : undefined} dangerouslySetInnerHTML={{ __html: item.description }} />
-                </div>
-              );
-            })}
-          </section>
-        </section>
-        ) : null}
-
-        {isVisible("properties") ? (
-        <section
-          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.properties) ? " showcase-section-has-bg" : ""}`}
-          style={sectionCombinedStyle("properties")}
-        >
-          {error ? <div className="error">{error}</div> : null}
-          {loading ? <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Carregando vitrine...</p> : null}
-          {!loading && properties.length === 0 ? (
-            <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Nenhuma propriedade disponivel no momento.</p>
-          ) : null}
-
-          <div id="destaques" className="property-grid" style={mergeBlockWrapperStyle(blockStyles.properties)}>
-            {properties.map((p) => {
-              const images = p.images?.length ? p.images : [{ url: "/property-placeholder.svg" }];
-              const currentIndex = carouselIndexes[p.id] || 0;
-              const mainImage = images[currentIndex]?.url;
-              const lancamento = isLancamento(p.createdAt);
-              const andamentoLabel = { PRONTO_PARA_MORAR: "Pronto para morar", EM_CONSTRUCAO: "Em construção" }[p.andamento];
-              const contratoInfo = tipoContratoInfo(p.tipoContrato);
-
-              return (
-                <Link
-                  key={p.id}
-                  to={`/vitrine/${tenantSlug}/imovel/${p.id}`}
-                  style={{ textDecoration: "none", display: "block" }}
-                >
-                  <article className={`property-card-luxury ${lancamento ? "is-lancamento" : ""}`}>
-                    <div className="card-image-wrapper">
-                      <img
-                        key={mainImage}
-                        src={mainImage}
-                        alt={p.title}
-                        style={{ animation: "imgFade 0.3s ease" }}
-                      />
-                      {lancamento && (
-                        <span className="featured-badge" style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)", color: "#fff", border: "none" }}>
-                          Lançamento
-                        </span>
-                      )}
-                      {!lancamento && andamentoLabel && (
-                        <span className="featured-badge">
-                          {andamentoLabel}
-                        </span>
-                      )}
-                      {contratoInfo && (
-                        <span
-                          className="featured-badge"
-                          title={contratoInfo.descricao}
-                          style={{ top: "16px", left: "auto", right: "16px", background: contratoInfo.cor, color: "#fff", borderColor: "transparent" }}
-                        >
-                          {contratoInfo.label}
-                        </span>
-                      )}
-                      {p.aceitaPermuta && (
-                        <span className="featured-badge" style={{ top: "auto", bottom: "16px", background: "rgba(99,102,241,0.8)", borderColor: "transparent" }}>
-                          Aceita permuta
-                        </span>
-                      )}
-                      {images.length > 1 && (
-                        <>
-                          <button type="button" className="carousel-btn prev" onClick={(e) => { e.preventDefault(); e.stopPropagation(); prevImage(p.id, images.length); }}>‹</button>
-                          <button type="button" className="carousel-btn next" onClick={(e) => { e.preventDefault(); e.stopPropagation(); nextImage(p.id, images.length); }}>›</button>
-                          <span className="carousel-counter">{currentIndex + 1}/{images.length}</span>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="card-info-wrapper">
-                      <h3>{p.title}</h3>
-                      {(p.neighborhood || p.city) && (
-                        <div className="card-location">
-                          <IcPin />
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {[p.neighborhood, p.city, p.state].filter(Boolean).join(", ")}
-                          </span>
-                        </div>
-                      )}
-                      {p.description && (
-                        <p style={{ fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.6", margin: "0 0 16px 0", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                          {p.description}
-                        </p>
-                      )}
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
-                        {p.squareFootage ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcArea />{p.squareFootage} m²</span> : null}
-                        {p.bedrooms ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcBed />{p.bedrooms} qto{p.bedrooms !== 1 ? "s" : ""}{p.suites ? ` · ${p.suites} suíte${p.suites !== 1 ? "s" : ""}` : ""}</span> : null}
-                        {p.parkingSpots ? <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "6px 12px", borderRadius: "8px" }}><IcCar />{p.parkingSpots} vaga{p.parkingSpots !== 1 ? "s" : ""}</span> : null}
-                      </div>
-                      {(() => {
-                        const ativas = comodidadesAtivas(p.comodidades);
-                        if (ativas.length === 0) return null;
-                        const visiveis = ativas.slice(0, 6);
-                        const restantes = ativas.length - visiveis.length;
-                        return (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
-                            {visiveis.map((c) => (
-                              <span key={c.key} title={c.label} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>
-                                <c.Icone size={13} />{c.label}
-                              </span>
-                            ))}
-                            {restantes > 0 && (
-                              <span style={{ display: "flex", alignItems: "center", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.04)", padding: "5px 10px", borderRadius: "999px" }}>+{restantes}</span>
-                            )}
-                          </div>
-                        );
-                      })()}
-                      <div className="card-price-wrapper">
-                        <div>
-                          <span className="price-label">Valor</span>
-                          <p className="card-price">
-                            R$ {Number(p.price).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-        ) : null}
-
-        {showcaseConfig.widgets.filter(w => !w.hidden).map((widget) => (
-        <section
-          key={widget.id}
-          className="showcase-layout-block"
-          style={{
-            position: "absolute",
-            left: `${widgetPos(widget).left}%`,
-            top: `${widgetPos(widget).top}px`,
-            width: `${widgetPos(widget).width}%`,
-            minHeight: `${widgetPos(widget).minHeight}px`,
-            zIndex: 10,
-            boxSizing: "border-box",
-            padding: "8px",
-          }}
-        >
-          <article className="widget-card" style={{ ...mergeBlockWrapperStyle(widget), height: "100%", boxSizing: "border-box" }}>
-            {widget.type === "testimonial" ? (
-              <div style={{ textAlign: "center", padding: "16px" }}>
-                <div className="widget-testimonial-stars" aria-label="5 de 5 estrelas">
-                              {[0, 1, 2, 3, 4].map((n) => <IconeEstrela key={n} size={13} />)}
-                            </div>
-                <div className="widget-testimonial-content" dangerouslySetInnerHTML={{ __html: widget.content }} />
-                <h3 style={{ fontSize: "16px", fontWeight: "600", color: "var(--accent)", margin: 0 }} dangerouslySetInnerHTML={{ __html: widget.title }} />
-              </div>
-            ) : widget.type === "stats" ? (
-              <div style={{ padding: "8px" }}>
-                <h3 style={{ textAlign: "center", marginBottom: "24px" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
-                <div className="widget-stats-grid">
-                  {(widget.content || "").split("|").reduce((acc, val, i) => {
-                    if (i % 2 === 0) acc.push([val]);
-                    else acc[acc.length - 1].push(val);
-                    return acc;
-                  }, []).slice(0, 4).map(([num, label], i) => (
-                    <div key={i} className="widget-stat-box">
-                      <div className="widget-stat-number">{num}</div>
-                      <div className="widget-stat-label">{label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : widget.type === "cta" ? (
-              <div className="widget-cta-box">
-                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
-                <p style={{ fontSize: "16px", margin: "16px 0" }} dangerouslySetInnerHTML={{ __html: widget.content }} />
-                {widget.ctaLabel ? (() => {
-                  const isWa = /wa\.me|whatsapp|api\.whatsapp/i.test(widget.ctaUrl || "");
-                  return (
-                    <a
-                      href={widget.ctaUrl || "#"}
-                      target={widget.ctaUrl ? "_blank" : undefined}
-                      rel={widget.ctaUrl ? "noreferrer" : undefined}
-                      className="widget-cta-button"
-                      style={isWa ? { background: "#25D366", display: "inline-flex", alignItems: "center", gap: "10px", boxShadow: "0 8px 22px rgba(37,211,102,0.4)" } : undefined}
-                    >
-                      {isWa ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg>
-                      ) : null}
-                      <span dangerouslySetInnerHTML={{ __html: widget.ctaLabel }} />
-                    </a>
-                  );
-                })() : null}
-              </div>
-            ) : widget.type === "social" ? (
-              <div style={{ textAlign: "center", padding: "8px" }}>
-                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
-                <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "16px", marginTop: "24px" }}>
-                  {(widget.content || "").split("|").filter(Boolean).map((url, i) => {
-                    const isWa = url.includes("wa.me") || url.includes("whatsapp");
-                    const isIg = url.includes("instagram");
-                    const isFb = url.includes("facebook");
-                    const label = isWa ? "WhatsApp" : isIg ? "Instagram" : isFb ? "Facebook" : "Acessar";
-                    const bg = isWa ? "#25D366" : isIg ? "linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)" : isFb ? "#1877F2" : "var(--accent)";
-                    const icon = isWa ? "W" : isIg ? "I" : isFb ? "F" : "S";
-                    return (
-                      <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "14px 28px", background: bg, borderRadius: "16px", color: "#fff", fontSize: "15px", fontWeight: "600", textDecoration: "none", boxShadow: "0 8px 24px rgba(0,0,0,0.15)", transition: "transform 0.3s ease" }} onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-3px)"} onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}>
-                        <span style={{ fontWeight: "800", fontSize: "18px" }}>{icon}</span> {label}
-                      </a>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : widget.type === "divider" ? (
-              <div style={{ textAlign: "center", padding: "32px 0", height: "100%", display: "flex", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "24px", width: "100%" }}>
-                  <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15))" }} />
-                  <span style={{ fontSize: "15px", opacity: 0.7, letterSpacing: "0.2em", textTransform: "uppercase" }} dangerouslySetInnerHTML={{ __html: widget.title }} />
-                  <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, rgba(255,255,255,0.15), transparent)" }} />
-                </div>
-              </div>
-            ) : widget.type === "map" ? (
-              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", marginTop: "20px", background: "rgba(0,0,0,0.15)", borderRadius: "20px", padding: "32px", textAlign: "center", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "16px" }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                  <p style={{ fontSize: "16px", color: "var(--text-main)", margin: 0, fontWeight: "500" }} dangerouslySetInnerHTML={{ __html: widget.content }} />
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h3 dangerouslySetInnerHTML={{ __html: widget.title }} />
-                <p dangerouslySetInnerHTML={{ __html: widget.content }} />
-              </div>
+            envolverPeca={({ pieceId, estilo, temBanner, children }) => (
+              <section
+                key={pieceId}
+                data-piece-id={pieceId}
+                ref={registrarPeca(pieceId)}
+                className={`showcase-layout-block${temBanner ? " showcase-section-has-bg" : ""}`}
+                style={estilo}
+              >
+                {children}
+              </section>
             )}
-          </article>
-        </section>
-        ))}
-
-        {isVisible("footer") ? (
-        <section
-          id="footer"
-          className={`showcase-layout-block${blockHasBackgroundImage(blockStyles.footer) ? " showcase-section-has-bg" : ""}`}
-          style={sectionCombinedStyle("footer")}
-        >
-          <footer
-            className="showcase-footer"
-            style={mergeBlockWrapperStyle(blockStyles.footer)}
-          >
-            <div className="showcase-footer-grid">
-              <div className="footer-col">
-                <h4 style={{ color: footerColor || "inherit" }} dangerouslySetInnerHTML={{ __html: showcaseConfig.footerTitle }} />
-                <p style={{ color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.description || "Encontre seu próximo imóvel com segurança e transparência." }} />
-              </div>
-              
-              <div className="footer-col">
-                <h4 style={{ color: footerColor || "inherit" }}>Imobiliária</h4>
-                <p style={{ color: footerColor || "var(--text-muted)", margin: "0 0 8px 0" }}>{tenantName}</p>
-                {tenant.creci ? <p style={{ color: footerColor || "var(--text-muted)", margin: "0 0 8px 0" }}>CRECI {tenant.creci}</p> : null}
-                {tenant.cidade ? <p style={{ color: footerColor || "var(--text-muted)", margin: "0 0 8px 0" }}>{tenant.cidade}</p> : null}
-              </div>
-
-              <div className="footer-col">
-                <h4 style={{ color: footerColor || "inherit" }}>Contato</h4>
-                {tenant.email ? <a href={`mailto:${tenant.email}`} style={{ color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.email }} /> : null}
-                {whatsappHref ? <a href={whatsappHref} target="_blank" rel="noreferrer" style={{ color: footerColor || "var(--text-muted)" }} dangerouslySetInnerHTML={{ __html: tenant.whatsapp }} /> : null}
-              </div>
-            </div>
-            
-            <div className="footer-bottom" style={{ color: footerColor || "var(--text-muted)" }}>
-              &copy; {new Date().getFullYear()} {tenantName}. Todos os direitos reservados.
-            </div>
-          </footer>
-        </section>
-        ) : null}
+          />
+        </div>
       </div>
-    </div>
+    </VitrineProvider>
   );
 }

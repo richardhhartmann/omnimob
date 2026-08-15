@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, setApiToken, setAdminToken } from "./api";
 import { initPointerGradient } from "./utils/pointerGradient";
 import { DashboardPage, ImovelListPage, ImovelFormPage } from "./pages/DashboardPage";
@@ -32,6 +32,7 @@ export default function App() {
     return s;
   });
   const location = useLocation();
+  const navegar = useNavigate();
   const DEFAULT_PUBLIC_SHOWCASE = "/vitrine/imobiliaria-centro";
 
   /* ─── Vitrine em domínio próprio ────────────────────────────────────────────
@@ -178,8 +179,20 @@ export default function App() {
   }
 
   function handleLogout() {
+    /* Sair do painel leva ao LOGIN, e não à vitrine pública.
+
+       Antes era só limpar a sessão: sem ela, a rota protegida caía no
+       `defaultPublicPath` e a pessoa aterrissava na vitrine da própria
+       imobiliária — a página dos CLIENTES dela. Quem clica em "Encerrar sessão"
+       ou está indo embora, ou vai entrar com outra conta; nos dois casos o
+       destino é a porta, não a vitrine.
+
+       `replace` para o botão Voltar não devolver ao painel já deslogado, que
+       só quicaria de volta. O `motivo` é lido uma vez pela tela de login e
+       descartado — ver `LoginPage`. */
     clearSession();
     setSession(null);
+    navegar("/login", { replace: true, state: { motivo: "sessao-encerrada" } });
   }
 
   const cargo = session?.usuario?.cargo;

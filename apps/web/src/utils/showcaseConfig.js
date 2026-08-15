@@ -28,7 +28,7 @@ export const DEFAULT_MOBILE_LAYOUT = {
   title:      { x: 0, y: 100,  w: 100, h: 320 },
   highlights: { x: 0, y: 440,  w: 100, h: 800 },
   properties: { x: 0, y: 1260, w: 100, h: 1200 },
-  footer:     { x: 0, y: 3200, w: 100, h: 400 },
+  footer:     { x: 0, y: 3900, w: 100, h: 400 },
 };
 
 export const DEFAULT_WIDGETS = [
@@ -38,7 +38,11 @@ export const DEFAULT_WIDGETS = [
     title: "Nossos Números",
     content: "200+|Imóveis vendidos|15 anos|De experiência|4.9★|Avaliação média",
     ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
-    x: 0, y: 1470, w: 100, h: 240, hidden: false,
+    layout: {
+      desktop: { x: 0, y: 1470, w: 100, h: 240 },
+      mobile:  { x: 0, y: 2520, w: 100, h: 320 },
+    },
+    hidden: false,
   },
   {
     id: "default-testimonial",
@@ -46,7 +50,11 @@ export const DEFAULT_WIDGETS = [
     title: "— Maria Silva, Compradora",
     content: "\"Encontrei o imóvel dos meus sonhos em menos de uma semana. Atendimento excepcional e sem burocracia!\"",
     ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
-    x: 0, y: 1770, w: 49, h: 240, hidden: false,
+    layout: {
+      desktop: { x: 0, y: 1770, w: 49, h: 240 },
+      mobile:  { x: 0, y: 2880, w: 100, h: 300 },
+    },
+    hidden: false,
   },
   {
     id: "default-hours",
@@ -54,7 +62,11 @@ export const DEFAULT_WIDGETS = [
     title: "Horário de Atendimento",
     content: "Segunda a Sexta: 09h às 18h<br>Sábados: 09h às 13h<br>Domingos e Feriados: Fechado",
     ctaLabel: "", ctaUrl: "", backgroundColor: "", color: "",
-    x: 51, y: 1770, w: 49, h: 240, hidden: false,
+    layout: {
+      desktop: { x: 51, y: 1770, w: 49, h: 240 },
+      mobile:  { x: 0, y: 3220, w: 100, h: 280 },
+    },
+    hidden: false,
   },
   {
     id: "default-cta",
@@ -64,7 +76,11 @@ export const DEFAULT_WIDGETS = [
     ctaLabel: "Falar no WhatsApp",
     ctaUrl: "https://wa.me/",
     backgroundColor: "", color: "",
-    x: 0, y: 2070, w: 100, h: 230, hidden: false,
+    layout: {
+      desktop: { x: 0, y: 2070, w: 100, h: 230 },
+      mobile:  { x: 0, y: 3540, w: 100, h: 300 },
+    },
+    hidden: false,
   },
 ];
 
@@ -123,8 +139,46 @@ function normalizeHighlightStylesRow(row) {
   };
 }
 
+function num(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeRect(raw, fallback) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  return {
+    x: num(r.x, fallback.x),
+    y: num(r.y, fallback.y),
+    w: num(r.w, fallback.w),
+    h: num(r.h, fallback.h),
+  };
+}
+
+/* ── Migração silenciosa do widget para layout por modo ──────────────────────
+   Widget nasceu com `x/y/w/h` soltos no objeto — uma posição só, compartilhada
+   por desktop e mobile. Blocos sempre tiveram `layout` e `mobileLayout`
+   separados, então mexer no celular arrastava o widget também no desktop.
+
+   O formato novo é `widget.layout = { desktop, mobile }`. Config antigo entra
+   aqui com os campos soltos e sai com os dois modos preenchidos — o mobile
+   começa como cópia do desktop, que é exatamente o comportamento de antes; a
+   partir daí cada modo anda sozinho.
+
+   Os campos soltos CONTINUAM na saída, espelhando o desktop. Não é resíduo: a
+   vitrine pública e qualquer leitor antigo do JSON leem por ali, e o espelho
+   deixa o formato novo entrar sem exigir que todos mudem no mesmo commit. */
 function normalizeWidget(widget, index) {
   const w = widget && typeof widget === "object" ? widget : {};
+  const legado = {
+    x: num(w.x, 0),
+    y: num(w.y, 1080 + index * 230),
+    w: num(w.w, 50),
+    h: num(w.h, 200),
+  };
+  const layoutRaw = w.layout && typeof w.layout === "object" ? w.layout : {};
+  const desktop = normalizeRect(layoutRaw.desktop, legado);
+  const mobile = normalizeRect(layoutRaw.mobile, desktop);
+
   return {
     id: typeof w.id === "string" && w.id ? w.id : `widget-${Date.now()}-${index}`,
     type: typeof w.type === "string" && w.type ? w.type : "text",
@@ -134,12 +188,45 @@ function normalizeWidget(widget, index) {
     ctaUrl: typeof w.ctaUrl === "string" ? w.ctaUrl : "",
     backgroundColor: typeof w.backgroundColor === "string" ? w.backgroundColor : "",
     color: typeof w.color === "string" ? w.color : "",
-    x: Number.isFinite(Number(w.x)) ? Number(w.x) : 0,
-    y: Number.isFinite(Number(w.y)) ? Number(w.y) : 1080 + index * 230,
-    w: Number.isFinite(Number(w.w)) ? Number(w.w) : 50,
-    h: Number.isFinite(Number(w.h)) ? Number(w.h) : 200,
+    layout: { desktop, mobile },
+    // Espelho do desktop, para leitores que ainda não conhecem `layout`.
+    x: desktop.x,
+    y: desktop.y,
+    w: desktop.w,
+    h: desktop.h,
     hidden: w.hidden === true,
     locked: w.locked === true,
+  };
+}
+
+/** Retângulo do widget no modo pedido ("desktop" | "mobile"). */
+export function widgetRect(widget, mode) {
+  const fallback = {
+    x: num(widget?.x, 0),
+    y: num(widget?.y, 1080),
+    w: num(widget?.w, 50),
+    h: num(widget?.h, 200),
+  };
+  const raw = widget?.layout?.[mode === "mobile" ? "mobile" : "desktop"];
+  return normalizeRect(raw, fallback);
+}
+
+/** Devolve uma cópia do widget com o retângulo daquele modo trocado. */
+export function withWidgetRect(widget, mode, rect) {
+  const alvo = mode === "mobile" ? "mobile" : "desktop";
+  const atual = {
+    desktop: widgetRect(widget, "desktop"),
+    mobile: widgetRect(widget, "mobile"),
+  };
+  const proximo = { ...atual, [alvo]: { ...atual[alvo], ...rect } };
+  return {
+    ...widget,
+    layout: proximo,
+    // O espelho legado acompanha o desktop, e só ele.
+    x: proximo.desktop.x,
+    y: proximo.desktop.y,
+    w: proximo.desktop.w,
+    h: proximo.desktop.h,
   };
 }
 
@@ -229,6 +316,11 @@ export function normalizeShowcaseConfig(raw) {
         };
 
   return {
+    /* Versão do formato. Serve para distinguir, sem adivinhação, um config
+       gravado antes do layout por modo dos widgets (ausente/1) de um já
+       migrado (2) — a migração em si é idempotente, mas o número deixa
+       telemetria e depuração honestas sobre o que veio do banco. */
+    version: 2,
     highlights,
     footerTitle: typeof cfg.footerTitle === "string" && cfg.footerTitle ? cfg.footerTitle : "Atendimento especializado",
     layout: mergedLayout,

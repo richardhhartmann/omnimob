@@ -1,3 +1,5 @@
+import { notificarRequisicao } from "./utils/pulsoTrial";
+
 /* Base da API. A barra do fim é removida de propósito: todo `path` daqui já
    começa com "/", então uma env terminada em barra produziria "//api/...", que
    o Express não casa com rota nenhuma — a resposta vira 404 em TODA requisição,
@@ -51,6 +53,13 @@ async function request(path, options = {}) {
     error.status = response.status;
     throw error;
   }
+
+  /* Um cadastro/edição que deu certo é o gatilho da pesquisa do teste (ver
+     utils/pulsoTrial.js). Fica aqui, no único ponto por onde toda requisição
+     passa, e não espalhado pelas telas: assim rota nova entra na conta sozinha
+     e nenhuma tela reescrita esquece de avisar. Só o caminho feliz — requisição
+     que falhou não é ação concluída, e por isso vem depois do `throw`. */
+  notificarRequisicao(path, restOptions.method);
 
   if (response.status === 204) return null;
   return response.json();
@@ -518,6 +527,16 @@ export const api = {
   // Situação do teste do tenant logado (dias restantes + o que ele já criou).
   getTrialStatus: (tenantSlug) =>
     request("/api/tenants/me/trial", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  /* Resposta da pesquisa que aparece durante o teste. Quando `escolha` for
+     "ESTENDER", a mesma chamada empurra o vencimento — uma vez por
+     imobiliária; a resposta diz em `estendido` se o prazo foi dado. */
+  responderPesquisaTrial: (tenantSlug, payload = {}) =>
+    request("/api/tenants/me/trial/pesquisa", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
 
   // Converte o teste em assinatura. `tokenPagamento` vem do provedor, gerado
   // no navegador — o número do cartão nunca passa pela nossa API.

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import ./test/registrar.mjs --test \"test/*.test.js\" \"test/*.test.jsx\""
   },
   "dependencies": {
     "@dnd-kit/helpers": "^0.5.0",

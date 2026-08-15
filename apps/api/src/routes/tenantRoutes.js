@@ -10,9 +10,18 @@ import {
   agendarCancelamentoDoSlug,
   normalizarPeriodo,
 } from "../services/pagamentoService.js";
-import { fidelizarTrial } from "../services/trialService.js";
+import {
+  fidelizarTrial,
+  estenderTrial,
+  registrarPesquisa,
+  DIAS_DE_EXTENSAO,
+} from "../services/trialService.js";
 import { sendEmail } from "../services/notificationService.js";
-import { emailAssinaturaConfirmada, emailRelatorioMensal } from "../services/emailTemplates.js";
+import {
+  emailAssinaturaConfirmada,
+  emailRelatorioMensal,
+  emailPesquisaTrial,
+} from "../services/emailTemplates.js";
 import { montarRelatorioMensal, mesFechadoAnterior } from "../services/relatorioService.js";
 import {
   enderecoDaVitrine,
@@ -334,7 +343,7 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
       select: {
         id: true, name: true, plano: true, statusPagamento: true, valorMensal: true,
         proximoVencimento: true, createdAt: true, showcaseConfig: true,
-        migracaoIntencao: true, migracaoResolvidaEm: true,
+        migracaoIntencao: true, migracaoResolvidaEm: true, trialEstendidoEm: true,
       },
     });
     if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
@@ -343,12 +352,21 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
     const corte = new Date(tenant.createdAt.getTime() + JANELA_DEMO_MS);
     const depoisDoCorte = { tenantId: tenant.id, createdAt: { gt: corte } };
 
-    const [imoveis, clientes, usuarios, leads, fotos] = await Promise.all([
+    /* A última resposta da pesquisa entra na mesma leva das contagens de
+       propósito: em produção cada ida ao banco custa perto de um segundo, e
+       esta rota é pedida na montagem do painel. Em paralelo ela é de graça. */
+    const [imoveis, clientes, usuarios, leads, fotos, ultimaPesquisa, respostas] = await Promise.all([
       prisma.property.count({ where: depoisDoCorte }),
       prisma.cliente.count({ where: depoisDoCorte }),
       prisma.usuario.count({ where: depoisDoCorte }),
       prisma.propertyLead.count({ where: depoisDoCorte }),
       prisma.propertyImage.count({ where: depoisDoCorte }),
+      prisma.pesquisaTrial.findFirst({
+        where: { tenantId: tenant.id },
+        orderBy: { criadoEm: "desc" },
+        select: { criadoEm: true, escolha: true },
+      }),
+      prisma.pesquisaTrial.count({ where: { tenantId: tenant.id } }),
     ]);
 
     // Quais planos dá para assinar agora, com o preço que está valendo no
@@ -379,10 +397,26 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
       plano: tenant.plano,
       expiraEm,
       diasRestantes,
+      /* Quando a conta nasceu. O pulso da pesquisa usa para não perguntar nada
+         na primeira meia hora, e a barra de progresso do teste sai da distância
+         entre esta data e `expiraEm`. */
+      criadoEm: tenant.createdAt,
       precos,
       inventario: {
         imoveis, clientes, usuarios, leads, fotos,
         vitrinePersonalizada: Boolean(tenant.showcaseConfig),
+      },
+      /* Tudo que o pulso da pesquisa precisa para decidir se hoje é dia de
+         perguntar. Vem do SERVIDOR, e não só da marca no navegador, porque a
+         conta é da imobiliária: quem dispensou a pergunta no computador do
+         escritório não pode reencontrá-la no celular dez minutos depois. */
+      pesquisa: {
+        ultimaEm: ultimaPesquisa?.criadoEm || null,
+        ultimaEscolha: ultimaPesquisa?.escolha || null,
+        respostas,
+        podeEstender: emTrial && !tenant.trialEstendidoEm,
+        diasExtensao: DIAS_DE_EXTENSAO,
+        estendidoEm: tenant.trialEstendidoEm,
       },
       /* Só vai quando ainda está PENDENTE. Quem já importou (ou já disse que
          faz depois) não precisa ver a oferta de novo, e resolver isso aqui
@@ -394,6 +428,109 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
   } catch (err) {
     console.error("[GET /tenants/me/trial]", err);
     return res.status(500).json({ error: "Erro ao carregar situação do teste." });
+  }
+});
+
+/* ─── Pesquisa espontânea do teste ───────────────────────────────────────────
+   Resposta do modal que aparece sozinho depois de a pessoa cadastrar ou editar
+   algo durante o teste (`PulsoTrialModal`, no web).
+
+   SEM PERMISSÃO ESPECIAL, ao contrário de `/me/assinar`: aqui ninguém compra
+   nada nem troca o plano. Quem responde é quem estava trabalhando na tela —
+   pode ser o corretor —, e exigir `gerenciarUsuarios` faria a pergunta aparecer
+   para ele e o botão falhar com 403. Assinar continua exigindo permissão, no
+   outro caminho: este modal só ABRE a tela de assinatura.
+
+   O prazo extra é o único efeito real, e ele é limitado no serviço: uma vez por
+   imobiliária, sete dias. Um "não" ali não é erro — é resposta —, então a rota
+   devolve 200 com `estendido: false` e o motivo, e a tela diz o que der. */
+const SENTIMENTOS = ["AMANDO", "NEUTRO", "DIFICIL"];
+const ESCOLHAS = ["ASSINAR", "ESTENDER", "DEPOIS", "FECHOU"];
+
+tenantRouter.post("/me/trial/pesquisa", requireAuth, requireTenant, async (req, res) => {
+  const { sentimento, escolha, comentario, origem } = req.body || {};
+
+  if (!ESCOLHAS.includes(escolha)) {
+    return res.status(400).json({ error: "Escolha inválida." });
+  }
+  const sentimentoLimpo = SENTIMENTOS.includes(sentimento) ? sentimento : null;
+
+  try {
+    /* O nome de quem respondeu vai COPIADO para a linha da pesquisa (ver o
+       modelo `PesquisaTrial`), então é preciso buscá-lo — o token só carrega o
+       id. Em paralelo com o tenant para não somar mais uma ida ao banco. */
+    const [tenant, usuario] = await Promise.all([
+      prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: { id: true, name: true, slug: true, email: true, statusPagamento: true, proximoVencimento: true },
+      }),
+      prisma.usuario.findFirst({
+        where: { id: req.authUserId, tenantId: req.tenant.id },
+        select: { nome: true, login: true },
+      }),
+    ]);
+    if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+    /* Só o esticão é recusado fora do teste; a resposta continua sendo gravada.
+       Um tenant que assinou entre a abertura do modal e o clique respondeu de
+       verdade, e jogar isso fora perderia justamente a opinião de quem converteu. */
+    let extensao = { estendido: false, motivo: "NAO_ESTA_EM_TESTE" };
+    if (escolha === "ESTENDER") {
+      extensao = await estenderTrial(tenant.id);
+    }
+
+    const autor = usuario ? `${usuario.nome} (${usuario.login})` : "";
+    await registrarPesquisa({
+      tenantId: tenant.id,
+      autor,
+      sentimento: sentimentoLimpo,
+      escolha,
+      comentario,
+      origem,
+    });
+
+    /* O aviso interno sai só quando há o que fazer com ele. "Estou amando" +
+       "deixo para depois" é ótimo de saber no relatório e péssimo de receber
+       por e-mail: some no meio da caixa e leva junto os que importavam. */
+    const texto = String(comentario || "").trim();
+    const vale = sentimentoLimpo === "DIFICIL" || escolha === "ESTENDER" || texto.length > 0;
+    if (vale && process.env.CONTATO_EMAIL) {
+      const diasRestantes = tenant.proximoVencimento
+        ? Math.max(0, Math.ceil((tenant.proximoVencimento.getTime() - Date.now()) / 86400000))
+        : null;
+      const modelo = emailPesquisaTrial({
+        imobiliaria: tenant.name,
+        slug: tenant.slug,
+        autor,
+        sentimento: sentimentoLimpo,
+        escolha,
+        comentario: texto,
+        diasRestantes,
+        base: (process.env.APP_URL || "").replace(/\/+$/, ""),
+        emailContato: tenant.email,
+      });
+      /* Sem `await`: a pessoa está olhando para um modal esperando o "pronto,
+         seu teste vai até tal dia". O e-mail leva segundos no Resend e uma
+         falha dele não muda nada do que já foi gravado. */
+      sendEmail({
+        to: process.env.CONTATO_EMAIL,
+        subject: modelo.subject,
+        body: modelo.body,
+        html: modelo.html,
+        ...(tenant.email ? { replyTo: tenant.email } : {}),
+      }).catch((e) => console.error("[pesquisa-trial] aviso interno falhou:", e.message));
+    }
+
+    return res.json({
+      ok: true,
+      estendido: Boolean(extensao.estendido),
+      motivo: extensao.estendido ? null : extensao.motivo,
+      expiraEm: extensao.estendido ? extensao.expiraEm : tenant.proximoVencimento,
+      diasGanhos: extensao.estendido ? extensao.dias : 0,
+    });
+  } catch (err) {
+    console.error("[POST /tenants/me/trial/pesquisa]", err);
+    return res.status(500).json({ error: "Erro ao registrar a resposta." });
   }
 });
 

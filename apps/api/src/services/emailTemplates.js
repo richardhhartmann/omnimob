@@ -395,6 +395,94 @@ export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, ur
   return { subject, body, html };
 }
 
+// ─── 7. Pesquisa do teste (vai para o time) ──────────────────────────────────
+
+/* A pessoa disse, dentro do painel e durante o teste, o que está achando.
+
+   O aviso NÃO sai a cada resposta: quem clicou "estou amando" e seguiu
+   trabalhando não é assunto para ninguém às 3 da tarde. A rota só chama isto
+   quando há o que fazer — dificuldade relatada, comentário escrito, ou o
+   pedido de mais prazo, que é uma objeção de compra em forma de botão. */
+export function emailPesquisaTrial({
+  imobiliaria, slug, autor, sentimento, escolha, comentario, diasRestantes, base, emailContato,
+}) {
+  const ROTULO_SENTIMENTO = {
+    AMANDO: "Está amando",
+    NEUTRO: "Vai indo",
+    DIFICIL: "Está com dificuldade",
+  };
+  const ROTULO_ESCOLHA = {
+    ASSINAR: "Foi para a tela de assinatura",
+    ESTENDER: "Pediu mais prazo de teste",
+    DEPOIS: "Deixou para depois",
+    FECHOU: "Fechou sem responder",
+  };
+
+  const dificuldade = sentimento === "DIFICIL";
+  const subject = dificuldade
+    ? `Omnimob · ${imobiliaria} está com dificuldade no teste`
+    : escolha === "ESTENDER"
+      ? `Omnimob · ${imobiliaria} pediu mais prazo de teste`
+      : `Omnimob · resposta da pesquisa — ${imobiliaria}`;
+
+  const linhas = [
+    { rotulo: "Imobiliária", valor: imobiliaria },
+    { rotulo: "Slug", valor: slug, mono: true },
+    { rotulo: "Respondeu", valor: autor || "não identificado" },
+    { rotulo: "Como está sendo", valor: ROTULO_SENTIMENTO[sentimento] || "não disse" },
+    { rotulo: "O que escolheu", valor: ROTULO_ESCOLHA[escolha] || escolha },
+    ...(diasRestantes != null ? [{ rotulo: "Dias de teste", valor: String(diasRestantes) }] : []),
+    ...(emailContato ? [{ rotulo: "E-mail", valor: emailContato, mono: true }] : []),
+  ];
+
+  const body = [
+    dificuldade
+      ? "Uma imobiliária em teste relatou dificuldade no painel."
+      : "Resposta da pesquisa que aparece durante o teste.",
+    "",
+    ...linhas.map((l) => `${l.rotulo}: ${l.valor}`),
+    ...(comentario ? ["", "— O que ela escreveu —", comentario] : []),
+    "",
+    dificuldade
+      ? "Vale um contato hoje: dificuldade não relatada vira teste que vence em silêncio."
+      : "",
+  ].join("\n");
+
+  const html = layoutEmail({
+    preheader: dificuldade
+      ? `${imobiliaria} travou em alguma parte do teste.`
+      : `${imobiliaria} respondeu a pesquisa do teste.`,
+    conteudo: [
+      eyebrow(dificuldade ? "● DIFICULDADE NO TESTE" : "● PESQUISA DO TESTE", dificuldade ? "#f59e0b" : COR.menta),
+      titulo(
+        dificuldade
+          ? "Alguém está travando durante o teste"
+          : escolha === "ESTENDER"
+            ? "Pediu mais tempo antes de decidir"
+            : "Resposta da pesquisa do painel",
+      ),
+      paragrafo(
+        dificuldade
+          ? `A ${forte(imobiliaria)} disse, dentro do painel, que está com dificuldade. `
+            + "O teste continua correndo — o contato precisa sair antes do vencimento."
+          : `A ${forte(imobiliaria)} respondeu a pesquisa que aparece durante o teste.`,
+      ),
+      dados(linhas),
+      ...(comentario
+        ? [divisor(), eyebrow("● O QUE ELA ESCREVEU", COR.dourado), aviso(esc(comentario), dificuldade ? "#f59e0b" : COR.dourado)]
+        : []),
+      ...(base ? [botao("Abrir o painel super-admin", `${String(base).replace(/\/+$/, "")}/admin`)] : []),
+      divisor(),
+      paragrafo(
+        `<span style="color:${COR.apagado};font-size:13px;">Aviso automático — sai só quando há dificuldade, comentário escrito ou pedido de mais prazo.</span>`,
+      ),
+    ].join(""),
+    rodape: "Aviso interno da plataforma Omnimob.",
+  });
+
+  return { subject, body, html };
+}
+
 /* Recuperação de senha.
 
    O texto evita prometer que a conta existe: quem pede a recuperação vê sempre

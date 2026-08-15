@@ -29,6 +29,12 @@ const DIAS_DE_TRIAL = 14;
 // candidato a remoção — janela para a pessoa voltar e fechar negócio.
 const DIAS_ATE_REMOVER = 30;
 
+/* Prazo extra que a pesquisa do painel pode dar, UMA vez por imobiliária.
+   Sete dias é escolha de negócio: é folga suficiente para quem estava sem
+   tempo de testar, e curto o bastante para não virar um segundo teste — quem
+   precisa de mais que isso é conversa com o time, não botão na tela. */
+export const DIAS_DE_EXTENSAO = 7;
+
 const CARGO_ADMIN = "Administrador";
 
 export function fimDoTrial(inicio = new Date()) {
@@ -287,6 +293,72 @@ export async function limparTrials({ aplicar = false } = {}) {
   }
 
   return { aplicado: true, desativados: aDesativar, removidos: aRemover };
+}
+
+// ─── Pesquisa espontânea e prazo extra ───────────────────────────────────────
+
+/**
+ * Estica o teste em `DIAS_DE_EXTENSAO`, uma vez só na vida da imobiliária.
+ *
+ * A contagem parte de HOJE ou do vencimento — o que for maior. Somar sempre
+ * sobre a data marcada daria menos do que o prometido para quem só voltou
+ * depois de vencido (teste vencido há 3 dias renderia 4, não 7), e somar
+ * sempre sobre hoje ENCURTARIA o prazo de quem pediu no primeiro dia.
+ *
+ * A trava do "uma vez só" mora no próprio UPDATE (`trialEstendidoEm: null`),
+ * não num `findUnique` antes: dois cliques no mesmo instante passariam os dois
+ * pela leitura e o teste ganharia 14 dias. Aqui o segundo simplesmente não
+ * encontra linha para atualizar.
+ *
+ * @returns {{ estendido: boolean, motivo?: string, expiraEm?: Date, dias?: number }}
+ */
+export async function estenderTrial(tenantId) {
+  const prisma = getGlobalPrisma();
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { statusPagamento: true, proximoVencimento: true, trialEstendidoEm: true },
+  });
+
+  if (!tenant) return { estendido: false, motivo: "NAO_ENCONTRADO" };
+  if (tenant.statusPagamento !== "TRIAL") return { estendido: false, motivo: "NAO_ESTA_EM_TESTE" };
+  if (tenant.trialEstendidoEm) return { estendido: false, motivo: "JA_ESTENDIDO" };
+
+  const agora = new Date();
+  const partida = tenant.proximoVencimento && tenant.proximoVencimento > agora
+    ? tenant.proximoVencimento
+    : agora;
+  const novaData = new Date(partida);
+  novaData.setDate(novaData.getDate() + DIAS_DE_EXTENSAO);
+
+  const { count } = await prisma.tenant.updateMany({
+    where: { id: tenantId, statusPagamento: "TRIAL", trialEstendidoEm: null },
+    data: {
+      proximoVencimento: novaData,
+      trialEstendidoEm: agora,
+      /* Reativa quem já tinha caído na faxina. Sem isto o prazo novo apareceria
+         na tela e o painel continuaria fechado — o pior dos dois mundos. */
+      ativo: true,
+    },
+  });
+
+  if (!count) return { estendido: false, motivo: "JA_ESTENDIDO" };
+  return { estendido: true, expiraEm: novaData, dias: DIAS_DE_EXTENSAO };
+}
+
+/** Uma resposta da pesquisa do painel. Só grava; quem decide é a rota. */
+export async function registrarPesquisa({ tenantId, autor = "", sentimento = null, escolha, comentario = "", origem = "" }) {
+  const prisma = getGlobalPrisma();
+  return prisma.pesquisaTrial.create({
+    data: {
+      tenantId,
+      autor: String(autor || "").slice(0, 120),
+      sentimento: sentimento || null,
+      escolha,
+      // Teto generoso, mas teto: o campo é aberto e vai parar num e-mail.
+      comentario: String(comentario || "").slice(0, 2000),
+      origem: String(origem || "").slice(0, 40),
+    },
+  });
 }
 
 /** Converte um trial em cliente pagante. É só virar a chave. */

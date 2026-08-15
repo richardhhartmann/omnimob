@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { getTrialStatusCompartilhado, esquecerTrialStatus } from "../utils/trialStatus";
+import {
+  getTrialStatusCompartilhado,
+  esquecerTrialStatus,
+  ouvirMudancaDeTrial,
+} from "../utils/trialStatus";
+import { ouvirPedidoDeAssinatura } from "../utils/pulsoTrial";
 import { PLANOS } from "../utils/planos";
 import { carregarStripe, stripeConfigurado, APARENCIA_STRIPE } from "../utils/stripe";
 import { IconeCheck } from "./Icones.jsx";
@@ -53,6 +58,24 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
     if (!tenantSlug) return;
     getTrialStatusCompartilhado(tenantSlug).then(setSituacao).catch(() => setSituacao(null));
   }, [tenantSlug]);
+
+  /* O prazo pode mudar com esta tela de pé: a pesquisa do painel
+     ([PulsoTrialModal]) dá dias a mais sem recarregar nada. Sem esta escuta o
+     selo continuaria anunciando o vencimento antigo logo depois de o produto
+     ter prometido outro. */
+  useEffect(() => {
+    if (!tenantSlug) return undefined;
+    return ouvirMudancaDeTrial(() => {
+      getTrialStatusCompartilhado(tenantSlug).then(setSituacao).catch(() => {});
+    });
+  }, [tenantSlug]);
+
+  /* "Quero assinar" dito lá na pesquisa abre este fluxo direto no passo do
+     plano — a etapa do "por que assinar" acabou de acontecer por lá. */
+  useEffect(() => ouvirPedidoDeAssinatura((passoPedido) => {
+    setPasso(passoPedido || 1);
+    setAberto(true);
+  }), []);
 
   // Relógio de minuto em minuto: o rótulo fala em dias, então não precisa de
   // segundo — e um timer de 1s rerenderizaria o painel inteiro sem motivo.
@@ -259,7 +282,45 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
         </span>
       </button>
 
-      {aberto ? (
+      {/* ── Quem não é Administrador não entra no fluxo de assinatura ─────────
+          A caixa de planos mostra valores, escolhe o pacote e coleta cartão —
+          decisões de quem responde pela conta. Antes, qualquer cargo percorria
+          os três passos e só esbarrava no fim, na hora de confirmar: a pessoa
+          escolhia plano e digitava o cartão para descobrir ali que não era com
+          ela.
+
+          `verConfiguracoes` é a permissão exclusiva do Administrador (ver o
+          comentário do campo em `schema.prisma`) — a mesma que abre a tela onde
+          plano e cobrança vivem. É por ela que `podeAssinar` chega aqui.
+
+          O selo com os dias continua visível para todo mundo: saber que o teste
+          está correndo é informação de trabalho, e quem descobre agora tem
+          quem avisar. */}
+      {aberto && !podeAssinar ? (
+        <div className="tv-veu" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
+          <div className="tv-caixa tv-caixa--recado" role="dialog" aria-modal="true" aria-labelledby="tv-titulo">
+            <span className="tv-eyebrow">● SEU TESTE ESTÁ CORRENDO</span>
+            <h2 id="tv-titulo" className="tv-titulo">
+              {restante.expirado ? "O teste expirou" : "A assinatura é com o administrador"}
+            </h2>
+            <p className="tv-texto">
+              Para assinar o plano da Omnimob, fale com o <strong>administrador</strong> da
+              {situacao?.nomeTenant ? ` ${situacao.nomeTenant}` : " sua imobiliária"} — é a pessoa com
+              acesso a Configurações, onde plano e cobrança ficam.
+            </p>
+            <p className="tv-texto tv-texto--fraco">
+              {restante.expirado
+                ? "Enquanto isso o ambiente segue como teste e pode ser desativado."
+                : "Até lá nada muda: o ambiente continua funcionando normalmente."}
+            </p>
+            <div className="tv-acoes">
+              <button type="button" className="tv-btn tv-btn--primario" onClick={fechar}>Entendi</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {aberto && podeAssinar ? (
         <div className="tv-veu" onMouseDown={(e) => e.target === e.currentTarget && !enviando && fechar()}>
           <div className="tv-caixa" ref={caixaRef} role="dialog" aria-modal="true" aria-labelledby="tv-titulo">
             <div className="tv-passos" aria-hidden="true">
@@ -418,20 +479,16 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                   <button type="button" className="tv-btn" onClick={() => setPasso(2)} disabled={enviando}>
                     Voltar
                   </button>
-                  {podeAssinar ? (
-                    <button
-                      type="button"
-                      className="tv-btn tv-btn--primario"
-                      onClick={assinar}
-                      disabled={enviando || (stripeConfigurado() && !cartaoPronto)}
-                    >
-                      {enviando ? "Processando…" : "Confirmar assinatura"}
-                    </button>
-                  ) : (
-                    <a className="tv-btn tv-btn--primario" href="mailto:contato@omnimob.app">
-                      Falar com o time
-                    </a>
-                  )}
+                  {/* Sem ramo alternativo: quem chega até aqui já passou pela
+                      guarda lá em cima, então é sempre o Administrador. */}
+                  <button
+                    type="button"
+                    className="tv-btn tv-btn--primario"
+                    onClick={assinar}
+                    disabled={enviando || (stripeConfigurado() && !cartaoPronto)}
+                  >
+                    {enviando ? "Processando…" : "Confirmar assinatura"}
+                  </button>
                 </div>
               </>
             ) : null}
@@ -558,6 +615,13 @@ const CSS = `
   from { opacity: 0; transform: translateY(14px) scale(0.98); }
   to { opacity: 1; transform: none; }
 }
+
+/* O recado para quem não assina é mais curto que o fluxo: sem trilha de passos,
+   sem lista de planos. A caixa acompanha — uma janela de 520px com quatro linhas
+   de texto lê como algo que faltou carregar. */
+.tv-caixa--recado { width: min(430px, 100%); }
+.tv-caixa--recado .tv-eyebrow { margin-bottom: 10px; }
+.tv-caixa--recado strong { color: #f1f5f9; font-weight: 700; }
 
 .tv-passos { display: flex; gap: 5px; margin-bottom: 18px; }
 .tv-passo {
