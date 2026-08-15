@@ -78,4 +78,10 @@ export const updateTenantConfiguracaoSchema = z.object({
   primaryColor: z.string().optional(),
   secondaryColor: z.string().optional(),
   autoGerarIA: z.boolean().optional(),
+  marcaDaguaAtiva: z.boolean().optional(),
+  /* Faixa fechada de propósito. Abaixo de 20% a marca some na foto e a pessoa
+     acha que o recurso quebrou; acima de 80% ela deixa de ser marca d'água e
+     vira um adesivo por cima do imóvel. O controle da tela já se move dentro
+     desses limites — isto é a trava de quem chama a API direto. */
+  marcaDaguaOpacidade: z.number().int().min(20).max(80).optional(),
 });

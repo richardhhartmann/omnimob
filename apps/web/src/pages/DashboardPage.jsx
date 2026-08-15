@@ -375,9 +375,14 @@ export function ImovelFormPage({ session }) {
            o mesmo que a vitrine, a página do imóvel e as redes sociais vão
            servir, porque as três leem a mesma URL guardada. */
         const logoUrl = session?.tenant?.logoUrl || "";
+        // Preferências da imobiliária, definidas em Configurações › Aparência.
+        const marcaAtiva = session?.tenant?.marcaDaguaAtiva !== false;
+        const marcaOpacidade = session?.tenant?.marcaDaguaOpacidade;
         for (let i = 0; i < imageFiles.length; i++) {
           const arquivo = await comMarcaDagua(imageFiles[i], logoUrl, {
             ehPanoramica: Boolean(imageIs360[i]),
+            ativa: marcaAtiva,
+            opacidade: marcaOpacidade,
           });
           const uploaded = await uploadToCloudinary(arquivo);
           await api.addPropertyImage(tenantSlug, targetPropertyId, { ...uploaded, is360: Boolean(imageIs360[i]) });

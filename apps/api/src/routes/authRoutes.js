@@ -64,6 +64,12 @@ function montarSessao(usuario) {
       showcaseConfig: usuario.tenant.showcaseConfig,
       plano: (usuario.tenant.plano || "BASICO").toUpperCase(),
       autoGerarIA: usuario.tenant.autoGerarIA,
+      /* Preferências da marca d'água. Vão na sessão porque quem precisa delas é
+         o CADASTRO DE IMÓVEL, que compõe a foto no navegador antes de enviá-la
+         — sem isto ele teria de buscar o perfil do tenant só para saber se
+         desenha a logo, a cada foto. */
+      marcaDaguaAtiva: usuario.tenant.marcaDaguaAtiva,
+      marcaDaguaOpacidade: usuario.tenant.marcaDaguaOpacidade,
       /* Endereço público da vitrine. Vai na sessão porque TODO link para ela —
          "Ver página", copiar link, o que vai no post de divulgação — precisa
          apontar para o domínio da imobiliária quando ele existe. Sem isto cada

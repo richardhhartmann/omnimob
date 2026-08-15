@@ -22,10 +22,26 @@
    no horizonte, e nas bordas ela apareceria cortada em duas metades.
    ──────────────────────────────────────────────────────────────────────────── */
 
-/* Opacidade da marca. O pedido era entre 50% e 60%; 55% fica no meio — visível
-   o bastante para desencorajar o reuso da foto e leve o bastante para não
-   disputar atenção com o imóvel, que é o que a pessoa veio ver. */
-const OPACIDADE = 0.55;
+/* Opacidade padrão, em porcentagem — a mesma que o schema guarda como valor
+   inicial do tenant. 55% é visível o bastante para desencorajar o reuso da foto
+   e leve o bastante para não disputar atenção com o imóvel.
+
+   Hoje cada imobiliária escolhe a sua em Configurações; este número é o ponto
+   de partida e o que vale quando o tenant não tem preferência gravada. */
+export const OPACIDADE_PADRAO = 55;
+
+/* Limites do que o produto aceita. Abaixo de 20% a marca some na foto e a
+   pessoa acha que o recurso quebrou; acima de 80% deixa de ser marca d'água e
+   vira adesivo sobre o imóvel. O mesmo par existe no validador da API — aqui
+   ele protege o desenho, lá protege o banco. */
+export const OPACIDADE_MIN = 20;
+export const OPACIDADE_MAX = 80;
+
+export function opacidadeValida(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return OPACIDADE_PADRAO;
+  return Math.min(OPACIDADE_MAX, Math.max(OPACIDADE_MIN, Math.round(n)));
+}
 
 /* Quanto da foto a marca ocupa, em cada eixo.
 
@@ -36,7 +52,7 @@ const OPACIDADE = 0.55;
    mandar sozinha, entregando uma marca de altura ridícula no meio da foto.
    Medido: uma logo 420×160 numa foto 900×600 saía com 180px de largura, 20% da
    foto; agora sai com 288px, e a marca finalmente se lê. */
-const PROPORCAO = 0.32;
+export const PROPORCAO_MARCA = 0.32;
 
 /* Teto de pixels do canvas.
 
@@ -66,7 +82,7 @@ function carregarImagem(src, { cors = false } = {}) {
  * Devolve um `File` novo, igual ao original mas com a logo composta no centro.
  * Lança se algo der errado — quem chama decide o que fazer (ver `comMarcaDagua`).
  */
-export async function aplicarMarcaDagua(arquivo, logoUrl) {
+export async function aplicarMarcaDagua(arquivo, logoUrl, { opacidade = OPACIDADE_PADRAO } = {}) {
   const enderecoDaFoto = URL.createObjectURL(arquivo);
   try {
     const [foto, logo] = await Promise.all([
@@ -86,14 +102,14 @@ export async function aplicarMarcaDagua(arquivo, logoUrl) {
 
     // Cabe na largura E na altura permitidas, mantendo a própria proporção.
     const fator = Math.min(
-      (largura * PROPORCAO) / logo.naturalWidth,
-      (altura * PROPORCAO) / logo.naturalHeight
+      (largura * PROPORCAO_MARCA) / logo.naturalWidth,
+      (altura * PROPORCAO_MARCA) / logo.naturalHeight
     );
     const lw = logo.naturalWidth * fator;
     const lh = logo.naturalHeight * fator;
     const caixa = Math.max(lw, lh);
 
-    ctx.globalAlpha = OPACIDADE;
+    ctx.globalAlpha = opacidadeValida(opacidade) / 100;
     /* Sombra fraca por baixo. Uma logo clara sobre uma parede branca — sala
        vazia, fachada ao sol — simplesmente desaparece; o halo escuro dá o
        contorno mínimo para ela existir em qualquer foto, sem virar contorno
@@ -132,11 +148,15 @@ export async function aplicarMarcaDagua(arquivo, logoUrl) {
  * segue. Perder a marca d'água é um arranhão; perder o cadastro é o trabalho da
  * pessoa.
  */
-export async function comMarcaDagua(arquivo, logoUrl, { ehPanoramica = false } = {}) {
-  if (!logoUrl || !arquivo || ehPanoramica) return arquivo;
+export async function comMarcaDagua(
+  arquivo,
+  logoUrl,
+  { ehPanoramica = false, ativa = true, opacidade = OPACIDADE_PADRAO } = {}
+) {
+  if (!ativa || !logoUrl || !arquivo || ehPanoramica) return arquivo;
   if (typeof document === "undefined") return arquivo;
   try {
-    return await aplicarMarcaDagua(arquivo, logoUrl);
+    return await aplicarMarcaDagua(arquivo, logoUrl, { opacidade });
   } catch {
     return arquivo;
   }

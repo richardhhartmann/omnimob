@@ -90,6 +90,19 @@ model Tenant {
   ativo               Boolean  @default(true)
   plano               String?         // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
   autoGerarIA         Boolean  @default(true)  // auto-preenche imóvel por IA ao lançar foto
+  /* Marca d'água nas fotos de imóvel.
+
+     Ligada por padrão porque só tem efeito para quem TEM logo: sem logo
+     configurada, o cadastro nem chama a composição. Deixar desligada por padrão
+     esconderia o recurso de quem mais se beneficia dele — a imobiliária que
+     acabou de subir a própria marca.
+
+     A opacidade é guardada em PORCENTAGEM inteira, e não em fração: é o número
+     que aparece no painel ("55%") e o que a pessoa escolhe no controle. Guardar
+     0.55 obrigaria a converter nos dois sentidos, em dois lugares, para nunca
+     mostrar o valor cru. */
+  marcaDaguaAtiva     Boolean  @default(true) @map("tnt_marca_dagua_ativa")
+  marcaDaguaOpacidade Int      @default(55)   @map("tnt_marca_dagua_opacidade")
   // Tipos de contrato liberados no cadastro de imóvel desta imobiliária.
   // Lista vazia = nenhum parametrizado; a UI trata como "todos" para não travar o cadastro.
   tiposContrato       TipoContrato[]  @default([VENDA, LOCACAO, PERMUTA, BUILT_TO_SUIT]) @map("tipos_contrato")
