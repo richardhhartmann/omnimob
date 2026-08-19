@@ -12,6 +12,8 @@ import { AjudaModal } from "./AjudaModal";
 import { corDeTextoPara } from "./adminUi";
 import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
 import { IconeRelatorios, ICONES_RELATORIOS } from "../utils/iconesRelatorios";
+import { ABAS_CONFIG } from "../utils/abasConfiguracoes";
+import { podeImportar } from "./ImportadorDados.jsx";
 import { lerDoTenant, CHAVES } from "../utils/chaveDoTenant";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -35,6 +37,7 @@ import {
   Question,
   PlusCircle,
   Tag,
+  ClockCounterClockwise,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -241,6 +244,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const isClientes      = p === "/clientes";
   const isUsuarios      = p === "/usuarios";
   const isCargos        = p === "/cargos";
+  const isAuditoria     = p === "/auditoria";
   const isConfiguracoes = p === "/configuracoes";
   // Apenas o editor da vitrine (/vitrine/:slug/editar) — não confundir com
   // /imoveis/editar, que é o formulário de imóvel.
@@ -323,6 +327,10 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         itens: [
           cargo?.gerenciarUsuarios && { key: "usuarios", Icon: UserSquare, label: "Usuários", active: isUsuarios, onClick: () => navigate("/usuarios") },
           cargo?.gerenciarCargos && { key: "cargos", Icon: Shield, label: "Cargos", active: isCargos, onClick: () => navigate("/cargos") },
+          /* Registro de atividade vive em EQUIPE, e não em Configurações: a
+             pergunta que ele responde é sobre PESSOAS — quem apagou, quem
+             alterou —, e é ao lado de Usuários e Cargos que ela é feita. */
+          cargo?.verAuditoria && { key: "auditoria", Icon: ClockCounterClockwise, label: "Registro de atividade", active: isAuditoria, onClick: () => navigate("/auditoria") },
         ].filter(Boolean),
       },
       {
@@ -333,7 +341,21 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
              um cargo levava junto Configurações, que não tem nada a ver com
              gerir gente — e, do outro lado, o Editor de Vitrine entrava numa
              tela com plano, cobrança e cancelamento de assinatura. */
-          cargo?.verConfiguracoes && { key: "config", Icon: GearSix, label: "Configurações", active: isConfiguracoes, onClick: () => navigate("/configuracoes") },
+          cargo?.verConfiguracoes && {
+            key: "config", Icon: GearSix, label: "Configurações",
+            active: isConfiguracoes, onClick: () => navigate("/configuracoes"),
+            /* Os subitens saem da MESMA lista que desenha os cartões da tela
+               (`utils/abasConfiguracoes.js`), inclusive a regra de permissão da
+               seção de Dados. Uma cópia aqui daria um menu que promete uma
+               seção que a tela não abre. */
+            subitens: ABAS_CONFIG
+              .filter((a) => a.key !== "dados" || podeImportar(cargo))
+              .map((a) => ({
+                key: `config-${a.key}`, Icon: a.Icon, label: a.label,
+                active: isConfiguracoes && ver === a.key,
+                onClick: () => navigate(`/configuracoes?ver=${a.key}`),
+              })),
+          },
           cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar Página", active: isShowcaseEditor, href: showcaseEditorLink },
           { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver Página", href: showcaseLink, external: true },
         ].filter(Boolean),
@@ -343,7 +365,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   }, [
     cargo, navigate, leadsBadge, showcaseEditorLink, showcaseLink,
     isDashboard, isImovelNovo, isImovelList, isInsights, isLeads,
-    isClientes, isUsuarios, isCargos, isConfiguracoes, isShowcaseEditor,
+    isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
     p, ver,
   ]);
 

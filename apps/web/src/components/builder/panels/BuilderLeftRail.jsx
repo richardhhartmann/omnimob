@@ -10,6 +10,7 @@ import {
   IconeOlhoCortado,
   IconeSeta,
 } from "../iconesEditor";
+import { Sparkle as IconeFaisca } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Painel esquerdo — "o que eu posso pôr na página".
@@ -29,6 +30,11 @@ import {
    ──────────────────────────────────────────────────────────────────────────── */
 
 const ABAS = [
+  /* A IA vem primeiro, e é uma escolha: quem abre o editor sem saber por onde
+     começar tem aqui a porta mais curta — descrever o que quer em vez de
+     escolher entre catorze peças. Quem já sabe montar segue direto para as
+     outras abas, que continuam onde estavam. */
+  { id: "ia", rotulo: "Assistente", Icone: IconeFaisca },
   { id: "adicionar", rotulo: "Adicionar", Icone: IconeMais },
   { id: "camadas", rotulo: "Camadas", Icone: IconeCamadas },
   { id: "templates", rotulo: "Templates", Icone: IconeGrade },
@@ -41,6 +47,7 @@ export function BuilderLeftRail({
   onAlternarColapso,
   onAdicionarWidget,
   onArrastarWidget,
+  tiposWidgetsUsados,
   camadas,
   selecionada,
   onSelecionarCamada,
@@ -48,6 +55,7 @@ export function BuilderLeftRail({
   onAlternarTrava,
   templates,
   onAplicarTemplate,
+  painelIA,
 }) {
   return (
     <aside className={`editor-rail ${colapsado ? "is-collapsed" : ""}`} data-tour="vitrine-biblioteca">
@@ -80,29 +88,40 @@ export function BuilderLeftRail({
 
       {colapsado ? null : (
         <div className="editor-rail-body">
+          {aba === "ia" ? painelIA : null}
+
           {aba === "adicionar" ? (
             <div className="editor-lib">
               <p className="editor-hint">Clique para adicionar ao fim da página, ou arraste para soltar num ponto exato.</p>
-              {CATEGORIAS.map((cat) => (
-                <section key={cat.id} className="editor-section">
-                  <h3 className="editor-section-title">{cat.titulo}</h3>
-                  <div className="editor-lib-grid">
-                    {widgetsDaCategoria(cat.id).map((template) => (
-                      <button
-                        key={template.type}
-                        type="button"
-                        className="editor-lib-card"
-                        onClick={() => onAdicionarWidget(template)}
-                        onPointerDown={(e) => onArrastarWidget(template, e)}
-                        title={`Adicionar ${template.nome}`}
-                      >
-                        <span className="editor-lib-preview">{template.preview}</span>
-                        <span className="editor-lib-nome">{template.nome}</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
+              {CATEGORIAS.map((cat) => {
+                const disponiveis = widgetsDaCategoria(cat.id).filter(
+                  (template) => !tiposWidgetsUsados?.has(template.type)
+                );
+
+                // Categoria vazia some junto com os widgets já usados.
+                if (!disponiveis.length) return null;
+
+                return (
+                  <section key={cat.id} className="editor-section">
+                    <h3 className="editor-section-title">{cat.titulo}</h3>
+                    <div className="editor-lib-grid">
+                      {disponiveis.map((template) => (
+                        <button
+                          key={template.type}
+                          type="button"
+                          className="editor-lib-card"
+                          onClick={() => onAdicionarWidget(template)}
+                          onPointerDown={(e) => onArrastarWidget(template, e)}
+                          title={`Adicionar ${template.nome}`}
+                        >
+                          <span className="editor-lib-preview">{template.preview}</span>
+                          <span className="editor-lib-nome">{template.nome}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           ) : null}
 

@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+Disallow: /login
+Disallow: /admin
+Disallow: /leads
+Disallow: /clientes
+Disallow: /usuarios
+Disallow: /cargos
+Disallow: /configuracoes
+Disallow: /tipos-imovel
+Disallow: /imoveis
+Disallow: /comecar
+
+Sitemap: https://omnimob.app/sitemap.xml

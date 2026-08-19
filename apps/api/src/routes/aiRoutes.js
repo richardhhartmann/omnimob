@@ -10,7 +10,9 @@ import {
   sugerirTituloDescricao,
   tiposDisponiveis,
   isAiEnabled,
+  gerarTexto,
 } from "../services/aiService.js";
+import { planejarVitrine } from "../services/vitrineIA.js";
 
 export const aiRouter = Router();
 
@@ -23,6 +25,57 @@ aiRouter.get("/tipos", (_req, res) => {
 
 // Daqui para baixo, todo recurso de IA exige plano Premium.
 aiRouter.use(requirePlanoIA);
+
+/* ── Assistente de vitrine ───────────────────────────────────────────────────
+   "arrume a minha página e deixe com cara de imobiliária de alto padrão" vira
+   uma lista de operações que o editor executa uma a uma, à vista da pessoa.
+
+   Devolve OPERAÇÕES, e não um `showcaseConfig` pronto — ver o cabeçalho de
+   `services/vitrineIA.js` para os três motivos. O curto: assim a física de
+   layout continua sendo a mesma do arrasto do mouse, e dá para mostrar o robô
+   trabalhando.
+
+   `editarPagina` e não `gerenciarImoveis`: quem manda na vitrine é quem edita a
+   vitrine. E `requirePlanoIA` (Premium) já vale para tudo daqui para baixo.
+
+   O catálogo de widgets vem no corpo, do cliente. Não é descuido: a lista mora
+   em `builder/data/biblioteca.jsx`, que é o que desenha a gaveta de peças, e uma
+   segunda cópia aqui divergiria no primeiro widget novo. Nada aqui confia nela
+   além do que o próprio cliente já sabe aplicar.
+   ────────────────────────────────────────────────────────────────────────── */
+aiRouter.post("/vitrine", requirePermissao("editarPagina"), async (req, res) => {
+  try {
+    const instrucao = String(req.body?.instrucao || "").trim();
+    if (instrucao.length < 4) {
+      return res.status(400).json({ error: "Escreva o que você quer que eu faça na sua vitrine." });
+    }
+    if (instrucao.length > 600) {
+      return res.status(400).json({ error: "Pedido muito longo. Resuma em uma ou duas frases." });
+    }
+
+    const vitrine = req.body?.vitrine;
+    if (!vitrine || !Array.isArray(vitrine.pecas) || vitrine.pecas.length === 0) {
+      return res.status(400).json({ error: "Não recebi o estado atual da vitrine." });
+    }
+
+    const catalogo = Array.isArray(req.body?.catalogo) ? req.body.catalogo : [];
+    // A lista de fontes também vem do cliente, pela mesma razão do catálogo:
+    // ela mora em `builder/data/temas.js`, que é quem desenha o seletor.
+    const fontes = Array.isArray(req.body?.fontes) ? req.body.fontes.map(String) : [];
+
+    const plano = await planejarVitrine(instrucao, vitrine, catalogo, gerarTexto, fontes);
+
+    if (plano.descartadas > 0) {
+      console.warn(`[ai/vitrine] ${plano.descartadas} operação(ões) descartada(s) por não serem aplicáveis`);
+    }
+
+    return res.json(plano);
+  } catch (err) {
+    console.error("[POST /ai/vitrine]", err);
+    const status = err.code === "AI_DISABLED" ? 503 : 500;
+    return res.status(status).json({ error: err.message || "Erro ao planejar a vitrine." });
+  }
+});
 
 // Gera conteúdo a partir dos dados de um imóvel (salvo OU rascunho no formulário).
 // body: { imovel: {...campos}, tipos?: string[] }

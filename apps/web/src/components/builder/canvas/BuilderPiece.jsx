@@ -2,7 +2,6 @@ import { AlcaDeArrasto } from "../AlcaDeArrasto";
 import {
   IconeCadeado,
   IconeCadeadoAberto,
-  IconeDuplicar,
   IconeGrip,
   IconeOlhoCortado,
 } from "../iconesEditor";
@@ -39,8 +38,14 @@ export function BuilderPiece({
   travada,
   selecionada,
   emMultiSelecao,
+  selecaoMultiplaAtiva = false,
   encostada,
   novaPeca,
+  animarLayout = false,
+  emArrasto = false,
+  magnetizada = false,
+  linhaSolo = false,
+  previewInsercao = false,
   className = "",
   /* A posição vem PRONTA do `ShowcaseRenderer` — a mesma que a vitrine pública
      aplica na mesma peça. Calcular `left`/`top`/`width` aqui seria a segunda
@@ -61,6 +66,11 @@ export function BuilderPiece({
     encostada ? "is-encostado" : "",
     travada ? "is-locked" : "",
     novaPeca ? "piece-entering" : "",
+    animarLayout ? "is-layout-animating" : "",
+    emArrasto ? "is-dragging" : "",
+    magnetizada ? "is-magnetized" : "",
+    linhaSolo ? "is-solo-grid" : "",
+    previewInsercao ? "is-insert-preview" : "",
   ].filter(Boolean).join(" ");
 
   // Etiqueta acima da borda, como num editor de design. Só quando a peça está
@@ -79,7 +89,14 @@ export function BuilderPiece({
          (ele sobrepõe a página, como na vitrine). Cravar 60 aqui derrubava o
          cabeçalho para trás dos outros blocos no instante em que ele era
          selecionado — clicar nele o fazia sumir por baixo do hero. */
-      style={selecionada ? { ...estilo, zIndex: Math.max(Number(estilo?.zIndex) || 0, 60) } : estilo}
+      style={
+        selecionada || previewInsercao
+          ? {
+              ...estilo,
+              zIndex: Math.max(Number(estilo?.zIndex) || 0, previewInsercao ? 70 : 60),
+            }
+          : estilo
+      }
       onPointerDown={(e) => onSelecionar?.(pieceId, e)}
     >
       <div className={`builder-piece-chrome ${etiquetaDentro ? "is-inside" : ""}`}>
@@ -93,13 +110,8 @@ export function BuilderPiece({
           <span>{rotulo}</span>
         </AlcaDeArrasto>
 
-        {selecionada && acoes ? (
+        {selecionada && acoes && !selecaoMultiplaAtiva ? (
           <div className="builder-piece-actions" onPointerDown={(e) => e.stopPropagation()}>
-            {acoes.duplicar ? (
-              <button type="button" className="editor-icon-button" title="Duplicar" onClick={acoes.duplicar}>
-                <IconeDuplicar size={13} />
-              </button>
-            ) : null}
             <button
               type="button"
               className="editor-icon-button"
@@ -117,7 +129,7 @@ export function BuilderPiece({
 
       {children}
 
-      {travada ? (
+      {selecaoMultiplaAtiva ? null : travada ? (
         /* Peça travada precisa dizer isso PARADA. O cadeado só aparecia na
            etiqueta, que por sua vez só aparece no hover — então, em repouso,
            uma peça travada era indistinguível de uma solta, e a pessoa

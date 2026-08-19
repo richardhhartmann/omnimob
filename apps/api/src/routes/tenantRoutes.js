@@ -32,6 +32,26 @@ import {
 } from "../services/dominioService.js";
 import { planoInfo, requirePlano, requirePlanoDominio } from "../middlewares/planoMiddleware.js";
 
+/* A linha do tenant sem o que não é da conta do navegador.
+ *
+ * `res.json(tenant)` devolvia a linha inteira do banco — e ali dentro vai o
+ * token da página do Facebook. Ele saía em texto puro para o front a cada
+ * gravação de Configurações, ficava no cache do navegador e em qualquer
+ * ferramenta de rede aberta na máquina do cliente. Cifrar em repouso resolveu o
+ * dump do banco; isto resolve o outro caminho.
+ *
+ * Lista do que sai, e não do que fica: campo novo no schema entra na resposta
+ * sozinho, que é o comportamento certo para dado comum. Segredo é a exceção e
+ * merece ser nomeado. */
+const SEGREDOS_DO_TENANT = ["facebookPageToken"];
+
+function semSegredos(tenant) {
+  if (!tenant) return tenant;
+  const saida = { ...tenant };
+  for (const campo of SEGREDOS_DO_TENANT) delete saida[campo];
+  return saida;
+}
+
 export const tenantRouter = Router();
 
 tenantRouter.get("/", requireAuth, async (req, res) => {
@@ -55,7 +75,7 @@ tenantRouter.post("/", requireAuth, async (req, res) => {
     }
 
     const tenant = await prisma.tenant.create({ data: parsed.data });
-    return res.status(201).json(tenant);
+    return res.status(201).json(semSegredos(tenant));
   } catch (error) {
     return res.status(409).json({
       error: "Nao foi possivel criar tenant. Verifique slug unico.",
@@ -82,7 +102,7 @@ tenantRouter.put("/me/configuracao", requireAuth, requireTenant, requirePermissa
       where: { id: req.tenant.id },
       data: parsed.data,
     });
-    return res.json(tenant);
+    return res.json(semSegredos(tenant));
   } catch {
     return res.status(500).json({ error: "Erro ao salvar configurações." });
   }
@@ -100,7 +120,7 @@ tenantRouter.put("/me", requireAuth, requireTenant, requirePermissao("editarPagi
       data: parsed.data,
     });
 
-    return res.json(tenant);
+    return res.json(semSegredos(tenant));
   } catch {
     return res.status(500).json({ error: "Erro ao atualizar perfil do tenant." });
   }

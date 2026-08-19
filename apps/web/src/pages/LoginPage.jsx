@@ -17,6 +17,11 @@ import { Alert, Button, OmnimobStyles, Eyebrow, Field, LogoLockup, Reveal, Scall
    isso, o recado voltaria a cada F5 e a cada passo para trás. */
 const AVISOS_DE_ENTRADA = {
   "sessao-encerrada": "Sessão encerrada. Entre novamente para voltar ao painel.",
+  /* Estes dois só existem desde que o acesso passou a ser conferido no banco a
+     cada requisição. Antes, quem fosse desativado seguia usando o painel até o
+     token vencer — não havia momento em que este recado pudesse aparecer. */
+  "acesso-revogado": "Seu acesso foi encerrado. Fale com o administrador da sua imobiliária.",
+  "conta-inativa": "A conta da sua imobiliária está desativada. Assine um plano para voltar a usar o painel.",
 };
 
 export function LoginPage({ onLogin }) {
@@ -133,6 +138,16 @@ export function LoginPage({ onLogin }) {
           <Link to="/recuperar-senha" className="lg-alt">Esqueci minha senha</Link>
           {" · "}
           <Link to="/admin/login" className="lg-alt">Administração da plataforma</Link>
+          {/* Segunda linha, em tom mais baixo: a tela de entrada é onde muita
+              gente chega direto, e sair dela sem caminho para os documentos
+              legais deixaria a Omnimob sem nenhum a partir daqui. */}
+          <span className="lg-legal">
+            <Link to="/termos" className="lg-alt">Termos</Link>
+            {" · "}
+            <Link to="/privacidade" className="lg-alt">Privacidade</Link>
+            {" · "}
+            <Link to="/contato" className="lg-alt">Contato</Link>
+          </span>
         </>
       }
     >
@@ -408,6 +423,7 @@ const CSS = `
   margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line-soft);
   text-align: center;
 }
+.lg-legal { display: block; margin-top: 8px; font-size: 11.5px; opacity: 0.72; }
 .lg-alt { font-size: 12.5px; color: var(--subtle); transition: color 0.18s ease; }
 .lg-alt:hover { color: var(--strong); }
 

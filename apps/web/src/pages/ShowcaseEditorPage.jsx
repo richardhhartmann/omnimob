@@ -6,6 +6,9 @@ import { api } from "../api";
 import { saveSession } from "../session";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { CHAVES, gravarNoTenant, lerDoTenant } from "../utils/chaveDoTenant";
+import { AssistenteIA } from "../components/builder/ia/AssistenteIA.jsx";
+import { useAssistenteIA } from "../components/builder/ia/useAssistenteIA";
+import { planoLiberaIA } from "../utils/planos";
 import { normalizeShowcaseConfig, widgetRect } from "../utils/showcaseConfig";
 import { estiloDoTema, linkWhatsApp, LARGURA_DESKTOP_REFERENCIA, LARGURA_MOBILE_REFERENCIA } from "../components/showcase/tema.js";
 import { comCelulaTrocada } from "../components/showcase/widgets/StatsWidget.jsx";
@@ -30,11 +33,13 @@ import {
   widgetPieceId,
 } from "../components/showcase/engine/pieces.js";
 import {
+  alinharPecas,
   alturaDoConteudo,
   ajustarAlturasMedidas,
   assentarLayout,
   assentarPecaNova,
   copiarDesktopParaMobile,
+  distribuirPecas,
   mobileFoiPersonalizado,
   moverPeca,
   pieceRect,
@@ -68,6 +73,30 @@ import { useShowcaseAutosave } from "../components/builder/hooks/useShowcaseAuto
    ──────────────────────────────────────────────────────────────────────────── */
 
 const VAZIO = new Set();
+
+function novoWidgetId() {
+  return `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function montarWidgetDoTemplate(template, id, caixa) {
+  return {
+    id,
+    type: template.type,
+    title: template.title,
+    content: template.content,
+    ctaLabel: template.ctaLabel || "",
+    ctaUrl: template.ctaUrl || "",
+    backgroundColor: "",
+    color: "",
+    hidden: false,
+    locked: false,
+    // Um widget novo nasce com os dois modos iguais. Depois cada modo anda só.
+    layout: {
+      desktop: { ...caixa },
+      mobile: { ...caixa },
+    },
+  };
+}
 
 export function ShowcaseEditorPage({ session, onSessionUpdate }) {
   const { confirm, modal: confirmModal } = useConfirm();
@@ -128,6 +157,15 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
   const configRef = useRef(config);
   configRef.current = config;
 
+  /* Widgets da biblioteca são singleton por `type`: se já existe uma instância
+     salva — mesmo oculta — esse tipo deixa de ser oferecido em "Adicionar".
+     Usamos `configSalvo`, não o preview de `gestoVivo`, para o cartão não sumir
+     debaixo do ponteiro enquanto um novo widget ainda está sendo arrastado. */
+  const tiposWidgetsUsados = useMemo(
+    () => new Set((configSalvo.widgets || []).map((w) => w.type).filter(Boolean)),
+    [configSalvo.widgets]
+  );
+
   const isLightMode = config.appearanceMode === "light";
   const globalFont = config.globalFont || "Inter";
   const isMobile = mode === "mobile";
@@ -184,6 +222,30 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
     });
     setGestoVivo(null);
   }, [registrar]);
+
+  /* `reempilhar` só é declarado lá embaixo (depende da medição de alturas), e o
+     assistente é declarado aqui. A ref liga os dois sem obrigar nenhum deles a
+     mudar de lugar por causa do outro. */
+  const reempilharRef = useRef(null);
+
+  /* ── Assistente de IA (Premium) ───────────────────────────────────────────
+     Ele escreve pelo MESMO `atualizarConfig` e pelo MESMO `registrar` que o
+     resto do editor — nada de caminho paralelo. É o que faz o resultado da IA
+     ser indistinguível do resultado do mouse: mesma engine, mesmo histórico,
+     mesmo autosave. Ver `components/builder/ia/`. */
+  const iaLiberada = planoLiberaIA(session?.tenant?.plano);
+  const assistente = useAssistenteIA({
+    tenantSlug,
+    configRef,
+    formRef,
+    modeRef,
+    atualizarConfig,
+    atualizarCampo,
+    registrar,
+    aoSelecionar: setSelecionada,
+    aoCompactar: () => reempilharRef.current?.(),
+    imoveis: previewProperties.length,
+  });
 
   // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -363,17 +425,30 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
       return;
     }
     if (event?.shiftKey) {
-      setMultiSelecao((prev) => {
-        const proximo = new Set(prev);
-        if (proximo.has(pieceId)) proximo.delete(pieceId);
-        else proximo.add(pieceId);
-        return proximo;
-      });
+      const proximo = new Set(multiSelecao);
+      if (proximo.has(pieceId)) {
+        proximo.delete(pieceId);
+        if (selecionada === pieceId) setSelecionada(proximo.values().next().value || null);
+      } else {
+        proximo.add(pieceId);
+        // A última peça adicionada vira a referência do inspetor, enquanto a
+        // seleção coletiva continua inteira para a barra de alinhamento.
+        setSelecionada(pieceId);
+      }
+      setMultiSelecao(proximo);
       return;
     }
     setSelecionada(pieceId);
     setMultiSelecao(new Set([pieceId]));
-  }, []);
+  }, [multiSelecao, selecionada]);
+
+  const aoIniciarPseudoSecao = useCallback((pieceIds, event) => {
+    const ids = Array.from(new Set(pieceIds || []));
+    if (!ids.length) return;
+    setMultiSelecao(new Set(ids));
+    setSelecionada(ids[0]);
+    interacao.aoPegarPseudoSecao(ids, event);
+  }, [interacao]);
 
   /* Esc limpa a seleção — e fecha o histórico quando ele está aberto, que era o
      único painel do editor sem saída pelo teclado (só clicando no ✕ ou fora). */
@@ -440,36 +515,6 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
     });
   }, [atualizarConfig]);
 
-  const duplicarPeca = useCallback((pieceId) => {
-    const alvo = parsePieceId(pieceId);
-    if (alvo?.kind !== "widget") return;
-    const novoId = `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    atualizarConfig((prev) => {
-      const original = prev.widgets.find((w) => w.id === alvo.key);
-      if (!original) return prev;
-      const desktop = widgetRect(original, "desktop");
-      const mobile = widgetRect(original, "mobile");
-      const copia = {
-        ...original,
-        id: novoId,
-        locked: false,
-        layout: {
-          desktop: { ...desktop, x: Math.min(desktop.x + 4, 100 - desktop.w), y: desktop.y + 24 },
-          mobile: { ...mobile, y: mobile.y + 24 },
-        },
-      };
-      // A cópia é a âncora: ela fica logo abaixo do original e empurra o resto.
-      return assentarPecaNova(
-        { ...prev, widgets: [...prev.widgets, copia] },
-        modeRef.current,
-        widgetPieceId(novoId)
-      );
-    }, { comHistorico: true });
-    setSelecionada(widgetPieceId(novoId));
-    setNovaPecaId(novoId);
-    setTimeout(() => setNovaPecaId(null), 700);
-  }, [atualizarConfig]);
-
   const removerWidget = useCallback((pieceId) => {
     const alvo = parsePieceId(pieceId);
     if (alvo?.kind !== "widget") return;
@@ -485,7 +530,9 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
 
   // ── Biblioteca ────────────────────────────────────────────────────────────
   const criarWidget = useCallback((template, rect) => {
-    const novoId = `widget-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    if (!template?.type || tiposWidgetsUsados.has(template.type)) return;
+
+    const novoId = novoWidgetId();
     atualizarConfig((prev) => {
       const modo = modeRef.current;
       const posicao = rect || proximaPosicaoLivre(prev, modo, template.tamanho?.w ?? 50);
@@ -495,72 +542,143 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
         w: template.tamanho?.w ?? posicao.w ?? 50,
         h: template.tamanho?.h ?? posicao.h ?? 220,
       };
-      const novo = {
-        id: novoId,
-        type: template.type,
-        title: template.title,
-        content: template.content,
-        ctaLabel: template.ctaLabel || "",
-        ctaUrl: template.ctaUrl || "",
-        backgroundColor: "",
-        color: "",
-        hidden: false,
-        locked: false,
-        // Nasce com os dois modos iguais; a partir daí cada um anda sozinho.
-        layout: { desktop: { ...caixa }, mobile: { ...caixa } },
-      };
-      return assentarPecaNova({ ...prev, widgets: [...prev.widgets, novo] }, modo, widgetPieceId(novoId));
+      const novo = montarWidgetDoTemplate(template, novoId, caixa);
+      return assentarPecaNova(
+        { ...prev, widgets: [...prev.widgets, novo] },
+        modo,
+        widgetPieceId(novoId)
+      );
     }, { comHistorico: true });
     setSelecionada(widgetPieceId(novoId));
     setNovaPecaId(novoId);
     setTimeout(() => setNovaPecaId(null), 700);
-  }, [atualizarConfig]);
+  }, [atualizarConfig, tiposWidgetsUsados]);
 
-  /* Arrastar da biblioteca para o canvas. Continua com listeners próprios: é o
-     único gesto que começa FORA do canvas e não tem peça para o dnd-kit
-     acompanhar — o que existe é um fantasma seguindo o ponteiro. */
+  /* Arrastar da biblioteca para o canvas.
+     Fora da folha continua existindo um fantasma leve. No instante em que o
+     ponteiro entra no canvas, o "fantasma" vira um widget REAL dentro de um
+     config transitório e passa pela mesma engine dos widgets existentes. */
   const aoArrastarDaBiblioteca = useCallback((template, event) => {
     if (event.button != null && event.button !== 0) return;
+    if (!template?.type || tiposWidgetsUsados.has(template.type)) return;
+
     const inicioX = event.clientX;
     const inicioY = event.clientY;
+    const novoId = novoWidgetId();
+    const pieceId = widgetPieceId(novoId);
+    const base = configRef.current;
+    const modo = modeRef.current;
+
     let arrastou = false;
+    let ultimoConfig = null;
+    let dentroNoUltimoQuadro = false;
 
     const aoMover = (e) => {
       if (!arrastou && Math.hypot(e.clientX - inicioX, e.clientY - inicioY) < 12) return;
       arrastou = true;
-      setArrastoBiblioteca({ template, x: e.clientX, y: e.clientY });
-    };
-
-    const aoSoltar = (e) => {
-      window.removeEventListener("pointermove", aoMover);
-      window.removeEventListener("pointerup", aoSoltar);
-      setArrastoBiblioteca(null);
-      // Sem movimento foi um clique: o `onClick` do cartão cuida de adicionar.
-      if (!arrastou) return;
 
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const caixa = canvas.getBoundingClientRect();
-      const dentro =
-        e.clientX >= caixa.left && e.clientX <= caixa.right &&
-        e.clientY >= caixa.top && e.clientY <= caixa.bottom;
-      if (!dentro) return;
 
-      const escala = modeRef.current === "mobile" ? 1 : zoomRef.current || 1;
-      const xPct = ((e.clientX - caixa.left) / caixa.width) * 100;
-      const yPx = (e.clientY - caixa.top) / escala;
+      const caixaCanvas = canvas.getBoundingClientRect();
+      const dentro =
+        e.clientX >= caixaCanvas.left && e.clientX <= caixaCanvas.right &&
+        e.clientY >= caixaCanvas.top && e.clientY <= caixaCanvas.bottom;
+
+      setArrastoBiblioteca({
+        template,
+        x: e.clientX,
+        y: e.clientY,
+        dentroCanvas: dentro,
+      });
+
+      if (!dentro) {
+        dentroNoUltimoQuadro = false;
+        ultimoConfig = null;
+        setGestoVivo(null);
+        return;
+      }
+
+      dentroNoUltimoQuadro = true;
+
+      const escala = modo === "mobile" ? 1 : zoomRef.current || 1;
+      const xPct = ((e.clientX - caixaCanvas.left) / Math.max(caixaCanvas.width, 1)) * 100;
+      const yPx = (e.clientY - caixaCanvas.top) / escala;
       const largura = template.tamanho?.w ?? 50;
-      criarWidget(template, {
+      const altura = template.tamanho?.h ?? 220;
+
+      const caixaInicial = {
         x: Math.max(0, Math.min(xPct, 100 - largura)),
         y: Math.max(0, yPx),
         w: largura,
-        h: template.tamanho?.h ?? 220,
+        h: altura,
+      };
+
+      /*
+       * Recriar só o widget temporário a partir da base congelada é importante:
+       * assim o outro modo (desktop/mobile) acompanha a posição mais recente,
+       * mas nenhuma deformação de um frame vira a entrada do frame seguinte.
+       */
+      const widgetTemporario = montarWidgetDoTemplate(template, novoId, caixaInicial);
+      const configComPreview = {
+        ...base,
+        widgets: [...(base.widgets || []), widgetTemporario],
+      };
+
+      const previsto = moverPeca(
+        configComPreview,
+        modo,
+        pieceId,
+        { x: caixaInicial.x, y: caixaInicial.y },
+        {
+          larguraCanvas: Math.max(caixaCanvas.width, 1),
+          cursorX: xPct,
+          ignorarLinhaOrigem: true,
+        }
+      );
+
+      ultimoConfig = previsto.config;
+      setGestoVivo({
+        ...previsto,
+        pieceId,
+        tipo: "insert",
       });
+    };
+
+    const limpar = () => {
+      window.removeEventListener("pointermove", aoMover);
+      window.removeEventListener("pointerup", aoSoltar);
+      window.removeEventListener("pointercancel", aoCancelar);
+    };
+
+    const aoSoltar = () => {
+      limpar();
+      setArrastoBiblioteca(null);
+
+      // Clique puro continua sendo responsabilidade do onClick do cartão.
+      if (!arrastou) return;
+
+      if (!dentroNoUltimoQuadro || !ultimoConfig) {
+        setGestoVivo(null);
+        return;
+      }
+
+      atualizarConfig(ultimoConfig, { comHistorico: true });
+      setSelecionada(pieceId);
+      setNovaPecaId(novoId);
+      setTimeout(() => setNovaPecaId(null), 700);
+    };
+
+    const aoCancelar = () => {
+      limpar();
+      setArrastoBiblioteca(null);
+      setGestoVivo(null);
     };
 
     window.addEventListener("pointermove", aoMover);
     window.addEventListener("pointerup", aoSoltar);
-  }, [criarWidget, zoomRef]);
+    window.addEventListener("pointercancel", aoCancelar);
+  }, [atualizarConfig, zoomRef, tiposWidgetsUsados]);
 
   // ── Página ────────────────────────────────────────────────────────────────
   const definirModoAparencia = useCallback((modo) => {
@@ -629,6 +747,7 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
       atualizarConfig((prev) => reempilharPorConteudo(prev, modeRef.current, alturas));
     }));
   }, [medirAgora, atualizarConfig]);
+  reempilharRef.current = reempilhar;
 
   const aoResetarPosicoes = useCallback(() => {
     atualizarConfig((prev) => resetarPosicoes(prev, modeRef.current), { comHistorico: true });
@@ -747,8 +866,20 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
   const acoesCanvas = useMemo(() => ({
     ocultar: ocultarPeca,
     alternarTrava,
-    duplicar: duplicarPeca,
-  }), [ocultarPeca, alternarTrava, duplicarPeca]);
+  }), [ocultarPeca, alternarTrava]);
+
+  const acoesMulti = useMemo(() => ({
+    alinhar: (tipo) => {
+      const ids = Array.from(multiSelecao);
+      if (ids.length < 2) return;
+      atualizarConfig((prev) => alinharPecas(prev, mode, ids, tipo), { comHistorico: true });
+    },
+    distribuir: (eixo) => {
+      const ids = Array.from(multiSelecao);
+      if (ids.length < 3) return;
+      atualizarConfig((prev) => distribuirPecas(prev, mode, ids, eixo), { comHistorico: true });
+    },
+  }), [multiSelecao, atualizarConfig, mode]);
 
   const alvoSelecionado = selecionada ? parsePieceId(selecionada) : null;
 
@@ -839,7 +970,6 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
     })),
     alternarTrava: () => selecionada && alternarTrava(selecionada),
     ocultar: () => selecionada && ocultarPeca(selecionada),
-    duplicar: () => selecionada && duplicarPeca(selecionada),
     remover: () => selecionada && removerWidget(selecionada),
   };
 
@@ -903,6 +1033,7 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
             onAlternarColapso={() => setRailColapsado((v) => !v)}
             onAdicionarWidget={(template) => criarWidget(template)}
             onArrastarWidget={aoArrastarDaBiblioteca}
+            tiposWidgetsUsados={tiposWidgetsUsados}
             camadas={camadas}
             selecionada={selecionada}
             onSelecionarCamada={(pieceId) => aoSelecionar(pieceId)}
@@ -913,6 +1044,13 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
             onAlternarTrava={alternarTrava}
             templates={BUILDER_TEMPLATES}
             onAplicarTemplate={aplicarTemplate}
+            painelIA={
+              <AssistenteIA
+                liberado={iaLiberada}
+                assistente={assistente}
+                aoAssinar={() => window.open("/configuracoes?ver=plano", "_blank")}
+              />
+            }
           />
 
           <div className="editor-stage" ref={stageRef}>
@@ -961,11 +1099,16 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
                   multiSelecao={multiSelecao}
                   encostados={gestoVivo?.encostadas || VAZIO}
                   guias={gestoVivo?.guias}
+                  gesto={gestoVivo}
+            iaTrabalhando={assistente.estado === "executando"}
                   novaPecaId={novaPecaId}
                   registrarPeca={registrarPeca}
                   aoSelecionar={aoSelecionar}
                   aoIniciarResize={interacao.aoPegarAlcaDeResize}
                   acoes={acoesCanvas}
+                  acoesMulti={acoesMulti}
+                  aoIniciarPseudoSecao={aoIniciarPseudoSecao}
+                  zoom={isMobile ? 1 : zoom}
                   altura={alturaCanvas}
                 />
                 </div>
@@ -998,7 +1141,7 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
           mas suficiente para virar BLOCO DE CONTENÇÃO). A partir daí `fixed`
           deixa de medir pela janela e passa a medir por ele, e o fantasma
           aparecia deslocado da mão. É a armadilha recorrente desta base. */}
-      {arrastoBiblioteca
+      {arrastoBiblioteca && !arrastoBiblioteca.dentroCanvas
         ? createPortal(
             <div className="editor-ghost" style={{ left: arrastoBiblioteca.x, top: arrastoBiblioteca.y }}>
               <span className="editor-ghost-preview">{arrastoBiblioteca.template.preview}</span>

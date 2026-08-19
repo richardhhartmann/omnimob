@@ -1,9 +1,8 @@
-import * as THREE from "three";
-import FOG from "vanta/dist/vanta.fog.min";
-import WAVES from "vanta/dist/vanta.waves.min";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSeo } from "../utils/seo";
+import { EfeitosProvider, SeletorDeEfeitos, useEfeitos } from "../components/Efeitos.jsx";
+import { StaggeredMenu } from "../components/StaggeredMenu.jsx";
 import {
   Buildings,
   Crown,
@@ -30,7 +29,6 @@ import ElectricBorder from "../components/ElectricBorder";
 import BounceCards from "../components/BounceCards";
 import LineSidebar from "../components/LineSidebar";
 import Counter from "../components/Counter";
-import GhostCursor from "../components/GhostCursor";
 import SpecularButton from "../components/SpecularButton";
 import { TrialModal } from "../components/TrialModal";
 import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
@@ -73,6 +71,62 @@ import {
    e a intensidade da luz. Quem é o caminho principal acende mais forte e de
    mais longe; o secundário responde de perto e de leve. Mesma pergunta que o
    preenchimento respondia ("qual destes é o daqui?"), com o vocabulário novo. */
+/* ────────────────────────────────────────────────────────────────────────────
+   O three.js e o Vanta entram por `import()`, e não pelo topo do arquivo.
+
+   Estáticos, eles somavam 253 kB ao pacote principal — baixados por TODA
+   visita, inclusive a de quem abre o painel e nunca vê a landing, e inclusive a
+   de quem vai rodar sem shader nenhum. Sob demanda, quem está no nível leve ou
+   mínimo simplesmente não os baixa.
+
+   A promessa é guardada porque as duas seções pedem o mesmo pacote: sem o
+   cache, entrar na página com as duas visíveis dispararia dois downloads da
+   mesma coisa. */
+/* O cursor fantasma também é WebGL — e importava o three e quatro passes de
+   pós-processamento no topo do módulo, o que sozinho segurava o three inteiro
+   dentro do pacote principal. Carregado assim, ele só desce para quem vai vê-lo
+   de fato. Sem `Suspense` visível: o que aparece é fumaça sobre um fundo que já
+   está lá, e um "carregando…" no lugar dela seria pior que a espera. */
+const GhostCursor = lazy(() => import("../components/GhostCursor"));
+
+let promessaDoVanta = null;
+
+function carregarVanta() {
+  if (!promessaDoVanta) {
+    promessaDoVanta = Promise.all([
+      import("three"),
+      import("vanta/dist/vanta.fog.min"),
+      import("vanta/dist/vanta.waves.min"),
+    ])
+      .then(([three, fog, waves]) => ({
+        THREE: three,
+        FOG: fog.default || fog,
+        WAVES: waves.default || waves,
+      }))
+      /* Falha de rede não pode derrubar a seção: o fundo estático já está
+         desenhado por baixo, e sem shader a página continua inteira. Zerar a
+         promessa deixa a próxima tentativa acontecer. */
+      .catch(() => { promessaDoVanta = null; return null; });
+  }
+  return promessaDoVanta;
+}
+
+/* Interpolação de cor em hexadecimal.
+ *
+ * Era `THREE.Color.lerp`, e usá-lo obrigava o three a existir no escopo do
+ * módulo — justamente o que este arquivo deixou de fazer. São doze linhas de
+ * aritmética contra 253 kB de dependência carregada à toa. */
+function misturarHex(de, para, fator) {
+  const canal = (c, deslocamento) => (c >> deslocamento) & 0xff;
+  let saida = 0;
+  for (const deslocamento of [16, 8, 0]) {
+    const a = canal(de, deslocamento);
+    const b = canal(para, deslocamento);
+    saida |= Math.round(a + (b - a) * fator) << deslocamento;
+  }
+  return saida;
+}
+
 const ESPECULAR = {
   primary: { tint: "#ffffff", tintOpacity: 0.16, textColor: "#f6f6f8", lineColor: "#ffffff", baseColor: "#8a8a95", intensity: 1.35, proximity: 320 },
   accent:  { tint: ACCENT,    tintOpacity: 0.30, textColor: "#ffffff", lineColor: "#c7c9ff", baseColor: "#6366f1", intensity: 1.30, proximity: 300 },
@@ -535,7 +589,19 @@ const MENU_ITENS = [
   { label: "Como funciona", href: "#jornada" },
   { label: "Planos", href: "#planos" },
   { label: "Dúvidas", href: "#faq" },
-  { label: "Contato", href: "#contato" },
+  /* Rotulado "Começar" e não "Contato": `#contato` é a seção de chamada para
+     ação ("Pronto para vender mais imóveis?"), e desde que existe a página
+     /contato os dois nomes iguais mandavam a pessoa para o lugar errado. */
+  { label: "Começar", href: "#contato" },
+];
+
+/* As páginas da Omnimob que não são a landing. Ficam no menu, e não só no
+   rodapé: o rodapé desta página está depois de 5.800 linhas de conteúdo, e
+   ninguém rola até lá para procurar "Sobre". */
+const PAGINAS_DA_OMNIMOB = [
+  { para: "/vitrines", label: "Vitrines publicadas" },
+  { para: "/sobre", label: "Sobre a Omnimob" },
+  { para: "/contato", label: "Falar com a gente" },
 ];
 
 /* `cor` é qualquer fundo CSS (as marcas com degradê usam o mesmo do painel, em
@@ -916,104 +982,35 @@ function useMedia(consulta) {
    referência é escura de ponta a ponta e pode ficar transparente sempre; aqui
    o CTA final é uma seção clara, e sem o vidro o menu sumiria ao passar por
    ela. */
-function LandingHeader() {
-  const [rolou, setRolou] = useState(false);
-  const [aberto, setAberto] = useState(false);
+/* O cabeçalho e o menu agora são o `StaggeredMenu` (porte do React Bits).
 
-  useEffect(() => {
-    const onScroll = () => setRolou(window.scrollY > 50);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+   Ele assumiu a barra inteira em vez de conviver com ela: dois cabeçalhos
+   `position: fixed` disputando o topo é o tipo de arranjo que funciona até a
+   primeira mudança de padding. O visual da barra não mudou — as classes
+   `.dl-header*` continuam sendo as mesmas —, mudou o que acontece ao abrir.
 
-  // Menu em tela cheia trava a rolagem atrás e responde ao Esc.
-  useEffect(() => {
-    if (!aberto) return;
-    const onKey = (e) => { if (e.key === "Escape") setAberto(false); };
-    const overflowAnterior = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = overflowAnterior;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [aberto]);
-
-  const fechar = () => setAberto(false);
-
+   Os itens de âncora e os de rota convivem na mesma lista; o componente
+   resolve cada um (ver `components/StaggeredMenu.jsx`). */
+function CabecalhoDaLanding() {
   return (
-    <>
-      <div className={`dl-menu${aberto ? " is-open" : ""}`} id="menu-principal" aria-hidden={!aberto}>
-        <span className="dl-menu__ghost" aria-hidden="true">menu</span>
-
-        <nav className="dl-menu__inner">
-          <div>
-            <span className="dl-mono dl-menu__label">Navegação</span>
-            <ul className="dl-menu__links">
-              {MENU_ITENS.map((item, i) => (
-                <li key={item.href}>
-                  <a href={item.href} onClick={fechar} tabIndex={aberto ? 0 : -1}>
-                    <span className="dl-mono dl-menu__num">{String(i + 1).padStart(2, "0")}</span>
-                    <span className="dl-menu__text">{item.label}</span>
-                    <span className="dl-menu__arrow" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" />
-                      </svg>
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="dl-menu__side">
-            <div className="dl-menu__block">
-              <span className="dl-mono dl-menu__side-label">Acesso</span>
-              <Link to="/login" onClick={fechar} tabIndex={aberto ? 0 : -1}>Painel da imobiliária</Link>
-              <Link to="/admin/login" onClick={fechar} tabIndex={aberto ? 0 : -1}>Área administrativa</Link>
-            </div>
-            <div className="dl-menu__block">
-              <span className="dl-mono dl-menu__side-label">E-mail</span>
-              <a href="mailto:contato@omnimob.app" onClick={fechar} tabIndex={aberto ? 0 : -1}>contato@omnimob.app</a>
-            </div>
-            <div className="dl-menu__block">
-              <span className="dl-mono dl-menu__side-label">Social</span>
-              <div className="dl-menu__socials">
-                <a href="https://wa.me/" target="_blank" rel="noreferrer" tabIndex={aberto ? 0 : -1}>WhatsApp</a>
-                <a href="https://instagram.com/" target="_blank" rel="noreferrer" tabIndex={aberto ? 0 : -1}>Instagram</a>
-              </div>
-            </div>
-          </div>
-        </nav>
-      </div>
-
-      <header className={`dl-header${rolou ? " is-scrolled" : ""}${aberto ? " is-menu-open" : ""}`}>
-        <Link to="/" className="dl-header__logo" onClick={fechar} aria-label="Omnimob — início">
-          {/* Arte própria do cabeçalho. Sem `height`: aqui o tamanho vem do
-              CSS, para encolher junto com a barra ao rolar. */}
+    <StaggeredMenu
+      itens={MENU_ITENS.map((i) => ({ rotulo: i.label, destino: i.href }))}
+      sociais={[
+        ...PAGINAS_DA_OMNIMOB.map((pg) => ({ rotulo: pg.label, destino: pg.para })),
+        { rotulo: "Entrar", destino: "/login" },
+        { rotulo: "WhatsApp", destino: "https://wa.me/" },
+      ]}
+      cores={["#6366f1", "#d4af37"]}
+      corDeDestaque="#d4af37"
+      logo={
+        <Link to="/" className="dl-header__logo" aria-label="Omnimob — início">
+          {/* Sem `height`: o tamanho vem do CSS, para encolher junto com a
+              barra ao rolar. */}
           <LogoLockup src={LOGO_LOCKUP_HEADER_SRC} className="dl-header__tipo" />
         </Link>
-
-        <div className="dl-header__right">
-          <Button href="#contato" variant="primary" className="dl-header__cta">Agendar demonstração</Button>
-
-          <button
-            type="button"
-            className="dl-burger"
-            onClick={() => setAberto((v) => !v)}
-            aria-expanded={aberto}
-            aria-controls="menu-principal"
-            aria-label={aberto ? "Fechar menu" : "Abrir menu"}
-          >
-            <span className="dl-mono dl-burger__label">{aberto ? "Fechar" : "Menu"}</span>
-            <span className="dl-burger__lines" aria-hidden="true">
-              <i /><i /><i />
-            </span>
-          </button>
-        </div>
-      </header>
-    </>
+      }
+      acoes={<Button href="#contato" variant="primary" className="dl-header__cta">Agendar demonstração</Button>}
+    />
   );
 }
 
@@ -2038,12 +2035,10 @@ function Planos({ planos, aoTestar }) {
      é a mesma armadilha do FOG lá embaixo — guardada fora, a limpeza fecha
      sobre o valor anterior e sobra um canvas órfão no StrictMode. */
   const ondaRef = useRef(null);
-  const corOnda = useRef(null);
-  const alvoOnda = useRef(null);
-  if (!corOnda.current) {
-    corOnda.current = new THREE.Color(ONDA_INICIAL);
-    alvoOnda.current = new THREE.Color(ONDA_INICIAL);
-  }
+  // Números hexadecimais crus, não objetos de cor: ver `misturarHex` lá em cima.
+  const corOnda = useRef(ONDA_INICIAL);
+  const alvoOnda = useRef(ONDA_INICIAL);
+  const { podeWebGL } = useEfeitos();
 
   /* O plano que manda na cor do fundo, e a cor dele. No desktop o hover; no
      carrossel, o foco. Nulo (Básico, ou nenhum cartão sob o mouse) apaga a
@@ -2062,20 +2057,34 @@ function Planos({ planos, aoTestar }) {
   useEffect(() => {
     const el = ondaRef.current;
     if (!el || !ondaPedida || !visivel) return undefined;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    /* Máquina que não aguenta shader fica com a tinta estática de baixo — que
+       já está desenhada e acompanha o mesmo plano. Não é degrau de qualidade:
+       é o clarão colorido sem a malha animada por cima. */
+    if (!podeWebGL) return undefined;
 
-    const efeito = WAVES({
-      el,
-      THREE,
-      mouseControls: true,
-      touchControls: true,
-      gyroControls: false,
-      minHeight: 200.0,
-      minWidth: 200.0,
-      scale: 1.0,
-      scaleMobile: 1.0,
-      color: corOnda.current.getHex(),
+    let efeito = null;
+    let quadro = null;
+    let observador = null;
+    let cancelado = false;
+
+    carregarVanta().then((vanta) => {
+      if (cancelado || !vanta) return;
+      efeito = vanta.WAVES({
+        el,
+        THREE: vanta.THREE,
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.0,
+        minWidth: 200.0,
+        scale: 1.0,
+        scaleMobile: 1.0,
+        color: corOnda.current,
+      });
+      montarLaco();
     });
+
+    function montarLaco() {
 
     /* O WAVES mede o elemento uma vez e só remede no resize da janela. Como a
        camada acompanha a altura da seção — que muda quando alguém abre a
@@ -2094,7 +2103,7 @@ function Planos({ planos, aoTestar }) {
        imagem ao buffer antes da pintura e o quadro em branco deixa de existir.
        Tem de ser o render direto: animationLoop() agenda o próprio rAF, e o
        laço passaria a rodar duas vezes por quadro. */
-    const observador = new ResizeObserver(() => {
+    observador = new ResizeObserver(() => {
       efeito.resize();
       if (efeito.renderer && efeito.scene && efeito.camera) {
         efeito.renderer.render(efeito.scene, efeito.camera);
@@ -2102,29 +2111,33 @@ function Planos({ planos, aoTestar }) {
     });
     observador.observe(el);
 
-    let quadro = requestAnimationFrame(function passo() {
+    quadro = requestAnimationFrame(function passo() {
       // Perto o bastante do alvo: para de escrever e só mantém o laço vivo
       // para a próxima troca de plano.
-      if (corOnda.current.getHex() !== alvoOnda.current.getHex()) {
-        corOnda.current.lerp(alvoOnda.current, 0.05);
-        efeito.options.color = corOnda.current.getHex();
+      if (corOnda.current !== alvoOnda.current) {
+        corOnda.current = misturarHex(corOnda.current, alvoOnda.current, 0.05);
+        // A mistura converge sem nunca chegar: a 1/255 do alvo, encosta.
+        if (Math.abs(corOnda.current - alvoOnda.current) <= 0x010101) corOnda.current = alvoOnda.current;
+        efeito.options.color = corOnda.current;
       }
       quadro = requestAnimationFrame(passo);
     });
+    }
 
     return () => {
-      cancelAnimationFrame(quadro);
-      observador.disconnect();
-      efeito.destroy();
+      cancelado = true;
+      if (quadro) cancelAnimationFrame(quadro);
+      observador?.disconnect();
+      efeito?.destroy();
     };
-  }, [ondaPedida, visivel]);
+  }, [ondaPedida, visivel, podeWebGL]);
 
   // O alvo muda com o plano escolhido; o laço acima leva a cor até ele. Quando
   // não há plano (Básico, ou mouse fora), o alvo fica onde estava: o que some é
   // a camada inteira, e guardar a última cor evita a volta atravessando o
   // espectro na próxima vez que ela acender.
   useEffect(() => {
-    if (ondaAtual) alvoOnda.current.setHex(ondaAtual);
+    if (ondaAtual) alvoOnda.current = ondaAtual;
   }, [ondaAtual]);
 
   // Quais cartões estão com a tabela inteira aberta. Por plano, e não um só
@@ -2314,7 +2327,7 @@ function Planos({ planos, aoTestar }) {
               className={`dl-mono dl-plan__nota${p.carregando ? " dl-esqueleto dl-esqueleto--nota" : ""}`}
               aria-hidden={p.carregando || undefined}
             >
-              {p.carregando ? " " : p.nota}
+              {p.carregando ? " " : p.nota}
             </span>
 
             <PlanoRecursos
@@ -2432,6 +2445,10 @@ function cartaoDaFaixa(c) {
 function FumacaQuandoVisivel() {
   const marcaRef = useRef(null);
   const [perto, setPerto] = useState(false);
+  /* Cursor fantasma: canvas com laço próprio a cada quadro. É o primeiro a cair
+     quando a máquina não dá conta — some sem deixar buraco, porque é enfeite
+     sobre um fundo que já existe. */
+  const { podeQuadroAQuadro } = useEfeitos();
 
   useEffect(() => {
     const el = marcaRef.current?.parentElement;
@@ -2446,7 +2463,8 @@ function FumacaQuandoVisivel() {
       {/* Âncora de zero altura: serve só para achar a seção pai sem envolver o
           canvas em nada — é o pai dele que precisa ser a seção. */}
       <span ref={marcaRef} aria-hidden="true" style={{ display: "none" }} />
-      {perto ? (
+      {perto && podeQuadroAQuadro ? (
+        <Suspense fallback={null}>
         <GhostCursor
           color="#a99109"
           brightness={1}
@@ -2460,6 +2478,7 @@ function FumacaQuandoVisivel() {
           fadeDelayMs={1000}
           fadeDurationMs={1500}
         />
+        </Suspense>
       ) : null}
     </>
   );
@@ -2559,6 +2578,8 @@ function BaralhoDeCanais() {
 }
 
 function ParedeDeDestaques() {
+  // Congela a deriva quando a máquina não sustenta o laço por quadro.
+  const { podeQuadroAQuadro } = useEfeitos();
   const emMobile = useMedia(CARROSSEL);
   const [aberto, setAberto] = useState(null);
   const fundoRef = useRef(null);
@@ -2596,6 +2617,10 @@ function ParedeDeDestaques() {
     <>
       <div className={`dl-porque__fundo${naVista ? " is-na-vista" : ""}`} ref={fundoRef}>
         <DriftWall
+          /* Sem deriva na máquina fraca: os ladrilhos ficam parados e
+             continuam clicáveis. O conteúdo é o mesmo; o que some é o
+             movimento. */
+          paused={!podeQuadroAQuadro}
           items={pecas}
           interactive={false}
           onItemClick={(item) => setAberto(item.dados)}
@@ -2765,7 +2790,18 @@ function StatsGrid() {
 
 // ── Página ──────────────────────────────────────────────────────────────────
 
+/* O provedor precisa ficar ACIMA do conteúdo, e o conteúdo precisa poder
+   consultá-lo — daí a página exportada ser só o embrulho. Medir dentro do
+   próprio componente que lê a medida daria um ciclo. */
 export function OmnimobLandingPage() {
+  return (
+    <EfeitosProvider>
+      <ConteudoDaLanding />
+    </EfeitosProvider>
+  );
+}
+
+function ConteudoDaLanding() {
   /* Repete o que está no index.html de propósito: as tags do HTML são o estado
      inicial de TODAS as rotas, então quem chega aqui vindo de outra tela (o
      React Router não recarrega a página) precisa que elas voltem ao valor da
@@ -2813,6 +2849,7 @@ export function OmnimobLandingPage() {
   }, [PLANS]);
 
   const vantaRef = useRef(null);
+  const { podeWebGL } = useEfeitos();
 
   /* A instância fica em variável local, não em estado. Guardada em estado, a
      limpeza fechava sobre o valor ANTERIOR (ainda null) e não destruía o efeito
@@ -2835,24 +2872,31 @@ export function OmnimobLandingPage() {
   }, []);
 
   useEffect(() => {
-    if (!vantaRef.current || !nevoaPerto) return undefined;
-    const efeito = FOG({
-      el: vantaRef.current,
-      THREE: THREE,
-      mouseControls: true,
-      touchControls: true,
-      gyroControls: false,
-      minHeight: 200.00,
-      minWidth: 200.00,
-      highlightColor: "#6b70f3",
-      midtoneColor: "#ffb221",
-      lowlightColor: "#f4f5f7",
-      baseColor: "#ffffff",
-      blurFactor: 0.50,
-      zoom: 2.00,
+    if (!vantaRef.current || !nevoaPerto || !podeWebGL) return undefined;
+    let efeito = null;
+    let cancelado = false;
+
+    carregarVanta().then((vanta) => {
+      if (cancelado || !vanta || !vantaRef.current) return;
+      efeito = vanta.FOG({
+        el: vantaRef.current,
+        THREE: vanta.THREE,
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+        highlightColor: "#6b70f3",
+        midtoneColor: "#ffb221",
+        lowlightColor: "#f4f5f7",
+        baseColor: "#ffffff",
+        blurFactor: 0.50,
+        zoom: 2.00,
+      });
     });
-    return () => efeito.destroy();
-  }, [nevoaPerto]);
+
+    return () => { cancelado = true; efeito?.destroy(); };
+  }, [nevoaPerto, podeWebGL]);
 
   return (
     <div className="dl-root">
@@ -2867,7 +2911,7 @@ export function OmnimobLandingPage() {
         aoFechar={() => setTrialAberto(false)}
       />
 
-      <LandingHeader />
+      <CabecalhoDaLanding />
 
       {/* ── Hero ── */}
       <section className="dl-hero" id="topo">
@@ -3142,6 +3186,42 @@ export function OmnimobLandingPage() {
         </div>
       </section>
 
+      {/* ── Aplicativo mobile ── */}
+      <section className="dl-section dl-section--alt dl-app-soon" id="aplicativo">
+        <div className="dl-wrap dl-app-soon__grid">
+          <Reveal className="dl-app-soon__copy">
+            <Eyebrow tone={GOLD}>OMNIMOB MOBILE</Eyebrow>
+            <h2 className="dl-h2">
+              <span className="dl-h2__strong">A Omnimob,</span>
+              <span className="dl-h2__soft">também no seu bolso.</span>
+            </h2>
+            <p className="dl-lead">
+              Em breve, a experiência da Omnimob também estará disponível em aplicativo para celular,
+              com versões para Android e iOS.
+            </p>
+            <div className="dl-app-soon__stores" aria-label="Disponibilidade futura nas lojas de aplicativos">
+              <span className="dl-app-soon__store">
+                <span className="dl-app-soon__store-kicker dl-mono">EM BREVE NO</span>
+                <strong>Google Play</strong>
+              </span>
+              <span className="dl-app-soon__store">
+                <span className="dl-app-soon__store-kicker dl-mono">EM BREVE NA</span>
+                <strong>App Store</strong>
+              </span>
+            </div>
+            <p className="dl-mono dl-note dl-app-soon__note">// ANDROID · IOS · A MESMA OMNIMOB, ONDE VOCÊ ESTIVER</p>
+          </Reveal>
+
+          <Reveal className="dl-app-soon__visual" delay={120}>
+            <img
+              src="/em_breve.png"
+              alt="Ilustração da Omnimob chegando em breve ao Google Play e à App Store"
+              loading="lazy"
+            />
+          </Reveal>
+        </div>
+      </section>
+
       {/* ── CTA final (seção clara) ── */}
       <section id="contato" className="dl-cta" ref={vantaRef}>
         {/* Sem escalopes aqui: a névoa em WebGL já é o movimento desta seção, e
@@ -3197,19 +3277,32 @@ export function OmnimobLandingPage() {
               <a href="#faq">Dúvidas</a>
             </div>
             <div>
+              <span className="dl-mono">A OMNIMOB</span>
+              <Link to="/vitrines">Vitrines publicadas</Link>
+              <Link to="/sobre">Sobre</Link>
+              <Link to="/contato">Contato</Link>
+            </div>
+            <div>
               <span className="dl-mono">ACESSO</span>
               <Link to="/login">Acesso do cliente</Link>
               <Link to="/admin/login">Área administrativa</Link>
             </div>
             <div>
-              <span className="dl-mono">CONTATO</span>
-              <a href="https://wa.me/" target="_blank" rel="noreferrer">WhatsApp</a>
+              {/* Termos e Privacidade no rodapé, como em qualquer serviço que
+                  cobra assinatura — e a Política é exigência da LGPD, não
+                  enfeite. */}
+              <span className="dl-mono">LEGAL</span>
+              <Link to="/termos">Termos de Uso</Link>
+              <Link to="/privacidade">Privacidade</Link>
               <a href="mailto:contato@omnimob.app">contato@omnimob.app</a>
             </div>
           </div>
         </div>
         <div className="dl-wrap dl-footer__bottom dl-mono">
           <span>© {ano} OMNIMOB</span>
+          {/* Discordar da detecção automática. Fica no rodapé porque ninguém
+              procura isto ao chegar — só depois de sentir a página pesada. */}
+          <SeletorDeEfeitos />
           <span>FEITO PARA IMOBILIÁRIAS BRASILEIRAS</span>
         </div>
       </footer>
@@ -3267,91 +3360,14 @@ const CSS = `
 .dl-header.is-menu-open .dl-header__cta { opacity: 0; pointer-events: none; }
 
 /* ── Botão do menu ── */
-.dl-root .dl-burger {
-  display: flex; align-items: center; gap: 14px;
-  background: none; border: 0; box-shadow: none; transform: none;
-  padding: 10px 0; cursor: pointer; color: var(--strong);
-}
-.dl-root .dl-burger:hover { background: none; box-shadow: none; transform: none; }
-.dl-burger__label { color: var(--subtle); font-size: 9.5px; letter-spacing: 0.2em; transition: color 0.3s ease; }
-.dl-burger:hover .dl-burger__label { color: var(--strong); }
-.dl-burger__lines {
-  width: 28px; height: 18px; flex: 0 0 auto;
-  display: flex; flex-direction: column; justify-content: space-between;
-}
-.dl-burger__lines i {
-  display: block; width: 100%; height: 1.5px; background: var(--strong); transform-origin: center;
-  transition: transform 0.5s var(--ease-out), opacity 0.3s ease, background 0.5s ease;
-}
-.dl-header.is-menu-open .dl-burger__lines i:nth-child(1) { transform: rotate(45deg) translate(5.5px, 5.5px); background: var(--gold); }
-.dl-header.is-menu-open .dl-burger__lines i:nth-child(2) { opacity: 0; }
-.dl-header.is-menu-open .dl-burger__lines i:nth-child(3) { transform: rotate(-45deg) translate(5.5px, -5.5px); background: var(--gold); }
 
 /* ── Menu em tela cheia ──
    O círculo nasce no canto do botão e cresce até cobrir a tela. O raio final
    passa bem de 100% porque o círculo precisa alcançar o canto oposto, que
    está mais longe que a borda mais próxima. */
-.dl-menu {
-  position: fixed; inset: 0; z-index: 999; display: flex; overflow: hidden;
-  background: #060607; pointer-events: none;
-  clip-path: circle(0% at calc(100% - 60px) 36px);
-  transition: clip-path 0.8s cubic-bezier(0.77, 0, 0.175, 1);
-}
-.dl-menu.is-open { clip-path: circle(150% at calc(100% - 60px) 36px); pointer-events: auto; }
-.dl-menu__ghost {
-  position: absolute; bottom: -6%; right: 4%; z-index: 0;
-  pointer-events: none; user-select: none;
-  font-size: clamp(11rem, 24vw, 28rem); font-weight: 800; line-height: 0.8;
-  letter-spacing: -0.05em; color: #0d0d0f;
-}
-.dl-menu__inner {
-  position: relative; z-index: 1;
-  width: 100%; display: grid; grid-template-columns: 1.5fr 1fr; gap: 60px;
-  align-content: center; padding: 120px clamp(20px, 5vw, 56px) 60px;
-}
-.dl-menu__label { display: block; margin-bottom: 32px; color: #3a3a42; font-size: 9px; letter-spacing: 0.42em; }
 
-.dl-menu__links li { border-bottom: 1px solid #17171a; overflow: hidden; }
-.dl-menu__links li:first-child { border-top: 1px solid #17171a; }
-.dl-menu__links a {
-  display: flex; align-items: center; gap: 20px; padding: 18px 0;
-  font-size: clamp(1.5rem, 3.4vw, 2.8rem); font-weight: 800; letter-spacing: -0.03em;
-  color: #4a4a55; transform: translateY(110%);
-  transition: transform 0.6s var(--ease-out), color 0.3s ease;
-}
-.dl-menu.is-open .dl-menu__links a { transform: translateY(0); }
-.dl-menu__links li:nth-child(1) a { transition-delay: 0.05s; }
-.dl-menu__links li:nth-child(2) a { transition-delay: 0.10s; }
-.dl-menu__links li:nth-child(3) a { transition-delay: 0.15s; }
-.dl-menu__links li:nth-child(4) a { transition-delay: 0.20s; }
-.dl-menu__links li:nth-child(5) a { transition-delay: 0.25s; }
-.dl-menu__links li:nth-child(6) a { transition-delay: 0.30s; }
-.dl-menu__num { min-width: 26px; font-size: 9.5px; color: #3a3a42; transition: color 0.3s ease; }
-.dl-menu__text { flex: 1; }
-.dl-menu__arrow {
-  display: flex; color: #2a2a30; opacity: 0; transform: translateX(-10px);
-  transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease;
-}
-.dl-menu__links a:hover { color: var(--gold); }
-.dl-menu__links a:hover .dl-menu__num { color: var(--gold); }
-.dl-menu__links a:hover .dl-menu__arrow { opacity: 1; transform: translateX(0); color: var(--gold); }
 
-.dl-menu__side {
-  display: flex; flex-direction: column; justify-content: flex-end; gap: 32px;
-  opacity: 0; transform: translateY(20px);
-  transition: opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s;
-}
-.dl-menu.is-open .dl-menu__side { opacity: 1; transform: none; }
-.dl-menu__side-label { display: block; margin-bottom: 10px; color: #3a3a42; font-size: 9px; letter-spacing: 0.34em; }
-.dl-menu__block a { display: block; font-size: 14.5px; line-height: 1.9; color: #74747f; transition: color 0.3s ease; }
-.dl-menu__block a:hover { color: var(--gold); }
-.dl-menu__socials { display: flex; gap: 20px; }
-.dl-menu__socials a { position: relative; font-size: 13px; }
-.dl-menu__socials a::after {
-  content: ""; position: absolute; left: 0; bottom: 2px; width: 0; height: 1px;
-  background: var(--gold); transition: width 0.3s ease;
-}
-.dl-menu__socials a:hover::after { width: 100%; }
+
 
 /* ── Cabeçalho de seção ── */
 .dl-head {
@@ -5035,6 +5051,75 @@ ${editorCSS()}
 .dl-def p { font-size: 13.5px; line-height: 1.85; color: var(--subtle); margin-top: 14px; }
 .dl-def__updated { display: block; margin-top: 20px; color: var(--placeholder); font-size: 9px; }
 
+/* ── Aplicativo mobile ── */
+.dl-app-soon {
+  position: relative;
+  overflow: hidden;
+}
+.dl-app-soon::before {
+  content: "";
+  position: absolute;
+  width: min(52vw, 720px);
+  aspect-ratio: 1;
+  right: -16%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(212,175,55,0.16), rgba(212,175,55,0.04) 45%, transparent 72%);
+  pointer-events: none;
+}
+.dl-app-soon__grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(420px, 1.18fr);
+  align-items: center;
+  gap: clamp(42px, 7vw, 104px);
+}
+.dl-app-soon__copy .dl-h2 { margin-top: 14px; }
+.dl-app-soon__copy .dl-lead { max-width: 530px; }
+.dl-app-soon__stores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+.dl-app-soon__store {
+  min-width: 168px;
+  display: grid;
+  gap: 2px;
+  padding: 12px 16px 13px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.045);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.dl-app-soon__store-kicker {
+  color: var(--placeholder);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+}
+.dl-app-soon__store strong {
+  color: var(--strong);
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.dl-app-soon__note { margin-top: 18px; }
+.dl-app-soon__visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.dl-app-soon__visual img {
+  display: block;
+  width: min(100%, 760px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 28px 52px rgba(0,0,0,0.28));
+}
+
 /* ── CTA final (claro) ── */
 .dl-cta {
   position: relative;
@@ -5108,21 +5193,67 @@ ${editorCSS()}
 .dl-footer__inner { display: grid; grid-template-columns: 1fr 1.35fr; gap: 48px; }
 .dl-footer__logo { display: inline-flex; align-items: center; }
 .dl-footer__brand p { font-size: 13px; line-height: 1.8; color: var(--placeholder); margin-top: 14px; max-width: 34ch; }
-.dl-footer__cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.dl-footer__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 28px; }
 .dl-footer__cols > div { display: grid; gap: 11px; align-content: start; }
 .dl-footer__cols span { color: #55555f; font-size: 9px; letter-spacing: 0.14em; }
 .dl-footer__cols a { font-size: 13px; color: var(--subtle); transition: color 0.18s ease; }
 .dl-footer__cols a:hover { color: var(--strong); }
 .dl-footer__bottom {
   display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  align-items: center;
   margin-top: 46px; padding-top: 20px; border-top: 1px solid var(--line);
   color: var(--placeholder); font-size: 9px;
+}
+
+/* ── Seletor de animações ────────────────────────────────────────────────────
+   A página se ajusta sozinha ao aparelho (ver utils/capacidadeDaMaquina.js),
+   e a detecção erra dos dois lados. Este controle e a nota abaixo dele existem
+   para a pessoa discordar — e para ela entender que a diferença que está vendo
+   foi deliberada, e não um defeito.
+
+   Discreto de propósito: fica na mesma linha do aviso de direitos autorais, no
+   tom do rodapé. Quem não sentiu a página pesada não precisa reparar nele.
+   ────────────────────────────────────────────────────────────────────────── */
+.dl-efeitos {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 9px; letter-spacing: 0.08em;
+}
+.dl-efeitos__rotulo { color: var(--placeholder); }
+.dl-efeitos__grupo {
+  display: flex; gap: 2px; padding: 2px; border-radius: 999px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line);
+}
+.dl-root .dl-efeitos__opcao,
+.dl-root .dl-efeitos__auto {
+  width: auto; padding: 4px 10px; border-radius: 999px;
+  font: inherit; letter-spacing: inherit; text-transform: uppercase;
+  background: none; border: 0; box-shadow: none; transform: none;
+  color: var(--placeholder); cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+.dl-root .dl-efeitos__opcao:hover,
+.dl-root .dl-efeitos__auto:hover {
+  color: #f4f5f7; background: rgba(255,255,255,0.06);
+  box-shadow: none; transform: none;
+}
+.dl-root .dl-efeitos__opcao.is-ativo {
+  color: #0a0a0b; background: #f4f5f7;
+}
+.dl-root .dl-efeitos__auto { margin-left: 4px; text-decoration: underline; text-underline-offset: 2px; }
+.dl-efeitos__nota { color: var(--placeholder); opacity: 0.72; text-transform: none; letter-spacing: 0.02em; }
+
+@media (max-width: 720px) {
+  .dl-efeitos { width: 100%; justify-content: center; }
+  .dl-efeitos__nota { width: 100%; text-align: center; }
 }
 
 /* ── Responsivo ── */
 @media (max-width: 1024px) {
   .dl-hero__grid, .dl-split, .dl-editor, .dl-footer__inner { grid-template-columns: 1fr; }
   .dl-hero__grid { gap: 56px; }
+  .dl-app-soon__grid { grid-template-columns: 1fr; gap: 40px; }
+  .dl-app-soon__visual { order: -1; }
+  .dl-app-soon__visual img { width: min(100%, 680px); }
   .dl-journey { grid-template-columns: repeat(2, 1fr); gap: 0 32px; }
   .dl-head { grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .dl-h2 { max-width: none; }
@@ -5137,8 +5268,6 @@ ${editorCSS()}
   .dl-chip-float--b { right: 0; }
 
   /* O painel lateral do menu desce para baixo dos links. */
-  .dl-menu__inner { grid-template-columns: 1fr; gap: 46px; align-content: start; padding-top: 108px; }
-  .dl-menu__ghost { font-size: 11rem; }
 }
 /* ── Tablet estreito e celular: recursos viram carrossel ──
    As abas já estão empilhadas sobre o painel desde os 1024px, e daqui para
@@ -5262,10 +5391,10 @@ ${editorCSS()}
      Com .dl-root porque as variantes de botão do kit (.dl-root .dl-btn) pesam
      mais que uma classe solta: sem o prefixo, este display:none perde e o CTA
      continua na barra — foi ele que espremeu a tipografia do logo até aqui. */
-  .dl-root .dl-header__cta, .dl-burger__label { display: none; }
+  /* O rótulo "Menu"/"Fechar" também sai no celular: sobra o ícone, que já diz
+     o que faz e não disputa largura com o logotipo. */
+  .dl-root .dl-header__cta, .sm-botao-caixa { display: none; }
   .dl-header__tipo, .dl-header.is-scrolled .dl-header__tipo { height: 34px; }
-  .dl-menu__socials { flex-direction: column; gap: 8px; }
-  .dl-menu__ghost { font-size: 7.5rem; }
   /* Sem cursor não há foco para revelar a palavra — ela só ocuparia memória. */
   .dl-ghost { display: none; }
   .dl-cta__brand img { width: 66px; height: 66px; }
@@ -5595,6 +5724,17 @@ ${editorCSS()}
 
   .dl-callout { padding: 22px 20px; }
 
+  .dl-app-soon__grid { gap: 30px; }
+  .dl-app-soon__copy { text-align: center; }
+  .dl-app-soon__copy .dl-eyebrow { justify-content: center; }
+  .dl-app-soon__copy .dl-lead { margin-left: auto; margin-right: auto; }
+  .dl-app-soon__stores { justify-content: center; }
+  .dl-app-soon__visual img {
+    width: min(100%, 560px);
+    max-height: 460px;
+  }
+  .dl-app-soon__note { max-width: 46ch; margin-left: auto; margin-right: auto; }
+
   /* Rodapé em duas colunas: em uma só, três blocos de links viravam meia tela
      de rolagem para fechar a página. */
   .dl-footer__cols { grid-template-columns: repeat(2, 1fr); gap: 24px 18px; }
@@ -5606,6 +5746,8 @@ ${editorCSS()}
    melhor sozinho. */
 @media (max-width: 380px) {
   .dl-grid-hair--4 { grid-template-columns: 1fr; }
+  .dl-app-soon__stores { display: grid; grid-template-columns: 1fr; }
+  .dl-app-soon__store { min-width: 0; }
   .dl-footer__cols { grid-template-columns: 1fr; }
   .dl-btn-row .dl-btn { width: 100%; }
 }
@@ -5628,8 +5770,6 @@ ${editorCSS()}
 
   /* O menu troca de estado sem o círculo crescendo nem os links subindo, e o
      FAQ abre e fecha direto. Ambos continuam funcionando, só sem percurso. */
-  .dl-menu, .dl-menu__side { transition: none; }
-  .dl-menu__links a { transform: none; transition: color 0.3s ease; transition-delay: 0s; }
   .dl-faq__panel, .dl-faq__a, .dl-faq__toggle, .dl-faq__bar { transition: none; }
   /* A lista de recursos troca de estado sem percurso: o painel salta para a
      altura nova e as linhas aparecem postas. Nenhum atraso pode sobrar, senão

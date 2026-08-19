@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
+import { InteressadosNoImovel } from "../components/InteressadosNoImovel.jsx";
 import { comodidadesAtivas } from "../utils/comodidades";
 import { tipoContratoInfo, tipoContratoLabel } from "../utils/tiposContrato";
 import { Panorama360 } from "../components/Panorama360";
@@ -456,6 +457,11 @@ export function PropertyInsightsPage({ session }) {
       </div>
 
       {/* ── Detalhes do ativo ─────────────────────────────────────────────── */}
+      {/* Quem da carteira estava esperando por este imóvel. Vem ANTES dos
+          detalhes porque é acionável — "ligue para estas três pessoas" — e o
+          resto da tela é leitura. */}
+      {property ? <InteressadosNoImovel propertyId={property.id} tenantSlug={tenantSlug} /> : null}
+
       <Section title="Detalhes do Ativo">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 32px" }}>
           {detalhes.map(([label, val]) => (

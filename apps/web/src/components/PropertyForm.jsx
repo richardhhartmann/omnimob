@@ -11,6 +11,7 @@ import { Panorama360 } from "./Panorama360.jsx";
 import { SelectCustom } from "./SelectCustom.jsx";
 import { overlay360 } from "../utils/cloudinaryOverlay.js";
 import { spawnRipple } from "../utils/rippleDrop.js";
+import { CartaoDeMenu } from "./CartaoDeMenu.jsx";
 import { shareWhatsapp } from "../utils/shareWhatsapp.js";
 import { IconeCheck, IconeX } from "./Icones.jsx";
 
@@ -86,6 +87,7 @@ const EMPTY = {
   areaTotal: "",
   andamento: "PRONTO_PARA_MORAR",
   aceitaPermuta: false,
+  publicarPortais: true,
   status: "ACTIVE",
   comodidades: { ...EMPTY_COMODIDADES },
 };
@@ -1055,47 +1057,7 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData, lo
                 desc: "Adicione novas tipologias ao sistema para categorizar seu portfólio.",
               },
             ].map((card) => (
-              <button
-                key={card.title}
-                onClick={card.onClick}
-                data-tour={card.tourId}
-                className="pg-follow"
-                style={{
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  padding: "48px 32px", borderRadius: "24px", cursor: "pointer",
-                  transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s, box-shadow 0.3s",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  background: "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
-                  backdropFilter: "blur(12px)", color: "inherit", gap: "24px",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-6px)";
-                  e.currentTarget.style.border = "1px solid rgba(255,255,255,0.3)";
-                  e.currentTarget.style.background = "radial-gradient(circle at var(--px, 50%) var(--py, 50%), rgba(255,255,255,0.18) 0%, transparent 90%), linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%)";
-                  e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.15)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.border = "1px solid rgba(255,255,255,0.15)";
-                  e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-                onMouseDown={(e) => {
-                  spawnRipple(e, card.accent || "rgba(255,255,255,0.85)");
-                  e.currentTarget.style.transform = "translateY(-1px) scale(0.98)";
-                }}
-                onMouseUp={(e) => {
-                  e.currentTarget.style.transform = "translateY(-6px)";
-                }}
-              >
-                <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {card.icon}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <span style={{ fontSize: "22px", fontWeight: "600", letterSpacing: "-0.5px" }}>{card.title}</span>
-                  <span style={{ fontSize: "14px", opacity: 0.7, fontWeight: "400", lineHeight: "1.5" }}>{card.desc}</span>
-                </div>
-              </button>
+              <CartaoDeMenu key={card.title} {...card} />
             ))}
           </div>
         </div>
@@ -1668,6 +1630,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       andamento: initialData.andamento || "",
       tipoContrato: initialData.tipoContrato || "",
       aceitaPermuta: Boolean(initialData.aceitaPermuta),
+      // Ausente nos imóveis anteriores ao campo: o padrão é publicar.
+      publicarPortais: initialData.publicarPortais !== false,
       status: initialData.status || "DRAFT",
       comodidades: { ...EMPTY_COMODIDADES, ...(initialData.comodidades || {}) },
     });
@@ -1832,6 +1796,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       andamento: form.andamento,
       tipoContrato: form.tipoContrato,
       aceitaPermuta: form.aceitaPermuta,
+      publicarPortais: form.publicarPortais,
       atributos,
     };
   }
@@ -2164,6 +2129,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       andamento: form.andamento || null,
       tipoContrato: form.tipoContrato || null,
       aceitaPermuta: Boolean(form.aceitaPermuta),
+      publicarPortais: Boolean(form.publicarPortais),
       status: form.status,
       comodidades: form.comodidades,
       imageFiles: images.map((img) => img.file),
@@ -2558,7 +2524,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                     </span>
                     <button
                       type="button"
-                      onClick={() => navigate("/configuracoes?tab=plano")}
+                      onClick={() => navigate("/configuracoes?ver=plano")}
                       style={{ alignSelf: "flex-start", width: "auto", padding: "7px 16px", fontSize: "12px", fontWeight: 600, borderRadius: "8px", background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe", cursor: "pointer" }}
                     >
                       Conhecer o plano Profissional
@@ -2941,6 +2907,28 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                 <div>
                   <span style={{ fontSize: "14px", fontWeight: "500" }}>Aceita permuta</span>
                   <span style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>Proprietário aceita troca parcial ou total</span>
+                </div>
+              </label>
+
+              {/* Portais imobiliários.
+                  Separado de "ativo na vitrine" de propósito: imóvel de
+                  exclusividade em negociação, ou de carteira, fica na vitrine
+                  da imobiliária e fora do ZAP. Sem este campo, "publicar tudo"
+                  seria a única política possível. */}
+              <label style={{
+                display: "flex", alignItems: "flex-start", gap: "14px", padding: "16px 18px", borderRadius: "14px",
+                cursor: disabled ? "not-allowed" : "pointer",
+                border: form.publicarPortais ? "1px solid rgba(14,165,233,0.45)" : "1px solid rgba(255,255,255,0.08)",
+                background: form.publicarPortais ? "rgba(14,165,233,0.09)" : "rgba(255,255,255,0.02)",
+                transition: "all 0.2s ease", userSelect: "none", opacity: disabled ? 0.55 : 1,
+              }}>
+                <input type="checkbox" checked={form.publicarPortais} onChange={(e) => set("publicarPortais", e.target.checked)} disabled={disabled} style={{ accentColor: "#0ea5e9", width: "16px", height: "16px", flexShrink: 0, marginTop: "2px" }} />
+                <div>
+                  <span style={{ fontSize: "14px", fontWeight: "500" }}>Enviar aos portais</span>
+                  <span style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.5 }}>
+                    Inclui o imóvel no arquivo que o ZAP, o VivaReal e o OLX Imóveis buscam.
+                    Desmarque para mantê-lo só na sua vitrine.
+                  </span>
                 </div>
               </label>
             </>

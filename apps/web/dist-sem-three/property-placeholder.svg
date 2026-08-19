@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="550" viewBox="0 0 900 550" role="img" aria-label="Imagem do imovel indisponivel">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+  </defs>
+  <rect width="900" height="550" fill="url(#bg)" />
+  <g fill="none" stroke="#94a3b8" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.75">
+    <path d="M170 330 L320 210 L430 300 L560 180 L730 330" />
+    <rect x="160" y="330" width="580" height="130" rx="16" />
+    <circle cx="650" cy="240" r="26" />
+  </g>
+  <text x="450" y="500" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" fill="#e2e8f0">
+    Imovel sem foto
+  </text>
+</svg>

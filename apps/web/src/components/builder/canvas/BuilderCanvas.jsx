@@ -1,6 +1,8 @@
 import { VitrineProvider } from "../../showcase/contexto.jsx";
 import { ShowcaseRenderer } from "../../showcase/ShowcaseRenderer.jsx";
 import { BuilderPiece } from "./BuilderPiece";
+import { BuilderMultiToolbar } from "./BuilderMultiToolbar";
+import { BuilderPseudoSections } from "./BuilderPseudoSections";
 import { SnapGuides } from "./SnapGuides";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -31,12 +33,19 @@ export function BuilderCanvas({
   multiSelecao,
   encostados,
   guias,
+  gesto,
+  /* A IA está executando um plano? Muda a animação das peças e acende a
+     folha — ver `builder/ia/`. */
+  iaTrabalhando = false,
   novaPecaId,
   registrarPeca,
   aoSelecionar,
   aoIniciarResize,
   aoEditarTexto,
   acoes,
+  acoesMulti,
+  aoIniciarPseudoSecao,
+  zoom = 1,
   altura,
 }) {
   const travados = config.lockedBlocks || [];
@@ -47,7 +56,7 @@ export function BuilderCanvas({
       data-tour="vitrine-canvas"
       className={`showcase-container showcase-builder-canvas showcase-palco editor-canvas-surface ${
         config.appearanceMode === "light" ? "showcase-theme-light" : ""
-      }`}
+      } ${iaTrabalhando ? "is-ia-trabalhando" : ""}`}
       /* A fonte vem por herança do palco, que já recebeu `estiloDoTema` — a
          mesma função que a vitrine publicada usa. Declará-la aqui de novo seria
          a terceira cópia da mesma regra. */
@@ -55,6 +64,24 @@ export function BuilderCanvas({
       onPointerDown={(e) => { if (e.target === e.currentTarget) aoSelecionar(null, e); }}
     >
       <SnapGuides guias={guias} />
+      <BuilderPseudoSections
+        config={config}
+        mode={mode}
+        selecionados={multiSelecao}
+        gesto={gesto}
+        zoom={zoom}
+        onIniciarArrasto={aoIniciarPseudoSecao}
+      />
+      {!gesto ? (
+        <BuilderMultiToolbar
+          config={config}
+          mode={mode}
+          selecionados={multiSelecao}
+          zoom={zoom}
+          onAlinhar={acoesMulti?.alinhar}
+          onDistribuir={acoesMulti?.distribuir}
+        />
+      ) : null}
 
       <VitrineProvider modo="editor" aoEditar={aoEditarTexto} tenantSlug={tenantSlug}>
         <ShowcaseRenderer
@@ -81,14 +108,34 @@ export function BuilderCanvas({
                 travada={travada}
                 selecionada={selecionada === pieceId}
                 emMultiSelecao={multiSelecao.has(pieceId)}
+                selecaoMultiplaAtiva={multiSelecao.size > 1}
                 encostada={encostados.has(pieceId)}
                 novaPeca={ehWidget && novaPecaId === widget.id}
+                /* Durante a execução da IA TODAS as peças animam, inclusive
+                   a que está sendo mexida — o oposto do arrasto, onde a peça na
+                   mão precisa acompanhar o ponteiro sem atraso. Aqui não há
+                   ponteiro: o movimento É o que se quer ver. */
+                animarLayout={iaTrabalhando || (Boolean(gesto) && gesto?.tipo !== "resize")}
+                emArrasto={
+                  gesto?.pieceId === pieceId ||
+                  (gesto?.tipo === "section" && (gesto?.pieceIds || []).includes(pieceId))
+                }
+                magnetizada={
+                  gesto?.pieceId === pieceId &&
+                  gesto?.magnetico === true &&
+                  (gesto?.grade?.colunas || 1) > 1
+                }
+                linhaSolo={
+                  gesto?.pieceId === pieceId &&
+                  gesto?.magnetico === true &&
+                  gesto?.grade?.colunas === 1
+                }
+                previewInsercao={gesto?.pieceId === pieceId && gesto?.tipo === "insert"}
                 className={temBanner ? "showcase-section-has-bg" : ""}
                 registrarRef={registrarPeca(pieceId)}
                 onSelecionar={aoSelecionar}
                 onResizeStart={aoIniciarResize(pieceId)}
                 acoes={{
-                  duplicar: ehWidget ? () => acoes.duplicar(pieceId) : undefined,
                   alternarTrava: () => acoes.alternarTrava(pieceId),
                   ocultar: () => acoes.ocultar(pieceId),
                 }}

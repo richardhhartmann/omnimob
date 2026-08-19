@@ -42,6 +42,7 @@ export function telaDaRota(pathname) {
   if (pathname === "/clientes") return "clientes";
   if (pathname === "/usuarios") return "usuarios";
   if (pathname === "/cargos") return "cargos";
+  if (pathname === "/auditoria") return "auditoria";
   if (pathname.startsWith("/vitrine/") && pathname.endsWith("/editar")) return "vitrine-editor";
   return null;
 }
@@ -717,6 +718,49 @@ function tourVitrineEditor() {
   };
 }
 
+/* ── Registro de atividade ──────────────────────────────────────────────────
+   Tela de LEITURA, e o tour reflete isso: não há nada para preencher, então ele
+   não pede ação nenhuma. O que ele faz é ensinar a fazer a pergunta — porque a
+   trilha só serve para quem sabe que ela existe no dia em que algo some.
+
+   Três passos e acabou. Tour longo numa tela sem formulário vira palestra.
+   ────────────────────────────────────────────────────────────────────────── */
+function tourAuditoria() {
+  return {
+    chave: chave("auditoria"),
+    titulo: "Registro de atividade",
+    rota: null,
+    passos: [
+      {
+        alvo: '[data-tour="auditoria-cabecalho"]',
+        titulo: "O que aconteceu, e por quem",
+        texto:
+          "Cada criação, alteração e exclusão feita no painel entra aqui sozinha — ninguém " +
+          "precisa registrar nada à mão. É a resposta pronta para <em>“sumiu um imóvel”</em> e " +
+          "<em>“quem mudou este preço?”</em>.",
+        lado: "bottom",
+      },
+      {
+        alvo: '[data-tour="auditoria-filtros"]',
+        titulo: "A pergunta quase sempre tem um período",
+        texto:
+          "Comece pelo <strong>quando</strong> e vá fechando: a ação (criou, alterou, excluiu), " +
+          "o tipo de registro e a pessoa. A busca aceita o nome do imóvel ou do cliente — é o " +
+          "caminho mais curto quando você já sabe o que sumiu.",
+        lado: "bottom",
+      },
+      {
+        alvo: '[data-tour="auditoria-linha"]',
+        titulo: "Clique numa linha para abrir",
+        texto:
+          "Dentro de cada registro estão a hora exata, o código do que foi mexido, a rota que " +
+          "originou a ação e os campos gravados. Senhas e tokens nunca aparecem — nem para você.",
+        lado: "top",
+      },
+    ],
+  };
+}
+
 /**
  * Roteiro da tela pedida, já ajustado ao plano e às permissões.
  * @returns {{chave, titulo, rota, passos}|null}
@@ -727,6 +771,7 @@ export function montarTourDeTela(tela, { plano } = {}) {
     case "clientes":        return tourClientes();
     case "usuarios":        return tourUsuarios();
     case "cargos":          return tourCargos();
+    case "auditoria":       return tourAuditoria();
     case "vitrine-editor":  return tourVitrineEditor();
     default:                return null;
   }
@@ -734,5 +779,5 @@ export function montarTourDeTela(tela, { plano } = {}) {
 
 /** Chaves de todos os tours de tela — o que "explorar por conta própria" cala. */
 export function chavesDasTelas() {
-  return ["imoveis-novo", "clientes", "usuarios", "cargos", "vitrine-editor"].map(chave);
+  return ["imoveis-novo", "clientes", "usuarios", "cargos", "auditoria", "vitrine-editor"].map(chave);
 }

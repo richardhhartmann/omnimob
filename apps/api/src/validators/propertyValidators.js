@@ -33,6 +33,8 @@ export const createPropertySchema = z.object({
   // valor escolhido está entre eles — o enum sozinho não sabe disso.
   tipoContrato: z.nativeEnum(TipoContrato).nullable().optional(),
   aceitaPermuta: z.boolean().optional().default(false),
+  // Entra no XML dos portais. Padrão ligado — ver `services/feedPortais.js`.
+  publicarPortais: z.boolean().optional().default(true),
   comodidades: z.record(z.boolean()).nullable().optional(),
   status: z.nativeEnum(PropertyStatus).optional().default(PropertyStatus.DRAFT),
 });

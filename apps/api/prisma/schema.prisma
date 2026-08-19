@@ -47,10 +47,33 @@ enum AndamentoImovel {
 // Natureza do negócio do imóvel. Cada tenant escolhe quais tipos ficam
 // disponíveis no cadastro (Tenant.tiposContrato).
 enum TipoContrato {
-  VENDA         // transferência de propriedade
-  LOCACAO       // aluguel
-  PERMUTA       // troca de bens
+  VENDA // transferência de propriedade
+  LOCACAO // aluguel
+  PERMUTA // troca de bens
   BUILT_TO_SUIT // construção sob medida para locação comercial
+}
+
+/**
+ * Estágio do lead no atendimento.
+ * A ordem da lista é a ordem do funil, e o código conta com isso em um lugar
+ * só: o relatório que empilha os estágios. GANHO e PERDIDO são os dois fins
+ * possíveis — sair do funil por cima ou por baixo.
+ */
+enum LeadEstagio {
+  NOVO
+  EM_ATENDIMENTO
+  VISITA
+  PROPOSTA
+  GANHO
+  PERDIDO
+}
+
+enum LeadEventoTipo {
+  CRIADO
+  ESTAGIO
+  RESPONSAVEL
+  NOTA
+  CONTATO
 }
 
 enum StatusPagamento {
@@ -63,46 +86,46 @@ enum StatusPagamento {
 // ─── Tenant ──────────────────────────────────────────────────────────────────
 
 model Tenant {
-  id                  String   @id @default(cuid())
+  id                  String          @id @default(cuid())
   name                String
-  slug                String   @unique
+  slug                String          @unique
   cnpj                String?
   creci               String?
-  whatsapp            String   @default("")
-  telefone            String   @default("")
-  email               String   @default("")
-  description         String   @default("")
-  slogan              String   @default("")
-  logoUrl             String   @default("")
-  primaryColor        String   @default("#6366f1")
-  secondaryColor      String   @default("#d4af37")
-  showcaseHeadline    String   @default("")
-  showcaseSubheadline String   @default("")
+  whatsapp            String          @default("")
+  telefone            String          @default("")
+  email               String          @default("")
+  description         String          @default("")
+  slogan              String          @default("")
+  logoUrl             String          @default("")
+  primaryColor        String          @default("#6366f1")
+  secondaryColor      String          @default("#d4af37")
+  showcaseHeadline    String          @default("")
+  showcaseSubheadline String          @default("")
   cep                 String?
-  endereco            String   @default("")
-  cidade              String   @default("")
-  estado              String   @default("")
+  endereco            String          @default("")
+  cidade              String          @default("")
+  estado              String          @default("")
   showcaseConfig      Json?
   facebookPageId      String?
   facebookPageToken   String?
   facebookPageName    String?
   instagramBusinessId String?
-  ativo               Boolean  @default(true)
-  plano               String?         // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
-  autoGerarIA         Boolean  @default(true)  // auto-preenche imóvel por IA ao lançar foto
-  /* Marca d'água nas fotos de imóvel.
-
-     Ligada por padrão porque só tem efeito para quem TEM logo: sem logo
-     configurada, o cadastro nem chama a composição. Deixar desligada por padrão
-     esconderia o recurso de quem mais se beneficia dele — a imobiliária que
-     acabou de subir a própria marca.
-
-     A opacidade é guardada em PORCENTAGEM inteira, e não em fração: é o número
-     que aparece no painel ("55%") e o que a pessoa escolhe no controle. Guardar
-     0.55 obrigaria a converter nos dois sentidos, em dois lugares, para nunca
-     mostrar o valor cru. */
-  marcaDaguaAtiva     Boolean  @default(true) @map("tnt_marca_dagua_ativa")
-  marcaDaguaOpacidade Int      @default(55)   @map("tnt_marca_dagua_opacidade")
+  ativo               Boolean         @default(true)
+  plano               String? // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
+  autoGerarIA         Boolean         @default(true) // auto-preenche imóvel por IA ao lançar foto
+  /**
+   * Marca d'água nas fotos de imóvel.
+   * Ligada por padrão porque só tem efeito para quem TEM logo: sem logo
+   * configurada, o cadastro nem chama a composição. Deixar desligada por padrão
+   * esconderia o recurso de quem mais se beneficia dele — a imobiliária que
+   * acabou de subir a própria marca.
+   * A opacidade é guardada em PORCENTAGEM inteira, e não em fração: é o número
+   * que aparece no painel ("55%") e o que a pessoa escolhe no controle. Guardar
+   * 0.55 obrigaria a converter nos dois sentidos, em dois lugares, para nunca
+   * mostrar o valor cru.
+   */
+  marcaDaguaAtiva     Boolean         @default(true) @map("tnt_marca_dagua_ativa")
+  marcaDaguaOpacidade Int             @default(55) @map("tnt_marca_dagua_opacidade")
   // Tipos de contrato liberados no cadastro de imóvel desta imobiliária.
   // Lista vazia = nenhum parametrizado; a UI trata como "todos" para não travar o cadastro.
   tiposContrato       TipoContrato[]  @default([VENDA, LOCACAO, PERMUTA, BUILT_TO_SUIT]) @map("tipos_contrato")
@@ -110,49 +133,51 @@ model Tenant {
   proximoVencimento   DateTime?
   valorMensal         Decimal?        @db.Decimal(10, 2)
 
-  /* ─── Endereço da vitrine ──────────────────────────────────────────────────
-     Enquanto `dominioProprio` for nulo, a vitrine vive no endereço da Omnimob
-     e nada aqui importa. Quando a imobiliária traz o domínio dela, guardamos:
-
-       dominioProprio  o host pedido, sem protocolo nem barra ("imob.com.br")
-       dominioStatus   PENDENTE enquanto o DNS não aponta; ATIVO depois
-       dominioAlvo     o que a Vercel mandou o cliente cadastrar no registrador
-
-     `dominioAlvo` é gravado porque o valor NÃO é fixo: a Vercel devolve um alvo
-     por projeto (hoje um CNAME `<hash>.vercel-dns-017.com`) e já trocou o IP do
-     apex uma vez. Cravar no código quebraria calado no dia da próxima troca —
-     e o sintoma seria "o domínio do cliente parou", sem pista. */
-  dominioProprio      String?  @unique @map("tnt_dominio_proprio")
-  dominioStatus       String   @default("OMNIMOB") @map("tnt_dominio_status")
-  dominioAlvo         Json?    @map("tnt_dominio_alvo")
+  /**
+   * ─── Endereço da vitrine ──────────────────────────────────────────────────
+   * Enquanto `dominioProprio` for nulo, a vitrine vive no endereço da Omnimob
+   * e nada aqui importa. Quando a imobiliária traz o domínio dela, guardamos:
+   * dominioProprio  o host pedido, sem protocolo nem barra ("imob.com.br")
+   * dominioStatus   PENDENTE enquanto o DNS não aponta; ATIVO depois
+   * dominioAlvo     o que a Vercel mandou o cliente cadastrar no registrador
+   * `dominioAlvo` é gravado porque o valor NÃO é fixo: a Vercel devolve um alvo
+   * por projeto (hoje um CNAME `<hash>.vercel-dns-017.com`) e já trocou o IP do
+   * apex uma vez. Cravar no código quebraria calado no dia da próxima troca —
+   * e o sintoma seria "o domínio do cliente parou", sem pista.
+   */
+  dominioProprio      String?   @unique @map("tnt_dominio_proprio")
+  dominioStatus       String    @default("OMNIMOB") @map("tnt_dominio_status")
+  dominioAlvo         Json?     @map("tnt_dominio_alvo")
   dominioVerificadoEm DateTime? @map("tnt_dominio_verificado_em")
 
-  /* O que a imobiliária disse, ao pedir o teste, que traria de outro sistema:
-     `{ sistemaAtual, itens, volume, formato, observacao }`. Nulo para quem
-     está abrindo agora e não tem nada para trazer.
-
-     Precisa ficar aqui, e não só no e-mail que o time recebe, porque quem
-     responde a ela é o PRIMEIRO ACESSO: a pessoa marcou "imóveis e clientes"
-     num modal na landing e, dias depois, entra no painel — o convite que
-     carregava essa informação já foi consumido. Sem gravar, o boas-vindas não
-     teria como saber que ela veio para migrar.
-
-     `migracaoResolvidaEm` marca que o assunto já foi tratado (ela importou, ou
-     disse que faz depois). Um carimbo em vez de apagar a intenção: o que ela
-     pretendia trazer continua sendo informação útil para o time de vendas. */
+  /**
+   * O que a imobiliária disse, ao pedir o teste, que traria de outro sistema:
+   * `{ sistemaAtual, itens, volume, formato, observacao }`. Nulo para quem
+   * está abrindo agora e não tem nada para trazer.
+   * Precisa ficar aqui, e não só no e-mail que o time recebe, porque quem
+   * responde a ela é o PRIMEIRO ACESSO: a pessoa marcou "imóveis e clientes"
+   * num modal na landing e, dias depois, entra no painel — o convite que
+   * carregava essa informação já foi consumido. Sem gravar, o boas-vindas não
+   * teria como saber que ela veio para migrar.
+   * `migracaoResolvidaEm` marca que o assunto já foi tratado (ela importou, ou
+   * disse que faz depois). Um carimbo em vez de apagar a intenção: o que ela
+   * pretendia trazer continua sendo informação útil para o time de vendas.
+   */
   migracaoIntencao    Json?     @map("tnt_migracao_intencao")
   migracaoResolvidaEm DateTime? @map("tnt_migracao_resolvida_em")
 
-  /* Quando a imobiliária ganhou o prazo extra de teste, pela pesquisa que
-     aparece no painel (ver `PesquisaTrial`). Coluna própria, e não uma conta
-     em cima do histórico de respostas, porque é ela que impede o segundo
-     esticão: a guarda vira um UPDATE condicional (`trialEstendidoEm: null`),
-     que o Postgres serializa sozinho. Contar linhas de log deixaria dois
-     cliques simultâneos passarem juntos e darem 14 dias de graça. */
-  trialEstendidoEm    DateTime? @map("tnt_trial_estendido_em")
+  /**
+   * Quando a imobiliária ganhou o prazo extra de teste, pela pesquisa que
+   * aparece no painel (ver `PesquisaTrial`). Coluna própria, e não uma conta
+   * em cima do histórico de respostas, porque é ela que impede o segundo
+   * esticão: a guarda vira um UPDATE condicional (`trialEstendidoEm: null`),
+   * que o Postgres serializa sozinho. Contar linhas de log deixaria dois
+   * cliques simultâneos passarem juntos e darem 14 dias de graça.
+   */
+  trialEstendidoEm DateTime? @map("tnt_trial_estendido_em")
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   usuarios     Usuario[]
   cargos       Cargo[]
@@ -165,22 +190,26 @@ model Tenant {
   chamados     Chamado[]
   pesquisas    PesquisaTrial[]
 
+  auditorias  Auditoria[]
+  leadEventos LeadEvento[]
+  perfisBusca PerfilBusca[]
+
   @@map("tb_tenants")
 }
 
-/* Resposta da pesquisa que aparece sozinha durante o teste, depois de a pessoa
-   cadastrar/editar algo (ver `PulsoTrialModal` no web).
-
-   É um HISTÓRICO, não um campo no tenant: a mesma imobiliária pode responder
-   mais de uma vez ao longo do teste, e a sequência é o que tem valor — quem
-   respondeu "estou com dificuldade" na segunda semana depois de ter dito
-   "estou amando" na primeira é exatamente o contato que precisa ser feito
-   antes do vencimento.
-
-   Guarda também o fechamento sem resposta (`escolha: "FECHOU"`), porque é ele
-   que segura a cadência entre um dispositivo e outro — sem essa linha, quem
-   dispensa a pergunta no computador do escritório a receberia de novo no
-   celular alguns minutos depois. */
+/**
+ * Resposta da pesquisa que aparece sozinha durante o teste, depois de a pessoa
+ * cadastrar/editar algo (ver `PulsoTrialModal` no web).
+ * É um HISTÓRICO, não um campo no tenant: a mesma imobiliária pode responder
+ * mais de uma vez ao longo do teste, e a sequência é o que tem valor — quem
+ * respondeu "estou com dificuldade" na segunda semana depois de ter dito
+ * "estou amando" na primeira é exatamente o contato que precisa ser feito
+ * antes do vencimento.
+ * Guarda também o fechamento sem resposta (`escolha: "FECHOU"`), porque é ele
+ * que segura a cadência entre um dispositivo e outro — sem essa linha, quem
+ * dispensa a pergunta no computador do escritório a receberia de novo no
+ * celular alguns minutos depois.
+ */
 model PesquisaTrial {
   id         String   @id @default(cuid())
   tenantId   String   @map("tenant_id")
@@ -220,44 +249,50 @@ model SuperAdmin {
 
 // ─── Cargo (substitui o enum UserRole) ───────────────────────────────────────
 
-/* Cargo é de UMA imobiliária.
-
-   Nasceu sem `tenantId`, e por um tempo a tabela foi global: as três
-   imobiliárias do banco dividiam a mesma linha "Administrador", e o
-   `cargoRoutes` listava e editava tudo sem filtro. Tirar "Gerenciar Imóveis" do
-   Corretor numa imobiliária tirava dos corretores das outras — sem aviso, e sem
-   nada na tela que sugerisse que aquele cargo não era só dela.
-
-   O vínculo é obrigatório de propósito: cargo sem dono é exatamente o estado
-   que produziu o vazamento. `onDelete: Cascade` acompanha o resto do schema —
-   sai a imobiliária, saem os cargos dela. */
+/**
+ * Cargo é de UMA imobiliária.
+ * Nasceu sem `tenantId`, e por um tempo a tabela foi global: as três
+ * imobiliárias do banco dividiam a mesma linha "Administrador", e o
+ * `cargoRoutes` listava e editava tudo sem filtro. Tirar "Gerenciar Imóveis" do
+ * Corretor numa imobiliária tirava dos corretores das outras — sem aviso, e sem
+ * nada na tela que sugerisse que aquele cargo não era só dela.
+ * O vínculo é obrigatório de propósito: cargo sem dono é exatamente o estado
+ * que produziu o vazamento. `onDelete: Cascade` acompanha o resto do schema —
+ * sai a imobiliária, saem os cargos dela.
+ */
 model Cargo {
-  id                Int      @id @default(autoincrement()) @map("crg_codigo")
-  tenantId          String   @map("tenant_id")
-  descricao         String   @map("crg_descricao")
+  id        Int    @id @default(autoincrement()) @map("crg_codigo")
+  tenantId  String @map("tenant_id")
+  descricao String @map("crg_descricao")
 
   // Permissões de acesso
-  acessarPainel     Boolean  @default(false) @map("acessar_painel")
-  editarPagina      Boolean  @default(false) @map("editar_pagina")
-  gerenciarImoveis  Boolean  @default(false) @map("gerenciar_imoveis")
-  gerenciarLeads    Boolean  @default(false) @map("gerenciar_leads")
-  gerenciarUsuarios Boolean  @default(false) @map("gerenciar_usuarios")
-  gerenciarClientes Boolean  @default(false) @map("gerenciar_clientes")
-  gerenciarCargos   Boolean  @default(false) @map("gerenciar_cargos")
-  /* Ver o menu Configurações. Era derivada — o menu saía de
-     `editarPagina || gerenciarUsuarios` — e por isso tirar "Gerenciar Usuários"
-     de um cargo levava junto a aba de Configurações, que não tem relação
-     nenhuma com gerir gente. Agora é permissão própria.
+  acessarPainel     Boolean @default(false) @map("acessar_painel")
+  editarPagina      Boolean @default(false) @map("editar_pagina")
+  gerenciarImoveis  Boolean @default(false) @map("gerenciar_imoveis")
+  gerenciarLeads    Boolean @default(false) @map("gerenciar_leads")
+  gerenciarUsuarios Boolean @default(false) @map("gerenciar_usuarios")
+  gerenciarClientes Boolean @default(false) @map("gerenciar_clientes")
+  gerenciarCargos   Boolean @default(false) @map("gerenciar_cargos")
+  /**
+   * Ver o menu Configurações. Era derivada — o menu saía de
+   * `editarPagina || gerenciarUsuarios` — e por isso tirar "Gerenciar Usuários"
+   * de um cargo levava junto a aba de Configurações, que não tem relação
+   * nenhuma com gerir gente. Agora é permissão própria.
+   * Exclusiva do cargo Administrador: a tela nem oferece a caixa para os
+   * outros, e a API recusa (ver `cargoRoutes`). Configurações é onde ficam
+   * plano, cobrança, domínio e o cancelamento da assinatura.
+   */
+  verConfiguracoes  Boolean @default(false) @map("ver_configuracoes")
+  verRelatorios     Boolean @default(false) @map("ver_relatorios")
+  /* Ler a trilha de auditoria — quem criou, alterou e excluiu o quê.
+     Exclusiva do Administrador, como `verConfiguracoes` e pelo mesmo motivo: a
+     trilha mostra a movimentação de TODO MUNDO, inclusive de quem administra a
+     conta. Não é informação de operação, é informação de supervisão. */
+  verAuditoria      Boolean @default(false) @map("ver_auditoria")
+  publicarRedes     Boolean @default(false) @map("publicar_redes")
 
-     Exclusiva do cargo Administrador: a tela nem oferece a caixa para os
-     outros, e a API recusa (ver `cargoRoutes`). Configurações é onde ficam
-     plano, cobrança, domínio e o cancelamento da assinatura. */
-  verConfiguracoes  Boolean  @default(false) @map("ver_configuracoes")
-  verRelatorios     Boolean  @default(false) @map("ver_relatorios")
-  publicarRedes     Boolean  @default(false) @map("publicar_redes")
-
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  usuarios          Usuario[]
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  usuarios Usuario[]
 
   @@index([tenantId])
   @@map("tb_cargo")
@@ -271,16 +306,16 @@ model Usuario {
   cargoCodigo       Int      @map("crg_codigo")
   nome              String   @map("usu_nome")
   login             String   @unique @map("usu_login")
-  /* E-mail da PESSOA, e é para onde vai a recuperação de senha.
-
-     Anulável porque o cadastro nunca pediu e-mail — os usuários que já existem
-     não têm nenhum, e exigir agora quebraria a tela de Usuários. Quem está sem
-     e-mail simplesmente não consegue recuperar sozinho: a tela avisa, e o
-     caminho é o administrador da imobiliária redefinir por lá.
-
-     Não é único: o mesmo e-mail pode ser de duas pessoas em imobiliárias
-     diferentes (o dono que administra duas). Quem identifica alguém é o
-     `login`, que continua único no sistema inteiro. */
+  /**
+   * E-mail da PESSOA, e é para onde vai a recuperação de senha.
+   * Anulável porque o cadastro nunca pediu e-mail — os usuários que já existem
+   * não têm nenhum, e exigir agora quebraria a tela de Usuários. Quem está sem
+   * e-mail simplesmente não consegue recuperar sozinho: a tela avisa, e o
+   * caminho é o administrador da imobiliária redefinir por lá.
+   * Não é único: o mesmo e-mail pode ser de duas pessoas em imobiliárias
+   * diferentes (o dono que administra duas). Quem identifica alguém é o
+   * `login`, que continua único no sistema inteiro.
+   */
   email             String?  @map("usu_email")
   senha             String   @map("usu_senha")
   forcaAlterarSenha Boolean  @default(false) @map("usu_forca_alterar_senha")
@@ -288,58 +323,65 @@ model Usuario {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  cargo   Cargo   @relation(fields: [cargoCodigo], references: [id])
-  vendas  Venda[]
-  tutorial UsuarioTutorial[]
-  chamados Chamado[]
-  /* Identificador que o registro tinha no sistema de origem, quando veio de uma
-     importação. Nulo em tudo que nasceu aqui dentro.
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cargo           Cargo             @relation(fields: [cargoCodigo], references: [id])
+  vendas          Venda[]
+  tutorial        UsuarioTutorial[]
+  chamados        Chamado[]
+  /**
+   * Identificador que o registro tinha no sistema de origem, quando veio de uma
+   * importação. Nulo em tudo que nasceu aqui dentro.
+   * Existe por um motivo prático: reimportar é a norma, não a exceção. A
+   * primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
+   * chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
+   * ela, a importação vira "atualize quem já veio, crie o resto".
+   * Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
+   * eles não têm nada a ver um com o outro.
+   */
+  origemExterna   String?           @map("origem_externa")
+  leadsAtribuidos PropertyLead[]    @relation("LeadsDoResponsavel")
 
-     Existe por um motivo prático: reimportar é a norma, não a exceção. A
-     primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
-     chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
-     ela, a importação vira "atualize quem já veio, crie o resto".
-
-     Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
-     eles não têm nada a ver um com o outro. */
-  origemExterna String? @map("origem_externa")
   @@unique([tenantId, origemExterna], name: "usuario_origem")
-
   @@index([tenantId, ativo])
+  /* Busca por e-mail na recuperação de senha (`authRoutes`, findFirst por
+     email). O índice existia no banco desde a migração `usuario_email`, mas não
+     estava declarado aqui — e o Prisma, que compara schema com histórico,
+     propunha derrubá-lo em toda migração nova. Declarado, ele para de sumir. */
+  @@index([email])
   @@map("tb_usuario")
 }
 
 // ─── Tutorial guiado ─────────────────────────────────────────────────────────
 
-/* O que cada usuário fez com o tour de primeiro acesso, uma linha por etapa.
-   FINALIZADO = percorreu até o fim · PULADO = saiu no meio (com o passo onde
-   parou) · EM_ANDAMENTO = abriu e não concluiu.
-
-   "Não fez" é a AUSÊNCIA de linha, não um valor. Gravar PENDENTE para todo
-   mundo exigiria semear linhas na criação do usuário e de novo a cada etapa
-   nova do tour — um backfill por release, e um usuário sem linha viraria
-   "sem dados" em vez de "não fez". Quem lê monta a matriz completa cruzando
-   com o fluxo declarado; é o que faz `GET /api/tutorial`. */
+/**
+ * O que cada usuário fez com o tour de primeiro acesso, uma linha por etapa.
+ * FINALIZADO = percorreu até o fim · PULADO = saiu no meio (com o passo onde
+ * parou) · EM_ANDAMENTO = abriu e não concluiu.
+ * "Não fez" é a AUSÊNCIA de linha, não um valor. Gravar PENDENTE para todo
+ * mundo exigiria semear linhas na criação do usuário e de novo a cada etapa
+ * nova do tour — um backfill por release, e um usuário sem linha viraria
+ * "sem dados" em vez de "não fez". Quem lê monta a matriz completa cruzando
+ * com o fluxo declarado; é o que faz `GET /api/tutorial`.
+ */
 enum TutorialStatus {
   EM_ANDAMENTO
   FINALIZADO
   PULADO
 }
 
-/* ── Chamados de suporte ────────────────────────────────────────────────────
-   Abertos pelo botão de Ajuda dentro do painel da imobiliária e lidos pelo
-   super-admin.
-
-   `numero` é inteiro e sequencial, e não cuid como o resto do schema, porque
-   este é o único id que uma PESSOA precisa dizer em voz alta: "o chamado 214".
-   Um cuid num telefonema não funciona.
-
-   O usuário é opcional e vem com o nome copiado ao lado: quem abriu pode ser
-   desligado da imobiliária depois, e o histórico do suporte não pode virar
-   "aberto por (ninguém)". Já o tenant cascateia — apagada a imobiliária, os
-   chamados dela não têm mais a quem responder.
-   ────────────────────────────────────────────────────────────────────────── */
+/**
+ * ── Chamados de suporte ────────────────────────────────────────────────────
+ * Abertos pelo botão de Ajuda dentro do painel da imobiliária e lidos pelo
+ * super-admin.
+ * `numero` é inteiro e sequencial, e não cuid como o resto do schema, porque
+ * este é o único id que uma PESSOA precisa dizer em voz alta: "o chamado 214".
+ * Um cuid num telefonema não funciona.
+ * O usuário é opcional e vem com o nome copiado ao lado: quem abriu pode ser
+ * desligado da imobiliária depois, e o histórico do suporte não pode virar
+ * "aberto por (ninguém)". Já o tenant cascateia — apagada a imobiliária, os
+ * chamados dela não têm mais a quem responder.
+ * ──────────────────────────────────────────────────────────────────────────
+ */
 model Chamado {
   numero       Int               @id @default(autoincrement()) @map("cha_numero")
   tenantId     String            @map("tenant_id")
@@ -375,19 +417,19 @@ enum ChamadoPrioridade {
 }
 
 model UsuarioTutorial {
-  id          String         @id @default(cuid()) @map("tut_id")
-  tenantId    String         @map("tenant_id")
-  usuarioId   String         @map("usu_id")
+  id           String         @id @default(cuid()) @map("tut_id")
+  tenantId     String         @map("tenant_id")
+  usuarioId    String         @map("usu_id")
   // Chave da etapa no fluxo declarado em apps/web/src/utils/tourFluxo.js
   // ("boas-vindas", "inicio", "imoveis"…). Texto livre de propósito: uma etapa
   // nova não pode exigir migração de enum.
-  etapa       String         @map("tut_etapa")
-  status      TutorialStatus @default(EM_ANDAMENTO) @map("tut_status")
+  etapa        String         @map("tut_etapa")
+  status       TutorialStatus @default(EM_ANDAMENTO) @map("tut_status")
   // Em que passo a pessoa estava ao pular — é o que diz ONDE ela desistiu.
-  passoParou  Int?           @map("tut_passo_parou")
-  totalPassos Int?           @map("tut_total_passos")
-  criadoEm    DateTime       @default(now()) @map("created_at")
-  atualizadoEm DateTime      @updatedAt @map("updated_at")
+  passoParou   Int?           @map("tut_passo_parou")
+  totalPassos  Int?           @map("tut_total_passos")
+  criadoEm     DateTime       @default(now()) @map("created_at")
+  atualizadoEm DateTime       @updatedAt @map("updated_at")
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
@@ -399,43 +441,44 @@ model UsuarioTutorial {
 // ─── Cliente ─────────────────────────────────────────────────────────────────
 
 model Cliente {
-  id          String    @id @default(cuid()) @map("clt_id")
-  tenantId    String    @map("tenant_id")
-  nome        String    @map("clt_nome")
-  cpf         String?   @map("clt_cpf")
-  rg          String?   @map("clt_rg")
-  nascimento  DateTime? @map("clt_nascimento") @db.Date
-  email       String?   @map("clt_email")
-  telefone    String?   @map("clt_telefone")
-  whatsapp    String?   @map("clt_whatsapp")
-  cep         String?   @map("clt_cep")
-  endereco    String?   @map("clt_endereco")
-  bairro      String?   @map("clt_bairro")
-  cidade      String?   @map("clt_cidade")
-  estado      String?   @map("clt_estado")
-  observacoes String?   @map("clt_observacoes") @db.Text
-  ativo       Boolean   @default(true) @map("clt_ativo")
+  id                String    @id @default(cuid()) @map("clt_id")
+  tenantId          String    @map("tenant_id")
+  nome              String    @map("clt_nome")
+  cpf               String?   @map("clt_cpf")
+  rg                String?   @map("clt_rg")
+  nascimento        DateTime? @map("clt_nascimento") @db.Date
+  email             String?   @map("clt_email")
+  telefone          String?   @map("clt_telefone")
+  whatsapp          String?   @map("clt_whatsapp")
+  cep               String?   @map("clt_cep")
+  endereco          String?   @map("clt_endereco")
+  bairro            String?   @map("clt_bairro")
+  cidade            String?   @map("clt_cidade")
+  estado            String?   @map("clt_estado")
+  observacoes       String?   @map("clt_observacoes") @db.Text
+  ativo             Boolean   @default(true) @map("clt_ativo")
   // Contato optou por receber divulgações de imóveis (base para broadcast WhatsApp).
-  aceitaDivulgacao   Boolean   @default(false) @map("clt_aceita_divulgacao")
-  divulgacaoOptInAt  DateTime? @map("clt_divulgacao_optin_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  aceitaDivulgacao  Boolean   @default(false) @map("clt_aceita_divulgacao")
+  divulgacaoOptInAt DateTime? @map("clt_divulgacao_optin_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  vendas Venda[]
-  /* Identificador que o registro tinha no sistema de origem, quando veio de uma
-     importação. Nulo em tudo que nasceu aqui dentro.
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendas        Venda[]
+  /**
+   * Identificador que o registro tinha no sistema de origem, quando veio de uma
+   * importação. Nulo em tudo que nasceu aqui dentro.
+   * Existe por um motivo prático: reimportar é a norma, não a exceção. A
+   * primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
+   * chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
+   * ela, a importação vira "atualize quem já veio, crie o resto".
+   * Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
+   * eles não têm nada a ver um com o outro.
+   */
+  origemExterna String?       @map("origem_externa")
+  perfisBusca   PerfilBusca[]
 
-     Existe por um motivo prático: reimportar é a norma, não a exceção. A
-     primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
-     chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
-     ela, a importação vira "atualize quem já veio, crie o resto".
-
-     Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
-     eles não têm nada a ver um com o outro. */
-  origemExterna String? @map("origem_externa")
   @@unique([tenantId, origemExterna], name: "cliente_origem")
-
   @@index([tenantId, ativo])
   @@index([tenantId, cpf])
   @@index([tenantId, aceitaDivulgacao])
@@ -471,32 +514,35 @@ model Venda {
 
 // ─── Tipos de Imóvel e Atributos ─────────────────────────────────────────────
 
-/* Tipo de imóvel é de UMA imobiliária.
-
-   Mesma história do `Cargo`: nasceu sem `tenantId` e a tabela era global — só
-   que aqui havia CRUD aberto na tela de Tipos de Imóvel. Uma imobiliária
-   renomear "Apartamento" renomeava para todas; excluir excluía de todas. Os
-   atributos (`ModeloAtributo`) vão junto por herança: eles pertencem ao tipo, e
-   o tipo agora tem dono. */
+/**
+ * Tipo de imóvel é de UMA imobiliária.
+ * Mesma história do `Cargo`: nasceu sem `tenantId` e a tabela era global — só
+ * que aqui havia CRUD aberto na tela de Tipos de Imóvel. Uma imobiliária
+ * renomear "Apartamento" renomeava para todas; excluir excluía de todas. Os
+ * atributos (`ModeloAtributo`) vão junto por herança: eles pertencem ao tipo, e
+ * o tipo agora tem dono.
+ */
 model TipoImovel {
-  id         Int              @id @default(autoincrement()) @map("tip_id")
-  tenantId   String           @map("tenant_id")
-  descricao  String           @map("tip_descricao")
-  areaFields Json             @default("[]") @map("tip_area_fields")
+  id         Int    @id @default(autoincrement()) @map("tip_id")
+  tenantId   String @map("tenant_id")
+  descricao  String @map("tip_descricao")
+  areaFields Json   @default("[]") @map("tip_area_fields")
 
   tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   atributos ModeloAtributo[]
   imoveis   Property[]
+
+  perfisBusca PerfilBusca[]
 
   @@index([tenantId])
   @@map("tb_tipo_imovel")
 }
 
 model ModeloAtributo {
-  id        Int      @id @default(autoincrement()) @map("atr_id")
-  tipoId    Int      @map("tip_id")
-  descricao String   @map("atr_descricao")
-  grupo     String?  @map("atr_grupo")
+  id        Int     @id @default(autoincrement()) @map("atr_id")
+  tipoId    Int     @map("tip_id")
+  descricao String  @map("atr_descricao")
+  grupo     String? @map("atr_grupo")
 
   tipo    TipoImovel       @relation(fields: [tipoId], references: [id], onDelete: Cascade)
   imoveis ImovelAtributo[]
@@ -518,61 +564,69 @@ model ImovelAtributo {
 // ─── Imóveis ─────────────────────────────────────────────────────────────────
 
 model Property {
-  id            String         @id @default(cuid())
-  tenantId      String
-  tipoImovelId  Int?           @map("tip_id")
-  propertyType  String         @default("") // mantido para compatibilidade, derivado de tipoImovel.descricao
-  title         String
-  description   String
-  price         Decimal        @db.Decimal(12, 2)
-  cep           String?
-  address       String
-  neighborhood  String         @default("")
-  city          String         @default("")
-  state         String         @default("")
-  bedrooms      Int            @default(0)
-  parkingSpots  Int            @default(0)
-  suites        Int            @default(0)
-  salas         Int            @default(0)   // nº de salas/ambientes (imóveis comerciais)
-  banheiros     Int            @default(0)   // nº de banheiros (imóveis comerciais)
-  squareFootage Float          @default(0)
-  finalidade    String?        // RESIDENCIAL | COMERCIAL
-  areaTerreno   Float?         @map("area_terreno")
-  areaConstruida Float?        @map("area_construida")
-  areaPrivativa Float?         @map("area_privativa")
-  areaTotal     Float?         @map("area_total")
-  andamento     AndamentoImovel?
-  tipoContrato  TipoContrato?   @map("tipo_contrato") // nulo nos imóveis cadastrados antes do campo existir
-  aceitaPermuta Boolean         @default(false) @map("aceita_permuta")
-  comodidades   Json?           // comodidades da regiao detectadas pelo CEP (ex.: { possuiMercado: true })
-  status        PropertyStatus @default(DRAFT)
-  viewCount     Int            @default(0)
-  leadCount     Int            @default(0)
-  saleCount     Int            @default(0)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id              String           @id @default(cuid())
+  tenantId        String
+  tipoImovelId    Int?             @map("tip_id")
+  propertyType    String           @default("") // mantido para compatibilidade, derivado de tipoImovel.descricao
+  title           String
+  description     String
+  price           Decimal          @db.Decimal(12, 2)
+  cep             String?
+  address         String
+  neighborhood    String           @default("")
+  city            String           @default("")
+  state           String           @default("")
+  bedrooms        Int              @default(0)
+  parkingSpots    Int              @default(0)
+  suites          Int              @default(0)
+  salas           Int              @default(0) // nº de salas/ambientes (imóveis comerciais)
+  banheiros       Int              @default(0) // nº de banheiros (imóveis comerciais)
+  squareFootage   Float            @default(0)
+  finalidade      String? // RESIDENCIAL | COMERCIAL
+  areaTerreno     Float?           @map("area_terreno")
+  areaConstruida  Float?           @map("area_construida")
+  areaPrivativa   Float?           @map("area_privativa")
+  areaTotal       Float?           @map("area_total")
+  andamento       AndamentoImovel?
+  tipoContrato    TipoContrato?    @map("tipo_contrato") // nulo nos imóveis cadastrados antes do campo existir
+  aceitaPermuta   Boolean          @default(false) @map("aceita_permuta")
+  comodidades     Json? // comodidades da regiao detectadas pelo CEP (ex.: { possuiMercado: true })
+  status          PropertyStatus   @default(DRAFT)
+  /**
+   * Entra no XML que os portais (ZAP, VivaReal, Imovelweb) buscam.
+   * Padrão ligado, e separado de `status`: um imóvel pode estar ativo na
+   * vitrine da imobiliária e fora dos portais de propósito — exclusividade em
+   * negociação, imóvel de carteira, ou simplesmente porque o portal cobra por
+   * anúncio. Sem este campo, "publicar tudo" seria a única política possível.
+   */
+  publicarPortais Boolean          @default(true) @map("prp_publicar_portais")
+  viewCount       Int              @default(0)
+  leadCount       Int              @default(0)
+  saleCount       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  tipoImovel   TipoImovel?           @relation(fields: [tipoImovelId], references: [id])
-  atributos    ImovelAtributo[]
-  publications PropertyPublication[]
-  images       PropertyImage[]
-  metricEvents PropertyMetricEvent[]
-  leads        PropertyLead[]
-  vendas       Venda[]
-  /* Identificador que o registro tinha no sistema de origem, quando veio de uma
-     importação. Nulo em tudo que nasceu aqui dentro.
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tipoImovel    TipoImovel?           @relation(fields: [tipoImovelId], references: [id])
+  atributos     ImovelAtributo[]
+  publications  PropertyPublication[]
+  images        PropertyImage[]
+  metricEvents  PropertyMetricEvent[]
+  leads         PropertyLead[]
+  vendas        Venda[]
+  /**
+   * Identificador que o registro tinha no sistema de origem, quando veio de uma
+   * importação. Nulo em tudo que nasceu aqui dentro.
+   * Existe por um motivo prático: reimportar é a norma, não a exceção. A
+   * primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
+   * chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
+   * ela, a importação vira "atualize quem já veio, crie o resto".
+   * Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
+   * eles não têm nada a ver um com o outro.
+   */
+  origemExterna String?               @map("origem_externa")
 
-     Existe por um motivo prático: reimportar é a norma, não a exceção. A
-     primeira tentativa quase sempre tem uma coluna mapeada errada, e sem uma
-     chave estável a segunda tentativa duplicaria tudo em vez de corrigir. Com
-     ela, a importação vira "atualize quem já veio, crie o resto".
-
-     Único POR TENANT: dois sistemas diferentes podem ter um imóvel "1042", e
-     eles não têm nada a ver um com o outro. */
-  origemExterna String? @map("origem_externa")
   @@unique([tenantId, origemExterna], name: "property_origem")
-
   @@index([tenantId, status])
 }
 
@@ -626,6 +680,16 @@ model PropertyImage {
   @@index([tenantId, propertyId, position])
 }
 
+/**
+ * Lead: quem levantou a mão na vitrine.
+ * Nasceu como caixa de entrada — nome, telefone, mensagem — e era só isso. Sem
+ * DONO e sem ESTÁGIO não existe atendimento, existe uma lista: ninguém sabe de
+ * quem é o lead, ninguém sabe se alguém já ligou, e o "funil de vendas" tinha
+ * de ser inferido de eventos de visualização, que medem o site e não a equipe.
+ * Os três campos abaixo mudam isso, e o histórico (`LeadEvento`) responde a
+ * pergunta que aparece toda semana numa imobiliária: "o que foi feito com este
+ * contato?".
+ */
 model PropertyLead {
   id         String   @id @default(cuid())
   tenantId   String
@@ -636,9 +700,157 @@ model PropertyLead {
   message    String?
   source     String   @default("showcase")
   createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  estagio           LeadEstagio @default(NOVO)
+  /**
+   * Corretor responsável. Opcional porque a distribuição automática pode não
+   * ter ninguém elegível — imobiliária de uma pessoa só, ou equipe inteira sem
+   * a permissão de atender. Nesse caso o lead cai na caixa comum, que é melhor
+   * do que atribuí-lo a alguém que não deveria vê-lo.
+   */
+  responsavelId     String?
+  /**
+   * Quando alguém encostou no lead pela primeira vez. É o que permite medir
+   * tempo de primeira resposta — o número que mais separa imobiliária que
+   * converte de imobiliária que não converte.
+   */
+  primeiroContatoEm DateTime?
+
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /**
+   * SetNull e não Cascade: desligar um corretor não pode apagar os leads que
+   * ele atendeu. Eles voltam para a caixa comum e alguém assume.
+   */
+  responsavel Usuario?     @relation("LeadsDoResponsavel", fields: [responsavelId], references: [id], onDelete: SetNull)
+  eventos     LeadEvento[]
 
   @@index([tenantId, propertyId, createdAt])
+  @@index([tenantId, estagio])
+  @@index([tenantId, responsavelId])
+}
+
+/**
+ * Uma linha por coisa que aconteceu com o lead.
+ * `usuarioNome` é gravado junto e de propósito, apesar de `usuarioId` existir:
+ * o histórico precisa continuar legível depois que a pessoa sai da empresa e o
+ * usuário é removido. Um histórico que vira "(usuário excluído) mudou o estágio"
+ * perde exatamente a informação pela qual ele existe.
+ */
+model LeadEvento {
+  id          String         @id @default(cuid()) @map("lev_id")
+  tenantId    String         @map("tenant_id")
+  leadId      String         @map("lea_id")
+  usuarioId   String?        @map("usu_id")
+  usuarioNome String?        @map("lev_usuario_nome")
+  tipo        LeadEventoTipo @map("lev_tipo")
+  de          String?        @map("lev_de")
+  para        String?        @map("lev_para")
+  texto       String?        @map("lev_texto") @db.Text
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   PropertyLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, createdAt])
+  @@map("tb_lead_evento")
+}
+
+// ─── Auditoria ───────────────────────────────────────────────────────────────
+
+/**
+ * Quem fez o quê, quando.
+ * Escrita por uma extensão do Prisma Client (`services/auditoria.js`), não por
+ * chamada espalhada nas rotas — é o que faz a trilha valer inclusive para as
+ * rotas que ainda não existem. Quem escreve uma rota nova não precisa lembrar
+ * de nada.
+ * NÃO tem relação com `Usuario`, e é deliberado: o registro precisa sobreviver
+ * à remoção de quem o gerou. Por isso `usuarioId` é texto solto e o nome vem
+ * gravado junto — um log que diz "(excluído) apagou o imóvel" não responde a
+ * pergunta pela qual ele foi criado. Com o tenant é o contrário: se a
+ * imobiliária sai, o histórico dela sai junto.
+ */
+model Auditoria {
+  id          String   @id @default(cuid()) @map("aud_id")
+  tenantId    String   @map("tenant_id")
+  usuarioId   String?  @map("usu_id")
+  usuarioNome String?  @map("aud_usuario_nome")
+  /**
+   * CRIOU | ALTEROU | EXCLUIU. Em português porque aparece cru na tela — e
+   * traduzir na interface seria um segundo lugar para desencontrar do primeiro.
+   */
+  acao        String   @map("aud_acao")
+  entidade    String   @map("aud_entidade")
+  entidadeId  String?  @map("aud_entidade_id")
+  /**
+   * Como a pessoa reconhece o registro: o título do imóvel, o nome do cliente.
+   * Sem ele o log diria "excluiu Property cmc3x9…", que não é resposta.
+   */
+  resumo      String?  @map("aud_resumo")
+  /**
+   * Os campos que mudaram, já sem senha nem token (ver `limparSegredos`).
+   */
+  dados       Json?    @map("aud_dados")
+  ip          String?  @map("aud_ip")
+  rota        String?  @map("aud_rota")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entidade, entidadeId])
+  @@index([tenantId, usuarioId, createdAt])
+  @@map("tb_auditoria")
+}
+
+// ─── Perfil de busca ─────────────────────────────────────────────────────────
+
+/**
+ * O que um cliente procura.
+ * A imobiliária já tem a base de clientes e já tem o acervo; o que faltava era
+ * a ligação entre os dois. Com o perfil gravado, cadastrar um imóvel passa a
+ * responder sozinho "quem da minha carteira estava esperando por isto" — que é
+ * o cruzamento que os sistemas grandes vendem como inteligência e que aqui é
+ * uma consulta com índice.
+ * Todos os critérios são opcionais de propósito: perfil pela metade ainda
+ * cruza. Exigir o formulário completo faria a maioria não ser preenchida, e um
+ * perfil vazio é o único que não serve para nada.
+ */
+model PerfilBusca {
+  id            String        @id @default(cuid()) @map("pfb_id")
+  tenantId      String        @map("tenant_id")
+  clienteId     String        @map("clt_id")
+  titulo        String        @map("pfb_titulo")
+  finalidade    String?       @map("pfb_finalidade") // RESIDENCIAL | COMERCIAL
+  tipoContrato  TipoContrato? @map("pfb_tipo_contrato")
+  tipoImovelId  Int?          @map("tip_id")
+  precoMin      Decimal?      @map("pfb_preco_min") @db.Decimal(12, 2)
+  precoMax      Decimal?      @map("pfb_preco_max") @db.Decimal(12, 2)
+  quartosMin    Int?          @map("pfb_quartos_min")
+  vagasMin      Int?          @map("pfb_vagas_min")
+  areaMin       Float?        @map("pfb_area_min")
+  cidade        String?       @map("pfb_cidade")
+  /**
+   * Lista de bairros aceitos. Vazia significa "qualquer bairro da cidade" —
+   * e não "nenhum", que tornaria o perfil impossível de casar.
+   */
+  bairros       String[]      @map("pfb_bairros")
+  ativo         Boolean       @default(true) @map("pfb_ativo")
+  /**
+   * Trava do aviso automático: quando o cruzamento avisou este perfil pela
+   * última vez. Sem ela, uma edição em massa no acervo dispararia dezenas de
+   * e-mails para o mesmo cliente no mesmo minuto.
+   */
+  ultimoAvisoEm DateTime?     @map("pfb_ultimo_aviso_em")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente    Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  tipoImovel TipoImovel? @relation(fields: [tipoImovelId], references: [id])
+
+  @@index([tenantId, ativo])
+  @@index([tenantId, clienteId])
+  @@map("tb_perfil_busca")
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, setApiToken, setAdminToken } from "./api";
 import { initPointerGradient } from "./utils/pointerGradient";
@@ -7,13 +7,13 @@ import { LeadsPage } from "./pages/LeadsPage";
 import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PropertyInsightsPage } from "./pages/PropertyInsightsPage";
-import { ShowcaseEditorPage } from "./pages/ShowcaseEditorPage";
 import { ShowcasePropertyPage } from "./pages/ShowcasePropertyPage";
 import { ShowcasePage } from "./pages/ShowcasePage";
 import { TrialConfirmarPage } from "./pages/TrialConfirmarPage";
 import { RecuperarSenhaPage } from "./pages/RecuperarSenhaPage";
 import { AdminLayout } from "./components/AdminLayout";
 import { CargosPage } from "./pages/CargosPage";
+import { AuditoriaPage } from "./pages/AuditoriaPage.jsx";
 import { ClientesPage } from "./pages/ClientesPage";
 import { ConfiguracaoPage } from "./pages/ConfiguracaoPage";
 import { TiposImovelPage } from "./pages/TiposImovelPage";
@@ -21,9 +21,51 @@ import { UsuariosPage } from "./pages/UsuariosPage";
 import { clearSession, loadSession, saveSession } from "./session";
 import { ehDominioDaOmnimob, slugDoDominioAtual } from "./utils/dominioVitrine";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
-import { SuperAdminPage } from "./pages/SuperAdminPage";
-import { OmnimobLandingPage } from "./pages/OmnimobLandingPage";
 import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
+import { LimiteDeErro } from "./components/LimiteDeErro.jsx";
+
+/* ── Divisão por rota ────────────────────────────────────────────────────────
+   Tudo vivia num pacote só: quem abria a landing baixava o formulário de
+   imóvel, o editor de vitrine e o painel inteiro antes de ver a primeira
+   palavra. Em máquina fraca isso não é só download — é a linha principal
+   travada interpretando megabytes de JavaScript que aquela pessoa não vai usar.
+
+   As três famílias abaixo NUNCA aparecem juntas na mesma sessão:
+     · a landing é para quem ainda não é cliente;
+     · o editor de vitrine é uma tela inteira, aberta de propósito;
+     · o super-admin é a Omnimob olhando os clientes dela.
+
+   O resto do painel fica junto de propósito: são telas que a mesma pessoa
+   percorre na mesma sessão, e fatiá-las trocaria um download grande por doze
+   esperas pequenas no meio da navegação. */
+const OmnimobLandingPage = lazy(() =>
+  import("./pages/OmnimobLandingPage").then((m) => ({ default: m.OmnimobLandingPage })));
+const ShowcaseEditorPage = lazy(() =>
+  import("./pages/ShowcaseEditorPage").then((m) => ({ default: m.ShowcaseEditorPage })));
+const SuperAdminPage = lazy(() =>
+  import("./pages/SuperAdminPage").then((m) => ({ default: m.SuperAdminPage })));
+
+/* As páginas públicas fora da landing: termos, privacidade, sobre, contato e a
+   galeria de vitrines. Carregadas sob demanda e SEPARADAS da landing — quem
+   abre a Política de Privacidade não deve baixar a página de vendas inteira
+   para ler um texto. Ver `components/PaginaPublica.jsx`. */
+const TermosPage = lazy(() =>
+  import("./pages/publicas/TermosPage.jsx").then((m) => ({ default: m.TermosPage })));
+const PrivacidadePage = lazy(() =>
+  import("./pages/publicas/PrivacidadePage.jsx").then((m) => ({ default: m.PrivacidadePage })));
+const SobrePage = lazy(() =>
+  import("./pages/publicas/SobrePage.jsx").then((m) => ({ default: m.SobrePage })));
+const ContatoPage = lazy(() =>
+  import("./pages/publicas/ContatoPage.jsx").then((m) => ({ default: m.ContatoPage })));
+const VitrinesPage = lazy(() =>
+  import("./pages/publicas/VitrinesPage.jsx").then((m) => ({ default: m.VitrinesPage })));
+
+/* Enquanto o pedaço desce. Fundo sólido e nada mais: a landing tem tela de
+   abertura própria (`OmnimobSplash`), e um segundo indicador antes dela seria
+   duas esperas encavaladas para o mesmo carregamento. */
+function Carregando() {
+  return <div style={{ minHeight: "100vh", background: "#0a0a0b" }} aria-busy="true" />;
+}
 
 export default function App() {
   const [session, setSession] = useState(() => {
@@ -151,11 +193,32 @@ export default function App() {
              sessão e mandar para o login, que é o que a pessoa faria de qualquer
              jeito depois de dez minutos achando que o sistema quebrou.
 
-             Só no 403: 401 pode ser token expirado com renovação em curso, e
-             falha de rede não diz nada sobre a validade da sessão. */
+             Só no 403 genérico: 401 sem marca pode ser token expirado com
+             renovação em curso, e falha de rede não diz nada sobre a validade
+             da sessão. */
           // Mesma guarda: 403 de uma sessão que já foi embora não derruba a
           // sessão nova de quem acabou de entrar com outra conta.
-          if (err?.status === 403 && sessionRef.current?.token === s.token) {
+          const daSessaoAtual = sessionRef.current?.token === s.token;
+          if (!daSessaoAtual) return;
+
+          /* Acesso RETIRADO enquanto a pessoa usava o painel: o usuário foi
+             desativado, mudou de imobiliária, ou a conta foi desligada. A API
+             marca esses casos (`sessaoEncerrada`, `contaInativa`) exatamente
+             para o painel poder distinguir de um 401 comum e dizer o motivo —
+             antes, o acesso continuava valendo por até sete dias e essa
+             situação simplesmente não existia. Ver `authMiddleware.js`. */
+          const motivo =
+            err?.body?.sessaoEncerrada ? "acesso-revogado" :
+            err?.body?.contaInativa ? "conta-inativa" : null;
+
+          if (motivo) {
+            clearSession();
+            setSession(null);
+            navegarParaLogin(motivo);
+            return;
+          }
+
+          if (err?.status === 403) {
             clearSession();
             setSession(null);
           }
@@ -192,7 +255,14 @@ export default function App() {
        descartado — ver `LoginPage`. */
     clearSession();
     setSession(null);
-    navegar("/login", { replace: true, state: { motivo: "sessao-encerrada" } });
+    navegarParaLogin("sessao-encerrada");
+  }
+
+  /* Um caminho só para a porta de saída. Três situações levam a ela — sair por
+     vontade própria, ter o acesso retirado e a conta ser desligada — e as três
+     precisam do mesmo `replace` e do mesmo recado no state. */
+  function navegarParaLogin(motivo) {
+    navegar("/login", { replace: true, state: { motivo } });
   }
 
   const cargo = session?.usuario?.cargo;
@@ -229,6 +299,15 @@ export default function App() {
   }
 
   return (
+    /* Uma fronteira só, no topo: as três rotas tardias estão em ramos
+       diferentes da árvore, e cercar cada uma daria três fallbacks para uma
+       espera que nunca acontece em paralelo. */
+    /* A barreira envolve o Suspense, e não o contrário: o que pode falhar é o
+       DOWNLOAD do pedaço, e essa falha chega como promessa rejeitada — o
+       Suspense não a captura, ele só espera. Sem a barreira por fora, o erro
+       sobe e desmonta a árvore inteira: tela branca sem saída. */
+    <LimiteDeErro>
+    <Suspense fallback={<Carregando />}>
     <Routes location={location}>
       <Route
         path="/login"
@@ -247,6 +326,14 @@ export default function App() {
           Públicas por definição: quem esqueceu a senha não tem sessão. E sem o
           `session ?` do login — quem está logado e clicou no link do e-mail
           quer trocar a senha, não ser mandado de volta ao painel. */}
+      {/* Públicas e independentes de sessão: quem está logado também precisa
+          conseguir ler os termos sem ser jogado para o painel. */}
+      <Route path="/termos" element={<TermosPage />} />
+      <Route path="/privacidade" element={<PrivacidadePage />} />
+      <Route path="/sobre" element={<SobrePage />} />
+      <Route path="/contato" element={<ContatoPage />} />
+      <Route path="/vitrines" element={<VitrinesPage />} />
+
       <Route path="/recuperar-senha" element={<RecuperarSenhaPage onLogin={handleLogin} />} />
       <Route path="/redefinir-senha" element={<RecuperarSenhaPage onLogin={handleLogin} />} />
 
@@ -318,6 +405,14 @@ export default function App() {
             ? <UsuariosPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        {/* Só leitura, e só para quem tem `verAuditoria` — que nasce apenas no
+            cargo Administrador. A trilha mostra a movimentação de todo mundo,
+            inclusive de quem administra a conta. */}
+        <Route path="/auditoria" element={
+          cargo?.verAuditoria
+            ? <AuditoriaPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
         <Route path="/cargos" element={
           cargo?.gerenciarCargos
             ? <CargosPage session={session} onSessionUpdate={handleSessionUpdate} />
@@ -352,5 +447,7 @@ export default function App() {
 
       <Route path="*" element={<Navigate to={defaultPublicPath} replace />} />
     </Routes>
+    </Suspense>
+    </LimiteDeErro>
   );
 }

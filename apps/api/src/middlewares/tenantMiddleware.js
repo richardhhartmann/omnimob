@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../db.js";
+import { preencherContexto } from "../services/auditoria.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
@@ -27,10 +28,32 @@ export async function requireTenant(req, res, next) {
       return res.status(403).json({ error: "Acesso nao autorizado para este tenant." });
     }
 
+    /* Imobiliária desativada perde o painel — e isso já era a intenção escrita
+       em `trialService` ("avisa quem acabou de perder o acesso"), só que nada
+       verificava. Sem esta linha, o e-mail dizia que o teste acabou e a pessoa
+       continuava usando o sistema normalmente até a remoção definitiva.
+
+       A mensagem é específica porque o motivo é específico: um 403 genérico
+       aqui faria a conta parecer quebrada em vez de vencida. */
+    if (!tenant.ativo) {
+      return res.status(403).json({
+        error: "Esta conta está desativada. Assine um plano para voltar a usar o painel.",
+        contaInativa: true,
+      });
+    }
+
     req.tenant = tenant;
+
     req.authUserId = payload.userId;
     req.authRole = payload.role;
-    return next();
+
+    /* A imobiliária da trilha. Vem daqui e não do token porque é este o valor
+       já conferido contra o cabeçalho `x-tenant-slug` — o mesmo que governa
+       todo o filtro multi-tenant do sistema.
+
+       `preencherContexto` abre o contexto se ainda não houver um, e chama o
+       `next` por dentro dele. Ver `services/auditoria.js`. */
+    return preencherContexto(req, { tenantId: tenant.id, usuarioId: payload.userId }, next);
   } catch {
     return res.status(500).json({ error: "Erro interno no servidor." });
   }

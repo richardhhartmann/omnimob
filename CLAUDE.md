@@ -44,12 +44,14 @@ omnimob/
 - `POST /api/auth/login`
 - `/api/tenants/*` — perfil, configuração do tenant
 - `/api/properties/*` — CRUD de imóveis, imagens, métricas (inclui `POST /:id/ai/gerar`)
-- `/api/leads/*` — leads do tenant
+- `/api/leads/*` — leads do tenant (dono, estágio do funil, histórico e notas)
+- `/api/auditoria/*` — trilha de quem fez o quê (só leitura; permissão `verAuditoria`)
+- `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
 - `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`
 - `/api/social/*` — publicação e OAuth Meta (+ webhook em `/api/social/webhook`)
 - `/api/ai/*` — geração de conteúdo com IA (Gemini)
-- `/public/*` — showcase público (sem auth); inclui `GET /public/sitemap.xml`, servido em `omnimob.app/sitemap.xml` por reescrita da Vercel
+- `/public/*` — showcase público (sem auth); inclui `GET /public/vitrines` (galeria da landing) e `GET /public/sitemap.xml`, servido em `omnimob.app/sitemap.xml` por reescrita da Vercel, e `GET /public/:slug/feed.xml` — o feed **VRSync** que ZAP/VivaReal/OLX Imóveis vêm buscar (carga agendada; nós não empurramos nada)
 - `/previa/*` — HTML com Open Graph para robôs de prévia (WhatsApp, Facebook, LinkedIn). A Vercel reescreve `/vitrine/*` para cá **só** quando o user-agent é de robô; pessoa continua recebendo o SPA. Ver `previaRoutes.js`
 - `/health` — health check real (DB + latência + versão do schema)
 
@@ -66,6 +68,22 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/recuperacao.test.js` | resposta igual para conta existente/inexistente; link de uso único |
 | `test/previa.test.js` | Open Graph com foto e preço; escape de HTML no texto do cliente |
 
+**Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
+cada requisição (ativo? qual cargo?) e ignora o que veio dentro do JWT. Sem
+isso, desativar alguém ou rebaixar o cargo dele não surtia efeito nenhum por até
+sete dias — a permissão do *cargo* já era relida, mas o *vínculo* da pessoa com
+o cargo, não. `requireTenant` recusa imobiliária desativada. Segredo de terceiro
+(o token da página do Facebook) é cifrado em repouso por `services/cofre.js`
+(AES-256-GCM, chave em `CRYPTO_SECRET`) e nunca sai nas respostas —
+`tenantRoutes` filtra por `SEGREDOS_DO_TENANT`. `helmet` carimba os cabeçalhos.
+
+**Trilha de auditoria (`services/auditoria.js`):** extensão do Prisma Client
+aplicada em `db.js`, mais `AsyncLocalStorage` para saber quem é a pessoa. Roda
+na camada de banco de propósito: rota nova entra na trilha sozinha, sem ninguém
+lembrar de chamar nada. `create`/`update` guardam os campos enviados; `delete`
+lê a linha antes de apagar (senão o log diria "excluiu Property cmc3x9…"). Senha
+e token nunca entram — `SEGREDO` casa por nome de campo, não por lista fechada.
+
 **Isolamento multi-tenant:** `Cargo` e `TipoImovel` já foram tabelas globais —
 sem `tenantId`, compartilhadas por todas as imobiliárias, com CRUD aberto na
 tela. Hoje as duas têm dono e filtro em toda query. Ao criar modelo novo que o
@@ -75,6 +93,13 @@ invisíveis porque com um cliente só o sintoma não aparece.
 **Camada de serviços (`src/services/`):** desacoplada, alinhada à arquitetura-alvo.
 - `tenantRegistry.js` — **seam multi-tenant**: resolve onde um tenant vive. Hoje banco único; ponto de troca para schema/banco-por-tenant. Use `getTenantClient()`/`getGlobalPrisma()` em vez de importar `db.js` direto.
 - `aiService.js` — Google Gemini 2.5 Flash (via `fetch`), gera descrições/título/hashtags/posts/ads/e-mail.
+- `cruzamento.js` — regra única do matching perfil × imóvel, lida nos dois
+  sentidos. Elástica de propósito (10% acima do teto de preço, um quarto a
+  menos) e marca os aproximados; filtro literal devolve pouco e ensina o
+  corretor a não confiar na ferramenta.
+- `feedPortais.js` — monta o XML VRSync. `distribuicaoLeads.js` — roleta de
+  corretores por carga, não por sorteio. `cofre.js` — cifragem em repouso.
+  `auditoria.js` — a trilha.
 - `provisioningService.js`, `migrationService.js`, `healthService.js`, `notificationService.js` (stub), `socialPublisher.js`.
 
 **Versionamento de banco:** migrado de `db push` → **Prisma Migrate**. Baseline em `prisma/migrations/0_init`. Ver [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) para o passo de baseline e o roadmap completo.
@@ -98,6 +123,7 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `DIRECT_URL` | — | Supabase `:5432` (migrations) | idem, do projeto de produção |
 | `PORT` | — | `4000` | `4000` |
 | `JWT_SECRET` | — | qualquer string | segredo forte e distinto do de dev |
+| `CRYPTO_SECRET` | — | opcional (cai no `JWT_SECRET`) | **distinto do `JWT_SECRET`** — cifra o token da página do Meta |
 | `APP_URL` | **FRONT** | `http://localhost:5173` | `https://omnimob.app` |
 | `FRONTEND_URL` | **FRONT** | `http://localhost:5173` | `https://omnimob.app` |
 | `ALLOWED_ORIGINS` | **FRONT** | `http://localhost:5173,http://localhost:3000` | `https://omnimob.app,https://www.omnimob.app` |
@@ -167,11 +193,15 @@ Modelos principais:
 | `User` | Admin/Agent/ShowcaseEditor por tenant |
 | `Property` | Imóvel (título, preço, endereço, tipo, fotos, status) |
 | `PropertyImage` | Fotos no Cloudinary, ordenadas por `position` |
-| `PropertyLead` | Leads capturados na vitrine pública |
+| `PropertyLead` | Leads da vitrine — com `responsavelId`, `estagio` e `primeiroContatoEm` |
+| `LeadEvento` | Histórico do lead (mudou de estágio, trocou de dono, nota) |
+| `Auditoria` | Quem criou/alterou/excluiu o quê. Sem FK para `Usuario` — o registro sobrevive à remoção de quem o gerou |
+| `PerfilBusca` | O que um cliente procura; base do cruzamento com o acervo |
 | `PropertyPublication` | Fila de publicação social (Facebook/Instagram/WhatsApp) |
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
 
 **Roles:** `ADMIN` | `AGENT` | `SHOWCASE_EDITOR`
+**Estágios do lead:** `NOVO` | `EM_ATENDIMENTO` | `VISITA` | `PROPOSTA` | `GANHO` | `PERDIDO`
 **Status de imóvel:** `DRAFT` | `ACTIVE` | `INACTIVE`
 
 **Seed:** `apps/api/prisma/seed.js`
@@ -206,11 +236,14 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
 ### Rotas principais (App.jsx)
 ```
 /login                          → LoginPage
+/termos /privacidade /sobre     → páginas institucionais (público)
+/contato /vitrines              → contato e galeria de vitrines reais (público)
 /vitrine/:tenantSlug            → ShowcasePage (público)
 /vitrine/:tenantSlug/imovel/:id → ShowcasePropertyPage (público)
 /vitrine/:tenantSlug/editar     → ShowcaseEditorPage (editor)
 /                               → DashboardPage (admin)
 /leads                          → LeadsPage
+/auditoria                      → AuditoriaPage (registro de atividade)
 /imoveis/:propertyId            → PropertyInsightsPage
 ```
 
@@ -385,6 +418,34 @@ Ctrl+Shift+Z. Os instantâneos do "Histórico de versões" são outra coisa: fic
 **Autosave:** `hooks/useShowcaseAutosave.js`, debounce de 1s sobre o `form`,
 pausado durante o gesto.
 
+### Assistente de IA (Premium)
+
+`components/builder/ia/` + `apps/api/src/services/vitrineIA.js`. A pessoa escreve
+"deixe com cara de alto padrão" e vê as peças se moverem, uma a uma, com o motivo
+de cada passo em português ao lado.
+
+> **A IA devolve OPERAÇÕES, nunca um `showcaseConfig` novo.** Três motivos: um
+> documento reescrito do zero volta com peças a menos; não dá para mostrar
+> acontecendo; e a física deixaria de valer. Cada operação passa por `moverPeca`
+> / `redimensionarPeca` — as MESMAS funções do arrasto do mouse —, então a IA não
+> consegue produzir layout inválido e o resultado dela é indistinguível do que
+> uma pessoa faria.
+
+O vocabulário (widgets, fontes) vem do CLIENTE a cada chamada, lido de
+`builder/data/biblioteca.jsx` e `builder/data/temas.js`. Uma cópia na API
+divergiria no primeiro widget novo. `services/vitrineIA.js` peneira o que o
+modelo devolve antes de a tela ver: alvo inexistente, coordenada fora da faixa,
+tipo repetido, fonte fora da lista, e a regra que não se quebra — `b:properties`
+não pode ser removida nem ocultada.
+
+Um plano = **uma** entrada no histórico (quem desfaz está desfazendo "o que a IA
+fez", não o quarto movimento). Ao fim, se o plano mexeu no layout, a página
+compacta: as operações são sequenciais e cada cascata empurra a seguinte, o que
+levava a grade de imóveis de 770px para 2694px.
+
+`test/vitrineIA.test.js` cobre o que acontece quando o modelo erra — é a única
+suíte da API que não toca no banco.
+
 ### `showcaseConfig` (formato gravado)
 
 ```js
@@ -440,6 +501,62 @@ O CSS do editor é escopado em `.editor-shell` no `styles.css` (`editor-*`,
 
 ---
 
+## Landing e páginas públicas
+
+**Divisão por rota.** Tudo vivia num pacote só de 2,6 MB: quem abria a landing
+baixava o painel inteiro antes de ver a primeira palavra. Hoje `App.jsx` carrega
+sob demanda (`lazy`) a landing, o editor de vitrine, o super-admin e as cinco
+páginas institucionais. O pacote comum caiu para 1,1 MB. O resto do painel fica
+junto de propósito — são telas que a mesma pessoa percorre na mesma sessão.
+
+> Pedaço carregado sob demanda pode FALHAR ao baixar — deploy com a aba aberta
+> troca o hash do arquivo, e o `import()` rejeita. `components/LimiteDeErro.jsx`
+> envolve o `Suspense` (não o contrário: o Suspense espera, não captura) e
+> oferece recarregar em vez de deixar a tela em branco.
+
+**Orçamento de efeitos (`utils/capacidadeDaMaquina.js` + `components/Efeitos.jsx`).**
+A landing tem dois shaders WebGL de tela cheia e cinco laços de
+`requestAnimationFrame`; em máquina fraca isso trava. Um hook classifica a
+máquina em `completo` / `leve` / `minimo` a partir de núcleos, memória,
+`prefers-reduced-motion`, `saveData` e — o que de fato decide — a **mediana do
+intervalo entre quadros medida na própria página**. Especificação mente nos dois
+sentidos; medição não.
+
+> **Não existe uma segunda landing "leve".** Duas cópias do mesmo conteúdo
+> divergem, e é o defeito que o editor de vitrine já teve. O que muda entre os
+> níveis são os EFEITOS, nunca o conteúdo. Efeito novo pergunta pela capacidade
+> (`podeWebGL`, `podeQuadroAQuadro`), não pelo nível.
+
+`three` e `vanta` entram por `import()` — 734 kB que o nível leve nunca baixa. O
+seletor no rodapé deixa a pessoa discordar da detecção; a escolha fica no
+`localStorage`.
+
+**Menu (`components/StaggeredMenu.jsx` + `.css`).** Porte do React Bits, com seis
+desvios documentados no cabeçalho do arquivo. Os dois que importam: ele **assumiu
+a barra inteira** (as classes `.dl-header*` continuam valendo, então encolher na
+rolagem, vidro e sumiço do CTA seguem iguais) e resolve o destino no clique —
+item que começa com `/` navega pelo roteador, item com `#` rola até a seção. O
+original usa `<a href>` puro, que recarregaria a aplicação. Respeita o orçamento
+de efeitos: em `minimo` abre e fecha sem coreografia.
+
+O véu (`.sm-veu`) desfoca e escurece a página com o menu aberto, e também
+**captura o clique de fora** — sem ele, clicar ao lado do painel acertaria o que
+estivesse embaixo e a página podia navegar. Só a opacidade é animada: animar o
+raio do desfoque obrigaria o compositor a refazer a textura borrada a cada
+quadro. No nível `minimo` o desfoque sai e o escurecimento sobe para compensar.
+
+> Ao portar componente com `transform`: **quem posiciona é o gsap, não o CSS.**
+> Com os dois empurrando 100%, o painel abria 460px fora da tela — a soma das
+> duas. Custou uma medição para achar.
+
+**Páginas públicas (`components/PaginaPublica.jsx` + `pages/publicas/`).** Termos,
+Privacidade, Sobre, Contato e Vitrines. NÃO reaproveitam o cabeçalho da landing
+— importá-lo faria quem lê a política de privacidade baixar a página de vendas.
+Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit`.
+`/vitrines` lê o banco: é prova, e uma lista escrita à mão envelheceria.
+
+---
+
 ## Convenções e padrões
 
 - **Sem Tailwind** — todo CSS é classes customizadas em `styles.css` ou inline styles em JSX
@@ -463,8 +580,11 @@ O CSS do editor é escopado em `.editor-shell` no `styles.css` (`editor-*`,
 - Notification Service com provedores reais (interface pronta, envio é stub)
 - Backup Service e Scheduler
 - Isolamento por schema/banco-por-tenant (seam pronto em `tenantRegistry.js`)
+- Coordenadas (lat/lng) e busca por raio — hoje endereço é texto
+- Exclusão lógica (`deletedAt`) e retenção/anonimização (LGPD)
+- API pública por imobiliária (chave por tenant)
 - Módulos ERP: Contratos, Agenda, Financeiro, Vistorias, Proprietários, Corretores
-- Site institucional; domínio próprio + SEO + blog para as vitrines
+- Blog/conteúdo para SEO (o site institucional já existe: `/sobre`, `/contato`, `/termos`, `/privacidade`, `/vitrines`)
 - Testes automatizados e deploy CI/CD (recuperação de senha **já existe** — `POST /api/auth/recuperar-senha`)
 
 > Panorama completo visão × realidade + roadmap: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
+import { CartaoDeMenu, VoltarAoIndice } from "../components/CartaoDeMenu.jsx";
+import { ABAS_CONFIG, ehAbaDeConfig, rotuloDaAba } from "../utils/abasConfiguracoes";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
 import { planoInfo, PLANOS } from "../utils/planos";
@@ -8,6 +10,8 @@ import { IconeCelular, IconeCheck, IconeEnvelope, IconeTelefone, IconeX } from "
 import { DominioVitrine } from "../components/DominioVitrine.jsx";
 import { ModalCiencia } from "../components/ModalCiencia.jsx";
 import { ImportadorDados, podeImportar } from "../components/ImportadorDados.jsx";
+import { MarcaDaguaConfig } from "../components/MarcaDaguaConfig.jsx";
+import { OPACIDADE_PADRAO } from "../utils/marcaDagua";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -284,6 +288,7 @@ const EMPTY = {
   cep: "", endereco: "", cidade: "", estado: "",
   logoUrl: "", primaryColor: "#6366f1", secondaryColor: "#d4af37",
   autoGerarIA: true,
+  marcaDaguaAtiva: true, marcaDaguaOpacidade: OPACIDADE_PADRAO,
 };
 
 /* ─── Rever o tour ────────────────────────────────────────────────────────────
@@ -324,61 +329,6 @@ function ReverTour({ tenantSlug }) {
   );
 }
 
-// ─── Abas ─────────────────────────────────────────────────────────────────────
-
-const TABS = [
-  {
-    key: "perfil", label: "Perfil", cor: "#6366f1",
-    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>,
-  },
-  {
-    key: "aparencia", label: "Aparência", cor: "#8b5cf6",
-    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="10.5" r="2.5" /><circle cx="8.5" cy="7.5" r="2.5" /><circle cx="6.5" cy="12.5" r="2.5" /><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" /></svg>,
-  },
-  {
-    key: "redes", label: "Redes Sociais", cor: "#1877f2",
-    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>,
-  },
-  {
-    /* Importação mora aqui, e não numa entrada própria do menu lateral: é coisa
-       que se faz uma vez, na mudança de sistema, e um item permanente na
-       navegação diária custaria atenção todo dia por uma tarefa de uma semana.
-       Configurações já é onde se resolve o que é da imobiliária inteira. */
-    key: "dados", label: "Dados", cor: "#0ea5e9",
-    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" /><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" /></svg>,
-  },
-  {
-    key: "plano", label: "Plano e recursos", cor: "#d4af37",
-    icone: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>,
-  },
-];
-
-function TabLink({ active, label, icone, cor, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        position: "relative", width: "100%", display: "flex", alignItems: "center", gap: "12px",
-        padding: "11px 14px", borderRadius: "12px", border: "none", cursor: "pointer",
-        background: active ? "rgba(255,255,255,0.06)" : "transparent",
-        color: active ? "var(--text)" : "var(--text-muted)",
-        fontSize: "13px", fontWeight: 600, textAlign: "left", transition: "background 0.2s, color 0.2s",
-      }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
-    >
-      {active && <span style={{ position: "absolute", left: 0, top: "22%", height: "56%", width: "3px", background: cor, borderRadius: "0 4px 4px 0" }} />}
-      <span style={{ width: "30px", height: "30px", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: active ? cor : `${cor}22`, color: active ? "#fff" : cor, transition: "background 0.2s, color 0.2s" }}>
-        {icone}
-      </span>
-      <span style={{ flex: 1, minWidth: 0, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {label}
-      </span>
-    </button>
-  );
-}
-
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function ConfiguracaoPage({ session, onSessionUpdate }) {
@@ -393,7 +343,22 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
      para algo que significa "o que você acabou de escrever não está salvo". */
   const showToast = useOutletContext()?.showToast;
   const tenantSlug = session?.tenant?.slug;
-  const [tab, setTab] = useState("perfil");
+  /* ── A seção aberta mora no endereço ───────────────────────────────────────
+     Era `useState("perfil")`, e o preço disso era não conseguir mandar "olha o
+     seu plano" por link, nem deixar o menu lateral abrir uma seção específica —
+     ele só sabia trazer a pessoa para a primeira aba. Sem `?ver=`, o que está
+     aberto é o índice de cartões, como em Relatórios.
+
+     A permissão entra na leitura, e não só na hora de desenhar: `?ver=dados`
+     digitado à mão por quem não pode importar cai no índice em vez de abrir uma
+     tela cujo único conteúdo seria dizer que ela não tem permissão. */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const abasVisiveis = ABAS_CONFIG.filter(
+    (a) => a.key !== "dados" || podeImportar(session?.usuario?.cargo)
+  );
+  const pedida = searchParams.get("ver");
+  const tab = abasVisiveis.some((a) => a.key === pedida) ? pedida : "MENU";
+  const setTab = (proxima) => setSearchParams(proxima === "MENU" ? {} : { ver: proxima });
   const [form, setForm] = useState(EMPTY);
   const [plano, setPlano] = useState(session?.tenant?.plano || "BASICO");
   const [loading, setLoading] = useState(true);
@@ -425,8 +390,12 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   const debounceRef = useRef(null);
 
   // ── Redes Sociais ──
-  const [searchParams, setSearchParams] = useSearchParams();
   const [socialStatus, setSocialStatus] = useState(null);
+  const [feedCopiado, setFeedCopiado] = useState(false);
+  /* O endereço do feed dos portais. Sai da mesma base que o resto do cliente
+     HTTP usa — cravar "api.omnimob.app" aqui daria um link quebrado em
+     desenvolvimento e um endereço errado se a API mudar de casa. */
+  const enderecoDoFeed = `${(import.meta.env.VITE_API_URL || "https://api.omnimob.app").replace(/\/+$/, "")}/public/${tenantSlug}/feed.xml`;
   const [socialLoading, setSocialLoading] = useState(false);
   const [socialMsg, setSocialMsg] = useState(null); // { type: "success"|"error", text }
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -436,7 +405,6 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   useEffect(() => {
     const social = searchParams.get("social");
     if (!social) return;
-    setTab("redes"); // volta do OAuth já mostrando a aba de Redes Sociais
     const page = searchParams.get("page");
     const msg = searchParams.get("msg");
     const hasIg = searchParams.get("instagram") === "ok";
@@ -446,20 +414,24 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
     } else if (social === "error") {
       setSocialMsg({ type: "error", text: msg || "Erro ao conectar conta." });
     }
-    // Limpa params da URL
-    setSearchParams({}, { replace: true });
+    /* Limpa o rastro do OAuth e deixa só a seção — voltar do Facebook cai em
+       Redes Sociais, que é de onde a pessoa saiu. Zerar tudo aqui a jogaria no
+       índice, com a mensagem de sucesso numa tela que ela não pediu. */
+    setSearchParams({ ver: "redes" }, { replace: true });
   }, []);
 
-  // Abre direto numa aba específica quando vier ?tab=... (ex.: CTA de upgrade de
-  // plano vindo do cadastro de imóvel ao subir uma foto panorâmica no Básico).
+  /* `?tab=` é a grafia antiga do mesmo pedido (o CTA de upgrade de plano no
+     cadastro de imóvel manda `?tab=plano` ao subir uma panorâmica no Básico).
+     Traduzir aqui em vez de aceitar os dois nomes para sempre: um link velho
+     que ainda circule continua funcionando, e a barra do navegador passa a
+     mostrar o endereço de verdade. */
   useEffect(() => {
     const alvo = searchParams.get("tab");
-    if (alvo && TABS.some((t) => t.key === alvo)) {
-      setTab(alvo);
-      const next = new URLSearchParams(searchParams);
-      next.delete("tab");
-      setSearchParams(next, { replace: true });
-    }
+    if (!alvo || !ehAbaDeConfig(alvo)) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("tab");
+    next.set("ver", alvo);
+    setSearchParams(next, { replace: true });
   }, []);
 
   useEffect(() => {
@@ -616,6 +588,8 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           primaryColor: t.primaryColor || "#6366f1",
           secondaryColor: t.secondaryColor || "#d4af37",
           autoGerarIA: t.autoGerarIA ?? true,
+          marcaDaguaAtiva: t.marcaDaguaAtiva ?? true,
+          marcaDaguaOpacidade: t.marcaDaguaOpacidade ?? OPACIDADE_PADRAO,
         });
         setPlano(t.plano || "BASICO");
         loadedRef.current = true;
@@ -655,6 +629,11 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               primaryColor: form.primaryColor,
               secondaryColor: form.secondaryColor,
               autoGerarIA: form.autoGerarIA,
+              /* Sem estas duas na sessao, mudar a marca aqui so valeria no
+                 proximo login: quem compoe a foto e o cadastro de imovel, e ele
+                 le as preferencias de session.tenant. */
+              marcaDaguaAtiva: form.marcaDaguaAtiva,
+              marcaDaguaOpacidade: form.marcaDaguaOpacidade,
             },
           });
         }
@@ -764,34 +743,59 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
         aoCancelar={() => setConfirmarCancelamento(null)}
       />
 
-      {/* ── Cabeçalho ─── */}
-      <div data-tour="config-cabecalho" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-        <div>
-          <h2 style={{ margin: "0 0 4px 0", fontSize: "24px", fontWeight: "700" }}>Configurações</h2>
-          <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
-            Dados cadastrais, contato e identidade visual da imobiliária
+      {tab === "MENU" ? (
+        /* ── Índice ───────────────────────────────────────────────────────────
+           Configurações tinha cinco abas numa coluna de 240px, e a barra
+           lateral do painel logo ao lado — duas navegações verticais
+           encostadas, competindo pelo mesmo canto do olho. Agora a tela abre
+           como Relatórios e como Gerenciar Imóveis: cartões grandes, um por
+           destino, e o submenu da barra leva direto a cada um. */
+        <div data-tour="config-cabecalho" className="glass-panel" style={{ textAlign: "center", padding: "56px 40px" }}>
+          <h2 style={{ marginBottom: "8px", fontSize: "28px", fontWeight: "700" }}>Configurações</h2>
+          <p style={{ marginBottom: "48px", color: "var(--text-muted)", fontSize: "16px" }}>
+            Tudo que vale para a imobiliária inteira — dados, identidade visual, redes e plano.
           </p>
-        </div>
-        <div style={{ minHeight: "24px" }}>{saveIndicator}</div>
-      </div>
-
-      {/* ── Layout com abas ─── */}
-      <div style={{ display: "flex", gap: "24px", alignItems: "flex-start", flexWrap: "wrap" }}>
-
-        {/* ── Menu lateral de abas ─── */}
-        <aside style={{ width: "240px", flexShrink: 0, position: "sticky", top: "80px" }}>
-          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
-            {/* A aba de Dados some para quem não pode importar nada — sem ela,
-                a pessoa abriria uma tela cujo único conteúdo é dizer que ela
-                não tem permissão. */}
-            {TABS.filter((t) => t.key !== "dados" || podeImportar(session?.usuario?.cargo)).map((t) => (
-              <TabLink key={t.key} active={tab === t.key} label={t.label} icone={t.icone} cor={t.cor} onClick={() => setTab(t.key)} />
-            ))}
+          <div
+            style={{
+              display: "grid",
+              /* Duas colunas na largura de trabalho e uma no celular, sem
+                 media query: `min(300px, 100%)` impede a coluna de ficar mais
+                 larga que a tela, que é o que estourava a grade fixa. */
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))",
+              gap: "32px", maxWidth: "820px", margin: "0 auto",
+            }}
+          >
+            {abasVisiveis.map((a, i) => {
+              /* Número ímpar de cartões: o último ocupa a linha inteira em vez
+                 de deixar um buraco do lado. Acontece de verdade — a seção de
+                 Dados some para quem não pode importar. */
+              const sozinho = abasVisiveis.length % 2 === 1 && i === abasVisiveis.length - 1;
+              const cartao = (
+                <CartaoDeMenu
+                  icon={<a.Icon size={40} weight="duotone" />}
+                  title={a.label}
+                  desc={a.desc}
+                  accent={a.cor}
+                  onClick={() => setTab(a.key)}
+                />
+              );
+              return sozinho
+                ? <div key={a.key} style={{ gridColumn: "1 / -1" }}>{cartao}</div>
+                : <div key={a.key} style={{ display: "contents" }}>{cartao}</div>;
+            })}
           </div>
-        </aside>
+        </div>
+      ) : (
+        <>
+        {/* ── Cabeçalho da seção ─── */}
+        <div data-tour="config-cabecalho" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+          <VoltarAoIndice onClick={() => setTab("MENU")} rotulo="Configurações" titulo={rotuloDaAba(tab)} />
+          {/* A mesma margem do botão de voltar, para os dois ficarem na mesma linha. */}
+          <div style={{ minHeight: "24px", marginBottom: "20px" }}>{saveIndicator}</div>
+        </div>
 
-        {/* ── Conteúdo da aba ativa ─── */}
-        <div key={tab} style={{ flex: 1, minWidth: "300px", display: "flex", flexDirection: "column", gap: "16px", animation: "fadeIn 0.3s ease-out" }}>
+        {/* ── Conteúdo da seção ─── */}
+        <div key={tab} style={{ display: "flex", flexDirection: "column", gap: "16px", animation: "fadeIn 0.3s ease-out" }}>
 
           {tab === "perfil" && (<>
           {/* Dados da Empresa */}
@@ -962,6 +966,26 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               </span>
             </div>
           </Secao>
+
+          {/* Marca d’água. Fica logo abaixo da Identidade Visual porque é um USO
+              da logo — separá-la em outra aba obrigaria a pessoa a lembrar que a
+              imagem que ela acabou de enviar tem um segundo destino. */}
+          <Secao cor="#0ea5e9" titulo="Marca d’água nas fotos" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          }>
+            <MarcaDaguaConfig
+              logoUrl={form.logoUrl}
+              ativa={form.marcaDaguaAtiva}
+              opacidade={form.marcaDaguaOpacidade}
+              onAtiva={(v) => set("marcaDaguaAtiva", v)}
+              onOpacidade={(v) => set("marcaDaguaOpacidade", v)}
+              tenantSlug={tenantSlug}
+              tenantNome={form.name}
+            />
+          </Secao>
             </div>
             <div style={{ width: "280px", flexShrink: 0 }}>
               <BrandPreview form={form} />
@@ -970,8 +994,65 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           )}
 
           {tab === "redes" && (<>
+          {/* ── Portais imobiliários ──────────────────────────────────────────
+              Fica junto de Redes Sociais porque responde a mesma pergunta —
+              "onde mais os meus imóveis aparecem?" —, e não junto de Aparência,
+              que é sobre como a vitrine se parece.
+
+              O endereço é só leitura: quem cadastra é a imobiliária, no painel
+              do portal. Não há o que configurar aqui além de copiar. */}
+          <Secao cor="#0ea5e9" titulo="Portais imobiliários" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1.5" />
+            </svg>
+          }>
+            <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+              Cadastre o endereço abaixo no painel do <strong>ZAP</strong>, <strong>VivaReal</strong> ou{" "}
+              <strong>OLX Imóveis</strong> como fonte de importação XML. Eles passam a buscar o seu
+              acervo sozinhos, algumas vezes por dia.
+            </p>
+
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                readOnly
+                value={enderecoDoFeed}
+                onFocus={(e) => e.target.select()}
+                style={{ ...inputStyle, flex: 1, minWidth: "260px", fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "12.5px" }}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(enderecoDoFeed);
+                    setFeedCopiado(true);
+                    setTimeout(() => setFeedCopiado(false), 1800);
+                  } catch {
+                    showToast?.("Não consegui copiar. Selecione o texto e use Ctrl+C.", "error");
+                  }
+                }}
+                style={{ width: "auto", padding: "11px 18px", fontSize: "13px", whiteSpace: "nowrap" }}
+              >
+                {feedCopiado ? "Copiado!" : "Copiar endereço"}
+              </button>
+              <a
+                href={enderecoDoFeed}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: "12.5px", color: "var(--accent, #818cf8)", whiteSpace: "nowrap" }}
+              >
+                Ver o arquivo
+              </a>
+            </div>
+
+            <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+              Entram no arquivo os imóveis <strong>ativos</strong>, com pelo menos uma foto e com
+              “Enviar aos portais” marcado no cadastro. Cada imóvel tem esse interruptor — dá para
+              manter um só na sua vitrine sem tirá-lo do ar.
+            </p>
+          </Secao>
+
           {/* Redes Sociais */}
-          <Secao cor="#1877f2" titulo="Redes Sociais" icone={
+          <Secao cor="#1877f2" titulo="Contas conectadas" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
@@ -1073,7 +1154,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
 
           {tab === "plano" && (<>
           {/* Plano e recursos */}
-          <Secao cor="#d4af37" titulo="Plano e recursos" icone={
+          <Secao cor="#d4af37" titulo="Sua assinatura" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
@@ -1255,8 +1336,8 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           </>)}
 
         </div>
-
-      </div>
+        </>
+      )}
     </div>
   );
 }

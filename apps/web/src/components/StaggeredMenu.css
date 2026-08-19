@@ -1,0 +1,250 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   StaggeredMenu — estilos.
+
+   Arquivo `.css` separado, e não template literal, seguindo o que já foi feito
+   com o `GhostCursor.css`: componente vindo do React Bits mantém a folha
+   própria, o que deixa a comparação com o original possível quando ele mudar.
+
+   A paleta é a da Omnimob. O painel do original é branco com texto preto, e
+   aqui isso inverteria o site inteiro no meio de uma interação — as camadas
+   usam o índigo e o dourado da marca, e o painel fica no quase-preto.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.sm-raiz {
+  --sm-largura: clamp(300px, 40vw, 460px);
+  position: relative;
+  z-index: 1000;
+}
+
+/* ── Véu ──
+   Escurece e desfoca a página para o painel virar o único assunto. Fica ABAIXO
+   das camadas e do painel (z-index 997 contra 998 e 999) e acima de tudo que é
+   conteúdo.
+
+   Só a opacidade é animada. Animar o raio do desfoque parece melhor no papel e
+   é caríssimo: cada quadro obrigaria o compositor a refazer a textura borrada
+   do fundo inteiro. Com o raio fixo, ele borra uma vez e só faz a mistura. */
+.sm-veu {
+  position: fixed;
+  inset: 0;
+  z-index: 997;
+  background: rgba(6, 6, 8, 0.58);
+  backdrop-filter: blur(7px) saturate(85%);
+  -webkit-backdrop-filter: blur(7px) saturate(85%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.42s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.sm-raiz[data-aberto] .sm-veu { opacity: 1; pointer-events: auto; }
+
+/* Máquina fraca: escurece bem mais para compensar a falta do desfoque.
+   Não é o mesmo valor por acaso — a página já é quase preta, então escurecer
+   sobre escuro rende pouco, e a 0,74 o cabeçalho do topo ainda competia com o
+   menu. Comparado lado a lado, 0,84 é onde a separação volta a ser óbvia. */
+.sm-raiz[data-simples] .sm-veu {
+  background: rgba(6, 6, 8, 0.84);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ── Camadas que entram antes do painel ── */
+.sm-camadas {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--sm-largura);
+  pointer-events: none;
+  z-index: 998;
+}
+.sm-camada {
+  position: absolute;
+  inset: 0;
+  /* Sem `transform` aqui, e é a correção de um defeito medido: com a regra do
+     CSS empurrando 100% e o gsap empurrando outros 100%, o painel abria 460px
+     fora da tela — a soma das duas. Quem posiciona é só o gsap, no
+     `useLayoutEffect`, que roda antes da pintura e não deixa piscar. */
+}
+
+/* ── A barra ──
+   Herda `.dl-header` da landing — encolhimento na rolagem, vidro e o
+   desaparecimento de logo e CTA com o menu aberto vêm de lá. Aqui só o que é
+   deste componente. */
+.sm-barra {
+  z-index: 1000;
+}
+
+/* ── Botão ── */
+.dl-root .sm-botao {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: auto;
+  padding: 6px 2px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  transform: none;
+  cursor: pointer;
+  color: var(--subtle);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  line-height: 1;
+  transition: color 0.3s ease;
+}
+.dl-root .sm-botao:hover { color: var(--strong); background: none; box-shadow: none; transform: none; }
+.sm-raiz[data-aberto] .sm-botao { color: var(--gold); }
+.dl-root .sm-botao:focus-visible { outline: 2px solid var(--gold); outline-offset: 5px; border-radius: 4px; }
+
+/* A janela de uma linha por onde o rolo de palavras passa. A largura é travada
+   pela maior delas ("Fechar"), senão a barra inteira se mexe a cada troca. */
+.sm-botao-caixa {
+  position: relative;
+  display: inline-block;
+  height: 1em;
+  min-width: 4.4em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: right;
+}
+.sm-botao-rolo { display: flex; flex-direction: column; line-height: 1; }
+.sm-botao-linha { display: block; height: 1em; line-height: 1; }
+
+.sm-icone {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+}
+.sm-icone-barra {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 1.6px;
+  background: currentColor;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+
+/* ── Painel ── */
+.sm-painel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100dvh;
+  width: var(--sm-largura);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  padding: 132px clamp(28px, 4vw, 52px) 40px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #0c0c0e;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  /* Idem: a posição inicial é escrita pelo gsap, nunca pelas duas pontas. */
+}
+.sm-painel-inner { flex: 1; display: flex; flex-direction: column; gap: 28px; }
+
+.sm-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Recorta o rótulo que sobe de baixo: sem isto ele apareceria invadindo o item
+   de cima durante a entrada. */
+.sm-item-caixa { position: relative; overflow: hidden; line-height: 1; }
+
+.sm-item {
+  position: relative;
+  display: inline-block;
+  /* A reserva à direita é do número, e 2,6em (104px na fonte atual) sobrava:
+     deixava 251px para "Como funciona", que pede 270px, e o rótulo quebrava em
+     duas linhas. 1,5em cobre o número com folga e devolve o espaço ao texto. */
+  padding: 6px 1.5em 6px 0;
+  color: var(--strong);
+  /* Teto de 2,5rem, e não 3: o rótulo mais longo da lista ("Como funciona")
+     quebrava em duas linhas dentro dos 460px do painel, e item de menu em duas
+     linhas desalinha a numeração e estraga o escalonamento da entrada. */
+  font-size: clamp(1.75rem, 4.6vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+.sm-item:hover { color: var(--sm-destaque, #d4af37); }
+.sm-item-rotulo { display: inline-block; will-change: transform; transform-origin: 50% 100%; }
+
+.sm-lista[data-numerar] { counter-reset: smItem; }
+.sm-lista[data-numerar] .sm-item::after {
+  counter-increment: smItem;
+  content: counter(smItem, decimal-leading-zero);
+  position: absolute;
+  top: 0.55em;
+  right: 0.1em;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--sm-destaque, #d4af37);
+  pointer-events: none;
+  user-select: none;
+  opacity: var(--sm-num-opacidade, 0);
+}
+
+/* ── Bloco de baixo ── */
+.sm-sociais { margin-top: auto; padding-top: 32px; display: flex; flex-direction: column; gap: 14px; }
+.sm-sociais-titulo {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--sm-destaque, #d4af37);
+}
+.sm-sociais-lista {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: center;
+  gap: 8px 20px;
+}
+.sm-sociais-link {
+  display: inline-block;
+  padding: 2px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--subtle);
+  text-decoration: none;
+  transition: color 0.3s ease, opacity 0.3s ease;
+}
+/* Apagar os irmãos ao passar o mouse: quem está sendo apontado é o único em
+   foco total. Vale também para o teclado, via `:focus-within`. */
+.sm-sociais-lista:hover .sm-sociais-link:not(:hover),
+.sm-sociais-lista:focus-within .sm-sociais-link:not(:focus-visible) { opacity: 0.35; }
+.sm-sociais-link:hover, .sm-sociais-link:focus-visible { color: var(--strong); opacity: 1; }
+.sm-sociais-link:focus-visible { outline: 2px solid var(--sm-destaque, #d4af37); outline-offset: 3px; }
+
+/* ── Telas estreitas ──
+   O painel toma a largura toda: um painel de 40vw num celular deixaria o
+   conteúdo em duas palavras por linha. */
+@media (max-width: 720px) {
+  .sm-raiz { --sm-largura: 100vw; }
+  .sm-painel { padding-top: 112px; border-left: 0; }
+  .sm-item { font-size: clamp(1.9rem, 9vw, 2.6rem); }
+}
+
+/* Quem pediu menos movimento no sistema recebe o painel sem coreografia — a
+   posição final é escrita pelo gsap, então o que resta aqui é encurtar as
+   transições de cor que o CSS controla. */
+@media (prefers-reduced-motion: reduce) {
+  .sm-item, .sm-sociais-link, .dl-root .sm-botao { transition-duration: 0.01ms; }
+  /* O véu aparece de uma vez, mas APARECE: ele não é enfeite, é o que separa o
+     menu do resto — tirá-lo deixaria o painel flutuando sobre a página legível. */
+  .sm-veu { transition-duration: 0.01ms; }
+}

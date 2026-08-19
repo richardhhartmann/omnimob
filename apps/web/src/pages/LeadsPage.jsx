@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api } from "../api";
+import { LeadAtendimento, ESTAGIOS, corDoEstagio, rotuloDoEstagio } from "../components/LeadAtendimento.jsx";
 import { Avatar } from "../components/adminUi";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
@@ -70,7 +71,12 @@ export function LeadsPage({ session }) {
   const tenantSlug = session?.tenant?.slug || "";
   const showToast = useOutletContext()?.showToast;
   const { confirm, modal: confirmModal } = useConfirm();
-  const [data, setData] = useState({ leads: [], total: 0, page: 1, limit: 100 });
+  const [data, setData] = useState({ leads: [], total: 0, page: 1, limit: 100, equipe: [] });
+  /* Filtros de atendimento. Vão para o SERVIDOR, ao contrário dos outros desta
+     tela: "os leads do Pedro que estão em proposta" precisa varrer a base
+     inteira, e não só os 100 já carregados — senão o filtro mente. */
+  const [estagioFiltro, setEstagioFiltro] = useState("");
+  const [responsavelFiltro, setResponsavelFiltro] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
@@ -112,7 +118,11 @@ export function LeadsPage({ session }) {
     setLoading(true);
     setError("");
     try {
-      const result = await api.listLeads(tenantSlug, { page: 1, limit: 100 });
+      const result = await api.listLeads(tenantSlug, {
+        page: 1, limit: 100,
+        estagio: estagioFiltro || undefined,
+        responsavelId: responsavelFiltro || undefined,
+      });
       setData(result);
       /* Atualiza o "último total visto" para sumir o badge na sidebar. Chaveado
          pelo ID da imobiliária, e não pelo slug — que é reutilizável entre
@@ -129,7 +139,7 @@ export function LeadsPage({ session }) {
     }
   }
 
-  useEffect(() => { loadLeads(); }, [tenantSlug]);
+  useEffect(() => { loadLeads(); }, [tenantSlug, estagioFiltro, responsavelFiltro]);
 
   function exportCSV() {
     const rows = [
@@ -153,6 +163,16 @@ export function LeadsPage({ session }) {
     URL.revokeObjectURL(url);
   }
   useEffect(() => { setPage(1); }, [search, propertyFilter, contactFilter, sortOrder]);
+
+  /* Troca o lead na lista em vez de recarregar. Recarregar depois de cada
+     clique de estágio faria a lista inteira piscar e rolar sob o cursor de
+     quem está no meio de uma triagem. */
+  function substituirLead(atualizado) {
+    setData((d) => ({
+      ...d,
+      leads: d.leads.map((l) => (l.id === atualizado.id ? { ...l, ...atualizado } : l)),
+    }));
+  }
 
   async function handleDelete(leadId) {
     if (!await confirm("Remover este lead?", "Remover")) return;
@@ -308,6 +328,27 @@ export function LeadsPage({ session }) {
           onChange={setPropertyFilter}
         />
         <SelectCustom
+          value={estagioFiltro}
+          placeholder="Todo estágio"
+          style={{ minWidth: "170px" }}
+          options={[{ value: "", label: "Todo estágio" }, ...ESTAGIOS.map((e) => ({ value: e.valor, label: e.rotulo }))]}
+          onChange={setEstagioFiltro}
+        />
+        <SelectCustom
+          value={responsavelFiltro}
+          placeholder="Toda a equipe"
+          style={{ minWidth: "180px" }}
+          /* "Sem responsável" é a caixa comum — os leads que a distribuição não
+             conseguiu atribuir. É a lista que alguém precisa abrir todo dia, e
+             por isso ela é uma opção e não a ausência de filtro. */
+          options={[
+            { value: "", label: "Toda a equipe" },
+            { value: "sem", label: "Sem responsável" },
+            ...(data.equipe || []).map((u) => ({ value: u.id, label: u.nome })),
+          ]}
+          onChange={setResponsavelFiltro}
+        />
+        <SelectCustom
           value={sortOrder}
           style={{ minWidth: "160px" }}
           options={[
@@ -353,7 +394,7 @@ export function LeadsPage({ session }) {
         <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "15px", marginBottom: "16px" }}>Nenhum lead encontrado com estes filtros.</p>
           <button type="button" className="button-secondary" style={{ width: "auto", padding: "8px 16px" }}
-            onClick={() => { setSearch(""); setPropertyFilter(""); setContactFilter("all"); setSortOrder("recent"); }}>
+            onClick={() => { setSearch(""); setPropertyFilter(""); setContactFilter("all"); setSortOrder("recent"); setEstagioFiltro(""); setResponsavelFiltro(""); }}>
             Limpar filtros
           </button>
         </div>
@@ -387,6 +428,25 @@ export function LeadsPage({ session }) {
                     <span style={{ fontSize: "12px", color: "var(--text-muted)" }} title={formatDate(lead.createdAt)}>
                       {timeAgo(lead.createdAt)}
                     </span>
+                    {/* O estágio também aqui em cima, e não só no funil abaixo:
+                        numa lista de trinta cartões, é a informação que decide
+                        se vale parar neste — e ela precisa ser lida de relance. */}
+                    <span
+                      style={{
+                        fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
+                        padding: "2px 8px", borderRadius: "999px",
+                        color: corDoEstagio(lead.estagio),
+                        background: `${corDoEstagio(lead.estagio)}1f`,
+                        border: `1px solid ${corDoEstagio(lead.estagio)}44`,
+                      }}
+                    >
+                      {rotuloDoEstagio(lead.estagio)}
+                    </span>
+                    {lead.responsavel?.nome ? (
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>· {lead.responsavel.nome}</span>
+                    ) : (
+                      <span style={{ fontSize: "12px", color: "#fbbf24" }}>· sem responsável</span>
+                    )}
                   </div>
 
                   {/* Chips de contato + imóvel */}
@@ -416,6 +476,14 @@ export function LeadsPage({ session }) {
                       {lead.message}
                     </p>
                   ) : null}
+
+                  <LeadAtendimento
+                    lead={lead}
+                    equipe={data.equipe}
+                    tenantSlug={tenantSlug}
+                    aoAtualizar={substituirLead}
+                    showToast={showToast}
+                  />
 
                   {temIA ? (
                     <AnaliseIA

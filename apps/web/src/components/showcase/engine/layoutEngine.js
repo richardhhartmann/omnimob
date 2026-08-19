@@ -27,16 +27,422 @@ import { encaixarX, encaixarY } from "./snapping.js";
 export const GAP_REEMPILHAMENTO = 56;
 
 /**
- * Move uma peça para (x, y), aplica encaixe e roda a cascata.
+ * Grade magnética horizontal.
  *
- * A peça movida é a ÂNCORA: ela fica onde a pessoa a colocou, e quem estava no
- * caminho é que se desloca. Sem isso, arrastar um bloco por cima de outro faria
- * o próprio bloco arrastado saltar para longe do ponteiro.
+ * O layout continua livre em qualquer outro lugar. A grade só assume o gesto
+ * quando um WIDGET atravessa a faixa vertical de uma linha de widgets. Nessa
+ * faixa, 1..4 peças passam a ocupar slots semânticos de 100 / 50 / 33 / 25%.
+ *
+ * Isso é deliberadamente separado da colisão comum: a colisão responde
+ * "ninguém pode atravessar ninguém"; a grade responde "estas peças agora formam
+ * uma linha". Misturar as duas regras faria a cascata desfazer o encaixe.
  */
-export function moverPeca(cfg, mode, pieceId, destino, { larguraCanvas = 1200, encaixar = true } = {}) {
+export const MAX_COLUNAS_MAGNETICAS = 4;
+const TOLERANCIA_AGRUPAR_LINHA = 44;
+const ALCANCE_IMA_VERTICAL = 36;
+
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function distanciaVerticalAteLinha(y, h, linha) {
+  const top = y;
+  const bottom = y + h;
+  if (bottom < linha.top) return linha.top - bottom;
+  if (top > linha.bottom) return top - linha.bottom;
+  return 0;
+}
+
+function agruparLinhasDeWidgets(pecas) {
+  const widgets = pecas
+    .filter((p) => p.kind === "widget")
+    .slice()
+    .sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const linhas = [];
+
+  for (const peca of widgets) {
+    let melhor = null;
+    let melhorDistancia = Infinity;
+
+    for (const linha of linhas) {
+      const distanciaTopo = Math.abs(peca.y - linha.y);
+      const sobreposicao = Math.max(
+        0,
+        Math.min(peca.y + peca.h, linha.bottom) - Math.max(peca.y, linha.top)
+      );
+      const baseSobreposicao = Math.max(1, Math.min(peca.h, linha.bottom - linha.top));
+      const mesmaFaixa =
+        distanciaTopo <= TOLERANCIA_AGRUPAR_LINHA ||
+        sobreposicao / baseSobreposicao >= 0.55;
+
+      if (!mesmaFaixa) continue;
+      if (distanciaTopo < melhorDistancia) {
+        melhor = linha;
+        melhorDistancia = distanciaTopo;
+      }
+    }
+
+    if (!melhor) {
+      linhas.push({
+        y: peca.y,
+        top: peca.y,
+        bottom: peca.y + peca.h,
+        pecas: [peca],
+      });
+      continue;
+    }
+
+    melhor.pecas.push(peca);
+    melhor.pecas.sort((a, b) => a.x - b.x);
+    melhor.top = Math.min(melhor.top, peca.y);
+    melhor.bottom = Math.max(melhor.bottom, peca.y + peca.h);
+    melhor.y = Math.min(...melhor.pecas.map((p) => p.y));
+  }
+
+  return linhas;
+}
+
+
+/**
+ * Pseudo-seções do builder.
+ *
+ * Elas NÃO existem no JSON salvo: são uma leitura das linhas de widgets que já
+ * existem. Um widget sozinho forma 1/1; widgets que compartilham a mesma faixa
+ * vertical formam a mesma pseudo-seção. Assim mover uma peça para outra linha
+ * recompõe as seções automaticamente, sem estado duplicado para sincronizar.
+ */
+export function pseudoSecoesDeWidgets(cfg, mode) {
   const pecas = toPieces(cfg, mode);
+  return agruparLinhasDeWidgets(pecas).map((linha) => {
+    const membros = linha.pecas.slice().sort((a, b) => a.x - b.x);
+    const pieceIds = membros.map((p) => p.id);
+    return {
+      id: `pseudo:${pieceIds.slice().sort().join("|")}`,
+      pieceIds,
+      y: linha.top,
+      h: Math.max(1, linha.bottom - linha.top),
+      colunas: membros.length,
+      travada: membros.some((p) => p.locked),
+    };
+  });
+}
+
+function mesmosIds(a, b) {
+  if (a.length !== b.length) return false;
+  const conjunto = new Set(a);
+  return b.every((id) => conjunto.has(id));
+}
+
+function secoesEstruturais(pecas) {
+  const linhas = agruparLinhasDeWidgets(pecas);
+  const secoes = [];
+
+  for (const linha of linhas) {
+    const membros = linha.pecas.slice().sort((a, b) => a.x - b.x);
+    const ids = membros.map((p) => p.id);
+    secoes.push({
+      id: `widgets:${ids.slice().sort().join("|")}`,
+      kind: "widgets",
+      pieceIds: ids,
+      y: linha.top,
+      h: Math.max(1, linha.bottom - linha.top),
+      locked: membros.some((p) => p.locked),
+    });
+  }
+
+  for (const peca of pecas) {
+    if (peca.kind !== "block") continue;
+    secoes.push({
+      id: `block:${peca.id}`,
+      kind: "block",
+      pieceIds: [peca.id],
+      y: peca.y,
+      h: peca.h,
+      locked: peca.locked,
+    });
+  }
+
+  secoes.sort((a, b) => a.y - b.y || a.id.localeCompare(b.id));
+  return secoes;
+}
+
+function gapDepoisDasSecoes(secoes) {
+  const mapa = new Map();
+  for (let i = 0; i < secoes.length; i += 1) {
+    const atual = secoes[i];
+    const proxima = secoes[i + 1];
+    const bruto = proxima ? proxima.y - (atual.y + atual.h) : 24;
+    // O gap acompanha a seção, mas não deixa uma anomalia antiga virar um vale
+    // de 400px nem comprime o layout a ponto de colar duas faixas.
+    mapa.set(atual.id, clamp(Number.isFinite(bruto) ? bruto : 24, 18, 160));
+  }
+  return mapa;
+}
+
+function deslocarSecao(pecasPorId, secao, novoY) {
+  const delta = novoY - secao.y;
+  if (Math.abs(delta) < 0.01) return;
+  for (const id of secao.pieceIds) {
+    const peca = pecasPorId.get(id);
+    if (peca) peca.y += delta;
+  }
+  secao.y = novoY;
+}
+
+/**
+ * Move uma pseudo-seção verticalmente.
+ *
+ * A linha inteira é tratada como uma unidade estrutural. Ao cruzar o centro da
+ * faixa vizinha, ela troca de posição e as seções atravessadas ocupam o espaço
+ * deixado — o comportamento de "empurrar a página" de Webflow, sem transformar
+ * a pseudo-seção em uma entidade persistida.
+ *
+ * Blocos fixos participam da pilha como seções estruturais; portanto mover uma
+ * linha de widgets também pode empurrar título, imóveis, rodapé e outras linhas.
+ * Uma seção travada é barreira: se o rearranjo precisasse movê-la, o quadro é
+ * recusado e o gesto para ali.
+ */
+export function moverPseudoSecaoWidgets(cfg, mode, pieceIds, destinoY) {
+  const ids = Array.from(new Set(pieceIds || []));
+  if (!ids.length) return { config: cfg, secao: null, bloqueada: true };
+
+  const pecas = toPieces(cfg, mode);
+  const porId = new Map(pecas.map((p) => [p.id, p]));
+  const secoes = secoesEstruturais(pecas);
+  const indiceOrigem = secoes.findIndex(
+    (secao) => secao.kind === "widgets" && mesmosIds(secao.pieceIds, ids)
+  );
+  if (indiceOrigem < 0) return { config: cfg, secao: null, bloqueada: true };
+
+  const selecionada = secoes[indiceOrigem];
+  if (selecionada.locked) {
+    return { config: cfg, secao: { ...selecionada }, bloqueada: true };
+  }
+
+  const gaps = gapDepoisDasSecoes(secoes);
+  const yDesejado = Math.max(0, Number.isFinite(destinoY) ? destinoY : selecionada.y);
+  const centroDesejado = yDesejado + selecionada.h / 2;
+  const outras = secoes.filter((_, i) => i !== indiceOrigem);
+
+  let indiceDestino = outras.findIndex((secao) => centroDesejado < secao.y + secao.h / 2);
+  if (indiceDestino < 0) indiceDestino = outras.length;
+
+  const ordem = outras.slice();
+  ordem.splice(indiceDestino, 0, selecionada);
+  const idsAntigos = secoes.map((s) => s.id);
+  const idsNovos = ordem.map((s) => s.id);
+
+  let inicio = idsAntigos.findIndex((id, i) => id !== idsNovos[i]);
+
+  // Ainda não cruzou outra seção: a linha acompanha o ponteiro dentro do vão
+  // disponível. Isso evita o aspecto de "handle preso" antes da primeira troca.
+  if (inicio < 0) {
+    const anterior = secoes[indiceOrigem - 1];
+    const proxima = secoes[indiceOrigem + 1];
+    const minimo = anterior
+      ? anterior.y + anterior.h + (gaps.get(anterior.id) || 24)
+      : 0;
+    const maximo = proxima
+      ? proxima.y - selecionada.h - (gaps.get(selecionada.id) || 24)
+      : Infinity;
+    const novoY = clamp(yDesejado, minimo, Math.max(minimo, maximo));
+    deslocarSecao(porId, selecionada, novoY);
+    return {
+      config: applyPieces(cfg, mode, pecas),
+      secao: { ...selecionada },
+      bloqueada: false,
+    };
+  }
+
+  let fim = idsAntigos.length - 1;
+  while (fim > inicio && idsAntigos[fim] === idsNovos[fim]) fim -= 1;
+
+  // A área afetada começa no slot antigo mais alto. Quando a pessoa leva a
+  // seção para o topo absoluto, o próprio ponteiro pode abrir espaço acima dele.
+  let cursor = Math.max(0, Math.min(secoes[inicio]?.y ?? 0, yDesejado));
+  const novosYs = new Map();
+
+  for (let i = inicio; i <= fim; i += 1) {
+    const secao = ordem[i];
+    novosYs.set(secao.id, cursor);
+    cursor += secao.h + (gaps.get(secao.id) || 24);
+  }
+
+  // Se a seção movida for mais alta que a que ela substituiu, a diferença
+  // continua empurrando as faixas de baixo até encontrar espaço livre.
+  for (let i = fim + 1; i < ordem.length; i += 1) {
+    const secao = ordem[i];
+    if (secao.y >= cursor - 0.01) break;
+    novosYs.set(secao.id, cursor);
+    cursor += secao.h + (gaps.get(secao.id) || 24);
+  }
+
+  // Cadeado é uma barreira estrutural, não só uma peça que ignora o mouse.
+  for (const secao of secoes) {
+    const novoY = novosYs.get(secao.id);
+    if (secao.locked && Number.isFinite(novoY) && Math.abs(novoY - secao.y) > 0.01) {
+      return { config: cfg, secao: { ...selecionada }, bloqueada: true };
+    }
+  }
+
+  for (const secao of ordem) {
+    const novoY = novosYs.get(secao.id);
+    if (Number.isFinite(novoY)) deslocarSecao(porId, secao, novoY);
+  }
+
+  return {
+    config: applyPieces(cfg, mode, pecas),
+    secao: { ...selecionada },
+    bloqueada: false,
+  };
+}
+
+function normalizarLinhaEmSlots(pecas, ids, { y = null, ordem = null } = {}) {
+  const porId = new Map(pecas.map((p) => [p.id, p]));
+  let membros = (ordem || ids)
+    .map((id) => porId.get(id))
+    .filter(Boolean);
+
+  if (!membros.length || membros.length > MAX_COLUNAS_MAGNETICAS) return false;
+  // Cadeado é literal: uma peça travada não pode encolher nem correr de slot.
+  if (membros.some((p) => p.locked)) return false;
+
+  if (!ordem) membros = membros.slice().sort((a, b) => a.x - b.x);
+
+  const largura = 100 / membros.length;
+  const linhaY = Number.isFinite(y) ? y : Math.min(...membros.map((p) => p.y));
+
+  membros.forEach((peca, indice) => {
+    peca.x = indice * largura;
+    peca.y = linhaY;
+    peca.w = largura;
+  });
+
+  return true;
+}
+
+function liberarLinhaDeOrigem(pecas, pieceId) {
+  const linhas = agruparLinhasDeWidgets(pecas);
+  const origem = linhas.find((linha) => linha.pecas.some((p) => p.id === pieceId));
+  if (!origem) return null;
+
+  const restantes = origem.pecas.filter((p) => p.id !== pieceId);
+  if (!restantes.length) return origem;
+
+  normalizarLinhaEmSlots(
+    pecas,
+    restantes.map((p) => p.id),
+    { y: origem.y }
+  );
+  return origem;
+}
+
+function tentarGradeMagnetica(
+  pecas,
+  pieceId,
+  destino,
+  { cursorX = null, ignorarLinhaOrigem = false } = {}
+) {
   const alvo = pecas.find((p) => p.id === pieceId);
-  if (!alvo) return { config: cfg, encostadas: new Set(), guias: { x: null, y: null } };
+  if (!alvo || alvo.kind !== "widget") return null;
+
+  const linhasBase = agruparLinhasDeWidgets(pecas);
+  const origem = ignorarLinhaOrigem
+    ? null
+    : linhasBase.find((linha) => linha.pecas.some((p) => p.id === pieceId)) || null;
+
+  const outras = pecas.filter((p) => p.id !== pieceId);
+  const linhas = agruparLinhasDeWidgets(outras);
+  const candidatas = linhas
+    .filter((linha) => linha.pecas.length < MAX_COLUNAS_MAGNETICAS)
+    .filter((linha) => !linha.pecas.some((p) => p.locked))
+    .map((linha) => ({
+      linha,
+      distancia: distanciaVerticalAteLinha(destino.y, alvo.h, linha),
+    }))
+    .filter(({ distancia }) => distancia <= ALCANCE_IMA_VERTICAL)
+    .sort((a, b) => a.distancia - b.distancia);
+
+  const alvoLinha = candidatas[0]?.linha || null;
+  if (!alvoLinha) return null;
+
+  const idsOrigem = new Set(origem?.pecas.map((p) => p.id) || []);
+  const ehMesmaLinha =
+    Boolean(origem) &&
+    alvoLinha.pecas.length > 0 &&
+    alvoLinha.pecas.every((p) => idsOrigem.has(p.id));
+
+  // Se saiu de uma linha e entrou em outra, a linha antiga fecha o buraco
+  // imediatamente: 2→1 vira 100%, 3→2 vira 50/50, 4→3 vira terços.
+  if (origem && !ehMesmaLinha) {
+    const restantes = origem.pecas.filter((p) => p.id !== pieceId);
+    if (restantes.length) {
+      normalizarLinhaEmSlots(
+        pecas,
+        restantes.map((p) => p.id),
+        { y: origem.y }
+      );
+    }
+  }
+
+  const membros = alvoLinha.pecas
+    .map((p) => pecas.find((atual) => atual.id === p.id))
+    .filter(Boolean)
+    .sort((a, b) => a.x - b.x);
+
+  const xDoGesto = Number.isFinite(cursorX)
+    ? clamp(cursorX, 0, 100)
+    : clamp(destino.x + alvo.w / 2, 0, 100);
+
+  let indice = membros.findIndex((p) => xDoGesto < p.x + p.w / 2);
+  if (indice < 0) indice = membros.length;
+
+  const ordem = membros.map((p) => p.id);
+  ordem.splice(indice, 0, pieceId);
+
+  const encaixou = normalizarLinhaEmSlots(
+    pecas,
+    ordem,
+    { y: alvoLinha.y, ordem }
+  );
+  if (!encaixou) return null;
+
+  const largura = 100 / ordem.length;
+  return {
+    pecas,
+    encostadas: new Set(ordem),
+    guias: {
+      x: indice * largura,
+      y: alvoLinha.y,
+    },
+    magnetico: true,
+    grade: {
+      colunas: ordem.length,
+      indice,
+      y: alvoLinha.y,
+    },
+  };
+}
+
+function moverPecaLivre(
+  cfg,
+  mode,
+  pieceId,
+  destino,
+  { larguraCanvas = 1200, encaixar = true, pecasIniciais = null } = {}
+) {
+  const pecas = pecasIniciais || toPieces(cfg, mode);
+  const alvo = pecas.find((p) => p.id === pieceId);
+  if (!alvo) {
+    return {
+      config: cfg,
+      encostadas: new Set(),
+      guias: { x: null, y: null },
+      magnetico: false,
+      grade: null,
+    };
+  }
 
   const outras = pecas.filter((p) => p.id !== pieceId);
   let x = destino.x;
@@ -52,7 +458,7 @@ export function moverPeca(cfg, mode, pieceId, destino, { larguraCanvas = 1200, e
     y = ry.y;
     guiaY = ry.guia;
   } else {
-    x = Math.min(Math.max(x, 0), Math.max(0, 100 - alvo.w));
+    x = clamp(x, 0, Math.max(0, 100 - alvo.w));
     y = Math.max(0, y);
   }
 
@@ -64,7 +470,190 @@ export function moverPeca(cfg, mode, pieceId, destino, { larguraCanvas = 1200, e
     config: applyPieces(cfg, mode, resolvidas),
     encostadas,
     guias: { x: guiaX, y: guiaY },
+    magnetico: false,
+    grade: null,
   };
+}
+
+/**
+ * Move uma peça para (x, y).
+ *
+ * Widgets ganham uma camada anterior à colisão comum: ao atravessar a faixa de
+ * uma linha de widgets eles formam uma grade de 1/1, 1/2, 1/3 ou 1/4. Fora
+ * dessa faixa o comportamento continua exatamente o freeform anterior.
+ */
+export function moverPeca(
+  cfg,
+  mode,
+  pieceId,
+  destino,
+  {
+    larguraCanvas = 1200,
+    encaixar = true,
+    magnetico = true,
+    cursorX = null,
+    ignorarLinhaOrigem = false,
+  } = {}
+) {
+  const pecas = toPieces(cfg, mode);
+  const alvo = pecas.find((p) => p.id === pieceId);
+  if (!alvo) {
+    return {
+      config: cfg,
+      encostadas: new Set(),
+      guias: { x: null, y: null },
+      magnetico: false,
+      grade: null,
+    };
+  }
+
+  if (magnetico && encaixar && alvo.kind === "widget") {
+    const encaixe = tentarGradeMagnetica(
+      pecas,
+      pieceId,
+      destino,
+      { cursorX, ignorarLinhaOrigem }
+    );
+
+    if (encaixe) {
+      return {
+        config: applyPieces(cfg, mode, encaixe.pecas),
+        encostadas: encaixe.encostadas,
+        guias: encaixe.guias,
+        magnetico: true,
+        grade: encaixe.grade,
+      };
+    }
+
+    // Fora de qualquer linha ocupada, o widget vira uma linha 1/1. Isto fecha a
+    // gramática do auto-layout: sozinho = 100%, dois = metades, três = terços,
+    // quatro = quartos. Ao sair de uma linha, a origem fecha o buraco ao vivo.
+    if (!ignorarLinhaOrigem) liberarLinhaDeOrigem(pecas, pieceId);
+
+    const alvoSolo = pecas.find((p) => p.id === pieceId);
+    const outras = pecas.filter((p) => p.id !== pieceId);
+    const ry = encaixarY(destino.y, outras);
+    alvoSolo.x = 0;
+    alvoSolo.y = Math.max(0, ry.y);
+    alvoSolo.w = 100;
+
+    const { pecas: resolvidas, encostadas } = resolverColisoes(pecas, pieceId);
+    return {
+      config: applyPieces(cfg, mode, resolvidas),
+      encostadas,
+      guias: { x: 0, y: ry.guia },
+      magnetico: true,
+      grade: { colunas: 1, indice: 0, y: alvoSolo.y },
+    };
+  }
+
+  return moverPecaLivre(
+    cfg,
+    mode,
+    pieceId,
+    destino,
+    { larguraCanvas, encaixar, pecasIniciais: pecas }
+  );
+}
+
+
+function pecasSeSobrepoem(a, b) {
+  const folga = 0.05;
+  return !(
+    a.x + a.w <= b.x + folga ||
+    b.x + b.w <= a.x + folga ||
+    a.y + a.h <= b.y + folga ||
+    b.y + b.h <= a.y + folga
+  );
+}
+
+function layoutTemSobreposicao(pecas) {
+  for (let i = 0; i < pecas.length; i += 1) {
+    for (let j = i + 1; j < pecas.length; j += 1) {
+      if (pecasSeSobrepoem(pecas[i], pecas[j])) return true;
+    }
+  }
+  return false;
+}
+
+/** Caixa coletiva de uma seleção. */
+function caixaDaSelecao(pecas) {
+  return {
+    left: Math.min(...pecas.map((p) => p.x)),
+    top: Math.min(...pecas.map((p) => p.y)),
+    right: Math.max(...pecas.map((p) => p.x + p.w)),
+    bottom: Math.max(...pecas.map((p) => p.y + p.h)),
+  };
+}
+
+/**
+ * Alinhamento de seleção múltipla com semântica de ferramenta de design.
+ * Não roda magnetismo nem cascata: uma ação explícita de alinhamento precisa
+ * respeitar exatamente o eixo pedido, do mesmo jeito que um valor digitado no
+ * inspetor não é "corrigido" pelo snap.
+ */
+export function alinharPecas(cfg, mode, pieceIds, alinhamento) {
+  const ids = new Set(pieceIds || []);
+  const pecas = toPieces(cfg, mode);
+  const selecionadas = pecas.filter((p) => ids.has(p.id));
+  if (selecionadas.length < 2) return cfg;
+
+  const caixa = caixaDaSelecao(selecionadas);
+  const centroX = (caixa.left + caixa.right) / 2;
+  const centroY = (caixa.top + caixa.bottom) / 2;
+
+  for (const peca of selecionadas) {
+    if (peca.locked) continue;
+    if (alinhamento === "left") peca.x = caixa.left;
+    else if (alinhamento === "center-x") peca.x = centroX - peca.w / 2;
+    else if (alinhamento === "right") peca.x = caixa.right - peca.w;
+    else if (alinhamento === "top") peca.y = caixa.top;
+    else if (alinhamento === "center-y") peca.y = centroY - peca.h / 2;
+    else if (alinhamento === "bottom") peca.y = caixa.bottom - peca.h;
+
+    peca.x = clamp(peca.x, 0, Math.max(0, 100 - peca.w));
+    peca.y = Math.max(0, peca.y);
+  }
+
+  // Page builder não tem camada livre como o Figma: alinhar não pode produzir
+  // sobreposição silenciosa. Se a operação invadir outra peça, nada é gravado.
+  if (layoutTemSobreposicao(pecas)) return cfg;
+  return applyPieces(cfg, mode, pecas);
+}
+
+/** Distribui três ou mais peças mantendo os extremos da seleção. */
+export function distribuirPecas(cfg, mode, pieceIds, eixo) {
+  const ids = new Set(pieceIds || []);
+  const pecas = toPieces(cfg, mode);
+  const selecionadas = pecas.filter((p) => ids.has(p.id));
+  if (selecionadas.length < 3) return cfg;
+
+  if (eixo === "horizontal") {
+    const ordem = selecionadas.slice().sort((a, b) => a.x - b.x);
+    const inicio = ordem[0].x;
+    const fim = ordem[ordem.length - 1].x + ordem[ordem.length - 1].w;
+    const soma = ordem.reduce((acc, p) => acc + p.w, 0);
+    const gap = (fim - inicio - soma) / Math.max(1, ordem.length - 1);
+    let cursor = inicio;
+    for (const peca of ordem) {
+      if (!peca.locked) peca.x = clamp(cursor, 0, Math.max(0, 100 - peca.w));
+      cursor += peca.w + gap;
+    }
+  } else if (eixo === "vertical") {
+    const ordem = selecionadas.slice().sort((a, b) => a.y - b.y);
+    const inicio = ordem[0].y;
+    const fim = ordem[ordem.length - 1].y + ordem[ordem.length - 1].h;
+    const soma = ordem.reduce((acc, p) => acc + p.h, 0);
+    const gap = (fim - inicio - soma) / Math.max(1, ordem.length - 1);
+    let cursor = inicio;
+    for (const peca of ordem) {
+      if (!peca.locked) peca.y = Math.max(0, cursor);
+      cursor += peca.h + gap;
+    }
+  }
+
+  if (layoutTemSobreposicao(pecas)) return cfg;
+  return applyPieces(cfg, mode, pecas);
 }
 
 /**
@@ -79,10 +668,10 @@ export function moverPeca(cfg, mode, pieceId, destino, { larguraCanvas = 1200, e
  * o construtor não deixar chegar lá. O limite é aplicado no gesto, então a
  * pessoa esbarra nele enquanto arrasta e vê exatamente o que será publicado.
  *
- * 40% permite duas colunas de propósito (dois cartões lado a lado num celular
- * é uma escolha legítima) e barra o que não é escolha, é engano.
+ * O auto-layout magnético agora trabalha com até quatro colunas também no
+ * mobile. O limite acompanha essa gramática: 25% é o menor slot possível.
  */
-export const LARGURA_MINIMA_MOBILE = 40;
+export const LARGURA_MINIMA_MOBILE = 25;
 
 /**
  * Redimensiona uma peça. Não empurra ninguém — para na primeira peça

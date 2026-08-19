@@ -254,7 +254,7 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
   function encerrarMigracao(irImportar) {
     api.migracaoResolvida(tenantSlug).catch(() => {});
     fechar();
-    if (irImportar) navigate("/configuracoes?tab=dados");
+    if (irImportar) navigate("/configuracoes?ver=dados");
   }
 
   const info = PLANOS.find((p) => p.key === dados.plano);

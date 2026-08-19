@@ -34,10 +34,11 @@ export const PERMISSOES = [
   "gerenciarCargos",
   "verConfiguracoes",
   "verRelatorios",
+  "verAuditoria",
   "publicarRedes",
 ];
 
-/* `verConfiguracoes` e `gerenciarCargos` aparecem SÓ no Administrador, e é
+/* `verConfiguracoes`, `gerenciarCargos` e `verAuditoria` aparecem SÓ no Administrador, e é
    deliberado: são as chaves da casa. Configurações guarda plano, cobrança,
    domínio e o cancelamento da assinatura; Gerenciar Cargos permite reescrever
    as permissões de todo mundo — inclusive conceder a si mesmo o que faltava. */

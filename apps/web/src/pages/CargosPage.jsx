@@ -9,7 +9,7 @@ import { ModalCiencia } from "../components/ModalCiencia";
 import { planoLiberaRedes } from "../utils/planos";
 import { IconeRelatorios } from "../utils/iconesRelatorios";
 import {
-  House, PencilSimple, Buildings, UserSquare, UserCircle, Shield, ShareNetwork,
+  House, PencilSimple, Buildings, UserSquare, UserCircle, Shield, ShareNetwork, ClockCounterClockwise,
 } from "@phosphor-icons/react";
 
 /* Cada permissão carrega o ÍCONE do lugar que ela abre — o mesmo da barra
@@ -29,6 +29,7 @@ const PERMISSOES = [
   /* "Ver Relatórios" absorveu o antigo "Gerenciar Leads": ela abre a página
      Relatórios inteira — leads, relatório mensal, funil e comissões. */
   { key: "verRelatorios",     label: "Ver Relatórios",     Icon: IconeRelatorios },
+  { key: "verAuditoria",      label: "Registro de Atividade", Icon: ClockCounterClockwise },
   { key: "publicarRedes",     label: "Publicar em Redes",  Icon: ShareNetwork },
 ];
 

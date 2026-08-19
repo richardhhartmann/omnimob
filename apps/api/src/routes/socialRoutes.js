@@ -6,6 +6,21 @@ import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { requirePlanoRedes } from "../middlewares/planoMiddleware.js";
 import { overlay360 } from "../utils/cloudinaryOverlay.js";
 
+import { cifrar, decifrar } from "../services/cofre.js";
+
+/* O token da página, pronto para uso.
+ *
+ * Um lugar só para decifrar, e é por isso que ele existe: são quinze pontos no
+ * arquivo que mandam o token para a Graph API, e decifrar em cada um seria
+ * quinze chances de esquecer um — que falharia calado, publicando com um texto
+ * cifrado no lugar da credencial.
+ *
+ * `decifrar` devolve texto puro inalterado, então tenant conectado antes desta
+ * mudança continua publicando normalmente. */
+function tokenDaPagina(tenant) {
+  return decifrar(tenant?.facebookPageToken) || null;
+}
+
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
 const META_CALLBACK_URL = process.env.META_CALLBACK_URL || "https://api.omnimob.app/api/social/oauth/callback";
@@ -126,10 +141,10 @@ async function deleteOnePublication(publication, tenant) {
 
   // Facebook: exclusão real via Graph API (para refs reais).
   if (channel === "FACEBOOK" && isRealMetaRef(publication.externalRef)) {
-    if (!tenant?.facebookPageToken) {
+    if (!tokenDaPagina(tenant)) {
       return { ok: false, error: "Página do Facebook não conectada." };
     }
-    const result = await deleteFacebookPost(tenant.facebookPageToken, publication.externalRef);
+    const result = await deleteFacebookPost(tokenDaPagina(tenant), publication.externalRef);
     if (!result.ok) {
       return { ok: false, error: result.error || "Falha ao remover o post do Facebook." };
     }
@@ -301,7 +316,13 @@ socialRouter.get("/oauth/callback", async (req, res) => {
     // 5. Salva no tenant
     await prisma.tenant.update({
       where: { id: tenantId },
-      data: { facebookPageId: pageId, facebookPageToken: pageToken, facebookPageName: pageName, instagramBusinessId },
+      data: {
+        facebookPageId: pageId,
+        // Cifrado em repouso: é credencial da imobiliária, não nossa. Ver `services/cofre.js`.
+        facebookPageToken: cifrar(pageToken),
+        facebookPageName: pageName,
+        instagramBusinessId,
+      },
     });
 
     const igParam = instagramBusinessId ? "&instagram=ok" : "";
@@ -380,7 +401,7 @@ socialRouter.post(
             const fbRes = await fetch(`${META_BASE}/${tenant.facebookPageId}/feed`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ message: caption, access_token: tenant.facebookPageToken }),
+              body: JSON.stringify({ message: caption, access_token: tokenDaPagina(tenant) }),
             });
             const fbData = await fbRes.json();
             if (fbData.error) throw new Error(fbData.error.message);
@@ -391,7 +412,7 @@ socialRouter.post(
             const fbRes = await fetch(`${META_BASE}/${tenant.facebookPageId}/photos`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: imageUrls[0], caption, access_token: tenant.facebookPageToken }),
+              body: JSON.stringify({ url: imageUrls[0], caption, access_token: tokenDaPagina(tenant) }),
             });
             const fbData = await fbRes.json();
             if (fbData.error) throw new Error(fbData.error.message);
@@ -404,7 +425,7 @@ socialRouter.post(
               const photoRes = await fetch(`${META_BASE}/${tenant.facebookPageId}/photos`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url, published: false, access_token: tenant.facebookPageToken }),
+                body: JSON.stringify({ url, published: false, access_token: tokenDaPagina(tenant) }),
               });
               const photoData = await photoRes.json();
               if (photoData.error) throw new Error(photoData.error.message);
@@ -413,7 +434,7 @@ socialRouter.post(
             const fbRes = await fetch(`${META_BASE}/${tenant.facebookPageId}/feed`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ message: caption, attached_media: attachedMedia, access_token: tenant.facebookPageToken }),
+              body: JSON.stringify({ message: caption, attached_media: attachedMedia, access_token: tokenDaPagina(tenant) }),
             });
             const fbData = await fbRes.json();
             if (fbData.error) throw new Error(fbData.error.message);
@@ -457,7 +478,7 @@ socialRouter.post(
             const createRes = await fetch(`${META_BASE}/${tenant.instagramBusinessId}/media`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ image_url: imageUrls[0], caption, access_token: tenant.facebookPageToken }),
+              body: JSON.stringify({ image_url: imageUrls[0], caption, access_token: tokenDaPagina(tenant) }),
             });
             const createData = await createRes.json();
             if (createData.error) throw new Error(createData.error.message);
@@ -471,7 +492,7 @@ socialRouter.post(
               const itemRes = await fetch(`${META_BASE}/${tenant.instagramBusinessId}/media`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ image_url: url, is_carousel_item: true, access_token: tenant.facebookPageToken }),
+                body: JSON.stringify({ image_url: url, is_carousel_item: true, access_token: tokenDaPagina(tenant) }),
               });
               const itemData = await itemRes.json();
               if (itemData.error) throw new Error(itemData.error.message);
@@ -484,7 +505,7 @@ socialRouter.post(
                 media_type: "CAROUSEL",
                 children: childIds.join(","),
                 caption,
-                access_token: tenant.facebookPageToken,
+                access_token: tokenDaPagina(tenant),
               }),
             });
             const carouselData = await carouselRes.json();
@@ -496,7 +517,7 @@ socialRouter.post(
           const publishRes = await fetch(`${META_BASE}/${tenant.instagramBusinessId}/media_publish`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ creation_id: containerId, access_token: tenant.facebookPageToken }),
+            body: JSON.stringify({ creation_id: containerId, access_token: tokenDaPagina(tenant) }),
           });
           const publishData = await publishRes.json();
           if (publishData.error) throw new Error(publishData.error.message);
@@ -588,7 +609,7 @@ socialRouter.get(
       select: { facebookPageToken: true },
     });
 
-    const metrics = await fetchPostInsights(publication.channel, publication.externalRef, tenant?.facebookPageToken);
+    const metrics = await fetchPostInsights(publication.channel, publication.externalRef, tokenDaPagina(tenant));
     return res.json(metrics);
   }
 );
@@ -653,7 +674,7 @@ socialRouter.post("/reconcile/:propertyId", requireAuth, requireTenant, async (r
     where: { propertyId, tenantId: req.tenant.id },
   });
 
-  const removed = await reconcilePublications(publications, tenant?.facebookPageToken);
+  const removed = await reconcilePublications(publications, tokenDaPagina(tenant));
 
   const current = await prisma.propertyPublication.findMany({
     where: { propertyId, tenantId: req.tenant.id },
@@ -676,7 +697,7 @@ socialRouter.post("/reconcile", requireAuth, requireTenant, async (req, res) => 
     where: { tenantId: req.tenant.id, status: "PUBLISHED" },
   });
 
-  const removed = await reconcilePublications(publications, tenant?.facebookPageToken);
+  const removed = await reconcilePublications(publications, tokenDaPagina(tenant));
 
   return res.json({ removedCount: removed.length, removed });
 });

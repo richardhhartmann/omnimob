@@ -13,6 +13,8 @@ import {
 import { interesseSchema, trialSchema } from "../validators/interesseValidators.js";
 import { precosDosPlanos } from "../services/pagamentoService.js";
 import { tenantPorDominio, enderecoDaVitrine } from "../services/dominioService.js";
+import { montarFeedVRSync } from "../services/feedPortais.js";
+import { proximoResponsavel } from "../services/distribuicaoLeads.js";
 import {
   criarTrial,
   assinarConvite,
@@ -169,6 +171,13 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
       data: { tenantId: tenant.id, propertyId: property.id, type: MetricEventType.LEAD },
     });
 
+    /* O lead nasce com dono e com histórico.
+       A distribuição não bloqueia nada: `proximoResponsavel` nunca lança e
+       devolve `null` quando não há corretor elegível — nesse caso o lead cai na
+       caixa comum, que é o certo para imobiliária de uma pessoa só. */
+    const responsavel = await proximoResponsavel(tenant.id);
+    const responsavelId = responsavel?.id || null;
+
     await prisma.propertyLead.create({
       data: {
         tenantId: tenant.id,
@@ -178,6 +187,19 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
         phone: typeof phone === "string" ? phone : null,
         message: typeof message === "string" ? message : null,
         source: "showcase",
+        responsavelId,
+        eventos: {
+          create: [
+            {
+              tenantId: tenant.id,
+              tipo: "CRIADO",
+              texto: `Contato recebido pela vitrine, no imóvel "${property.title}".`,
+            },
+            ...(responsavel
+              ? [{ tenantId: tenant.id, tipo: "RESPONSAVEL", para: responsavel.nome, texto: "Distribuído automaticamente." }]
+              : []),
+          ],
+        },
       },
     });
 
@@ -567,6 +589,10 @@ publicRouter.get("/planos", async (_req, res) => {
    `apps/web/vercel.json`) — precisa ser servido de lá, e não de
    `api.omnimob.app`, exatamente pela regra do parágrafo acima. */
 
+// Quebra de linha do XML. Constante porque escrevê-la dentro de um template
+// aninhado vira escape dentro de escape, e ninguém mais lê a linha.
+const BR = "\n";
+
 /** Escapa o que a XML não aceita cru. Slug é validado no cadastro, mas o
     endereço é montado por concatenação e um dia pode receber outra coisa. */
 function xml(texto) {
@@ -576,6 +602,132 @@ function xml(texto) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+/* ── Vitrines publicadas ─────────────────────────────────────────────────────
+   Alimenta a página `/vitrines` da Omnimob: as vitrines que estão de fato no
+   ar, com quantos imóveis cada uma tem e uma foto de capa.
+
+   É prova, não promessa — e é o único conteúdo da landing que nenhuma outra
+   plataforma consegue inventar. Por isso os dados vêm do banco, e não de uma
+   lista escrita à mão: uma lista fixa envelhece, e no dia em que um cliente
+   sair a página continuaria exibindo a vitrine dele.
+
+   ── O QUE NÃO SAI DAQUI ──
+
+   Nada de e-mail, telefone, CNPJ ou dado de contato: a página mostra o
+   TRABALHO da imobiliária, não a ficha dela. E só entra quem tem imóvel ativo
+   com foto — vitrine vazia como vitrine de exemplo é propaganda contra si
+   mesma.
+   ────────────────────────────────────────────────────────────────────────── */
+publicRouter.get("/vitrines", async (req, res) => {
+  try {
+    const tenants = await prisma.tenant.findMany({
+      where: { ativo: true, statusPagamento: { not: "CANCELADO" } },
+      select: {
+        name: true, slug: true, cidade: true, estado: true, logoUrl: true,
+        primaryColor: true, slogan: true, description: true,
+        dominioProprio: true, dominioStatus: true,
+        _count: { select: { properties: { where: { status: "ACTIVE" } } } },
+        properties: {
+          where: { status: "ACTIVE", images: { some: {} } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            city: true,
+            images: { orderBy: { position: "asc" }, where: { is360: false }, take: 1, select: { url: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 60,
+    });
+
+    const base = (baseDoApp(req) || "https://omnimob.app").replace(/\/+$/, "");
+
+    const vitrines = tenants
+      .filter((t) => t.properties.length > 0 && t.properties[0].images.length > 0)
+      .map((t) => ({
+        nome: t.name,
+        slug: t.slug,
+        cidade: t.cidade || t.properties[0].city || "",
+        estado: t.estado || "",
+        logoUrl: t.logoUrl || "",
+        cor: t.primaryColor || "#6366f1",
+        // Slogan primeiro; a descrição entra recortada quando ele não existe.
+        frase: t.slogan || (t.description ? `${t.description.slice(0, 120)}${t.description.length > 120 ? "…" : ""}` : ""),
+        imoveis: t._count.properties,
+        capa: t.properties[0].images[0].url,
+        endereco: enderecoDaVitrine(t, base),
+      }));
+
+    res.set("Cache-Control", "public, max-age=600, s-maxage=600");
+    return res.json({ vitrines, total: vitrines.length });
+  } catch (erro) {
+    console.error("[GET /public/vitrines]", erro);
+    return res.status(500).json({ error: "Erro ao listar as vitrines." });
+  }
+});
+
+
+/* ── Feed dos portais ────────────────────────────────────────────────────────
+   `GET /public/:slug/feed.xml` — o endereço que a imobiliária cadastra no
+   painel do ZAP, do VivaReal ou do OLX Imóveis. O robô do portal vem buscar; a
+   Omnimob não empurra nada. Ver `services/feedPortais.js` para o formato e o
+   porquê.
+
+   Público e sem autenticação de propósito: é o robô do portal que lê, e ele não
+   tem como se autenticar. O que protege é o conteúdo — só imóvel que a própria
+   imobiliária marcou para publicar, os mesmos que já estão na vitrine aberta.
+
+   Sem `res.status(500)` no erro: portal que recebe 500 marca a carga como
+   falha e, dependendo do provedor, DESATIVA os anúncios já publicados. Um feed
+   vazio diz "nada mudou" e é infinitamente menos destrutivo do que isso.
+   ────────────────────────────────────────────────────────────────────────── */
+publicRouter.get("/:slug/feed.xml", async (req, res) => {
+  const slug = String(req.params.slug || "");
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      select: { id: true, name: true, slug: true, email: true, ativo: true, statusPagamento: true, dominioProprio: true, dominioStatus: true },
+    });
+
+    /* Conta desligada ou cancelada não alimenta portal. Não é rigor: anúncio
+       que continua no ar depois de a imobiliária sair leva o cliente a um
+       telefone que ninguém atende, e a reclamação chega no portal. */
+    if (!tenant || !tenant.ativo || tenant.statusPagamento === "CANCELADO") {
+      res.type("application/xml");
+      return res.send(montarFeedVRSync({ name: "Omnimob" }, [], null));
+    }
+
+    const imoveis = await prisma.property.findMany({
+      where: { tenantId: tenant.id, status: "ACTIVE", publicarPortais: true },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        images: { orderBy: { position: "asc" }, where: { is360: false } },
+        tipoImovel: { select: { descricao: true } },
+      },
+    });
+
+    /* Sem foto, fora. O portal recusa o anúncio na importação e conta como
+       erro no relatório de carga da imobiliária — ficar de fora é mais limpo. */
+    const publicaveis = imoveis.filter((i) => i.images.length > 0);
+
+    const base = (baseDoApp(req) || "https://omnimob.app").replace(/\/+$/, "");
+    const vitrine = enderecoDaVitrine(tenant, base).replace(/\/+$/, "");
+
+    const corpo = montarFeedVRSync(tenant, publicaveis, (i) => `${vitrine}/imovel/${i.id}`);
+
+    res.type("application/xml");
+    /* Meia hora. O robô do portal passa algumas vezes por dia; sem cache, uma
+       varredura curiosa varreria o acervo inteiro a cada visita. */
+    res.set("Cache-Control", "public, max-age=1800, s-maxage=1800");
+    return res.send(corpo);
+  } catch (erro) {
+    console.error(`[feed.xml] ${slug}:`, erro.message);
+    res.type("application/xml");
+    return res.send(montarFeedVRSync({ name: "Omnimob" }, [], null));
+  }
+});
 
 publicRouter.get("/sitemap.xml", async (req, res) => {
   try {
@@ -596,9 +748,25 @@ publicRouter.get("/sitemap.xml", async (req, res) => {
       orderBy: { createdAt: "asc" },
     });
 
-    const urls = [
-      `  <url>\n    <loc>${xml(site)}/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    /* A home e as páginas institucionais. Antes o sitemap tinha um endereço só
+       para a Omnimob — a landing — e tudo mais eram vitrines de cliente. Termos,
+       Privacidade, Sobre, Contato e a galeria de vitrines são páginas próprias e
+       precisam ser indexadas como tal. */
+    const PAGINAS_DA_OMNIMOB = [
+      { caminho: "/", prioridade: "1.0", frequencia: "weekly" },
+      { caminho: "/vitrines", prioridade: "0.8", frequencia: "weekly" },
+      { caminho: "/sobre", prioridade: "0.6", frequencia: "monthly" },
+      { caminho: "/contato", prioridade: "0.6", frequencia: "monthly" },
+      { caminho: "/termos", prioridade: "0.3", frequencia: "yearly" },
+      { caminho: "/privacidade", prioridade: "0.3", frequencia: "yearly" },
     ];
+
+    const urls = PAGINAS_DA_OMNIMOB.map(
+      (pagina) =>
+        `  <url>` + BR + `    <loc>${xml(site)}${pagina.caminho}</loc>` + BR +
+        `    <changefreq>${pagina.frequencia}</changefreq>` + BR +
+        `    <priority>${pagina.prioridade}</priority>` + BR + `  </url>`
+    );
 
     for (const t of tenants) {
       // Domínio próprio ATIVO = outro host. Ver a regra no topo do bloco.

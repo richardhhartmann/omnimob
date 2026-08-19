@@ -1,17 +1,20 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { prisma } from "./db.js";
 import { adminRouter } from "./routes/adminRoutes.js";
 import { aiRouter } from "./routes/aiRoutes.js";
 import { vendaRouter } from "./routes/vendaRoutes.js";
+import { auditoriaRouter } from "./routes/auditoriaRoutes.js";
 import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
 import { chamadoRouter } from "./routes/chamadoRoutes.js";
 import { importacaoRouter } from "./routes/importacaoRoutes.js";
 import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
+import { perfilBuscaRouter } from "./routes/perfilBuscaRoutes.js";
 import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
 import { previaRouter } from "./routes/previaRoutes.js";
@@ -24,6 +27,7 @@ import { tenantRouter } from "./routes/tenantRoutes.js";
 import { tutorialRouter } from "./routes/tutorialRoutes.js";
 import { usuarioRouter } from "./routes/usuarioRoutes.js";
 import { getHealth } from "./services/healthService.js";
+import { contextoDeAuditoria } from "./services/auditoria.js";
 
 dotenv.config();
 
@@ -31,6 +35,38 @@ const app = express();
 const port = Number(process.env.PORT || 4000);
 
 app.set("trust proxy", 1);
+
+/* ── Cabeçalhos de segurança ────────────────────────────────────────────────
+   Primeiro middleware da pilha, antes até do CORS: o que ele faz é carimbar a
+   resposta, e resposta que sai por um caminho curto (um 403 do CORS, por
+   exemplo) também precisa do carimbo.
+
+   Duas coisas ficam desligadas, e as duas por motivo concreto:
+
+   `contentSecurityPolicy` — a política padrão do helmet é feita para quem serve
+   aplicação web. Esta API serve JSON, XML e as páginas de prévia
+   (`previaRoutes`), que são HTML mínimo com Open Graph para o robô do WhatsApp
+   ler. A CSP padrão bloquearia os estilos embutidos ali sem proteger nada: não
+   existe sessão de navegador nesta origem para um XSS roubar — a autenticação é
+   por cabeçalho `Authorization`, não por cookie.
+
+   `crossOriginResourcePolicy` — o padrão é `same-origin`, e o front vive em
+   outro domínio (`omnimob.app` chamando `api.omnimob.app`). Deixá-lo no padrão
+   derrubaria a aplicação inteira. `cross-origin` aqui não afrouxa nada que o
+   CORS já não governe logo abaixo, e ele governa com lista fechada.
+
+   O resto entra como vem: HSTS, nosniff, no-referrer, frameguard, e o
+   `X-Powered-By: Express` para de anunciar o que roda aqui. */
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
+    // Um ano, incluindo subdomínios — `api.omnimob.app` e as vitrines em
+    // `<slug>.omnimob.app` só respondem em HTTPS.
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  })
+);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
@@ -141,6 +177,11 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+/* Abre o contexto da requisição para a trilha de auditoria. Vem antes das
+   rotas e depois do parser: o "quem" é preenchido pela autenticação lá dentro,
+   mas o objeto precisa existir antes dela para poder ser preenchido. */
+app.use(contextoDeAuditoria);
+
 app.use(generalLimiter);
 
 app.get("/health", async (_req, res) => {
@@ -153,6 +194,8 @@ app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/tenants", tenantRouter);
 app.use("/api/properties", propertyRouter);
 app.use("/api/leads", leadRouter);
+app.use("/api/auditoria", auditoriaRouter);
+app.use("/api/perfis-busca", perfilBuscaRouter);
 app.use("/api/usuarios", usuarioRouter);
 app.use("/api/tutorial", tutorialRouter);
 app.use("/api/chamados", chamadoRouter);

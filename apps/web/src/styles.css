@@ -1025,10 +1025,21 @@ button:disabled {
   font-weight: 300;
 }
 
+/* As cinco estrelas, numa linha.
+
+   Ficavam empilhadas na vertical, e a causa não estava aqui: o preflight do
+   Tailwind declara `svg { display: block }`, então cada estrela virava um
+   parágrafo próprio. Antes eram a string "★★★★★", e como texto elas se
+   comportavam — `font-size` e `letter-spacing` são desta época e não faziam
+   mais nada, porque nenhum dos dois vale para SVG.
+
+   Flex resolve sem discutir com o preflight, e o `gap` faz o que o
+   `letter-spacing` tentava fazer. */
 .widget-testimonial-stars {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
   color: #f59e0b;
-  font-size: 24px;
-  letter-spacing: 4px;
   margin-bottom: 16px;
 }
 
@@ -3536,6 +3547,67 @@ input[type="checkbox"].sw:disabled { opacity: 0.5; cursor: not-allowed; }
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
+/* Enquanto existe um gesto de MOVE, as peças que a física reposiciona correm
+   para a nova caixa em vez de teleportar. A peça que está na mão só usa essa
+   transição quando entrou no ímã; fora dele precisa acompanhar o ponteiro sem
+   atraso. */
+.builder-piece.is-layout-animating {
+  transition:
+    left 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    min-height 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+  will-change: left, top, width;
+}
+
+.builder-piece.is-layout-animating.is-dragging:not(.is-magnetized) {
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+  will-change: auto;
+}
+
+/* Na linha 1/1 o Y continua colado no ponteiro; só X/largura animam ao abrir ou
+   fechar uma linha. Assim o auto-layout não deixa a peça "atrasada" da mão. */
+.builder-piece.is-layout-animating.is-dragging.is-solo-grid {
+  transition:
+    left 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+  will-change: left, width;
+}
+
+.builder-piece.is-dragging.is-magnetized {
+  border-color: var(--ed-accent, #818cf8);
+  box-shadow:
+    0 0 0 1px rgba(129, 140, 248, 0.32),
+    0 12px 34px -16px rgba(129, 140, 248, 0.72);
+}
+
+/* Widget vindo da biblioteca: já é o componente real, apenas com um chrome
+   transitório para deixar claro que ainda não houve drop. */
+.builder-piece.is-insert-preview {
+  pointer-events: none;
+  border-style: dashed;
+  border-color: var(--ed-accent, #818cf8);
+  box-shadow:
+    0 0 0 1px rgba(129, 140, 248, 0.24),
+    0 18px 46px -22px rgba(129, 140, 248, 0.8);
+  animation: editorPreviewExpand 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes editorPreviewExpand {
+  from {
+    opacity: 0.45;
+    transform: scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .builder-piece:hover { border-color: rgba(255, 255, 255, 0.18); }
 .showcase-theme-light .builder-piece:hover { border-color: rgba(15, 23, 42, 0.18); }
 
@@ -3622,7 +3694,23 @@ input[type="checkbox"].sw:disabled { opacity: 0.5; cursor: not-allowed; }
   background: rgba(12, 12, 18, 0.94);
 }
 
-.builder-piece-actions .editor-icon-button { width: 22px; height: 19px; border-radius: 5px; }
+.builder-piece-actions .editor-icon-button {
+  width: 22px;
+  height: 19px;
+  border-radius: 5px;
+
+  /* Precisa ser definido neste nível para vencer
+     `.editor-shell button { color: inherit }`. */
+  color: var(--ed-muted, #7e879a);
+}
+
+.builder-piece-actions .editor-icon-button:hover:not(:disabled) {
+  color: var(--ed-text, #e6e8ee);
+}
+
+.builder-piece-actions .editor-icon-button.is-danger:hover:not(:disabled) {
+  color: var(--ed-danger, #f87171);
+}
 
 .builder-piece-handle {
   position: absolute;
@@ -3928,4 +4016,951 @@ input[type="checkbox"].sw:disabled { opacity: 0.5; cursor: not-allowed; }
   .editor-topbar-title { display: none; }
   .editor-zoom { display: none; }
   .editor-inspector { width: 232px; }
+}
+
+/* ─── Registro de atividade (trilha de auditoria) ────────────────────────────
+   Linha do tempo agrupada por dia. O marcador colorido à esquerda carrega a
+   ação (criou / alterou / excluiu) em FORMA e em cor — quem não distingue verde
+   de vermelho continua lendo pelo ícone.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.aud-filtros {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 14px 16px;
+}
+.aud-filtros select,
+.aud-filtros input {
+  width: auto; padding: 8px 11px; font-size: 13px; border-radius: 9px;
+}
+.aud-busca {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 240px;
+  padding: 0 11px; border-radius: 9px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-muted);
+}
+.aud-busca input {
+  flex: 1; background: none; border: none; padding: 9px 0; outline: none;
+  color: inherit; font-size: 13px;
+}
+.aud-data {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text-muted); white-space: nowrap;
+}
+.aud-limpar {
+  width: auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 12px; border-radius: 999px; font-size: 12px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+  color: inherit; box-shadow: none; transform: none;
+}
+
+.aud-dia { padding: 6px 0 2px; }
+.aud-dia__titulo {
+  margin: 0; padding: 10px 16px 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.aud-lista { list-style: none; margin: 0; padding: 0; }
+
+.aud-item { display: flex; gap: 12px; padding: 2px 16px; position: relative; }
+/* O fio que liga os eventos do dia. Para no último para não sobrar rabicho. */
+.aud-item::before {
+  content: ""; position: absolute; left: 30px; top: 30px; bottom: -2px;
+  width: 1px; background: rgba(255,255,255,0.07);
+}
+.aud-item:last-child::before { display: none; }
+
+.aud-item__marca {
+  width: 29px; height: 29px; border-radius: 50%; flex-shrink: 0; margin-top: 6px;
+  display: flex; align-items: center; justify-content: center; z-index: 1;
+}
+.aud-item__corpo { flex: 1; min-width: 0; }
+
+.aud-item__linha {
+  width: 100%; display: flex; align-items: baseline; justify-content: space-between;
+  gap: 14px; padding: 9px 10px; border-radius: 9px; text-align: left;
+  background: transparent; border: 1px solid transparent; color: inherit;
+  box-shadow: none; transform: none; cursor: pointer;
+  transition: background 0.15s ease;
+}
+.aud-item__linha:hover { background: rgba(255,255,255,0.035); box-shadow: none; transform: none; }
+.aud-item__texto { font-size: 13.5px; line-height: 1.5; min-width: 0; }
+.aud-item__texto em { font-style: normal; color: var(--text-muted); }
+.aud-item__quando {
+  font-size: 11.5px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.aud-item__detalhe {
+  margin: 2px 10px 12px; padding: 12px 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.aud-ficha {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 14px;
+  margin: 0; font-size: 12.5px;
+}
+.aud-ficha dt { color: var(--text-muted); }
+.aud-ficha dd { margin: 0; word-break: break-word; }
+
+.aud-campos__titulo {
+  display: block; margin-bottom: 6px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.aud-campos ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.aud-campos li { display: flex; gap: 10px; font-size: 12.5px; align-items: baseline; }
+.aud-campos code {
+  flex-shrink: 0; min-width: 120px;
+  font-size: 11.5px; color: var(--text-muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.aud-campos li span { word-break: break-word; }
+
+.aud-vazio { padding: 44px 20px; text-align: center; color: var(--text-muted); font-size: 14px; }
+
+.aud-paginacao {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  font-size: 12.5px; color: var(--text-muted);
+}
+.aud-paginacao button {
+  width: auto; padding: 7px 14px; border-radius: 9px; font-size: 12.5px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+  color: inherit; box-shadow: none; transform: none;
+}
+.aud-paginacao button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (max-width: 720px) {
+  .aud-filtros select, .aud-filtros input { width: 100%; }
+  .aud-busca { flex-basis: 100%; }
+  .aud-item__linha { flex-direction: column; gap: 3px; }
+}
+
+/* ── Widgets estruturados da vitrine ─────────────────────────────────────────
+   Todos usam grids fluidos, não media queries de viewport: no editor uma peça
+   de 25% pode ficar estreita dentro de uma janela enorme, então quem manda é a
+   largura disponível no próprio widget. */
+.widget-property-search,
+.widget-regions,
+.widget-faq,
+.widget-steps,
+.widget-team,
+.widget-finance {
+  height: 100%;
+}
+
+.widget-property-search__head,
+.widget-steps__head,
+.widget-team__head {
+  margin-bottom: 20px;
+}
+
+.widget-property-search__head p,
+.widget-regions > p,
+.widget-steps__head p,
+.widget-team__head p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.widget-property-search__fields,
+.widget-finance__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(175px, 100%), 1fr));
+  gap: 12px;
+}
+
+.widget-property-search label,
+.widget-finance label {
+  display: grid;
+  gap: 7px;
+}
+
+.widget-property-search label > span,
+.widget-finance label > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.widget-property-search select,
+.widget-finance select,
+.widget-finance input {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text-main);
+  box-shadow: none;
+}
+
+.widget-property-search__button {
+  width: auto;
+  min-width: 170px;
+  margin-top: 16px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.widget-regions__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.widget-regions__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 112px;
+  padding: 10px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-main);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.widget-regions__chip:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.widget-faq__list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.widget-faq__item {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.widget-faq__item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.widget-faq__item summary::-webkit-details-marker { display: none; }
+.widget-faq__item p { margin: 0; padding: 0 16px 16px; }
+
+.widget-faq__plus {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  transition: transform 0.2s ease;
+}
+
+.widget-faq__item[open] .widget-faq__plus { transform: rotate(45deg); }
+
+.widget-steps__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));
+  gap: 12px;
+}
+
+.widget-steps__item {
+  position: relative;
+  min-height: 150px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.widget-steps__number {
+  display: block;
+  margin-bottom: 20px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.widget-steps__item strong {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-main);
+  font-size: 15px;
+}
+
+.widget-steps__item p { margin: 0; }
+
+.widget-team__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 12px;
+}
+
+.widget-team__person {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.widget-team__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.widget-team__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.widget-team__info { min-width: 0; }
+.widget-team__info strong,
+.widget-team__info span,
+.widget-team__info small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.widget-team__info strong { color: var(--text-main); font-size: 14px; }
+.widget-team__info span { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.widget-team__info small { color: var(--accent); font-size: 10px; margin-top: 4px; font-weight: 700; }
+
+.widget-team__contact {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(37, 211, 102, 0.12);
+  border: 1px solid rgba(37, 211, 102, 0.22);
+  color: #25d366;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.widget-finance {
+  display: flex;
+  flex-direction: column;
+}
+
+.widget-finance__result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: end;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.widget-finance__result > span { color: var(--text-muted); font-size: 11px; }
+.widget-finance__result > strong { color: var(--text-main); font-size: 15px; text-align: right; }
+.widget-finance__result > strong.is-accent { color: var(--accent); font-size: clamp(18px, 2.2vw, 26px); }
+.widget-finance__result > strong small { font-size: 10px; margin-left: 3px; color: var(--text-muted); }
+.widget-finance__result > em { grid-column: 1 / -1; color: var(--text-muted); font-size: 10px; font-style: normal; margin-top: 4px; }
+.widget-finance__notice { margin: 12px 0 0 !important; font-size: 10px !important; line-height: 1.45 !important; opacity: 0.8; }
+
+.showcase-theme-light .widget-property-search select,
+.showcase-theme-light .widget-finance select,
+.showcase-theme-light .widget-finance input,
+.showcase-theme-light .widget-faq__item,
+.showcase-theme-light .widget-steps__item,
+.showcase-theme-light .widget-team__person,
+.showcase-theme-light .widget-regions__chip {
+  background: rgba(15, 23, 42, 0.035);
+  border-color: rgba(15, 23, 42, 0.09);
+}
+
+.showcase-theme-light .widget-property-search select,
+.showcase-theme-light .widget-finance select,
+.showcase-theme-light .widget-finance input {
+  color: #0f172a;
+}
+
+.editor-textarea {
+  min-height: 84px;
+  resize: vertical;
+  line-height: 1.45;
+}
+/* ── Pseudo-seções e seleção múltipla ───────────────────────────────────────
+   Pseudo-seção não é dado da vitrine. É chrome do builder calculado a partir
+   das linhas de widgets: por isso mora no CSS/editor e nunca no ShowcaseWidget. */
+.builder-pseudo-sections {
+  position: absolute;
+  inset: 0;
+  z-index: 65;
+  pointer-events: none;
+}
+
+.builder-pseudo-section {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  border-block: 1px dashed rgba(129, 140, 248, 0.09);
+  background: linear-gradient(90deg, rgba(129, 140, 248, 0.018), transparent 16%, transparent 84%, rgba(129, 140, 248, 0.018));
+  pointer-events: none;
+  transition:
+    top 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.builder-pseudo-section.is-active,
+.builder-pseudo-section:has(.builder-pseudo-section__handle:hover),
+.builder-pseudo-section:has(.builder-pseudo-section__handle:focus-visible) {
+  border-color: rgba(129, 140, 248, 0.42);
+  background: linear-gradient(90deg, rgba(129, 140, 248, 0.055), transparent 22%, transparent 78%, rgba(129, 140, 248, 0.055));
+}
+
+.builder-pseudo-section.is-dragging {
+  border-color: var(--ed-accent, #818cf8);
+  background: rgba(129, 140, 248, 0.045);
+}
+
+.builder-pseudo-section__handle {
+  --pseudo-handle-scale: 1;
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  width: auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 7px 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(129, 140, 248, 0.22);
+  background: rgba(10, 10, 15, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #aeb5cf;
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.42;
+  cursor: grab;
+  pointer-events: auto;
+  transform: scale(var(--pseudo-handle-scale));
+  transform-origin: top left;
+  transition: opacity 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.builder-pseudo-section__handle:hover,
+.builder-pseudo-section__handle:focus-visible,
+.builder-pseudo-section.is-active .builder-pseudo-section__handle {
+  opacity: 1;
+  border-color: rgba(129, 140, 248, 0.7);
+  background: rgba(15, 15, 24, 0.96);
+  color: #e7e9f5;
+  outline: none;
+}
+
+.builder-pseudo-section.is-dragging .builder-pseudo-section__handle {
+  cursor: grabbing;
+  opacity: 1;
+  background: var(--ed-accent, #818cf8);
+  border-color: transparent;
+  color: #090a10;
+}
+
+.builder-pseudo-section__handle em {
+  font-style: normal;
+  font-size: 8.5px;
+  color: #8f96aa;
+  padding-left: 3px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.builder-pseudo-section.is-dragging .builder-pseudo-section__handle em { color: rgba(9, 10, 16, 0.66); border-color: rgba(9, 10, 16, 0.2); }
+
+.builder-pseudo-section__handle:disabled {
+  cursor: not-allowed;
+  opacity: 0.32;
+}
+
+.showcase-theme-light .builder-pseudo-section__handle {
+  background: rgba(255, 255, 255, 0.88);
+  color: #475569;
+  border-color: rgba(79, 70, 229, 0.18);
+}
+
+.showcase-theme-light .builder-pseudo-section__handle:hover,
+.showcase-theme-light .builder-pseudo-section.is-active .builder-pseudo-section__handle {
+  background: rgba(255, 255, 255, 0.98);
+  color: #312e81;
+}
+
+/* Barra Figma-like da seleção coletiva. A inversão de zoom mantém os controles
+   com tamanho de UI mesmo quando a folha está em 55% ou 140%. */
+.builder-multi-toolbar {
+  --multi-toolbar-scale: 1;
+  position: absolute;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(12, 12, 18, 0.96);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transform: translate(-50%, -100%) translateY(-9px) scale(var(--multi-toolbar-scale));
+  transform-origin: bottom center;
+  pointer-events: auto;
+}
+
+.builder-multi-toolbar.is-inside {
+  transform: translate(-50%, 0) scale(var(--multi-toolbar-scale));
+  transform-origin: top center;
+}
+
+.builder-multi-toolbar__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(129, 140, 248, 0.16);
+  color: #c7ccff;
+  font-size: 9.5px;
+  font-weight: 800;
+}
+
+.builder-multi-toolbar__group { display: inline-flex; gap: 2px; }
+.builder-multi-toolbar__divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.1); margin: 0 1px; }
+
+.builder-multi-toolbar button {
+  width: 25px;
+  height: 24px;
+  min-width: 25px;
+  padding: 0;
+  border-radius: 5px;
+  border: 0;
+  background: transparent;
+  color: #aeb5c9;
+  box-shadow: none;
+  transform: none;
+}
+
+.builder-multi-toolbar button.is-active:not(:disabled) {
+  background: var(--ed-accent, #818cf8);
+  color: #090a10;
+  box-shadow:
+    0 0 0 1px rgba(129, 140, 248, 0.35),
+    0 3px 10px rgba(129, 140, 248, 0.22);
+}
+
+.builder-multi-toolbar button.is-active:hover:not(:disabled) {
+  background: #929bf9;
+  color: #090a10;
+}
+
+.builder-multi-toolbar button:disabled { opacity: 0.25; cursor: default; }
+
+.showcase-theme-light
+  .builder-multi-toolbar
+  button.is-active:not(:disabled) {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(79, 70, 229, 0.22),
+    0 3px 10px rgba(79, 70, 229, 0.18);
+}
+
+.showcase-theme-light
+  .builder-multi-toolbar
+  button.is-active:hover:not(:disabled) {
+  background: #4338ca;
+  color: #ffffff;
+}
+.showcase-theme-light .builder-multi-toolbar button { color: #64748b; }
+.showcase-theme-light .builder-multi-toolbar button:hover:not(:disabled) { background: rgba(79, 70, 229, 0.09); color: #312e81; }
+.showcase-theme-light .builder-multi-toolbar__divider { background: rgba(15, 23, 42, 0.1); }
+.showcase-theme-light .builder-multi-toolbar__count { background: rgba(79, 70, 229, 0.1); color: #4338ca; }
+.builder-pseudo-sections.is-busy .builder-pseudo-section__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ─── Atendimento do lead: funil, responsável e histórico ────────────────────
+   Fica dentro do cartão do lead. Atender é uma sequência rápida — olhar, mover,
+   anotar, próximo — e cada clique a mais nessa sequência custa em toda a lista.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.lead-atend {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+/* O funil como uma régua contínua e não como botões soltos: a forma diz que
+   existe uma ordem, que é a informação que o corretor usa. */
+.lead-funil {
+  display: flex; flex-wrap: wrap; gap: 2px;
+  background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 9px; padding: 3px; width: fit-content; max-width: 100%;
+}
+.ds-shell .lead-funil__passo {
+  width: auto; padding: 5px 11px; border-radius: 7px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  background: transparent; border: 1px solid transparent; color: var(--text-muted);
+  box-shadow: none; transform: none; cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.ds-shell .lead-funil__passo:hover:not(.is-ativo):not(:disabled) {
+  background: rgba(255,255,255,0.05); color: var(--text-main); box-shadow: none; transform: none;
+}
+.ds-shell .lead-funil__passo.is-ativo {
+  color: #fff;
+  background: color-mix(in srgb, var(--cor) 26%, transparent);
+  border-color: color-mix(in srgb, var(--cor) 46%, transparent);
+  box-shadow: none; transform: none;
+}
+.ds-shell .lead-funil__passo:disabled { opacity: 0.55; cursor: progress; }
+
+.lead-atend__linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lead-atend__marca { font-size: 11.5px; color: var(--text-muted); }
+.lead-atend__marca--alerta { color: #fbbf24; }
+
+.ds-shell .lead-hist__botao {
+  width: auto; display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-muted); box-shadow: none; transform: none;
+}
+.ds-shell .lead-hist__botao:hover { color: var(--text-main); background: rgba(255,255,255,0.07); box-shadow: none; transform: none; }
+
+.lead-hist {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);
+}
+.lead-hist__form { display: flex; gap: 8px; }
+.lead-hist__form input {
+  flex: 1; padding: 9px 12px; font-size: 13px; border-radius: 8px;
+  background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.1); color: inherit;
+}
+.ds-shell .lead-hist__form button {
+  width: auto; padding: 9px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+  box-shadow: none; transform: none;
+}
+.ds-shell .lead-hist__form button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.lead-hist__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.lead-hist__lista li {
+  display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  font-size: 12.5px; line-height: 1.5;
+}
+.lead-hist__ponto { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; align-self: center; }
+.lead-hist__tipo {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); min-width: 108px;
+}
+.lead-hist__texto { flex: 1; min-width: 140px; word-break: break-word; }
+.lead-hist__meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.lead-hist__vazio { margin: 0; font-size: 12.5px; color: var(--text-muted); text-align: center; padding: 8px; }
+
+@media (max-width: 640px) {
+  .lead-funil { width: 100%; }
+  .lead-hist__tipo { min-width: 0; }
+}
+
+/* ─── Perfis de busca e cruzamento com o acervo ──────────────────────────────
+   Abre dentro da ficha do cliente: o que a pessoa procura é dado dela, e vive
+   ao lado de quem ela é.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.ds-shell .pfb__abrir {
+  width: auto; display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: rgba(167,139,250,0.12); border: 1px solid rgba(167,139,250,0.32);
+  color: #c4b5fd; box-shadow: none; transform: none; white-space: nowrap;
+}
+.ds-shell .pfb__abrir:hover { background: rgba(167,139,250,0.2); box-shadow: none; transform: none; }
+
+.pfb {
+  margin-top: 14px; padding: 14px; border-radius: 12px;
+  background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.pfb__cabeca { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-main); }
+.ds-shell .pfb__novo {
+  margin-left: auto; width: auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  color: inherit; box-shadow: none; transform: none;
+}
+.pfb__vazio { margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.6; }
+
+.pfb__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pfb__item {
+  padding: 11px 13px; border-radius: 10px;
+  background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.06);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.pfb__item-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pfb__titulo { display: block; font-size: 13.5px; font-weight: 600; }
+.pfb__resumo { display: block; margin-top: 3px; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+.pfb__acoes { display: flex; gap: 6px; flex-shrink: 0; }
+.ds-shell .pfb__acoes button {
+  width: auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: 8px; font-size: 11.5px; font-weight: 600;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-muted); box-shadow: none; transform: none;
+}
+.ds-shell .pfb__acoes button:hover { color: var(--text-main); background: rgba(255,255,255,0.09); box-shadow: none; transform: none; }
+.ds-shell .pfb__acoes .pfb__remover { color: #f87171; border-color: rgba(248,113,113,0.28); background: rgba(248,113,113,0.1); }
+
+.pfb__sem-match { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+
+.pfb__matches {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px;
+}
+.pfb__match {
+  display: flex; align-items: center; gap: 10px; padding: 8px;
+  border-radius: 9px; text-decoration: none; color: inherit;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pfb__match:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); }
+.pfb__match img,
+.pfb__match-sem-foto {
+  width: 46px; height: 46px; border-radius: 7px; object-fit: cover; flex-shrink: 0;
+  background: rgba(255,255,255,0.06);
+}
+.pfb__match-corpo { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pfb__match-titulo {
+  font-size: 12.5px; font-weight: 600; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.pfb__match-meta { font-size: 11.5px; color: var(--text-muted); }
+/* Os "aproximados" vêm marcados de propósito: aceitar 10% acima do teto é útil,
+   apresentá-los como se batessem exatamente seria mentir para o corretor. */
+.pfb__aprox {
+  font-size: 10.5px; color: #fbbf24; margin-top: 1px;
+}
+
+.pfb-form {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 10px;
+}
+.pfb-campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.pfb-campo--largo { grid-column: 1 / -1; }
+.pfb-campo > span { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; }
+.pfb-campo input,
+.pfb-campo select {
+  width: 100%; padding: 9px 11px; font-size: 13px; border-radius: 8px;
+  background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.1); color: inherit;
+}
+.pfb-campo small { font-size: 11px; color: var(--text-muted); }
+.pfb-form__acoes { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ─── "Quem estava esperando por este imóvel" ────────────────────────────────
+   No painel do imóvel. Só aparece quando há alguém — cartão permanente com
+   "nenhum interessado" ocuparia espaço sem pedir ação.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.int-bloco {
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
+  border-color: rgba(167,139,250,0.28);
+  background: linear-gradient(145deg, rgba(167,139,250,0.09), rgba(255,255,255,0.02));
+}
+.int-bloco__cabeca { display: flex; align-items: center; gap: 9px; font-size: 14px; color: #c4b5fd; }
+.int-bloco__cabeca strong { color: var(--text-main); font-size: 14px; font-weight: 600; }
+
+.int-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.int-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: 9px;
+  background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.06);
+}
+.int-item__quem { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.int-item__nome { font-size: 13.5px; font-weight: 600; }
+.int-item__perfil { font-size: 11.5px; color: var(--text-muted); }
+.int-item__aprox { font-size: 10.5px; color: #fbbf24; }
+.int-item__sem { font-size: 11.5px; color: var(--text-muted); font-style: italic; }
+.int-item__acoes { display: flex; gap: 6px; flex-shrink: 0; }
+.int-acao {
+  display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; text-decoration: none;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--text-muted);
+}
+.int-acao:hover { color: var(--text-main); background: rgba(255,255,255,0.09); }
+.int-acao--whats { color: #4ade80; border-color: rgba(37,211,102,0.35); background: rgba(37,211,102,0.12); }
+
+/* ─── Assistente de IA da vitrine ────────────────────────────────────────────
+   Painel na primeira aba do trilho esquerdo. A lista de passos é o que dá
+   sentido às peças pulando pela tela: cada movimento tem um motivo escrito em
+   português, e é ele que a pessoa lê para julgar se gostou.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.ia-painel { display: flex; flex-direction: column; gap: 12px; padding: 2px; }
+
+.ia-caixa { position: relative; display: flex; }
+.ia-caixa textarea {
+  width: 100%; resize: none; padding: 11px 40px 11px 12px;
+  font-family: inherit; font-size: 13px; line-height: 1.5; border-radius: 10px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12);
+  color: inherit; outline: none;
+  transition: border-color 0.16s ease;
+}
+.ia-caixa textarea:focus { border-color: var(--accent, #818cf8); }
+.ia-caixa textarea:disabled { opacity: 0.55; }
+
+.editor-shell .ia-enviar {
+  position: absolute; right: 7px; bottom: 7px;
+  width: 28px; height: 28px; padding: 0; border-radius: 8px;
+  display: grid; place-items: center; flex-shrink: 0;
+  background: var(--accent, #6366f1); border: 0; color: #fff;
+  box-shadow: none; transform: none; cursor: pointer;
+}
+.editor-shell .ia-enviar:disabled { opacity: 0.35; cursor: not-allowed; }
+.editor-shell .ia-enviar--parar { background: #ef4444; }
+
+.ia-sugestoes { display: flex; flex-direction: column; gap: 5px; }
+.editor-shell .ia-sugestoes button {
+  width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px;
+  font-size: 12px; line-height: 1.45;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-muted); box-shadow: none; transform: none; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.editor-shell .ia-sugestoes button:hover {
+  background: rgba(255,255,255,0.07); color: var(--text-main);
+  box-shadow: none; transform: none;
+}
+
+.ia-pensando {
+  margin: 0; display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--accent, #818cf8);
+}
+.ia-pensando svg { animation: iaPulsa 1.4s ease-in-out infinite; }
+@keyframes iaPulsa { 0%, 100% { opacity: 0.45; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.1); } }
+
+.ia-resumo {
+  margin: 0; padding: 10px 12px; border-radius: 9px; font-size: 12.5px; line-height: 1.55;
+  background: rgba(99,102,241,0.09); border: 1px solid rgba(99,102,241,0.25);
+  color: var(--text-main);
+}
+.ia-erro { margin: 0; font-size: 12.5px; color: #fca5a5; line-height: 1.5; }
+.ia-vazio, .ia-nota { margin: 0; font-size: 11.5px; color: var(--text-muted); line-height: 1.55; }
+
+.ia-passos {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 1px;
+  max-height: 260px; overflow-y: auto;
+}
+.ia-passo {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 8px; border-radius: 7px;
+  font-size: 12px; line-height: 1.45; color: var(--text-muted);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+/* O passo em execução acende. É o par visual da peça que está sendo mexida no
+   canvas — os dois piscam juntos, e é isso que liga o motivo ao movimento. */
+.ia-passo.is-agora { background: rgba(99,102,241,0.14); color: var(--text-main); }
+.ia-passo.is-feito { color: var(--text-main); }
+.ia-passo__marca {
+  width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(255,255,255,0.16);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.ia-passo.is-feito .ia-passo__marca { background: #10b981; }
+.ia-passo.is-agora .ia-passo__marca {
+  background: var(--accent, #818cf8);
+  box-shadow: 0 0 0 3px rgba(129,140,248,0.22);
+  animation: iaPulsa 1s ease-in-out infinite;
+}
+.ia-passo__texto { flex: 1; min-width: 0; }
+
+/* ── Bloqueio para quem não é Premium ── */
+.ia-bloqueio {
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+  padding: 16px; border-radius: 12px;
+  background: linear-gradient(160deg, rgba(212,175,55,0.10), rgba(255,255,255,0.02));
+  border: 1px solid rgba(212,175,55,0.28);
+}
+.ia-bloqueio__selo {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #d4af37;
+}
+.ia-bloqueio h4 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.3; }
+.ia-bloqueio p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+.editor-shell .ia-bloqueio button {
+  width: auto; padding: 9px 16px; border-radius: 9px; font-size: 12.5px; font-weight: 600;
+  background: #d4af37; border: 0; color: #17170f; box-shadow: none; transform: none;
+}
+
+/* ── O canvas enquanto o robô trabalha ──
+   A folha ganha um halo que diz "não sou eu quem está mexendo". Sutil de
+   propósito: o que precisa chamar atenção é a peça que se move, não a moldura. */
+.editor-canvas-surface.is-ia-trabalhando {
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.34), 0 0 42px rgba(99,102,241,0.18);
+  transition: box-shadow 0.4s ease;
+}
+/* Durante a IA o movimento é mais lento que o do arrasto: 450ms em vez de 180.
+   Arrasto acompanha a mão e precisa ser imediato; aqui o movimento É a
+   informação, e rápido demais vira teleporte. */
+.editor-canvas-surface.is-ia-trabalhando .builder-piece.is-layout-animating {
+  transition:
+    left 450ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 450ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 450ms cubic-bezier(0.22, 1, 0.36, 1),
+    min-height 450ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+/* A peça que a IA está tocando agora: mesmo destaque da seleção, mais um pulso
+   para o olho encontrá-la sem procurar. */
+.editor-canvas-surface.is-ia-trabalhando .builder-piece.is-selected {
+  box-shadow: 0 0 0 2px var(--accent, #818cf8), 0 0 26px rgba(129,140,248,0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ia-pensando svg, .ia-passo.is-agora .ia-passo__marca { animation: none; }
+  .editor-canvas-surface.is-ia-trabalhando .builder-piece.is-layout-animating { transition: none; }
 }

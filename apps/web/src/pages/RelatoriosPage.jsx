@@ -2,8 +2,8 @@ import { useSearchParams } from "react-router-dom";
 import { LeadsPage } from "./LeadsPage";
 import { RelatorioMensal } from "../components/RelatorioMensal";
 import { FunilDeVendas, Comissoes } from "../components/FunilVendas";
-import { spawnRipple } from "../utils/rippleDrop";
 import { ICONES_RELATORIOS } from "../utils/iconesRelatorios";
+import { CartaoDeMenu, VoltarAoIndice } from "../components/CartaoDeMenu.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Relatórios — a página que reúne tudo que é LEITURA do que aconteceu.
@@ -24,77 +24,6 @@ import { ICONES_RELATORIOS } from "../utils/iconesRelatorios";
    permissões próprias justamente para não existir o estado sem sentido de ver
    o menu e não ver o conteúdo.
    ──────────────────────────────────────────────────────────────────────────── */
-
-/* Cartão do menu, igual ao do PropertyManagement.
-
-   Os valores de transform, borda, sombra e gradiente são os mesmos de lá, de
-   propósito: qualquer diferença aqui apareceria como "esta tela é de outro
-   produto" para quem passa de uma para a outra em dois cliques. */
-function CartaoMenu({ card }) {
-  return (
-    <button
-      onClick={card.onClick}
-      className="pg-follow"
-      style={{
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "48px 32px", borderRadius: "24px", cursor: "pointer",
-        transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s, box-shadow 0.3s",
-        border: "1px solid rgba(255,255,255,0.15)",
-        background: "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
-        backdropFilter: "blur(12px)", color: "inherit", gap: "24px",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-6px)";
-        e.currentTarget.style.border = "1px solid rgba(255,255,255,0.3)";
-        e.currentTarget.style.background = "radial-gradient(circle at var(--px, 50%) var(--py, 50%), rgba(255,255,255,0.18) 0%, transparent 90%), linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%)";
-        e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.15)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.border = "1px solid rgba(255,255,255,0.15)";
-        e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)";
-        e.currentTarget.style.boxShadow = "none";
-      }}
-      onMouseDown={(e) => {
-        spawnRipple(e, card.accent || "rgba(255,255,255,0.85)");
-        e.currentTarget.style.transform = "translateY(-1px) scale(0.98)";
-      }}
-      onMouseUp={(e) => {
-        e.currentTarget.style.transform = "translateY(-6px)";
-      }}
-    >
-      <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {card.icon}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px", textAlign: "center" }}>
-        <span style={{ fontSize: "22px", fontWeight: "600", letterSpacing: "-0.5px" }}>{card.title}</span>
-        <span style={{ fontSize: "14px", opacity: 0.7, fontWeight: "400", lineHeight: "1.5" }}>{card.desc}</span>
-      </div>
-    </button>
-  );
-}
-
-function Voltar({ onClick, titulo }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-      <button
-        type="button"
-        onClick={onClick}
-        style={{
-          width: "auto", padding: "7px 13px", borderRadius: "999px", cursor: "pointer",
-          display: "inline-flex", alignItems: "center", gap: "7px", fontSize: "12.5px",
-          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "inherit",
-        }}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-        Relatórios
-      </button>
-      <h2 style={{ margin: 0, fontSize: "21px", fontWeight: 700 }}>{titulo}</h2>
-    </div>
-  );
-}
 
 const CARDS = [
   {
@@ -173,9 +102,13 @@ export function RelatoriosPage({ session }) {
             {CARDS.map((c) => {
               const Icone = ICONES_RELATORIOS[c.chave];
               return (
-                <CartaoMenu
+                <CartaoDeMenu
                   key={c.chave}
-                  card={{ ...c, icon: <Icone size={40} weight="duotone" />, onClick: () => setView(c.chave) }}
+                  icon={<Icone size={40} weight="duotone" />}
+                  title={c.title}
+                  desc={c.desc}
+                  accent={c.accent}
+                  onClick={() => setView(c.chave)}
                 />
               );
             })}
@@ -183,7 +116,7 @@ export function RelatoriosPage({ session }) {
         </div>
       ) : (
         <>
-          <Voltar onClick={() => setView("MENU")} titulo={TITULO[view]} />
+          <VoltarAoIndice onClick={() => setView("MENU")} rotulo="Relatórios" titulo={TITULO[view]} />
           {conteudo}
         </>
       )}

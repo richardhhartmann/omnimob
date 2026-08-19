@@ -4,9 +4,24 @@ import { SelectCustom } from "../../SelectCustom";
 import { FONT_OPTIONS, PRESET_THEMES, THEME_LABELS } from "../data/temas";
 import { BLOCK_LABELS, parsePieceId } from "../../showcase/engine/pieces.js";
 import {
+  conteudoEhJson,
+  DADOS_BUSCA_PADRAO,
+  DADOS_EQUIPE_PADRAO,
+  DADOS_FAQ_PADRAO,
+  DADOS_FINANCIAMENTO_PADRAO,
+  DADOS_PASSOS_PADRAO,
+  DADOS_REGIOES_PADRAO,
+  itensParaLinhas,
+  lerDadosWidget,
+  linhasParaItens,
+  listaParaTexto,
+  serializarDadosWidget,
+  somenteTexto,
+  textoParaLista,
+} from "../../showcase/widgets/widgetData.js";
+import {
   IconeCadeado,
   IconeCadeadoAberto,
-  IconeDuplicar,
   IconeOlhoCortado,
   IconeReset,
   IconeSeta,
@@ -49,6 +64,21 @@ function CampoTexto({ label, value, onChange, placeholder, readOnly }) {
         className="editor-input"
         value={value || ""}
         readOnly={readOnly}
+        placeholder={placeholder}
+        onChange={(e) => onChange?.(e.target.value)}
+      />
+    </label>
+  );
+}
+
+function CampoArea({ label, value, onChange, placeholder, rows = 4 }) {
+  return (
+    <label className="editor-field">
+      <span className="editor-field-label">{label}</span>
+      <textarea
+        className="editor-input editor-textarea"
+        value={value || ""}
+        rows={rows}
         placeholder={placeholder}
         onChange={(e) => onChange?.(e.target.value)}
       />
@@ -213,6 +243,110 @@ function PainelDaPagina({ form, config, tenantName, isLightMode, currentTheme, a
   );
 }
 
+function salvarDadosWidget(widget, acoes, fallback, proximo, tituloAoMigrar = "") {
+  if (tituloAoMigrar && !conteudoEhJson(widget.content)) acoes.atualizarWidget("title", tituloAoMigrar);
+  const atual = lerDadosWidget(widget.content, fallback);
+  const dados = typeof proximo === "function" ? proximo(atual) : proximo;
+  acoes.atualizarWidget("content", serializarDadosWidget(dados));
+}
+
+function PainelConteudoEstruturado({ widget, acoes }) {
+  if (widget.type === "property-search") {
+    const dados = lerDadosWidget(widget.content, DADOS_BUSCA_PADRAO);
+    return (
+      <Secao titulo="Busca de imóveis">
+        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
+        <CampoArea label="Objetivos" rows={3} value={listaParaTexto(dados.negocios)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, negocios: textoParaLista(v) }))} placeholder={'Comprar\nAlugar'} />
+        <CampoArea label="Tipos de imóvel" rows={4} value={listaParaTexto(dados.tipos)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, tipos: textoParaLista(v) }))} placeholder={'Apartamento\nCasa\nTerreno'} />
+        <CampoArea label="Regiões" rows={4} value={listaParaTexto(dados.localizacoes)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, localizacoes: textoParaLista(v) }))} />
+        <CampoTexto label="WhatsApp/base do atendimento" value={widget.ctaUrl} onChange={(v) => acoes.atualizarWidget("ctaUrl", v)} placeholder="https://wa.me/5511999999999" />
+        <p className="editor-hint" style={{ margin: 0 }}>O visitante escolhe o perfil e o botão abre o atendimento com a busca já escrita.</p>
+      </Secao>
+    );
+  }
+
+  if (widget.type === "regions") {
+    const dados = lerDadosWidget(widget.content, DADOS_REGIOES_PADRAO);
+    return (
+      <Secao titulo="Regiões">
+        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_REGIOES_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
+        <CampoArea label="Regiões (uma por linha)" rows={7} value={listaParaTexto(dados.regioes)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_REGIOES_PADRAO, (d) => ({ ...d, regioes: textoParaLista(v) }))} />
+        <CampoTexto label="WhatsApp/base do atendimento" value={widget.ctaUrl} onChange={(v) => acoes.atualizarWidget("ctaUrl", v)} placeholder="https://wa.me/5511999999999" />
+      </Secao>
+    );
+  }
+
+  if (widget.type === "faq") {
+    const legado = !conteudoEhJson(widget.content);
+    const fallback = legado
+      ? { itens: [{ pergunta: somenteTexto(widget.title) || "Pergunta frequente", resposta: somenteTexto(widget.content) || "Resposta" }] }
+      : DADOS_FAQ_PADRAO;
+    const dados = lerDadosWidget(widget.content, fallback);
+    return (
+      <Secao titulo="Perguntas frequentes">
+        <CampoArea
+          label="Uma pergunta por linha"
+          rows={8}
+          value={itensParaLinhas(dados.itens, ["pergunta", "resposta"])}
+          onChange={(v) => salvarDadosWidget(widget, acoes, fallback, { itens: linhasParaItens(v, ["pergunta", "resposta"]) }, "Perguntas frequentes")}
+          placeholder="Como agendo uma visita? :: Fale com nossa equipe e escolha um horário."
+        />
+        <p className="editor-hint" style={{ margin: 0 }}>Use <b>::</b> entre a pergunta e a resposta. O FAQ antigo é migrado automaticamente na primeira edição.</p>
+      </Secao>
+    );
+  }
+
+  if (widget.type === "steps") {
+    const dados = lerDadosWidget(widget.content, DADOS_PASSOS_PADRAO);
+    return (
+      <Secao titulo="Etapas">
+        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_PASSOS_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
+        <CampoArea
+          label="Etapas"
+          rows={8}
+          value={itensParaLinhas(dados.itens, ["titulo", "descricao"])}
+          onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_PASSOS_PADRAO, (d) => ({ ...d, itens: linhasParaItens(v, ["titulo", "descricao"]) }))}
+          placeholder="Escolha :: Compare os imóveis que combinam com você."
+        />
+        <p className="editor-hint" style={{ margin: 0 }}>Formato: <b>Título :: descrição</b>. Até seis etapas são exibidas.</p>
+      </Secao>
+    );
+  }
+
+  if (widget.type === "team") {
+    const dados = lerDadosWidget(widget.content, DADOS_EQUIPE_PADRAO);
+    return (
+      <Secao titulo="Equipe">
+        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_EQUIPE_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
+        <CampoArea
+          label="Corretores"
+          rows={9}
+          value={itensParaLinhas(dados.pessoas, ["nome", "cargo", "creci", "whatsapp", "foto"])}
+          onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_EQUIPE_PADRAO, (d) => ({ ...d, pessoas: linhasParaItens(v, ["nome", "cargo", "creci", "whatsapp", "foto"]) }))}
+          placeholder="Ana Souza :: Corretora :: CRECI 12345 :: 5511999999999 :: https://.../foto.jpg"
+        />
+        <CampoTexto label="WhatsApp fallback" value={widget.ctaUrl} onChange={(v) => acoes.atualizarWidget("ctaUrl", v)} placeholder="https://wa.me/5511999999999" />
+        <p className="editor-hint" style={{ margin: 0 }}>Formato: <b>Nome :: cargo :: CRECI :: WhatsApp :: URL da foto</b>. Campos finais podem ficar vazios.</p>
+      </Secao>
+    );
+  }
+
+  if (widget.type === "finance") {
+    const dados = lerDadosWidget(widget.content, DADOS_FINANCIAMENTO_PADRAO);
+    return (
+      <Secao titulo="Simulação padrão">
+        <CampoNumero label="Imóvel" sufixo="R$" value={dados.valorImovel} min={0} passo={10000} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, valorImovel: v }))} />
+        <CampoNumero label="Entrada" sufixo="R$" value={dados.entrada} min={0} passo={5000} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, entrada: v }))} />
+        <CampoNumero label="Prazo" sufixo="meses" value={dados.prazoMeses} min={12} max={480} passo={12} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, prazoMeses: v }))} />
+        <CampoNumero label="Taxa" sufixo="% a.a." value={dados.taxaAnual} min={0} max={100} passo={0.1} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, taxaAnual: v }))} />
+        <CampoArea label="Aviso legal" rows={4} value={dados.aviso} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, aviso: v }))} />
+      </Secao>
+    );
+  }
+
+  return null;
+}
+
 /* ── Peça selecionada ──────────────────────────────────────────────────────── */
 function PainelDaPeca({ pieceId, config, rect, mode, isLightMode, acoes }) {
   const alvo = parsePieceId(pieceId);
@@ -362,13 +496,10 @@ function PainelDaPeca({ pieceId, config, rect, mode, isLightMode, acoes }) {
         </Secao>
       ) : null}
 
+      {ehWidget ? <PainelConteudoEstruturado widget={widget} acoes={acoes} /> : null}
+
       <Secao titulo="Ações">
         <div className="editor-actions-grid">
-          {ehWidget ? (
-            <button type="button" className="editor-button" onClick={acoes.duplicar}>
-              <IconeDuplicar size={13} /> Duplicar
-            </button>
-          ) : null}
           <button type="button" className="editor-button" onClick={acoes.alternarTrava}>
             {travada ? <IconeCadeado size={13} /> : <IconeCadeadoAberto size={13} />}
             {travada ? "Destravar" : "Travar"}

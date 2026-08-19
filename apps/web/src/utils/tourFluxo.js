@@ -33,6 +33,7 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
   const podeCargos   = Boolean(cargo?.gerenciarCargos);
   const podeVitrine  = Boolean(cargo?.editarPagina);
   const podeConfig   = Boolean(cargo?.verConfiguracoes);
+  const podeAuditoria = Boolean(cargo?.verAuditoria);
 
   const etapas = [
     {
@@ -189,6 +190,25 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
       ],
     },
 
+    /* Entra depois de Cargos e antes de Configurações: a sequência do tour é a
+       da barra lateral, e é lá que ele fecha o grupo EQUIPE. */
+    podeAuditoria && {
+      chave: "auditoria",
+      titulo: "Registro de atividade",
+      rota: "/auditoria",
+      passos: [
+        {
+          alvo: '[data-tour="auditoria-cabecalho"]',
+          titulo: "Nada acontece sem deixar rastro",
+          texto:
+            "Toda criação, alteração e exclusão feita no painel fica registrada aqui — com " +
+            "<strong>autor, data e origem</strong>. É o que responde “sumiu um imóvel, quem apagou?” " +
+            "sem depender da memória de ninguém.",
+          lado: "bottom",
+        },
+      ],
+    },
+
     podeConfig && {
       chave: "configuracoes",
       titulo: "Configurações",
@@ -198,8 +218,9 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
           alvo: '[data-tour="config-cabecalho"]',
           titulo: "A cara da sua imobiliária",
           texto:
-            "Logo, cores, dados de contato e informações legais. É o que aparece para o " +
-            "cliente na vitrine e nos materiais gerados pela plataforma.",
+            "Logo, cores, dados de contato e informações legais — cada assunto no seu " +
+            "cartão. É o que aparece para o cliente na vitrine e nos materiais gerados " +
+            "pela plataforma.",
           lado: "bottom",
         },
       ],

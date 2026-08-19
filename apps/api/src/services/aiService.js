@@ -92,6 +92,12 @@ async function gerar(prompt, opts = {}) {
   return callGemini([{ text: prompt }], opts);
 }
 
+/* Exportado para o assistente de vitrine (`services/vitrineIA.js`), que monta o
+   próprio contrato e o próprio esquema de resposta e só precisa do transporte.
+   Injetar a função em vez de importar o serviço lá dentro mantém o planejador
+   testável sem rede. */
+export { gerar as gerarTexto };
+
 // ─── Ficha do imóvel → texto para o prompt ────────────────────────────────────
 
 function brl(valor) {

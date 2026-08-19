@@ -231,18 +231,96 @@ export const api = {
       body: JSON.stringify({ order }),
     }),
 
-  listLeads: (tenantSlug, { page = 1, limit = 20, propertyId } = {}) => {
+  listLeads: (tenantSlug, { page = 1, limit = 20, propertyId, estagio, responsavelId } = {}) => {
     const params = new URLSearchParams({ page, limit });
     if (propertyId) params.set("propertyId", propertyId);
+    if (estagio) params.set("estagio", estagio);
+    if (responsavelId) params.set("responsavelId", responsavelId);
     return request(`/api/leads?${params}`, {
       headers: { "x-tenant-slug": tenantSlug },
     });
   },
 
+  // Estágio do funil e/ou responsável. Os dois na mesma chamada porque na tela
+  // são o mesmo gesto: "assumi e comecei a atender".
+  atualizarLead: (tenantSlug, leadId, payload) =>
+    request(`/api/leads/${leadId}`, {
+      method: "PATCH",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  anotarLead: (tenantSlug, leadId, texto) =>
+    request(`/api/leads/${leadId}/nota`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ texto }),
+    }),
+
+  obterLead: (tenantSlug, leadId) =>
+    request(`/api/leads/${leadId}`, { headers: { "x-tenant-slug": tenantSlug } }),
+
+  /* ── Trilha de auditoria ── */
+  listarAuditoria: (tenantSlug, filtros = {}) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) {
+      if (v !== "" && v !== null && v !== undefined) params.set(k, v);
+    }
+    return request(`/api/auditoria?${params}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
+
+  filtrosDaAuditoria: (tenantSlug) =>
+    request("/api/auditoria/filtros", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  /* ── Perfis de busca e cruzamento ── */
+  listarPerfisBusca: (tenantSlug, clienteId) => {
+    const params = new URLSearchParams();
+    if (clienteId) params.set("clienteId", clienteId);
+    return request(`/api/perfis-busca?${params}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
+
+  criarPerfilBusca: (tenantSlug, payload) =>
+    request("/api/perfis-busca", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  salvarPerfilBusca: (tenantSlug, id, payload) =>
+    request(`/api/perfis-busca/${id}`, {
+      method: "PUT",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  removerPerfilBusca: (tenantSlug, id) =>
+    request(`/api/perfis-busca/${id}`, {
+      method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  // O que o acervo tem para este cliente.
+  imoveisDoPerfil: (tenantSlug, id) =>
+    request(`/api/perfis-busca/${id}/imoveis`, { headers: { "x-tenant-slug": tenantSlug } }),
+
+  // A direção inversa: quem da carteira estava esperando por este imóvel.
+  interessadosNoImovel: (tenantSlug, propertyId) =>
+    request(`/api/perfis-busca/imovel/${propertyId}`, { headers: { "x-tenant-slug": tenantSlug } }),
+
   deleteLead: (tenantSlug, leadId) =>
     request(`/api/leads/${leadId}`, {
       method: "DELETE",
       headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  /* Assistente de vitrine (Premium): o pedido em português vira uma lista de
+     operações que o editor executa passo a passo. Ver `services/vitrineIA.js`
+     na API para por que não volta um showcaseConfig pronto. */
+  planejarVitrineIA: (tenantSlug, payload) =>
+    request("/api/ai/vitrine", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
     }),
 
   // Resumo, temperatura, resposta pronta e imóveis do acervo para este lead.
@@ -600,6 +678,9 @@ export const api = {
   // Preços vigentes dos planos, lidos do provedor de pagamento. Público: a
   // landing precisa deles antes de existir qualquer sessão.
   getPlanosPublicos: () => request("/public/planos"),
+
+  // As vitrines que estão no ar, para a página /vitrines. Público e sem sessão.
+  listarVitrinesPublicas: () => request("/public/vitrines"),
 
   /* O endereço da vitrine (slug) que sai deste nome está livre? Consultado
      enquanto a pessoa digita, para o conflito aparecer com o nome ainda em

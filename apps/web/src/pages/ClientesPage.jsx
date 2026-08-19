@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { PerfisDeBusca } from "../components/PerfisDeBusca.jsx";
 import { useOutletContext } from "react-router-dom";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { useConfirm } from "../components/ConfirmModal";
@@ -12,6 +13,14 @@ const FORM_EMPTY = {
   cep: "", endereco: "", bairro: "", cidade: "", estado: "", observacoes: "", ativo: true,
   aceitaDivulgacao: false,
 };
+
+function IconAlvo() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.4" />
+    </svg>
+  );
+}
 
 function formatarData(iso) {
   if (!iso) return "";
@@ -39,6 +48,11 @@ export function ClientesPage({ session }) {
   const [clientes, setClientes] = useState([]);
   const [view, setView] = useState("list");
   const [editando, setEditando] = useState(null);
+  /* Um cliente por vez com os perfis abertos. Vários abertos ao mesmo tempo
+     transformariam a lista numa parede de formulários — e a pergunta "o que
+     este cliente procura" é sempre sobre UM cliente. */
+  const [perfisDe, setPerfisDe] = useState(null);
+  const [tiposImovel, setTiposImovel] = useState([]);
   const [form, setForm] = useState(FORM_EMPTY);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -77,6 +91,15 @@ export function ClientesPage({ session }) {
   useEffect(() => {
     carregarClientes();
   }, [tenantSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* O catálogo de tipos alimenta o seletor do perfil de busca. Uma vez por
+     tela, e não por perfil aberto — ele não muda no meio do atendimento. */
+  useEffect(() => {
+    if (!tenantSlug) return;
+    api.getTiposImovel(tenantSlug)
+      .then((r) => setTiposImovel(Array.isArray(r) ? r : r?.tipos || []))
+      .catch(() => {});
+  }, [tenantSlug]);
 
   function handleSearchChange(e) {
     const val = e.target.value;
@@ -396,6 +419,16 @@ export function ClientesPage({ session }) {
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {/* O que a pessoa procura fica ao lado do que ela é: mesma
+                      ficha, mesma linha de ações. */}
+                  <button
+                    type="button"
+                    className="pfb__abrir"
+                    aria-expanded={perfisDe === c.id}
+                    onClick={() => setPerfisDe((atual) => (atual === c.id ? null : c.id))}
+                  >
+                    <IconAlvo /> {perfisDe === c.id ? "Fechar busca" : "O que procura"}
+                  </button>
                   <StatusPill active={c.ativo} />
                   <BtnEditar onClick={() => abrirEditar(c)} />
                   {/* Mesma regra da tela de Usuários: a lixeira só existe para
@@ -411,6 +444,17 @@ export function ClientesPage({ session }) {
                     </>
                   )}
                 </div>
+
+                {perfisDe === c.id ? (
+                  <div style={{ flexBasis: "100%" }}>
+                    <PerfisDeBusca
+                      cliente={c}
+                      tenantSlug={tenantSlug}
+                      tiposImovel={tiposImovel}
+                      showToast={showToast}
+                    />
+                  </div>
+                ) : null}
               </div>
             );
           })}

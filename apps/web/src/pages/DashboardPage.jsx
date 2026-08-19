@@ -11,6 +11,7 @@ import {
   GearSix,
   PencilSimple,
   ArrowSquareOut,
+  ClockCounterClockwise,
 } from "@phosphor-icons/react";
 import { api } from "../api";
 import { PropertyManagement } from "../components/PropertyForm";
@@ -113,6 +114,13 @@ function HomePage({ session }) {
       description: "Gerencie os cargos e permissões da equipe.",
       onClick: () => navigate("/cargos"),
       accent: "#e04212",
+    },
+    cargo?.verAuditoria && {
+      icon: <ClockCounterClockwise size={32} weight="duotone" />,
+      title: "Registro de atividade",
+      description: "Quem criou, alterou ou excluiu o quê, e quando.",
+      onClick: () => navigate("/auditoria"),
+      accent: "#a78bfa",
     },
     cargo?.verConfiguracoes && {
       icon: <GearSix size={32} weight="duotone" />,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 import { abrirChamado, CATEGORIAS_CHAMADO, EMAIL_SUPORTE } from "../utils/suporte";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { capturarTela, printComoArquivo } from "../utils/capturarTela";
@@ -355,6 +356,17 @@ export function AjudaModal({ open, onClose, tourDaTela, aoReverTour, contexto })
               </div>
             </div>
           ) : null}
+
+          {/* Rodapé fixo do modal: os documentos da Omnimob alcançáveis de
+              dentro do painel. Sem isto, um cliente logado não tinha caminho
+              nenhum até os Termos — a landing fica atrás do login. */}
+          <div className="aj-legal">
+            <Link to="/termos" target="_blank" rel="noreferrer">Termos de Uso</Link>
+            <span aria-hidden="true">·</span>
+            <Link to="/privacidade" target="_blank" rel="noreferrer">Política de Privacidade</Link>
+            <span aria-hidden="true">·</span>
+            <Link to="/sobre" target="_blank" rel="noreferrer">Sobre a Omnimob</Link>
+          </div>
         </div>
       </div>
     </>,
@@ -555,6 +567,14 @@ const CSS = `
 
 /* ── Ações ── */
 .aj-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+
+.aj-legal {
+  display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap;
+  padding: 12px 20px 16px; border-top: 1px solid rgba(255,255,255,0.07);
+  font-size: 11.5px; color: var(--text-muted);
+}
+.aj-legal a { color: var(--text-muted); text-decoration: none; }
+.aj-legal a:hover { color: var(--text-main); text-decoration: underline; }
 .aj-caixa .aj-btn {
   width: auto; padding: 9px 16px; border-radius: 10px; cursor: pointer;
   font-family: inherit; font-size: 12.5px; font-weight: 600;

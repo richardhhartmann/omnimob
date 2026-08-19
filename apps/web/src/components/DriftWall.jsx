@@ -89,6 +89,11 @@ const DriftWall = ({
   overlayColor = "#060010",
   /** false = fundo decorativo: sem foco, sem leitor de tela, sem cursor. */
   interactive = true,
+  /** Congela a deriva sem desmontar nada — as peças ficam onde estão e
+   *  continuam clicáveis. Vem do orçamento de efeitos da landing
+   *  (`components/Efeitos.jsx`): em máquina fraca o movimento sai e o
+   *  conteúdo fica. */
+  paused = false,
   /** Chamado com o item ao clicar numa peça. Liga o clique mesmo sem foco. */
   onItemClick,
   className = "",
@@ -111,13 +116,17 @@ const DriftWall = ({
   const [containerWidth, setContainerWidth] = useState(1200);
   const [activeId, setActiveId] = useState(null);
   const activeIdRef = useRef(null);
-  const [reduced, setReduced] = useState(false);
+  const [prefereReduzir, setPrefereReduzir] = useState(false);
   const [naTela, setNaTela] = useState(true);
+  /* Duas origens, um efeito: a preferência declarada no sistema e o orçamento
+     medido da máquina. Derivar aqui evita repetir o "ou" nos seis lugares que
+     consultam isto abaixo — e é ali que um deles seria esquecido. */
+  const reduced = prefereReduzir || paused;
 
   useEffect(() => {
-    setReduced(prefersReducedMotion());
+    setPrefereReduzir(prefersReducedMotion());
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = (e) => setReduced(e.matches);
+    const onChange = (e) => setPrefereReduzir(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
