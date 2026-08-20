@@ -14,6 +14,8 @@ import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
 import { IconeRelatorios, ICONES_RELATORIOS } from "../utils/iconesRelatorios";
 import { ABAS_CONFIG } from "../utils/abasConfiguracoes";
 import { podeImportar } from "./ImportadorDados.jsx";
+import { SeloBeta } from "./SeloBeta.jsx";
+import { TEMAS, observarSistema, temaEfetivo, temaEscolhido } from "../utils/temaDoPainel";
 import { lerDoTenant, CHAVES } from "../utils/chaveDoTenant";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -38,6 +40,9 @@ import {
   PlusCircle,
   Tag,
   ClockCounterClockwise,
+  Sun,
+  Moon,
+  CircleHalf,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -107,8 +112,11 @@ function SeloPlano({ plano }) {
    achar o item — nomeado de propósito, em vez de seletor estrutural: um
    `.ds-nav > div:nth-child(3) a` quebraria calado no dia em que um grupo novo
    entrar no meio do menu. */
-function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge, tourId }) {
-  const cls = `ds-item${active ? " is-active" : ""}`;
+function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge, tourId, beta }) {
+  /* `has-beta` solta o rótulo do `flex: 1` para o selo sentar ENCOSTADO no
+     nome, e não na borda direita do item. Na borda ele leria como o contador de
+     leads, que é o outro elemento que mora ali. */
+  const cls = `ds-item${active ? " is-active" : ""}${!collapsed && beta ? " has-beta" : ""}`;
 
   const content = (
     <>
@@ -117,6 +125,9 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
         {collapsed && badge > 0 ? <span className="ds-item__pip" /> : null}
       </span>
       {!collapsed ? <span className="ds-item__label">{label}</span> : null}
+      {/* Só com a barra expandida. Recolhida sobram 28px, onde nem o nome cabe
+          — e a dica lateral já diz de que item se trata. */}
+      {!collapsed && beta ? <SeloBeta /> : null}
       {!collapsed && badge > 0 ? (
         <span className="ds-item__badge">{badge > 99 ? "99+" : badge}</span>
       ) : null}
@@ -143,6 +154,44 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
   );
 
   return <SideTooltip label={label} collapsed={collapsed}>{el}</SideTooltip>;
+}
+
+/* ── O botão de tema, ao lado do nome ────────────────────────────────────────
+   Cicla entre as três opções em vez de abrir menu: são três estados e o ícone
+   mostra em qual você está, então um clique basta. O `title` diz o próximo
+   destino — é o que evita a pessoa clicar duas vezes para descobrir a ordem. */
+const ICONE_DO_TEMA = { claro: Sun, escuro: Moon, auto: CircleHalf };
+
+function SeletorDeTema({ escolhido, aoTrocar }) {
+  /* Só claro e escuro no atalho do perfil. "Automático" existe, mas é uma
+     escolha de configuração, não de alternância rápida: quem clica aqui quer
+     TROCAR a tela agora, e um terceiro estado que "depende do sistema" faz o
+     clique não ter efeito visível quando o sistema já está naquele modo.
+
+     Ele continua disponível em Configurações › Aparência e no primeiro acesso,
+     onde a pessoa está decidindo com calma. E quem escolheu automático por lá
+     vê o ícone dele aqui — o botão mostra o estado real, só não oferece o
+     terceiro destino. */
+  const ordem = ["claro", "escuro"];
+  /* Vindo de "automático", o índice é -1 e o próximo seria "claro" por
+     acidente. Partimos do que está NA TELA: quem vê escuro espera que o clique
+     leve ao claro, independente de como chegou nele. */
+  const atualNaTela = escolhido === "claro" ? "claro" : "escuro";
+  const proximo = ordem[(ordem.indexOf(atualNaTela) + 1) % ordem.length];
+  const Icone = ICONE_DO_TEMA[escolhido] || Moon;
+  const rotulo = TEMAS.find((t) => t.id === proximo)?.rotulo || proximo;
+
+  return (
+    <button
+      type="button"
+      className="ds-tema"
+      onClick={() => aoTrocar(proximo)}
+      title={`Tema: ${TEMAS.find((t) => t.id === escolhido)?.rotulo}. Clique para ${rotulo.toLowerCase()}.`}
+      aria-label={`Trocar o tema do painel para ${rotulo}`}
+    >
+      <Icone size={15} weight="fill" />
+    </button>
+  );
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -176,6 +225,47 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      `onSessionUpdate`, e a sessão é a fonte lida aqui. */
   const corPrimaria = session?.tenant?.primaryColor || "#4f46e5";
   const tintaPrimaria = corDeTextoPara(corPrimaria);
+
+  /* ── O tema do painel ──────────────────────────────────────────────────────
+     Duas fontes, e a ordem é a regra: a preferência da PESSOA ganha, e o tema
+     da IMOBILIÁRIA é o padrão para quem nunca escolheu. `temaPainel` nulo é o
+     que distingue "quero escuro" de "nunca opinei" — sem ele, o administrador
+     não teria como definir um padrão sem passar por cima de quem já decidiu.
+
+     `escolhido` é o que a pessoa quer ("auto" incluso); `efetivo` é o que a
+     tela desenha. Os dois existem porque "auto" precisa continuar sendo "auto"
+     quando gravado, e virar claro ou escuro só na hora de pintar. */
+  const [temaPessoal, setTemaPessoal] = useState(() => session?.usuario?.temaPainel ?? null);
+  const escolhido = temaEscolhido(temaPessoal, session?.tenant?.temaImobiliaria);
+  const [efetivo, setEfetivo] = useState(() => temaEfetivo(escolhido));
+
+  useEffect(() => { setEfetivo(temaEfetivo(escolhido)); }, [escolhido]);
+
+  /* ── O tema também no <html> ──────────────────────────────────────────────
+     Modais e tours (`tg-cartao`, `pt-caixa`, o convite do tour) são renderizados
+     ANTES do `.ds-shell`, como irmãos dele — não como descendentes. Então o
+     `data-tema` do shell não os alcança, e eles ficavam escuros sobre um painel
+     claro.
+
+     Um marcador na raiz resolve sem mover ninguém de lugar. Ele é limpo na
+     saída porque a vitrine pública vive na mesma aplicação: navegar do painel
+     para `/vitrine/...` deixaria o atributo pendurado, e a página do cliente
+     passaria a responder a um tema que é do painel. */
+  useEffect(() => {
+    document.documentElement.dataset.temaPainel = efetivo;
+    return () => { delete document.documentElement.dataset.temaPainel; };
+  }, [efetivo]);
+  // Só com "auto" o sistema operacional manda; nos outros a escolha é explícita.
+  useEffect(() => observarSistema(escolhido, setEfetivo), [escolhido]);
+
+  /* A troca grava e segue — sem esperar a rede. Um tema que só muda depois da
+     resposta pisca; e se a gravação falhar, a pior consequência é a preferência
+     não sobreviver ao próximo login, não a tela travar. */
+  const trocarTema = useCallback((proximo) => {
+    setTemaPessoal(proximo);
+    api.salvarMeuTema(proximo).catch(() => {});
+    onSessionUpdate?.({ ...session, usuario: { ...session.usuario, temaPainel: proximo } });
+  }, [session, onSessionUpdate]);
 
   /* Brilho de borda direcional em todo botão do painel. Um listener delegado
      aqui na raiz alimenta o CSS — ver `utils/brilhoDeBorda.js` e o bloco
@@ -230,16 +320,26 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
   // ── Estado ativo ──────────────────────────────────────────────────────────────
   const p = location.pathname;
-  /* "Gerenciar Imóveis" e "Relatórios" são ÍNDICES: cada um abre uma tela de
-     cartões e a escolhida vive em `?ver=`. É o que permite ao submenu apontar
-     para o destino final em vez de largar a pessoa no índice para escolher de
-     novo. Sem parâmetro, o índice é o que está aberto — e nenhum subitem fica
-     aceso, porque nenhum deles é onde a pessoa está. */
+  /* Três itens da barra são ÍNDICES: abrem uma tela de cartões, e o destino
+     escolhido tem endereço próprio. É o que permite ao submenu apontar para o
+     destino final em vez de largar a pessoa no índice para escolher de novo.
+     No índice, nenhum subitem fica aceso — nenhum deles é onde a pessoa está.
+
+     "Relatórios" e "Configurações" guardam a escolha em `?ver=`, porque cada
+     destino é um pedaço da MESMA tela. "Gerenciar Imóveis" guarda no caminho
+     (`/imoveis` → `/imoveis/novo`), porque o formulário é outra tela — e um
+     caminho que já dizia "novo" mais um `?ver=novo` atrás diziam a mesma coisa
+     duas vezes. */
   const ver = new URLSearchParams(location.search).get("ver");
   const isDashboard     = p === "/";
-  const isImovelNovo    = p === "/imoveis/novo" || p === "/tipos-imovel";
-  const isImovelList    = p === "/imoveis";
-  const isInsights      = p.startsWith("/imoveis/") && !isImovelNovo;
+  /* "Gerenciar Imóveis" é o índice (`/imoveis`) e acende também quando a pessoa
+     está numa das telas que ele leva a — o formulário e as categorias. */
+  const isGerenciarImoveis = p === "/imoveis" || p === "/imoveis/novo" || p === "/tipos-imovel";
+  const isImovelList    = p === "/imoveis/portfolio";
+  /* Insights de um imóvel é `/imoveis/<id>` — qualquer coisa sob o prefixo que
+     não seja um dos caminhos nomeados. A lista com um imóvel aberto continua
+     sendo "onde a pessoa está" para o item Portfólio. */
+  const isInsights      = p.startsWith("/imoveis/") && !isGerenciarImoveis && !isImovelList && p !== "/imoveis/editar";
   const isLeads         = p === "/relatorios" || p === "/leads";
   const isClientes      = p === "/clientes";
   const isUsuarios      = p === "/usuarios";
@@ -293,13 +393,13 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         itens: cargo?.gerenciarImoveis ? [
           {
             key: "imoveis-novo", Icon: Buildings, label: "Gerenciar Imóveis",
-            active: isImovelNovo, onClick: () => navigate("/imoveis/novo"),
+            active: isGerenciarImoveis, onClick: () => navigate("/imoveis"),
             subitens: [
-              { key: "imovel-form", Icon: PlusCircle, label: "Novo Imóvel", active: p === "/imoveis/novo" && ver === "novo", onClick: () => navigate("/imoveis/novo?ver=novo") },
+              { key: "imovel-form", Icon: PlusCircle, label: "Novo Imóvel", active: p === "/imoveis/novo", onClick: () => navigate("/imoveis/novo") },
               { key: "imovel-tipos", Icon: Tag, label: "Categoria de Imóvel", active: p === "/tipos-imovel", onClick: () => navigate("/tipos-imovel") },
             ],
           },
-          { key: "imoveis-lista", Icon: SquaresFour, label: "Portfólio Ativo", active: isImovelList || isInsights, onClick: () => navigate("/imoveis") },
+          { key: "imoveis-lista", Icon: SquaresFour, label: "Portfólio Ativo", active: isImovelList || isInsights, onClick: () => navigate("/imoveis/portfolio") },
         ] : [],
       },
       {
@@ -356,7 +456,11 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 onClick: () => navigate(`/configuracoes?ver=${a.key}`),
               })),
           },
-          cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar Página", active: isShowcaseEditor, href: showcaseEditorLink },
+          /* O editor de vitrine ainda está em Beta, e o selo aparece aqui e no
+             topo do próprio editor — a mesma tag, o mesmo componente. Aqui
+             porque é onde a pessoa decide entrar; lá porque é onde ela trabalha
+             e precisa continuar sabendo. */
+          cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar Página", active: isShowcaseEditor, href: showcaseEditorLink, beta: true },
           { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver Página", href: showcaseLink, external: true },
         ].filter(Boolean),
       },
@@ -364,7 +468,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     return g.filter((grupo) => grupo.itens.length > 0);
   }, [
     cargo, navigate, leadsBadge, showcaseEditorLink, showcaseLink,
-    isDashboard, isImovelNovo, isImovelList, isInsights, isLeads,
+    isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads,
     isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
     p, ver,
   ]);
@@ -427,9 +531,19 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         contexto={{ rota: p, tenantSlug, usuario: session?.usuario?.login || userName }}
       />
 
+      {/* `data-tema` no SHELL, e não só no `<main>`.
+
+          O `.main-content` tem `max-width: 1200px` e `margin: 0 auto`: a caixa
+          do `<main>` é mais estreita que a coluna, então pintar o fundo nela
+          deixava faixas escuras dos dois lados. Quem precisa ficar claro é a
+          ÁREA, e a área é o shell.
+
+          O `.ds-side` continua escuro sem esforço: ele pinta com os próprios
+          tokens (`--s-bg`), de outra família, que este tema não toca. */}
       <div
         ref={shellRef}
         className="ds-shell"
+        data-tema={efetivo}
         style={{ "--tenant-primary": corPrimaria, "--tenant-primary-ink": tintaPrimaria }}
       >
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
@@ -480,6 +594,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                       href={item.href}
                       external={item.external}
                       badge={item.badge}
+                      beta={item.beta}
                       collapsed={c}
                       tourId={`nav-${item.key}`}
                     />
@@ -499,6 +614,12 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                             <button
                               key={sub.key}
                               type="button"
+                              /* Mesmo esquema do item pai (`nav-<key>`): o tour
+                                 precisa apontar para o submenu desde que
+                                 Relatórios e Configurações viraram índices — o
+                                 roteiro falava deles como se fossem uma tela
+                                 só, sem caminho para os destinos de dentro. */
+                              data-tour={`nav-${sub.key}`}
                               className={`ds-subitem${sub.active ? " is-active" : ""}`}
                               style={{ "--i": si }}
                               tabIndex={item.active ? 0 : -1}
@@ -558,17 +679,38 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             <div className="ds-profile" data-tour="perfil">
               <div className="ds-avatar">{userInitial}</div>
               {!c ? (
-                <div className="ds-profile__text">
-                  <span className="ds-profile__name">{userName}</span>
-                  <span className="ds-profile__role">{userRole}</span>
-                </div>
+                <>
+                  <div className="ds-profile__text">
+                    <span className="ds-profile__name">{userName}</span>
+                    <span className="ds-profile__role">{userRole}</span>
+                  </div>
+                  {/* O atalho de tema mora no perfil porque a escolha é da
+                      PESSOA, não da imobiliária — e é ao lado do próprio nome
+                      que se procura o que é seu. O caminho da casa fica em
+                      Configurações › Aparência, que é do administrador.
+
+                      Cicla claro → escuro → automático, e o ícone diz onde
+                      está. Um menu para três opções custaria dois cliques onde
+                      um resolve. */}
+                  <SeletorDeTema escolhido={escolhido} aoTrocar={trocarTema} />
+                </>
               ) : null}
             </div>
           </div>
         </aside>
 
         {/* ── Conteúdo principal ───────────────────────────────────────────────── */}
-        <main className={isShowcaseEditor ? "main-content--editor-vitrine" : "main-content"} style={{ flex: 1, minWidth: 0 }}>
+        {/* ── O tema pinta AQUI, não na barra ────────────────────────────────
+            `data-tema` no `<main>`, e o `ds-side` fica de fora de propósito: a
+            barra lateral é a moldura do produto e mantém a identidade escura em
+            qualquer tema. O conteúdo é onde a pessoa trabalha, e é ele que pode
+            ser claro. Pintar as duas faria o painel claro perder a âncora
+            visual que o identifica como Omnimob. */}
+        <main
+          className={isShowcaseEditor ? "main-content--editor-vitrine" : "main-content"}
+          data-tema={efetivo}
+          style={{ flex: 1, minWidth: 0 }}
+        >
           <div key={location.pathname} style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}>
             <Outlet context={{ showToast }} />
           </div>
@@ -735,6 +877,9 @@ const CSS = `
 .ds-item__icon { display: flex; flex-shrink: 0; position: relative; color: currentColor; }
 .ds-item.is-active .ds-item__icon { color: #fff; }
 .ds-item__label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+/* Com selo ao lado, o rótulo ocupa só o que precisa — senão o selo é empurrado
+   para a borda direita e vira mais um contador aos olhos de quem lê rápido. */
+.ds-item.has-beta .ds-item__label { flex: 0 1 auto; }
 .ds-item__pip {
   position: absolute; top: -4px; right: -4px; width: 8px; height: 8px;
   border-radius: 50%; background: #ef4444; border: 1.5px solid var(--s-bg);
@@ -865,6 +1010,22 @@ const CSS = `
   background: var(--s-avatar); color: var(--s-avatar-ink); font-size: 11px; font-weight: 700;
 }
 .ds-profile__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+
+/* Botão de tema, à direita do nome. Discreto em repouso e legível no hover: ele
+   é usado uma vez por pessoa, não todo dia, e não deve competir com a navegação
+   pelo canto do olho. */
+.ds-tema {
+  width: 28px; height: 28px; padding: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; border: 1px solid transparent;
+  background: transparent; box-shadow: none; transform: none;
+  color: var(--s-text); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ds-shell .ds-tema:hover {
+  background: var(--s-hover); color: var(--s-strong);
+  box-shadow: none; transform: none; border-color: transparent;
+}
 .ds-profile__name {
   font-size: 12px; font-weight: 600; color: var(--s-strong); line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { mergeBlockWrapperStyle } from "../../utils/showcaseConfig";
 import { ShowcasePropertyCard } from "./ShowcasePropertyCard.jsx";
+import { imovelPassaNoFiltro, useFiltroDaVitrine } from "./contexto.jsx";
 
 /* A grade de imóveis.
 
@@ -13,6 +14,18 @@ import { ShowcasePropertyCard } from "./ShowcasePropertyCard.jsx";
    altura usa nas duas telas. */
 
 function Grade({ properties, tenantSlug, carouselIndexes, onProxima, onAnterior, estilo, carregando, erro }) {
+  /* O filtro que os widgets de Busca e de Regiões escrevem. No editor ele é
+     sempre nulo — a prancheta mostra o acervo inteiro, sempre. */
+  const { filtro, aplicarFiltro } = useFiltroDaVitrine();
+  const visiveis = filtro ? properties.filter((p) => imovelPassaNoFiltro(p, filtro)) : properties;
+
+  /* O rótulo do filtro em vigor, para a pessoa saber por que a grade encolheu.
+     Sem ele, clicar num bairro e ver três imóveis onde havia trinta lê como
+     "o site quebrou" — o filtro é invisível e o resultado, não. */
+  const rotuloFiltro = filtro
+    ? [filtro.contrato, filtro.tipo, filtro.regiao].filter(Boolean).join(" · ")
+    : "";
+
   return (
     <div id="destaques" className="property-grid" style={estilo}>
       {erro ? <div className="error" style={{ gridColumn: "1 / -1" }}>{erro}</div> : null}
@@ -21,13 +34,29 @@ function Grade({ properties, tenantSlug, carouselIndexes, onProxima, onAnterior,
         <p style={{ color: "var(--text-muted)", gridColumn: "1 / -1", textAlign: "center" }}>Carregando vitrine...</p>
       ) : null}
 
-      {!carregando && properties.length === 0 ? (
+      {filtro ? (
+        <div className="property-grid__filtro" style={{ gridColumn: "1 / -1" }}>
+          <span>
+            Mostrando <strong>{visiveis.length}</strong>
+            {visiveis.length === 1 ? " imóvel em " : " imóveis em "}
+            <strong>{rotuloFiltro}</strong>
+          </span>
+          <button type="button" onClick={() => aplicarFiltro(null)}>
+            Ver todos
+            <span aria-hidden>×</span>
+          </button>
+        </div>
+      ) : null}
+
+      {!carregando && visiveis.length === 0 ? (
         <p style={{ color: "var(--text-muted)", gridColumn: "1 / -1", textAlign: "center", padding: "40px 0" }}>
-          Nenhum imóvel disponível no momento.
+          {filtro
+            ? "Nenhum imóvel encontrado com esses critérios."
+            : "Nenhum imóvel disponível no momento."}
         </p>
       ) : null}
 
-      {properties.map((p) => (
+      {visiveis.map((p) => (
         <ShowcasePropertyCard
           key={p.id}
           property={p}

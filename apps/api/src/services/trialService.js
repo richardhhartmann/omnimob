@@ -25,9 +25,30 @@ import { emailTrialExpirado } from "./emailTemplates.js";
  */
 
 const DIAS_DE_TRIAL = 14;
-// Depois de vencido o trial fica desativado por este tempo antes de virar
-// candidato a remoção — janela para a pessoa voltar e fechar negócio.
+/* ── Quanto tempo os dados sobrevivem ao vencimento ──────────────────────────
+   Dois prazos, e a diferença entre eles é deliberada.
+
+   TRIAL: 30 dias. Quem testou e não assinou tem, na maioria dos casos, um
+   punhado de imóveis de experiência. A janela existe para o caso de a pessoa
+   voltar e fechar negócio.
+
+   PAGANTE: 90 dias. Aqui é o acervo real de uma empresa — anos de cadastro,
+   fotos, histórico de leads e vendas. E o motivo mais comum de uma conta virar
+   ATRASADO não é desistência: é cartão vencido, troca de titular do cartão,
+   boleto que não chegou. Apagar isso em trinta dias significaria destruir o
+   trabalho de um cliente por um problema administrativo que quase sempre se
+   resolve — e "quase sempre" não é bom o suficiente quando a alternativa é
+   irreversível.
+
+   Noventa dias também dá tempo de a cobrança falhar, o time perceber, tentar
+   contato e a pessoa responder — um ciclo que trinta dias não cobrem. */
 const DIAS_ATE_REMOVER = 30;
+const DIAS_ATE_REMOVER_PAGANTE = 90;
+
+/** Prazo de graça desta conta, conforme o que ela era quando venceu. */
+function diasDeGraca(statusPagamento) {
+  return statusPagamento === "TRIAL" ? DIAS_ATE_REMOVER : DIAS_ATE_REMOVER_PAGANTE;
+}
 
 /* Prazo extra que a pesquisa do painel pode dar, UMA vez por imobiliária.
    Sete dias é escolha de negócio: é folga suficiente para quem estava sem
@@ -240,20 +261,42 @@ export async function criarTrial({ imobiliaria, email, telefone = "", plano = "P
 export async function limparTrials({ aplicar = false } = {}) {
   const prisma = getGlobalPrisma();
   const agora = new Date();
-  const limiteRemocao = new Date(agora.getTime() - DIAS_ATE_REMOVER * 86400000);
+  const limiteTrial = new Date(agora.getTime() - DIAS_ATE_REMOVER * 86400000);
+  const limitePagante = new Date(agora.getTime() - DIAS_ATE_REMOVER_PAGANTE * 86400000);
+
+  /* ── TRIAL E PLANO PAGO VENCIDO ────────────────────────────────────────────
+     Cobria só `TRIAL`. Um cliente pagante cujo pagamento parou virava
+     `ATRASADO` e ficava ali para sempre: continuava com acesso, continuava
+     ocupando o slug, e ninguém era avisado de nada.
+
+     Os dois casos são a mesma pergunta — "o acesso a esta conta ainda vale?" —
+     e merecem o mesmo desfecho: desativa, avisa, e remove depois do prazo.
+
+     `CANCELADO` fica de FORA de propósito: quem cancelou já foi tratado pelo
+     fluxo de cancelamento, que respeita o período já pago. Varrer por aqui
+     encurtaria o que a pessoa comprou. */
+  const VENCIVEIS = ["TRIAL", "ATRASADO"];
 
   const aDesativar = await prisma.tenant.findMany({
-    where: { statusPagamento: "TRIAL", ativo: true, proximoVencimento: { lt: agora } },
+    where: { statusPagamento: { in: VENCIVEIS }, ativo: true, proximoVencimento: { lt: agora } },
     // Os campos de domínio entram aqui porque o e-mail de expiração linka a
     // vitrine, e o endereço dela depende deles.
-    select: { id: true, slug: true, name: true, email: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
+    select: { id: true, slug: true, name: true, email: true, statusPagamento: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
   });
 
+  /* Cada status com o seu prazo. Um `lt` só, com o limite mais longo, apagaria
+     trials com trinta dias de atraso apenas depois de noventa; com o mais
+     curto, apagaria pagantes cedo demais. */
   const aRemover = await prisma.tenant.findMany({
-    where: { statusPagamento: "TRIAL", proximoVencimento: { lt: limiteRemocao } },
+    where: {
+      OR: [
+        { statusPagamento: "TRIAL", proximoVencimento: { lt: limiteTrial } },
+        { statusPagamento: "ATRASADO", proximoVencimento: { lt: limitePagante } },
+      ],
+    },
     // Os campos de domínio entram aqui porque o e-mail de expiração linka a
     // vitrine, e o endereço dela depende deles.
-    select: { id: true, slug: true, name: true, email: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
+    select: { id: true, slug: true, name: true, email: true, statusPagamento: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
   });
 
   if (!aplicar) {
@@ -275,9 +318,16 @@ export async function limparTrials({ aplicar = false } = {}) {
       const modelo = emailTrialExpirado({
         imobiliaria: t.name,
         slug: t.slug,
-        diasAteRemover: DIAS_ATE_REMOVER,
+        // O prazo dito no e-mail é o mesmo que a faxina vai cobrar. Cravar 30
+        // aqui prometeria ao pagante menos tempo do que ele tem.
+        diasAteRemover: diasDeGraca(t.statusPagamento),
         base,
         urlVitrine: enderecoDaVitrine(t, base),
+        /* Quem estava pagando não recebe um e-mail falando de "período de
+           teste": para essa pessoa a frase é falsa, e uma mensagem que erra o
+           fato básico perde a credibilidade justamente na hora em que precisa
+           dela para trazer o cliente de volta. */
+        eraTeste: t.statusPagamento === "TRIAL",
       });
       // eslint-disable-next-line no-await-in-loop
       await sendEmail({

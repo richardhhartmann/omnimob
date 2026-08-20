@@ -255,7 +255,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
             </p>
           </div>
 
-          <div style={{ display: "flex", background: "rgba(0,0,0,0.2)", borderRadius: "8px", padding: "4px", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <div className="ui-segmentado" style={{ display: "flex", borderRadius: "8px", padding: "4px" }}>
             <button
               onClick={() => setViewMode("grid")}
               style={{

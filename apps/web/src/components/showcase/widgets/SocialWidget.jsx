@@ -8,7 +8,7 @@ import {
   XLogo,
   Globe,
 } from "@phosphor-icons/react";
-import { ShowcaseLinkExterno, ShowcaseTexto } from "../contexto.jsx";
+import { ShowcaseLinkExterno, ShowcaseTexto, usaFonteReal, useDadosDaVitrine } from "../contexto.jsx";
 
 /* Redes sociais.
 
@@ -60,9 +60,31 @@ export function redesDoConteudo(conteudo) {
     });
 }
 
+/* ── Os endereços de verdade ─────────────────────────────────────────────────
+   O padrão do widget era `https://wa.me/|https://instagram.com/|https://facebook.com/`
+   — três endereços SEM PERFIL. Clicar levava à página inicial de cada rede, e a
+   imobiliária que não trocasse os três publicava uma seção "Acompanhe nas redes
+   sociais" que não acompanha ninguém.
+
+   Agora saem do cadastro: o WhatsApp do perfil e a página do Facebook que a
+   imobiliária conectou em Configurações › Redes Sociais.
+
+   O Instagram fica de fora mesmo quando está conectado, e a razão é honesta: a
+   Graph API nos dá o id da conta business, e `instagram.com/<id>` não abre. O @
+   da conta não é guardado em lugar nenhum. Botão que leva a lugar nenhum é pior
+   que botão ausente — quem quiser o Instagram cola o endereço no inspetor, e
+   aí ele entra pelo caminho manual. */
+function redesReais(redes) {
+  if (!redes) return [];
+  return [redes.whatsapp, redes.facebook, redes.instagram].filter(Boolean);
+}
+
 export function SocialWidget({ widget }) {
   const cor = widget.color ? { color: widget.color } : undefined;
-  const redes = redesDoConteudo(widget.content);
+  const dados = useDadosDaVitrine();
+  const reais = redesReais(dados?.redes);
+  const real = usaFonteReal(widget, reais);
+  const redes = redesDoConteudo(real ? reais.join("|") : widget.content);
 
   return (
     <div style={{ textAlign: "center", padding: "8px" }}>

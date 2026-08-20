@@ -25,6 +25,10 @@ export function BuilderCanvas({
   tenant,
   tenantSlug,
   properties,
+  /* Os mesmos dados reais que a vitrine pública recebe. Sem eles aqui, o
+     editor desenharia a equipe de exemplo e a página publicada mostraria a de
+     verdade — a divergência que a regra WYSIWYG existe para impedir. */
+  dadosDaVitrine,
   carouselIndexes,
   onProxima,
   onAnterior,
@@ -83,7 +87,7 @@ export function BuilderCanvas({
         />
       ) : null}
 
-      <VitrineProvider modo="editor" aoEditar={aoEditarTexto} tenantSlug={tenantSlug}>
+      <VitrineProvider modo="editor" aoEditar={aoEditarTexto} tenantSlug={tenantSlug} dados={dadosDaVitrine}>
         <ShowcaseRenderer
           config={config}
           mode={mode}

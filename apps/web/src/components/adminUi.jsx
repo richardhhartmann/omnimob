@@ -68,7 +68,7 @@ export function StatGrid({ children }) {
 // Segmentado de filtros (ex.: Todos / Ativos / Inativos).
 export function FilterTabs({ value, onChange, options }) {
   return (
-    <div style={{ display: "flex", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "3px", border: "1px solid rgba(255,255,255,0.08)" }}>
+    <div className="ui-segmentado" style={{ display: "flex", borderRadius: "10px", padding: "3px" }}>
       {options.map((opt) => (
         <button key={opt.key} type="button" onClick={() => onChange(opt.key)}
           style={{

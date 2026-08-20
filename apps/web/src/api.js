@@ -472,18 +472,165 @@ export const api = {
 
   // ─── Importação de outra plataforma ──────────────────────────────────────
   // Os tipos de imóvel e cargos DESTA imobiliária, para a tela avisar antes o
-  // que da planilha não vai casar com o que existe aqui.
+  // que da fonte não vai casar com o que existe aqui.
   importacaoReferencias: (tenantSlug) =>
     request("/api/importacao/referencias", { headers: { "x-tenant-slug": tenantSlug } }),
 
-  /* Um lote por chamada. Quem fatia é a tela — assim o progresso anda na frente
-     de quem está olhando, em vez de deixar uma barra parada por dois minutos. */
-  importarLote: (tenantSlug, entidade, linhas) =>
-    request(`/api/importacao/${entidade}`, {
+  /* Lê a fonte e devolve as primeiras linhas SEM gravar nada. É o único momento
+     em que dá para perceber que o feed aponta para a filial errada antes de
+     quinhentos imóveis entrarem. */
+  importacaoPrevia: (tenantSlug, payload) =>
+    request("/api/importacao/fonte/previa", {
       method: "POST",
       headers: { "x-tenant-slug": tenantSlug },
-      body: JSON.stringify({ linhas }),
+      body: JSON.stringify(payload),
     }),
+
+  /* O trabalho. O servidor relê a fonte e fatia em lotes por dentro — o
+     conteúdo já está lá, e devolver o controle para a tela só para ela pedir de
+     volta em pedaços seria uma viagem de rede por lote sem nada em troca. */
+  importacaoExecutar: (tenantSlug, payload) =>
+    request("/api/importacao/fonte/importar", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  /* Tema do painel desta pessoa. `null` desfaz a escolha e devolve ao tema da
+     imobiliária — o caminho de volta precisa existir. */
+  salvarMeuTema: (tema) =>
+    request("/api/auth/meu-tema", { method: "PUT", body: JSON.stringify({ tema }) }),
+
+  // ─── Canais de divulgação ────────────────────────────────────────────────
+  // O retrato de cada canal: o que está no ar, quantos imóveis recebe e o que
+  // falta configurar. Existe porque o feed dos portais funcionava desde sempre
+  // e ninguém sabia — a integração mais completa do produto era invisível.
+  listarCanais: (tenantSlug) =>
+    request("/api/canais", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  conectarMercadoLivre: (tenantSlug) =>
+    request("/api/canais/mercadolivre/conectar", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  desconectarMercadoLivre: (tenantSlug) =>
+    request("/api/canais/mercadolivre", { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  publicarMercadoLivre: (tenantSlug, propertyId, payload = {}) =>
+    request(`/api/canais/mercadolivre/publicar/${propertyId}`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  encerrarMercadoLivre: (tenantSlug, propertyId) =>
+    request(`/api/canais/mercadolivre/publicar/${propertyId}`, {
+      method: "DELETE", headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  /* A ponte não oficial de WhatsApp. Corpo vazio DESLIGA — é o caminho de saída,
+     e ele precisa ser tão fácil quanto o de entrada. */
+  salvarPonteWhatsapp: (tenantSlug, payload) =>
+    request("/api/canais/whatsapp-ponte", {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  publicarStatusPelaPonte: (tenantSlug, propertyId, payload) =>
+    request(`/api/canais/whatsapp-ponte/publicar/${propertyId}`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  // ─── Chaves da API da imobiliária ────────────────────────────────────────
+  // O catálogo de escopos vem do servidor: uma segunda lista aqui desencontraria
+  // da que o validador usa na primeira permissão nova.
+  listarEscoposApi: (tenantSlug) =>
+    request("/api/chaves-api/escopos", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  listarChavesApi: (tenantSlug) =>
+    request("/api/chaves-api", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  /* A resposta traz `texto` com a chave INTEGRAL, e é a única vez que ela
+     existe fora do navegador de quem pediu. O banco guarda só o hash. */
+  criarChaveApi: (tenantSlug, payload) =>
+    request("/api/chaves-api", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  revogarChaveApi: (tenantSlug, id) =>
+    request(`/api/chaves-api/${id}`, {
+      method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  /* ── Baixar tudo ──────────────────────────────────────────────────────────
+     Não passa pelo `request`: a resposta é um arquivo, não JSON, e lê-la como
+     objeto para depois reserializar dobraria na memória um conteúdo que pode ter
+     dezenas de megabytes. Aqui o corpo vira `blob` e o navegador salva. */
+  async exportarTudo(tenantSlug) {
+    const r = await fetch(`${API_URL}/api/tenants/me/exportar`, {
+      headers: { Authorization: `Bearer ${authToken}`, "x-tenant-slug": tenantSlug },
+    });
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => ({}));
+      throw new Error(corpo.error || "Não consegui gerar a exportação.");
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `omnimob-${tenantSlug}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Sem o revoke, cada clique deixa o arquivo inteiro preso na memória da aba.
+    URL.revokeObjectURL(url);
+    return blob.size;
+  },
+
+  // ─── Fontes de importação guardadas ──────────────────────────────────────
+  // O endereço do feed, salvo para ser lido DE NOVO. É o que separa "importei
+  // uma vez" de "está integrado".
+  listarFontes: (tenantSlug) =>
+    request("/api/importacao/fontes", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  criarFonte: (tenantSlug, payload) =>
+    request("/api/importacao/fontes", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  atualizarFonte: (tenantSlug, id, payload) =>
+    request(`/api/importacao/fontes/${id}`, {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  removerFonte: (tenantSlug, id) =>
+    request(`/api/importacao/fontes/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  sincronizarFonte: (tenantSlug, id) =>
+    request(`/api/importacao/fontes/${id}/sincronizar`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  // ─── Webhooks de saída ───────────────────────────────────────────────────
+  listarEventosWebhook: (tenantSlug) =>
+    request("/api/webhooks-saida/eventos", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  listarWebhooks: (tenantSlug) =>
+    request("/api/webhooks-saida", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  criarWebhook: (tenantSlug, payload) =>
+    request("/api/webhooks-saida", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  atualizarWebhook: (tenantSlug, id, payload) =>
+    request(`/api/webhooks-saida/${id}`, {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  removerWebhook: (tenantSlug, id) =>
+    request(`/api/webhooks-saida/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  testarWebhook: (tenantSlug, id) =>
+    request(`/api/webhooks-saida/${id}/testar`, { method: "POST", headers: { "x-tenant-slug": tenantSlug } }),
 
   // ─── Tipos e atributos ───────────────────────────────────────────────────
   createTipoImovel: (tenantSlug, payload) =>

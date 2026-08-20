@@ -224,7 +224,15 @@ function DefinirSenhaCard({ alvo, onConcluir, onCancelar }) {
       soft="senha para continuar."
       onSubmit={handleSubmit}
       error={error}
-      aviso={aviso}
+      /* Sem `aviso` aqui. Ele existe no `LoginPage` e descreve por que a pessoa
+         CAIU na tela de login — "sua sessão foi encerrada", por exemplo. Este
+         cartão só aparece DEPOIS de um login bem-sucedido, então repetir aquele
+         texto seria falar de um problema que acabou de ser resolvido.
+
+         Antes a linha era `aviso={aviso}`, referenciando uma variável de outro
+         componente: derrubava a tela inteira com "aviso is not defined" no
+         primeiro acesso de todo usuário novo — exatamente quando a troca de
+         senha é obrigatória. */
       saindo={saindo}
     >
       <Field label="Nova senha" hint="Mínimo de 6 caracteres.">

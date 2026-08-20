@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { IconeCheck, IconeLink } from "../../Icones.jsx";
+import { SeloBeta } from "../../SeloBeta.jsx";
 import {
   IconeAjustar,
   IconeDesfazer,
@@ -129,6 +130,10 @@ export function BuilderTopbar({
     <header className="editor-topbar" data-tour="vitrine-topbar">
       <div className="editor-topbar-side">
         <strong className="editor-topbar-title">Editor de Vitrine</strong>
+        {/* O mesmo selo do item "Editar Página" na barra lateral. Fica ANTES do
+            status de salvamento porque qualifica o nome da ferramenta, não o
+            que acabou de acontecer com o documento. */}
+        <SeloBeta />
         <StatusDeSalvamento estado={estadoSalvamento} />
       </div>
 

@@ -35,6 +35,10 @@ export const createPropertySchema = z.object({
   aceitaPermuta: z.boolean().optional().default(false),
   // Entra no XML dos portais. Padrão ligado — ver `services/feedPortais.js`.
   publicarPortais: z.boolean().optional().default(true),
+  /* Rua e número na página pública. `false` por padrão aqui também, e não só no
+     banco: um cadastro feito pela API sem o campo não deve publicar o endereço
+     por omissão — a escolha tem de ser dita. */
+  exibirEnderecoCompleto: z.boolean().optional().default(false),
   comodidades: z.record(z.boolean()).nullable().optional(),
   status: z.nativeEnum(PropertyStatus).optional().default(PropertyStatus.DRAFT),
 });
@@ -86,4 +90,39 @@ export const updateTenantConfiguracaoSchema = z.object({
      vira um adesivo por cima do imóvel. O controle da tela já se move dentro
      desses limites — isto é a trava de quem chama a API direto. */
   marcaDaguaOpacidade: z.number().int().min(20).max(80).optional(),
+  /* Horário de atendimento, como a vitrine mostra.
+
+     `dias` é texto livre porque a realidade é: "Segunda a sexta", "Sábado",
+     "Feriados", "Plantão de domingo". Uma lista fechada de sete dias não
+     descreve nenhuma imobiliária de verdade — e obrigaria sete linhas para
+     dizer o que uma linha diz.
+
+     `fechado` existe para a faixa que anuncia AUSÊNCIA de atendimento; nela
+     `abre`/`fecha` vêm vazios, e é por isso que os dois são opcionais aqui em
+     vez de obrigatórios. Quem peneira a combinação inválida é o
+     `dadosDaVitrine`, que é quem monta a resposta pública. */
+  /* Ano de fundação da imobiliária. O teto é o ano corrente calculado na hora
+     da validação, e não um número cravado: um literal envelheceria em silêncio
+     e recusaria cadastros legítimos na virada do ano. */
+  /* Tema do painel para toda a imobiliária. Lista fechada: um valor fora dela
+     faria a tela cair no padrão sem ninguém saber por quê. */
+  temaImobiliaria: z.enum(["claro", "escuro", "auto"]).optional(),
+  fundadaEm: z
+    .number()
+    .int()
+    .min(1900)
+    .max(new Date().getFullYear())
+    .nullable()
+    .optional(),
+  horarioAtendimento: z
+    .array(
+      z.object({
+        dias: z.string().trim().min(1).max(60),
+        abre: z.string().trim().max(5).optional().default(""),
+        fecha: z.string().trim().max(5).optional().default(""),
+        fechado: z.boolean().optional().default(false),
+      }),
+    )
+    .max(8)
+    .optional(),
 });

@@ -31,6 +31,18 @@ import prismaPkg from "@prisma/client";
    transporte configurado", que só registra no console.
 
    Antes de qualquer import que leia estas variáveis, por isso no topo. */
+/* O SINALIZADOR É O QUE REALMENTE DESLIGA, e os `delete` abaixo são apenas
+   higiene.
+
+   Apagar as variáveis não bastava: o `new PrismaClient()`, logo abaixo,
+   RECARREGA o `.env` para achar o DATABASE_URL — e traz de volta tudo que está
+   lá. `RESEND_API_KEY` sumia de verdade (não existe no `.env` de dev) e
+   `SMTP_USER`/`SMTP_PASS` voltavam. A suíte mandou e-mail real, por SMTP, sobre
+   imobiliárias `zz-teste-…` para a caixa de quem rodava os testes.
+
+   O sinalizador não está em arquivo nenhum, então nada o repõe. Ver
+   `emailTransport` no notificationService. */
+process.env.EMAIL_DESLIGADO = "1";
 delete process.env.RESEND_API_KEY;
 delete process.env.SMTP_USER;
 delete process.env.SMTP_PASS;

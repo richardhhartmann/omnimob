@@ -207,18 +207,88 @@ function PainelDaPagina({ form, config, tenantName, isLightMode, currentTheme, a
           </div>
         ) : null}
 
-        <div className="editor-field-row">
-          <CampoCor label="Primária" value={form.primaryColor} fallback="#6366f1" onChange={(v) => acoes.atualizarCampo("primaryColor", v)} />
-          <CampoCor label="Secundária" value={form.secondaryColor} fallback="#d4af37" onChange={(v) => acoes.atualizarCampo("secondaryColor", v)} />
-        </div>
+        {/* ── As cores da VITRINE, separadas das do painel ────────────────────
+            Eram a mesma coisa: `tenant.primaryColor` pintava a ferramenta de
+            trabalho da equipe E a página que o cliente da imobiliária vê. As
+            duas respondem a perguntas diferentes — conforto de quem opera oito
+            horas por dia, e marca de quem vende.
+
+            Herdar continua sendo o padrão, para a vitrine de quem já existia
+            não mudar de cor num deploy. Desmarcar revela as cores próprias, que
+            ficam guardadas mesmo enquanto a herança está ligada: religar e
+            desligar não perde a escolha. */}
+        <label className="editor-fonte">
+          <input
+            type="checkbox"
+            checked={config.herdarCoresDoPainel !== false}
+            onChange={(e) => acoes.atualizarConfigDireto("herdarCoresDoPainel", e.target.checked)}
+          />
+          <span className="editor-fonte__texto">
+            <strong>Usar as cores do painel</strong>
+            <span>As mesmas de Configurações › Aparência. Desmarque para dar cores próprias à vitrine.</span>
+          </span>
+        </label>
+
+        {config.herdarCoresDoPainel === false ? (
+          <div className="editor-field-row">
+            <CampoCor
+              label="Primária"
+              value={config.corPrimaria || form.primaryColor}
+              fallback="#6366f1"
+              onChange={(v) => acoes.atualizarConfigDireto("corPrimaria", v)}
+            />
+            <CampoCor
+              label="Secundária"
+              value={config.corSecundaria || form.secondaryColor}
+              fallback="#d4af37"
+              onChange={(v) => acoes.atualizarConfigDireto("corSecundaria", v)}
+            />
+          </div>
+        ) : null}
+
+        {/* Mesma ideia para claro/escuro, mas DESLIGADO por omissão: a vitrine
+            sempre teve o próprio modo, e herdar por padrão mudaria a página
+            publicada de quem nunca pediu. */}
+        <label className="editor-fonte">
+          <input
+            type="checkbox"
+            checked={config.herdarTemaDoPainel === true}
+            onChange={(e) => acoes.atualizarConfigDireto("herdarTemaDoPainel", e.target.checked)}
+          />
+          <span className="editor-fonte__texto">
+            <strong>Seguir o tema do painel</strong>
+            <span>Claro ou escuro conforme o painel. Desmarcado, a vitrine tem o modo escolhido acima.</span>
+          </span>
+        </label>
       </Secao>
 
-      <Secao titulo="Empresa" aberta={false}>
-        <CampoTexto label="Nome" value={tenantName} readOnly />
-        <CampoTexto label="WhatsApp" value={form.whatsapp} onChange={(v) => acoes.atualizarCampo("whatsapp", v)} placeholder="5511999999999" />
-        <CampoTexto label="E-mail" value={form.email} onChange={(v) => acoes.atualizarCampo("email", v)} placeholder="contato@imobiliaria.com" />
-        <CampoTexto label="Slogan" value={form.slogan} onChange={(v) => acoes.atualizarCampo("slogan", v)} placeholder="Alto padrão" />
-        <CampoTexto label="Logo (URL)" value={form.logoUrl} onChange={(v) => acoes.atualizarCampo("logoUrl", v)} placeholder="https://…/logo.png" />
+      {/* ── Os dados da imobiliária NÃO se editam aqui ────────────────────────
+          Havia uma seção "Empresa" com WhatsApp, e-mail, slogan e logo, e ela
+          era um segundo lugar para a mesma verdade. Os mesmos campos existem em
+          Configurações › Perfil, e nada garantia que as duas telas
+          concordassem: o WhatsApp trocado no editor divergia do que a página do
+          imóvel, o feed dos portais e o widget de equipe continuavam usando.
+
+          Identidade da imobiliária é cadastro, não desenho de página. Este
+          painel edita a VITRINE; o que a vitrine mostra sobre a empresa vem de
+          um lugar só.
+
+          O atalho abaixo existe para a pessoa não ter de descobrir sozinha para
+          onde foram os campos. */}
+      <Secao titulo="Dados da imobiliária" aberta={false}>
+        <p className="editor-hint" style={{ margin: 0 }}>
+          Nome, WhatsApp, e-mail, slogan, logo, CRECI e endereço vêm do cadastro da imobiliária —
+          a vitrine, a página do imóvel e os portais leem todos do mesmo lugar.
+        </p>
+        <a
+          className="editor-button"
+          href="/configuracoes?ver=perfil"
+          target="_blank"
+          rel="noreferrer"
+          style={{ textDecoration: "none", justifyContent: "center" }}
+        >
+          Abrir Configurações › Perfil
+        </a>
       </Secao>
 
       {ocultos.length || widgetsOcultos.length ? (
@@ -248,6 +318,95 @@ function salvarDadosWidget(widget, acoes, fallback, proximo, tituloAoMigrar = ""
   const atual = lerDadosWidget(widget.content, fallback);
   const dados = typeof proximo === "function" ? proximo(atual) : proximo;
   acoes.atualizarWidget("content", serializarDadosWidget(dados));
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   De onde a peça tira o conteúdo.
+
+   Sete widgets sabem ler o cadastro da imobiliária: a Equipe lista os
+   corretores marcados como visíveis, Localização desenha o mapa do endereço,
+   Números conta imóveis e vendas, Regiões sai do acervo, Horários vem do
+   atendimento, Busca oferece os tipos que existem e Redes usa os perfis
+   conectados.
+
+   O alternador começa LIGADO, e é isso que muda o padrão do produto: arrastar a
+   peça já traz o que é verdade. Antes vinha "Ana Souza, João Lima e Marina
+   Alves" — três pessoas inventadas no código — e só saía dali se alguém
+   apagasse campo por campo.
+
+   Desligar é uma escolha legítima, e por isso existe: a imobiliária que ainda
+   não cadastrou a equipe, ou que quer um texto próprio, recupera os campos
+   manuais intactos. Nada se perde na troca — o conteúdo digitado continua
+   guardado no widget enquanto a fonte real está no ar.
+   ────────────────────────────────────────────────────────────────────────── */
+const FONTES_REAIS = {
+  team: {
+    rotulo: "Equipe cadastrada",
+    onde: "Usuários",
+    explica: "Lista quem está ativo e marcado como “aparecer na vitrine”.",
+  },
+  map: {
+    rotulo: "Endereço da imobiliária",
+    onde: "Configurações › Perfil",
+    explica: "Desenha o mapa e o botão de rota a partir do endereço cadastrado.",
+  },
+  hours: {
+    rotulo: "Horário de atendimento",
+    onde: "Configurações › Perfil",
+    explica: "Mostra as faixas cadastradas e um selo de aberto ou fechado agora.",
+  },
+  stats: {
+    rotulo: "Números do sistema",
+    onde: "seu acervo",
+    explica: "Conta imóveis ativos, negócios fechados, anos de mercado e cidades atendidas.",
+  },
+  regions: {
+    rotulo: "Regiões do acervo",
+    onde: "seus imóveis",
+    explica: "Lista os bairros onde você tem imóvel, e o clique filtra a vitrine.",
+  },
+  "property-search": {
+    rotulo: "Filtros do acervo",
+    onde: "seus imóveis",
+    explica: "Oferece os tipos e regiões que existem, e a busca filtra a página.",
+  },
+  social: {
+    rotulo: "Perfis conectados",
+    onde: "Configurações › Redes Sociais",
+    explica: "Usa o WhatsApp do cadastro e a página do Facebook conectada.",
+  },
+};
+
+function PainelFonteDeDados({ widget, acoes }) {
+  const fonte = FONTES_REAIS[widget.type];
+  if (!fonte) return null;
+
+  // Ausente conta como ligado — ver `normalizeShowcaseConfig`.
+  const ligado = widget.usarDadosReais !== false;
+
+  return (
+    <Secao titulo="Fonte do conteúdo">
+      <label className="editor-fonte">
+        <input
+          type="checkbox"
+          checked={ligado}
+          /* Ligar GRAVA `undefined`, não `true`: a ausência é o padrão, e
+             marcar `true` em toda peça diria que a escolha foi feita quando
+             ninguém escolheu nada. */
+          onChange={(e) => acoes.atualizarWidget("usarDadosReais", e.target.checked ? undefined : false)}
+        />
+        <span className="editor-fonte__texto">
+          <strong>{fonte.rotulo}</strong>
+          <span>{fonte.explica}</span>
+        </span>
+      </label>
+      <p className="editor-hint" style={{ margin: 0 }}>
+        {ligado
+          ? `Vem de ${fonte.onde} e se atualiza sozinho. Desligue para escrever à mão.`
+          : "Você está escrevendo à mão. Ligue para usar os dados do sistema."}
+      </p>
+    </Secao>
+  );
 }
 
 function PainelConteudoEstruturado({ widget, acoes }) {
@@ -495,6 +654,8 @@ function PainelDaPeca({ pieceId, config, rect, mode, isLightMode, acoes }) {
           </p>
         </Secao>
       ) : null}
+
+      {ehWidget ? <PainelFonteDeDados widget={widget} acoes={acoes} /> : null}
 
       {ehWidget ? <PainelConteudoEstruturado widget={widget} acoes={acoes} /> : null}
 

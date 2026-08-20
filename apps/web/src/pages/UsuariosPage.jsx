@@ -6,8 +6,16 @@ import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, 
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
+import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 
-const FORM_EMPTY = { nome: "", login: "", email: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false };
+const FORM_EMPTY = {
+  nome: "", login: "", email: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false,
+  /* ── O que esta pessoa mostra na vitrine ──────────────────────────────────
+     `exibirNaVitrine` começa FALSO. Aparecer com nome e foto numa página
+     pública é decisão de quem aparece, não consequência de ter login — e o
+     painel tem gente que não atende cliente nenhum (financeiro, o dono). */
+  exibirNaVitrine: false, foto: "", creci: "", whatsapp: "", cargoVitrine: "",
+};
 
 /* ─── Sufixo de tenant no login ───────────────────────────────────────────────
    A tela de login é uma só para todos os clientes, então o login precisa ser
@@ -78,6 +86,19 @@ function normalizarBaseLogin(valor) {
     .replace(/[^a-z0-9._-]/g, "");
 }
 
+/* Os campos que só a vitrine usa, juntos, para criação e edição mandarem
+   exatamente a mesma coisa. A API normaliza de novo do lado dela (o WhatsApp
+   vira só dígitos lá) — aqui é só o recorte. */
+function camposDeVitrine(form) {
+  return {
+    exibirNaVitrine: Boolean(form.exibirNaVitrine),
+    foto: form.foto.trim(),
+    creci: form.creci.trim(),
+    whatsapp: form.whatsapp.trim(),
+    cargoVitrine: form.cargoVitrine.trim(),
+  };
+}
+
 export function UsuariosPage({ session }) {
   const tenantSlug = session?.tenant?.slug;
   /* Ninguém se desativa. Seria o único caminho para um tenant ficar sem
@@ -98,6 +119,23 @@ export function UsuariosPage({ session }) {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | inactive
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+
+  /* A foto vai direto do navegador para o Cloudinary, como a do imóvel e a
+     logo — o backend nunca vê o arquivo. O que fica no formulário é a URL. */
+  async function enviarFoto(arquivo) {
+    if (!arquivo) return;
+    setEnviandoFoto(true);
+    setError("");
+    try {
+      const { url } = await uploadToCloudinary(arquivo);
+      setForm((p) => ({ ...p, foto: url }));
+    } catch {
+      setError("Não consegui enviar a foto. Tente de novo.");
+    } finally {
+      setEnviandoFoto(false);
+    }
+  }
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -157,6 +195,13 @@ export function UsuariosPage({ session }) {
       cargoCodigo: String(u.cargoCodigo),
       ativo: u.ativo,
       forcaAlterarSenha: u.forcaAlterarSenha,
+      // `?? ""` pelo mesmo motivo do e-mail: os quatro são anuláveis no banco
+      // e os campos são controlados.
+      exibirNaVitrine: u.exibirNaVitrine ?? false,
+      foto: u.foto ?? "",
+      creci: u.creci ?? "",
+      whatsapp: u.whatsapp ?? "",
+      cargoVitrine: u.cargoVitrine ?? "",
     });
     setError("");
     setView("form");
@@ -190,6 +235,7 @@ export function UsuariosPage({ session }) {
           cargoCodigo: Number(form.cargoCodigo),
           ativo: form.ativo,
           forcaAlterarSenha: form.forcaAlterarSenha,
+          ...camposDeVitrine(form),
         };
         const updated = await api.updateUsuario(tenantSlug, editando.id, payload);
         setUsuarios((prev) => prev.map((u) => u.id === updated.id ? updated : u));
@@ -202,6 +248,7 @@ export function UsuariosPage({ session }) {
           email: form.email.trim() || null,
           cargoCodigo: Number(form.cargoCodigo),
           ativo: form.ativo,
+          ...camposDeVitrine(form),
         });
         setUsuarios((prev) => [...prev, created]);
         showToast?.(`${created.nome} cadastrado.`);
@@ -369,6 +416,99 @@ export function UsuariosPage({ session }) {
               define a própria senha na tela seguinte.
             </p>
           )}
+
+          {/* ── Presença na vitrine ────────────────────────────────────────
+              O widget "Equipe" da vitrine lê exatamente estes campos. Ele
+              nasceu com três corretores INVENTADOS no código ("Ana Souza",
+              "João Lima", "Marina Alves") porque não havia de onde tirar os
+              reais — o cadastro guardava quem ENTRA no painel, não quem ATENDE
+              o cliente.
+
+              A seção fica recolhida atrás de uma marcação, e não sempre aberta:
+              a maioria dos usuários de uma imobiliária não aparece na vitrine, e
+              quatro campos vazios em todo cadastro ensinariam a ignorá-los. */}
+          <div className="usuario-vitrine">
+            <label className="usuario-vitrine__chave">
+              <input
+                type="checkbox"
+                className="sw"
+                checked={form.exibirNaVitrine}
+                onChange={(e) => setForm((p) => ({ ...p, exibirNaVitrine: e.target.checked }))}
+                disabled={loading}
+              />
+              <span>
+                <strong>Aparecer no site</strong>
+                <small>Mostra esta pessoa no bloco de equipe da página pública, com contato direto.</small>
+              </span>
+            </label>
+
+            {form.exibirNaVitrine ? (
+              <div className="usuario-vitrine__campos">
+                <div className="usuario-vitrine__foto">
+                  <div className="usuario-vitrine__avatar">
+                    {form.foto
+                      ? <img src={form.foto} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                      : <span>{(form.nome || "?").charAt(0).toUpperCase()}</span>}
+                  </div>
+                  <div className="usuario-vitrine__foto-acoes">
+                    <label className="button-secondary" style={{ width: "auto", cursor: enviandoFoto ? "default" : "pointer", opacity: enviandoFoto ? 0.6 : 1 }}>
+                      {enviandoFoto ? "Enviando…" : form.foto ? "Trocar foto" : "Enviar foto"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={enviandoFoto || loading}
+                        onChange={(e) => { enviarFoto(e.target.files?.[0]); e.target.value = ""; }}
+                        style={{ display: "none" }}
+                      />
+                    </label>
+                    {form.foto ? (
+                      <button type="button" className="button-secondary" style={{ width: "auto" }} onClick={() => setForm((p) => ({ ...p, foto: "" }))} disabled={loading}>
+                        Remover
+                      </button>
+                    ) : null}
+                    <small>Sem foto, a vitrine mostra as iniciais.</small>
+                  </div>
+                </div>
+
+                <div className="usuario-vitrine__grade">
+                  <label>
+                    <span>Cargo na vitrine</span>
+                    <input
+                      value={form.cargoVitrine}
+                      onChange={(e) => setForm((p) => ({ ...p, cargoVitrine: e.target.value }))}
+                      placeholder="Ex: Corretora de imóveis"
+                      disabled={loading}
+                    />
+                    {/* O cargo do PAINEL é uma peça de permissão. Apresentar
+                        alguém ao cliente como "Administrador" não diz nada
+                        sobre o que essa pessoa faz por ele. */}
+                    <small>Vazio usa o cargo do sistema, que costuma ser técnico demais para o cliente.</small>
+                  </label>
+                  <label>
+                    <span>CRECI</span>
+                    <input
+                      value={form.creci}
+                      onChange={(e) => setForm((p) => ({ ...p, creci: e.target.value }))}
+                      placeholder="Ex: CRECI-SP 123456"
+                      disabled={loading}
+                    />
+                    <small>O da pessoa, não o da imobiliária — é esse que o cliente confere.</small>
+                  </label>
+                  <label>
+                    <span>WhatsApp</span>
+                    <input
+                      value={form.whatsapp}
+                      onChange={(e) => setForm((p) => ({ ...p, whatsapp: e.target.value }))}
+                      placeholder="Ex: 11999998888"
+                      inputMode="tel"
+                      disabled={loading}
+                    />
+                    <small>Sem número, o botão cai no WhatsApp geral da imobiliária.</small>
+                  </label>
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           <div className="actions" data-tour="usuario-salvar" style={{ marginTop: "24px" }}>
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>

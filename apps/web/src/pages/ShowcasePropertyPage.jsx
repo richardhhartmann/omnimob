@@ -523,6 +523,11 @@ export function ShowcasePropertyPage({ slugFixo }) {
                   <p style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)", marginBottom: "12px" }}>Localização</p>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", color: isLightMode ? "#334155" : "#cbd5e1" }}>
                     <span style={{ color: primaryColor, marginTop: "2px", flexShrink: 0 }}><IcPin /></span>
+                    {/* A rua só aparece quando a imobiliária marcou. O corte de
+                        verdade é no servidor — com a opção desligada, `address` e
+                        `cep` nem chegam aqui (ver `semEnderecoOculto`). Este
+                        `&&` é consequência disso, não a trava: se fosse só ele,
+                        o endereço continuaria no JSON da página. */}
                     <p style={{ margin: 0, fontSize: "14px", lineHeight: "1.6" }}>
                       {property.address && <><strong>{property.address}</strong><br /></>}
                       {[property.neighborhood, property.city, property.state].filter(Boolean).join(", ")}

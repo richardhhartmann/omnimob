@@ -31,6 +31,8 @@ import {
   dominioConfigurado,
 } from "../services/dominioService.js";
 import { planoInfo, requirePlano, requirePlanoDominio } from "../middlewares/planoMiddleware.js";
+import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
+import { exportarTudo } from "../services/exportacaoCompleta.js";
 
 /* A linha do tenant sem o que não é da conta do navegador.
  *
@@ -43,7 +45,16 @@ import { planoInfo, requirePlano, requirePlanoDominio } from "../middlewares/pla
  * Lista do que sai, e não do que fica: campo novo no schema entra na resposta
  * sozinho, que é o comportamento certo para dado comum. Segredo é a exceção e
  * merece ser nomeado. */
-const SEGREDOS_DO_TENANT = ["facebookPageToken"];
+/* Tudo que é credencial de terceiro e nunca sai numa resposta. A lista cresceu
+   junto com os canais: o token da página do Facebook, os do Mercado Livre (que
+   publicam anúncio em nome do vendedor) e o da ponte de WhatsApp — este último
+   é a credencial de uma sessão inteira do WhatsApp da imobiliária. */
+const SEGREDOS_DO_TENANT = [
+  "facebookPageToken",
+  "mercadoLivreToken",
+  "mercadoLivreRefresh",
+  "whatsappPonteToken",
+];
 
 function semSegredos(tenant) {
   if (!tenant) return tenant;
@@ -84,6 +95,36 @@ tenantRouter.post("/", requireAuth, async (req, res) => {
   }
 });
 
+/* ── Levar tudo embora ───────────────────────────────────────────────────────
+   Um botão, um JSON. A API já permite tirar cada coisa em separado, mas exige
+   chave, cliente HTTP e alguém que saiba paginar — o que responde ao
+   integrador e não responde à imobiliária que está saindo, nem ao titular que
+   exerce portabilidade.
+
+   `verConfiguracoes` porque o arquivo traz a carteira inteira com CPF e
+   telefone: é a permissão de quem responde pela conta, não a de quem opera. */
+tenantRouter.get(
+  "/me/exportar",
+  requireAuth,
+  requireTenant,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    try {
+      const dados = await exportarTudo(req.tenant.id);
+      const data = new Date().toISOString().slice(0, 10);
+      /* `Content-Disposition` para o navegador BAIXAR em vez de desenhar. Sem
+         ele, um JSON de dezenas de megabytes abre numa aba e trava a máquina de
+         quem clicou. */
+      res.setHeader("Content-Disposition", `attachment; filename="omnimob-${req.tenant.slug}-${data}.json"`);
+      res.type("application/json");
+      return res.send(JSON.stringify(dados, null, 2));
+    } catch (erro) {
+      console.error("[tenant] exportar:", erro);
+      return res.status(500).json({ error: "Erro ao gerar a exportação." });
+    }
+  },
+);
+
 tenantRouter.get("/me", requireTenant, async (req, res) => {
   try {
     return res.json(req.tenant);
@@ -102,6 +143,10 @@ tenantRouter.put("/me/configuracao", requireAuth, requireTenant, requirePermissa
       where: { id: req.tenant.id },
       data: parsed.data,
     });
+    /* Endereço e horário alimentam os widgets da vitrine, que guardam o
+       resultado apurado por um minuto. Sem isto, quem corrige o endereço e vai
+       conferir no editor vê o antigo e conclui que não salvou. */
+    limparCacheDaVitrine(req.tenant.id);
     return res.json(semSegredos(tenant));
   } catch {
     return res.status(500).json({ error: "Erro ao salvar configurações." });

@@ -20,6 +20,7 @@ enum PublicationChannel {
   FACEBOOK
   INSTAGRAM
   WHATSAPP
+  MERCADO_LIVRE
 }
 
 enum PublicationStatus {
@@ -97,19 +98,95 @@ model Tenant {
   description         String          @default("")
   slogan              String          @default("")
   logoUrl             String          @default("")
+  /**
+   * ── CORES DO PAINEL ────────────────────────────────────────────────────
+   * `primaryColor` e `secondaryColor` eram uma coisa só, usada no painel E na
+   * vitrine — e as duas respondem a perguntas diferentes. O painel é ferramenta
+   * de trabalho da equipe; a vitrine é a cara da imobiliária para o cliente
+   * dela. Uma imobiliária pode querer o painel sóbrio e a vitrine vibrante, e
+   * antes isso era impossível sem estragar um dos dois.
+   * Estes dois continuam sendo os do PAINEL — manter o nome evita reescrever
+   * todo o painel e o schema de uma vez. As cores da vitrine moram no
+   * `showcaseConfig`, junto do resto do desenho dela.
+   */
   primaryColor        String          @default("#6366f1")
   secondaryColor      String          @default("#d4af37")
+  /**
+   * Tema do painel para toda a imobiliária: "escuro" | "claro" | "auto".
+   * É o PADRÃO, não uma imposição: vale para quem ainda não escolheu o seu.
+   * Ver `Usuario.temaPainel` — se o da pessoa for nulo, este é aplicado.
+   * "auto" espelha o sistema operacional de quem está olhando.
+   */
+  temaImobiliaria     String          @default("escuro") @map("tema_imobiliaria")
   showcaseHeadline    String          @default("")
   showcaseSubheadline String          @default("")
   cep                 String?
   endereco            String          @default("")
   cidade              String          @default("")
   estado              String          @default("")
+  /**
+   * Horário de atendimento, como uma lista de faixas:
+   * `[{ dias: "Segunda a sexta", abre: "09:00", fecha: "18:00", fechado: false }]`
+   * JSON e não colunas por dia da semana: imobiliária de plantão em fim de
+   * semana, atendimento partido no almoço e "sábado só com hora marcada" são
+   * a norma, e sete pares de colunas não descrevem nenhum dos três. O widget
+   * de Horários escrevia isso como HTML solto no `content`, o que dava um
+   * texto bonito e um dado que ninguém mais no sistema conseguia ler.
+   * Nulo = nunca foi preenchido, e o widget cai no texto manual.
+   */
+  horarioAtendimento  Json?           @map("horario_atendimento")
+  /**
+   * Ano em que a imobiliária foi fundada — dela, não da conta aqui.
+   * O widget "Números" precisava dizer "X anos de experiência", e a única data
+   * que tínhamos era `createdAt`, a da assinatura da Omnimob. Uma imobiliária
+   * de trinta anos que entrou no mês passado anunciaria "0 anos" na própria
+   * vitrine — um número pior que nenhum. Nulo enquanto ninguém preencher, e o
+   * cartão simplesmente não aparece.
+   */
+  fundadaEm           Int?            @map("fundada_em")
   showcaseConfig      Json?
+  chavesApi           ChaveApi[]
+  fontesImportacao    FonteImportacao[]
+  webhooks            Webhook[]
   facebookPageId      String?
   facebookPageToken   String?
   facebookPageName    String?
   instagramBusinessId String?
+  /**
+   * ── Mercado Livre ────────────────────────────────────────────────────────
+   * Ao contrário do ZAP e do OLX, que vêm BUSCAR o feed, o Mercado Livre é
+   * empurrado: publicamos cada anúncio pela API deles, em nome do vendedor.
+   * Daí precisar de token por imobiliária, e não de uma credencial nossa.
+   * O token vale seis horas e o `refresh` renova — guardamos os dois cifrados
+   * (`services/cofre.js`), como o token da página do Facebook.
+   * Publicar exige ainda um PACOTE DE ANÚNCIOS contratado pelo vendedor com o
+   * comercial do Mercado Livre. Sem ele a API autentica e recusa a publicação,
+   * e é por isso que a tela avisa antes de a pessoa tentar.
+   */
+  mercadoLivreUserId   String?   @map("ml_user_id")
+  mercadoLivreToken    String?   @map("ml_token")
+  mercadoLivreRefresh  String?   @map("ml_refresh")
+  mercadoLivreExpiraEm DateTime? @map("ml_expira_em")
+  mercadoLivreNick     String?   @map("ml_nick")
+  /**
+   * ── Ponte não oficial de WhatsApp ────────────────────────────────────────
+   * NÃO é integração nossa com a Meta: é o endereço de um serviço que a própria
+   * imobiliária contrata (Whapi, Evolution API e afins), que mantém uma sessão
+   * do WhatsApp Web e publica status por ela.
+   * Guardamos o endereço e o token, não a sessão — de propósito. Hospedar a
+   * sessão faria a Omnimob operar a violação dos termos da Meta em nome do
+   * cliente; assim a decisão, o risco e o contrato são de quem liga.
+   * A tela deixa explícito que isso pode banir o número.
+   */
+  whatsappPonteUrl   String? @map("wa_ponte_url")
+  whatsappPonteToken String? @map("wa_ponte_token")
+  /**
+   * Quando um portal veio buscar o feed pela última vez.
+   * É a única evidência que a imobiliária tem de que a integração com o ZAP
+   * está viva — nós não recebemos confirmação de carga, e "cadastrei a URL, e
+   * agora?" era uma pergunta sem resposta possível.
+   */
+  feedLidoEm         DateTime? @map("feed_lido_em")
   ativo               Boolean         @default(true)
   plano               String? // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
   autoGerarIA         Boolean         @default(true) // auto-preenche imóvel por IA ao lançar foto
@@ -320,6 +397,35 @@ model Usuario {
   senha             String   @map("usu_senha")
   forcaAlterarSenha Boolean  @default(false) @map("usu_forca_alterar_senha")
   ativo             Boolean  @default(true) @map("usu_ativo")
+  /**
+   * ── O que a vitrine mostra de um corretor ───────────────────────────────
+   * O widget "Equipe" nasceu com três pessoas inventadas no código ("Ana
+   * Souza", "João Lima") porque não havia de onde tirar as de verdade: o
+   * cadastro de usuário guarda quem ENTRA no painel, não quem ATENDE o
+   * cliente. Estes quatro campos são a diferença entre as duas coisas.
+   * `exibirNaVitrine` é opt-in, e não o contrário. Aparecer com foto e nome
+   * numa página pública é decisão da pessoa, não consequência de ter login —
+   * e a imobiliária tem gente no painel que não atende ninguém (o
+   * administrativo, o financeiro, o dono).
+   * `creci` mora aqui e também no Tenant: o registro da EMPRESA e o registro
+   * de cada CORRETOR são documentos diferentes, e o cliente que confere
+   * procura o do corretor com quem falou.
+   */
+  /**
+   * Tema do painel escolhido POR ESTA PESSOA: "escuro" | "claro" | "auto".
+   * NULO é o estado que importa: significa "nunca escolhi", e aí vale o tema da
+   * imobiliária. Assim o administrador que troca o tema da casa alcança quem
+   * nunca opinou, e não passa por cima de quem já decidiu.
+   * Sem esta distinção, ou o administrador não conseguiria definir um padrão,
+   * ou trocaria o tema de quem já tinha escolhido o seu — e as duas coisas são
+   * erradas de maneiras diferentes.
+   */
+  temaPainel      String?  @map("usu_tema_painel")
+  foto            String?  @map("usu_foto")
+  creci           String?  @map("usu_creci")
+  whatsapp        String   @default("") @map("usu_whatsapp")
+  exibirNaVitrine Boolean  @default(false) @map("usu_exibir_na_vitrine")
+  cargoVitrine    String?  @map("usu_cargo_vitrine")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -349,6 +455,121 @@ model Usuario {
      propunha derrubá-lo em toda migração nova. Declarado, ele para de sumir. */
   @@index([email])
   @@map("tb_usuario")
+}
+
+/**
+ * ── Chave de API da imobiliária ────────────────────────────────────────────
+ * O crachá que outra plataforma usa para ler e escrever no acervo deste
+ * tenant. Uma linha por chave; uma imobiliária pode ter várias (a do portal, a
+ * do site antigo, a do integrador) e revogar uma sem derrubar as outras.
+ *
+ * GUARDAMOS O HASH, NUNCA A CHAVE. O texto integral aparece uma única vez, na
+ * tela, no instante em que é gerado — depois nem nós conseguimos recuperá-lo.
+ * É a mesma regra da senha do usuário, e pela mesma razão: um vazamento do
+ * banco não pode virar acesso ao acervo de ninguém.
+ *
+ * `prefixo` existe porque o hash é ilegível e a pessoa precisa reconhecer qual
+ * chave revogar. São os primeiros caracteres do texto — o bastante para
+ * distinguir, insuficiente para usar.
+ *
+ * `escopos` é lista e não booleanos porque a pergunta cresce: hoje são imóveis,
+ * clientes e usuários em leitura e escrita; amanhã entram leads. Uma coluna por
+ * combinação viraria doze colunas.
+ *
+ * `revogadaEm` em vez de DELETE: quem investiga um acesso indevido precisa
+ * saber que a chave existiu, quem a criou e quando ela parou de valer.
+ */
+model ChaveApi {
+  id         String    @id @default(cuid()) @map("cha_id")
+  tenantId   String    @map("tenant_id")
+  nome       String    @map("cha_nome")
+  prefixo    String    @map("cha_prefixo")
+  hash       String    @unique @map("cha_hash")
+  escopos    String[]  @map("cha_escopos")
+  ultimoUso  DateTime? @map("cha_ultimo_uso")
+  revogadaEm DateTime? @map("cha_revogada_em")
+  // Nome de quem gerou, copiado. Sem FK: a chave sobrevive ao desligamento de
+  // quem a criou, e a trilha não pode virar "criada por (ninguém)".
+  criadaPor  String?   @map("cha_criada_por")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, revogadaEm])
+  @@map("tb_chave_api")
+}
+
+/**
+ * ── Fonte de importação guardada ───────────────────────────────────────────
+ * O endereço do feed que a imobiliária apontou, para poder ser lido DE NOVO.
+ *
+ * Sem esta tabela, importar era um evento: colar a URL, conferir, importar,
+ * acabou. Mas o valor de um feed é justamente continuar valendo amanhã — o
+ * sistema antigo publica o acervo atualizado no mesmo endereço, e quem migrou
+ * na segunda quer o imóvel novo de quinta sem repetir o ritual.
+ *
+ * `desativarAusentes` é a política de ausência, e é opt-in. Imóvel que sai do
+ * feed do outro lado deveria sair daqui — só que "sumiu do feed" e "o feed
+ * quebrou e voltou vazio" são indistinguíveis de fora. Ligado, o que some vira
+ * INATIVO (nunca apagado); desligado, o acervo só cresce. A escolha é de quem
+ * conhece a origem.
+ *
+ * `ultimoResultado` guarda o relatório da última leitura para a tela mostrar o
+ * que aconteceu sem refazer o trabalho.
+ */
+model FonteImportacao {
+  id                String    @id @default(cuid()) @map("fon_id")
+  tenantId          String    @map("tenant_id")
+  nome              String    @map("fon_nome")
+  entidade          String    @map("fon_entidade") // imoveis | clientes | usuarios
+  url               String    @map("fon_url")
+  ativa             Boolean   @default(true) @map("fon_ativa")
+  desativarAusentes Boolean   @default(false) @map("fon_desativar_ausentes")
+  ultimaSync        DateTime? @map("fon_ultima_sync")
+  ultimoResultado   Json?     @map("fon_ultimo_resultado")
+  criadaPor         String?   @map("fon_criada_por")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, ativa])
+  @@map("tb_fonte_importacao")
+}
+
+/**
+ * ── Webhook de saída ───────────────────────────────────────────────────────
+ * O inverso do feed. No feed, o dado é do outro lado e nós vamos buscar; aqui o
+ * EVENTO é nosso — um lead entrou na vitrine —, e o CRM do cliente só
+ * descobriria perguntando de tempos em tempos. Perguntar de minuto em minuto
+ * para receber "nada" na quase totalidade das vezes é o desperdício que webhook
+ * existe para eliminar.
+ *
+ * `segredo` assina cada entrega (HMAC-SHA256 no cabeçalho). Sem assinatura,
+ * qualquer um que descubra a URL do cliente pode inventar leads no CRM dele —
+ * a URL não é credencial, é endereço.
+ *
+ * `falhasSeguidas` desarma o webhook sozinho depois de muitas falhas: endereço
+ * que morreu e ninguém removeu vira uma tentativa perdida por evento, para
+ * sempre. Zera na primeira entrega boa.
+ */
+model Webhook {
+  id             String    @id @default(cuid()) @map("whk_id")
+  tenantId       String    @map("tenant_id")
+  url            String    @map("whk_url")
+  eventos        String[]  @map("whk_eventos")
+  segredo        String    @map("whk_segredo")
+  ativo          Boolean   @default(true) @map("whk_ativo")
+  falhasSeguidas Int       @default(0) @map("whk_falhas_seguidas")
+  ultimoEnvio    DateTime? @map("whk_ultimo_envio")
+  ultimaFalha    String?   @map("whk_ultima_falha")
+  criadoPor      String?   @map("whk_criado_por")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, ativo])
+  @@map("tb_webhook")
 }
 
 // ─── Tutorial guiado ─────────────────────────────────────────────────────────
@@ -600,6 +821,19 @@ model Property {
    * anúncio. Sem este campo, "publicar tudo" seria a única política possível.
    */
   publicarPortais Boolean          @default(true) @map("prp_publicar_portais")
+  /**
+   * Mostrar a RUA E O NÚMERO na página pública do imóvel.
+   * Desligado por padrão, e o padrão é a parte que importa: bairro e cidade
+   * bastam para o visitante se situar, e o endereço exato é o que transforma
+   * um anúncio em convite para bater na porta de quem ainda mora lá. Também é
+   * o que permite alguém fechar negócio direto com o proprietário, passando por
+   * fora da imobiliária que anunciou.
+   * Quando desligado, o endereço NÃO é omitido só na tela: ele sai do payload
+   * público inteiro (ver `publicRoutes`) e o feed dos portais passa a pedir
+   * exibição por bairro. Esconder na interface e mandar no JSON seria esconder
+   * de quem olha e entregar a quem procura.
+   */
+  exibirEnderecoCompleto Boolean     @default(false) @map("prp_exibir_endereco_completo")
   viewCount       Int              @default(0)
   leadCount       Int              @default(0)
   saleCount       Int              @default(0)

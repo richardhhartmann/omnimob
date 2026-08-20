@@ -15,6 +15,8 @@ import { precosDosPlanos } from "../services/pagamentoService.js";
 import { tenantPorDominio, enderecoDaVitrine } from "../services/dominioService.js";
 import { montarFeedVRSync } from "../services/feedPortais.js";
 import { proximoResponsavel } from "../services/distribuicaoLeads.js";
+import { dadosDaVitrine } from "../services/dadosDaVitrine.js";
+import { emitir } from "../services/webhooks.js";
 import {
   criarTrial,
   assinarConvite,
@@ -35,6 +37,25 @@ function gate360(properties, plano) {
   return Array.isArray(properties)
     ? properties.map((p) => ({ ...p, images: zerar(p.images) }))
     : { ...properties, images: zerar(properties.images) };
+}
+
+/* ── O endereço só sai se a imobiliária mandou ───────────────────────────────
+   Esconder na tela não é esconder. A vitrine e a página do imóvel recebem o
+   registro inteiro em JSON, e um `display: none` no navegador deixa a rua e o
+   número a um clique de distância no painel de rede — visíveis para exatamente
+   quem tem interesse em procurá-los.
+
+   Então o corte é AQUI, antes de a resposta sair. Bairro, cidade e estado
+   ficam: são o que o visitante precisa para se situar, e não levam ninguém à
+   porta de quem ainda mora no imóvel.
+
+   O CEP sai junto. Sozinho ele parece inofensivo, e não é: um CEP brasileiro de
+   rua identifica o logradouro inteiro, e alguns identificam um único prédio —
+   devolver o CEP escondendo a rua seria publicar a mesma informação em outro
+   formato. */
+function semEnderecoOculto(imovel) {
+  if (!imovel || imovel.exibirEnderecoCompleto) return imovel;
+  return { ...imovel, address: "", cep: null };
 }
 
 function publicTenantShape(tenant) {
@@ -73,27 +94,73 @@ publicRouter.get("/:tenantSlug/properties", async (req, res) => {
       include: { images: { orderBy: { position: "asc" } } },
     });
 
+    /* ── A contagem de visitas NÃO segura a página ─────────────────────────
+       Aqui estava a lentidão da vitrine.
+
+       Era um `$transaction` com UM UPDATE POR IMÓVEL. Uma imobiliária com
+       trinta anúncios fazia trinta e uma idas ao banco — em transação, e com
+       `await` — antes de o primeiro byte da resposta sair. Contra o Supabase,
+       cada ida custa dezenas de milissegundos, e o visitante pagava a soma
+       inteira para ver a página.
+
+       Duas mudanças, e as duas importam:
+
+       1. `updateMany` no lugar de N `update`. O incremento é a mesma operação
+          para todos os imóveis da lista, e o banco resolve em UMA instrução.
+
+       2. Sem `await`. O visitante não precisa que o contador esteja gravado
+          para ver a vitrine — a contagem é para o relatório da imobiliária, e
+          uma escrita que falhe não pode derrubar a página de ninguém. Se o
+          processo morrer entre a resposta e a gravação, perde-se uma visita
+          num relatório; segurar a página para evitar isso é trocar o problema
+          de alguém pelo de todo mundo.
+
+       O `$transaction` continua porque as duas escritas descrevem o mesmo
+       fato: contador e evento não podem divergir. */
     if (properties.length > 0) {
-      const now = new Date();
-      await prisma.$transaction([
-        ...properties.map((property) =>
-          prisma.property.update({
-            where: { id: property.id },
+      const agora = new Date();
+      const ids = properties.map((p) => p.id);
+      prisma
+        .$transaction([
+          prisma.property.updateMany({
+            where: { id: { in: ids } },
             data: { viewCount: { increment: 1 } },
-          })
-        ),
-        prisma.propertyMetricEvent.createMany({
-          data: properties.map((property) => ({
-            tenantId: tenant.id,
-            propertyId: property.id,
-            type: MetricEventType.VIEW,
-            createdAt: now,
-          })),
-        }),
-      ]);
+          }),
+          prisma.propertyMetricEvent.createMany({
+            data: ids.map((propertyId) => ({
+              tenantId: tenant.id,
+              propertyId,
+              type: MetricEventType.VIEW,
+              createdAt: agora,
+            })),
+          }),
+        ])
+        .catch((erro) => console.warn(`[vitrine] não contei as visitas de ${tenant.slug}: ${erro.message}`));
     }
 
-    return res.json({ tenant: publicTenantShape(tenant), properties: gate360(properties, tenant.plano) });
+    /* Os dados reais dos widgets viajam JUNTO, no mesmo payload.
+
+       Podia ser um endpoint próprio, e não é de propósito: esta resposta é o
+       que a vitrine pública e o editor já buscam (os dois chamam
+       `getPublicShowcase`), e uma segunda requisição significaria a página
+       desenhar uma vez com a equipe vazia e de novo com ela preenchida — o
+       reflow que a engine de layout existe para evitar. Como bônus, o editor
+       recebe exatamente o que o visitante recebe, que é a regra WYSIWYG.
+
+       A apuração falhar não pode derrubar a vitrine: sem o bloco, cada widget
+       cai no conteúdo digitado à mão, que é o comportamento de antes. */
+    let vitrine = null;
+    try {
+      vitrine = await dadosDaVitrine(tenant);
+    } catch (erro) {
+      console.warn(`[vitrine] não apurei os dados reais de ${tenant.slug}: ${erro.message}`);
+    }
+
+    return res.json({
+      tenant: publicTenantShape(tenant),
+      properties: gate360(properties, tenant.plano).map(semEnderecoOculto),
+      vitrine,
+    });
   } catch {
     return res.status(500).json({ error: "Erro ao carregar vitrine." });
   }
@@ -134,7 +201,7 @@ publicRouter.get("/:tenantSlug/properties/:propertyId", async (req, res) => {
 
     return res.json({
       tenant: publicTenantShape(tenant),
-      property: gate360({ ...property, viewCount: property.viewCount + 1 }, tenant.plano),
+      property: semEnderecoOculto(gate360({ ...property, viewCount: property.viewCount + 1 }, tenant.plano)),
     });
   } catch {
     return res.status(500).json({ error: "Erro ao carregar imovel." });
@@ -178,7 +245,7 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
     const responsavel = await proximoResponsavel(tenant.id);
     const responsavelId = responsavel?.id || null;
 
-    await prisma.propertyLead.create({
+    const lead = await prisma.propertyLead.create({
       data: {
         tenantId: tenant.id,
         propertyId: property.id,
@@ -201,6 +268,20 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
           ],
         },
       },
+    });
+
+    /* Avisa quem estiver ouvindo. NÃO é esperado: o `emitir` dispara e retorna
+       na mesma linha. Um CRM lento faria o formulário da vitrine demorar, e um
+       CRM fora do ar o faria falhar — para um visitante que não tem nada a ver
+       com isso. O lead já está gravado; o aviso é consequência, não condição. */
+    emitir(tenant.id, "lead.criado", {
+      id: lead.id,
+      nome: lead.name,
+      email: lead.email,
+      telefone: lead.phone,
+      mensagem: lead.message,
+      origem: lead.source,
+      imovel: { id: property.id, title: property.title },
     });
 
     return res.json({ message: "Interesse registrado com sucesso.", property: updated });
@@ -698,6 +779,15 @@ publicRouter.get("/:slug/feed.xml", async (req, res) => {
       res.type("application/xml");
       return res.send(montarFeedVRSync({ name: "Omnimob" }, [], null));
     }
+
+    /* Carimba QUANDO o portal veio buscar. É a única evidência que a
+       imobiliária tem de que a integração com o ZAP está viva — não recebemos
+       confirmação de carga, e "cadastrei a URL, e agora?" era uma pergunta sem
+       resposta possível. Fora do caminho da resposta: o feed não pode esperar
+       uma escrita, e um erro aqui não pode derrubar a carga do portal. */
+    prisma.tenant
+      .update({ where: { id: tenant.id }, data: { feedLidoEm: new Date() } })
+      .catch(() => {});
 
     const imoveis = await prisma.property.findMany({
       where: { tenantId: tenant.id, status: "ACTIVE", publicarPortais: true },

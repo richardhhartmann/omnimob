@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { formatCep, formatCnpj, formatCreci, formatPhone, onlyDigits } from "../utils/masks";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
+import { TEMAS } from "../utils/temaDoPainel";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Segundo passo das boas-vindas: a ficha da imobiliária.
@@ -41,6 +42,14 @@ const VAZIO = {
   name: "", slogan: "", cnpj: "", creci: "", whatsapp: "", telefone: "", email: "",
   cep: "", endereco: "", cidade: "", estado: "", logoUrl: "",
   primaryColor: "#6366f1", secondaryColor: "#d4af37",
+  /* Tema do painel para a imobiliária inteira. Escuro por padrão: é o que o
+     produto sempre foi, e a primeira tela não é hora de surpreender ninguém. */
+  temaImobiliaria: "escuro",
+  /* Uma faixa já montada, e não uma lista vazia: o horário mais comum de
+     imobiliária é justamente este, e quem concordar só confere. Pedir que a
+     pessoa clique em "adicionar" antes de digitar qualquer coisa é atrito no
+     campo mais chato da tela. */
+  horarioAtendimento: [{ dias: "Segunda a sexta", abre: "09:00", fecha: "18:00", fechado: false }],
 };
 
 export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
@@ -74,6 +83,10 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
           estado: t.estado || "",
           logoUrl: t.logoUrl || "",
           primaryColor: t.primaryColor || "#6366f1",
+          temaImobiliaria: t.temaImobiliaria || "escuro",
+          horarioAtendimento: Array.isArray(t.horarioAtendimento) && t.horarioAtendimento.length
+            ? t.horarioAtendimento
+            : VAZIO.horarioAtendimento,
           secondaryColor: t.secondaryColor || "#d4af37",
         });
       })
@@ -125,7 +138,40 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
     }
   }
 
+  /* ── O que é obrigatório, e por quê cada um ────────────────────────────────
+     Estes seis são o que a VITRINE precisa para não ir ao ar pela metade: sem
+     nome ela não tem título, sem contato o visitante não fecha negócio, sem
+     endereço o mapa não existe e sem horário o selo de "aberto agora" some.
+
+     O resto continua opcional de propósito. Logo, CRECI, CNPJ, cores e tema são
+     coisas que a pessoa pode não ter à mão no primeiro minuto, e travar o
+     começo por causa deles empurraria todo mundo para o "Preencher depois" —
+     que é exatamente o que este trabalho quer deixar de ser o caminho fácil. */
+  const OBRIGATORIOS = [
+    ["name", "Nome da imobiliária"],
+    ["slogan", "Slogan"],
+    ["whatsapp", "Contato (WhatsApp)"],
+    ["email", "E-mail"],
+    ["endereco", "Endereço"],
+  ];
+
+  const faltando = useMemo(() => {
+    const vazios = OBRIGATORIOS.filter(([campo]) => !String(form[campo] || "").trim()).map(([c]) => c);
+    /* Horário é lista, não texto: "preenchido" significa ter ao menos uma faixa
+       com dia descrito. Uma linha em branco recém-adicionada não conta. */
+    const temHorario = (form.horarioAtendimento || []).some((f) => String(f?.dias || "").trim());
+    if (!temHorario) vazios.push("horarioAtendimento");
+    return new Set(vazios);
+  }, [form]);
+
+  const rotuloDoQueFalta = OBRIGATORIOS.filter(([c]) => faltando.has(c)).map(([, r]) => r)
+    .concat(faltando.has("horarioAtendimento") ? ["Horário de atendimento"] : []);
+
   async function salvar() {
+    if (faltando.size) {
+      setErro(`Preencha para continuar: ${rotuloDoQueFalta.join(", ")}.`);
+      return;
+    }
     setSalvando(true);
     setErro("");
     try {
@@ -136,6 +182,9 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
         cep: onlyDigits(form.cep),
         estado: form.estado.toUpperCase().slice(0, 2),
         creci: form.creci.trim(),
+        // Faixa sem dia descrito não vai ao banco: existe na tela porque a
+        // pessoa acabou de clicar em "adicionar" e ainda não digitou.
+        horarioAtendimento: (form.horarioAtendimento || []).filter((f) => String(f?.dias || "").trim()),
       });
       aoConcluir?.(form);
     } catch (e) {
@@ -153,11 +202,11 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
   return (
     <div className="pi-corpo">
       <div className="pi-grade">
-        <Campo rotulo="Nome da imobiliária" largo>
+        <Campo rotulo="Nome da imobiliária" largo obrigatorio faltando={faltando.has("name")}>
           <input className="pi-entrada" value={form.name} onChange={(e) => set("name", e.target.value)} maxLength={120} disabled={ocupado} />
         </Campo>
 
-        <Campo rotulo="Slogan" dica="Aparece embaixo do nome na vitrine." largo>
+        <Campo rotulo="Slogan" dica="Aparece embaixo do nome na vitrine." largo obrigatorio faltando={faltando.has("slogan")}>
           <input className="pi-entrada" value={form.slogan} onChange={(e) => set("slogan", e.target.value)} placeholder="O seu próximo endereço começa aqui" maxLength={120} disabled={ocupado} />
         </Campo>
 
@@ -171,7 +220,7 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
           <input className="pi-entrada" value={form.creci} onChange={(e) => set("creci", formatCreci(e.target.value))} placeholder="12345-J/SP" disabled={ocupado} />
         </Campo>
 
-        <Campo rotulo="Contato (WhatsApp)">
+        <Campo rotulo="Contato (WhatsApp)" obrigatorio faltando={faltando.has("whatsapp")}>
           <input className="pi-entrada" value={form.whatsapp} onChange={(e) => set("whatsapp", formatPhone(e.target.value))} placeholder="(11) 99999-9999" inputMode="tel" disabled={ocupado} />
         </Campo>
 
@@ -179,7 +228,7 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
           <input className="pi-entrada" value={form.telefone} onChange={(e) => set("telefone", formatPhone(e.target.value))} placeholder="(11) 3333-3333" inputMode="tel" disabled={ocupado} />
         </Campo>
 
-        <Campo rotulo="E-mail" largo>
+        <Campo rotulo="E-mail" largo obrigatorio faltando={faltando.has("email")}>
           <input className="pi-entrada" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="contato@imobiliaria.com.br" disabled={ocupado} />
         </Campo>
 
@@ -198,7 +247,7 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
           <input className="pi-entrada" value={form.cidade} onChange={(e) => set("cidade", e.target.value)} disabled={ocupado} />
         </Campo>
 
-        <Campo rotulo="Endereço" largo>
+        <Campo rotulo="Endereço" largo obrigatorio faltando={faltando.has("endereco")}>
           <input className="pi-entrada" value={form.endereco} onChange={(e) => set("endereco", e.target.value)} placeholder="Rua, número e complemento" disabled={ocupado} />
         </Campo>
 
@@ -232,12 +281,107 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
           </div>
         </Campo>
 
-        <Campo rotulo="Cor primária">
+        {/* Cores do PAINEL. As da vitrine são escolhidas no editor dela, com
+            a opção de herdar estas. */}
+        <Campo rotulo="Cor primária" dica="Do painel. A vitrine pode herdar ou ter as suas.">
           <Cor valor={form.primaryColor} aoMudar={(v) => set("primaryColor", v)} desabilitado={ocupado} />
         </Campo>
 
         <Campo rotulo="Cor secundária">
           <Cor valor={form.secondaryColor} aoMudar={(v) => set("secondaryColor", v)} desabilitado={ocupado} />
+        </Campo>
+
+        {/* O tema padrão de quem trabalha aqui. Perguntado JÁ na primeira tela
+            porque é a hora em que a pessoa está decidindo como a casa dela vai
+            ser — e porque quem entrar depois herda esta escolha sem precisar
+            fazer a sua. Quem preferir outro troca no próprio perfil, e essa
+            preferência individual não é sobrescrita. */}
+        {/* Horário de atendimento. Obrigatório porque a vitrine mostra o selo
+            de "aberto agora" a partir daqui — sem faixa nenhuma, o bloco de
+            horários da página publicada fica mudo. */}
+        <Campo
+          rotulo="Horário de atendimento"
+          dica="A vitrine calcula sozinha se você está aberto agora."
+          largo
+          obrigatorio
+          faltando={faltando.has("horarioAtendimento")}
+        >
+          <div className="pi-horarios">
+            {(form.horarioAtendimento || []).map((faixa, i) => {
+              const trocar = (campo, valor) =>
+                set("horarioAtendimento", form.horarioAtendimento.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)));
+              return (
+                <div className="pi-horario" key={i}>
+                  <input
+                    className="pi-entrada"
+                    value={faixa.dias}
+                    onChange={(e) => trocar("dias", e.target.value)}
+                    placeholder="Ex: Segunda a sexta"
+                    disabled={ocupado}
+                  />
+                  {faixa.fechado ? (
+                    <span className="pi-horario__fechado">Sem atendimento</span>
+                  ) : (
+                    <span className="pi-horario__horas">
+                      <input className="pi-entrada" type="time" value={faixa.abre} onChange={(e) => trocar("abre", e.target.value)} disabled={ocupado} />
+                      <em>às</em>
+                      <input className="pi-entrada" type="time" value={faixa.fecha} onChange={(e) => trocar("fecha", e.target.value)} disabled={ocupado} />
+                    </span>
+                  )}
+                  <label className="pi-horario__chave">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(faixa.fechado)}
+                      onChange={(e) => trocar("fechado", e.target.checked)}
+                      disabled={ocupado}
+                    />
+                    Fechado
+                  </label>
+                  {form.horarioAtendimento.length > 1 ? (
+                    <button
+                      type="button"
+                      className="pi-horario__remover"
+                      onClick={() => set("horarioAtendimento", form.horarioAtendimento.filter((_, j) => j !== i))}
+                      disabled={ocupado}
+                      aria-label="Remover faixa"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {(form.horarioAtendimento || []).length < 6 ? (
+              <button
+                type="button"
+                className="pi-horario__mais"
+                onClick={() => set("horarioAtendimento", [
+                  ...(form.horarioAtendimento || []),
+                  { dias: "", abre: "09:00", fecha: "13:00", fechado: false },
+                ])}
+                disabled={ocupado}
+              >
+                + Adicionar faixa
+              </button>
+            ) : null}
+          </div>
+        </Campo>
+
+        <Campo rotulo="Tema do painel" dica="Vale para toda a equipe. Cada pessoa pode trocar o seu depois." largo>
+          <div className="pi-temas">
+            {TEMAS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`pi-tema${form.temaImobiliaria === t.id ? " is-ativo" : ""}`}
+                onClick={() => set("temaImobiliaria", t.id)}
+                disabled={ocupado}
+              >
+                <span className={`pi-tema__amostra is-${t.id}`} aria-hidden />
+                {t.rotulo}
+              </button>
+            ))}
+          </div>
         </Campo>
       </div>
 
@@ -250,10 +394,16 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
       {erro ? <p className="pi-erro">{erro}</p> : null}
 
       <div className="pi-acoes">
-        <button type="button" className="pi-botao pi-botao--fantasma" onClick={aoPular} disabled={ocupado}>
-          Preencher depois
-        </button>
-        <button type="button" className="pi-botao pi-botao--primario" onClick={salvar} disabled={ocupado}>
+        {/* Desligado enquanto faltar campo, com o motivo no `title`. O clique
+            ainda é validado dentro do `salvar` — o botão desligado orienta,
+            não protege: o Enter num campo passaria por cima dele. */}
+        <button
+          type="button"
+          className="pi-botao pi-botao--primario"
+          onClick={salvar}
+          disabled={ocupado || faltando.size > 0}
+          title={faltando.size ? `Falta preencher: ${rotuloDoQueFalta.join(", ")}` : undefined}
+        >
           {salvando ? "Salvando…" : "Salvar e começar"}
         </button>
       </div>
@@ -261,10 +411,16 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
   );
 }
 
-function Campo({ rotulo, dica, largo, children }) {
+function Campo({ rotulo, dica, largo, obrigatorio, faltando, children }) {
   return (
-    <label className={`pi-campo${largo ? " pi-campo--largo" : ""}`}>
-      <span className="pi-rotulo">{rotulo}</span>
+    <label className={`pi-campo${largo ? " pi-campo--largo" : ""}${faltando ? " is-faltando" : ""}`}>
+      <span className="pi-rotulo">
+        {rotulo}
+        {/* O asterisco marca o obrigatório ANTES de a pessoa tentar salvar.
+            Descobrir a exigência só no erro é o que faz alguém preencher meia
+            tela, apanhar, e ter de reler tudo procurando o que faltou. */}
+        {obrigatorio ? <i className="pi-obrigatorio" aria-hidden="true">*</i> : null}
+      </span>
       {children}
       {dica ? <span className="pi-dica">{dica}</span> : null}
     </label>
@@ -296,6 +452,65 @@ function Cor({ valor, aoMudar, desabilitado }) {
 export const PERFIL_INICIAL_CSS = `
 .pi-carregando { font-size: 13px; color: var(--bv-fraco, #94a3b8); padding: 26px 0; text-align: center; }
 .pi-corpo { display: flex; flex-direction: column; gap: 16px; text-align: left; }
+
+/* Os três temas como amostras clicáveis, e não um combo: a escolha é visual, e
+   um seletor de texto obrigaria a imaginar o resultado. O quadradinho mostra. */
+/* ── Obrigatórios ── */
+.pi-obrigatorio { color: #fca5a5; font-style: normal; margin-left: 3px; }
+/* Moldura vermelha no campo que falta.
+   (Sem crases neste comentário: ele vive dentro de um template literal, e uma
+   crase aqui encerra a string e derruba o build.) */
+.pi-campo.is-faltando .pi-entrada { border-color: rgba(248, 113, 113, 0.45); }
+
+/* ── Horário de atendimento ── */
+.pi-horarios { display: flex; flex-direction: column; gap: 8px; }
+.pi-horario {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center; gap: 8px;
+}
+.pi-horario__horas { display: inline-flex; align-items: center; gap: 6px; }
+.pi-horario__horas .pi-entrada { width: auto; min-width: 96px; }
+.pi-horario__horas em { font-style: normal; font-size: 11.5px; color: #64748b; }
+.pi-horario__fechado { font-size: 12px; color: #64748b; font-style: italic; }
+.pi-horario__chave {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #94a3b8; white-space: nowrap; cursor: pointer;
+}
+.bv-caixa .pi-horario__remover, .pi-horario__remover {
+  width: 26px; height: 26px; padding: 0; border-radius: 7px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.12); background: transparent; box-shadow: none;
+  color: #94a3b8; font-size: 15px; line-height: 1;
+}
+.pi-horario__remover:hover { color: #fca5a5; border-color: rgba(248,113,113,0.35); background: transparent; }
+.bv-caixa .pi-horario__mais, .pi-horario__mais {
+  width: auto; align-self: flex-start; padding: 7px 13px; border-radius: 9px; cursor: pointer;
+  border: 1px dashed rgba(255,255,255,0.18); background: transparent; box-shadow: none;
+  color: #94a3b8; font-family: inherit; font-size: 12px; font-weight: 600;
+}
+.pi-horario__mais:hover { color: #e2e8f0; border-color: rgba(255,255,255,0.3); background: transparent; }
+
+@media (max-width: 620px) {
+  .pi-horario { grid-template-columns: 1fr; }
+}
+
+.pi-temas { display: flex; gap: 8px; flex-wrap: wrap; }
+.pi-tema {
+  display: inline-flex; align-items: center; gap: 8px; width: auto;
+  padding: 8px 13px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03);
+  box-shadow: none; transform: none;
+  color: #cbd5e1; font-family: inherit; font-size: 12.5px; font-weight: 600;
+}
+.pi-tema:hover { background: rgba(255,255,255,0.06); color: #f1f5f9; box-shadow: none; transform: none; }
+.pi-tema.is-ativo { border-color: rgba(129,140,248,0.55); background: rgba(129,140,248,0.12); color: #f1f5f9; }
+.pi-tema__amostra {
+  width: 15px; height: 15px; border-radius: 5px; flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.22);
+}
+.pi-tema__amostra.is-claro { background: #f6f7f9; }
+.pi-tema__amostra.is-escuro { background: #0d0d12; }
+/* Automático é os dois: metade e metade diz "depende" sem precisar de texto. */
+.pi-tema__amostra.is-auto { background: linear-gradient(135deg, #f6f7f9 0 50%, #0d0d12 50% 100%); }
 
 .pi-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .pi-campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }

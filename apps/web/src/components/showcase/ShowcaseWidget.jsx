@@ -3,6 +3,7 @@ import { CtaWidget } from "./widgets/CtaWidget.jsx";
 import { DividerWidget } from "./widgets/DividerWidget.jsx";
 import { FaqWidget } from "./widgets/FaqWidget.jsx";
 import { FinanceWidget } from "./widgets/FinanceWidget.jsx";
+import { HoursWidget } from "./widgets/HoursWidget.jsx";
 import { MapWidget } from "./widgets/MapWidget.jsx";
 import { PropertySearchWidget } from "./widgets/PropertySearchWidget.jsx";
 import { RegionsWidget } from "./widgets/RegionsWidget.jsx";
@@ -24,7 +25,10 @@ const RENDERIZADORES = {
   map: MapWidget,
   text: TextWidget,
   note: TextWidget,
-  hours: TextWidget,
+  /* `hours` caía no renderizador de texto e o conteúdo era uma string com
+     `<br>` no meio. Agora tem componente próprio, porque passou a ter dado
+     próprio: as faixas de atendimento vivem no cadastro da imobiliária. */
+  hours: HoursWidget,
   faq: FaqWidget,
   "property-search": PropertySearchWidget,
   regions: RegionsWidget,

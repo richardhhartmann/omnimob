@@ -47,6 +47,11 @@ function montarSessao(usuario) {
       nome: usuario.nome,
       login: usuario.login,
       cargo: cargoDaSessao(usuario.cargo),
+      /* NULO é informação, não ausência: significa "nunca escolhi tema", e é o
+         que faz o painel cair no da imobiliária. Normalizar para uma string
+         aqui apagaria essa distinção e o administrador nunca mais alcançaria
+         esta pessoa ao definir o padrão da casa. */
+      temaPainel: usuario.temaPainel ?? null,
     },
     tenant: {
       id: usuario.tenant.id,
@@ -57,8 +62,10 @@ function montarSessao(usuario) {
       description: usuario.tenant.description,
       slogan: usuario.tenant.slogan,
       logoUrl: usuario.tenant.logoUrl,
+      // Cores do PAINEL. As da vitrine moram no `showcaseConfig`.
       primaryColor: usuario.tenant.primaryColor,
       secondaryColor: usuario.tenant.secondaryColor,
+      temaImobiliaria: usuario.tenant.temaImobiliaria || "escuro",
       showcaseHeadline: usuario.tenant.showcaseHeadline,
       showcaseSubheadline: usuario.tenant.showcaseSubheadline,
       showcaseConfig: usuario.tenant.showcaseConfig,
@@ -94,6 +101,33 @@ authRouter.post("/login", async (req, res) => {
 
     if (!usuario || !usuario.ativo) {
       return res.status(401).json({ error: "Usuario ou senha invalidos." });
+    }
+
+    /* ── A IMOBILIÁRIA ainda vale? ─────────────────────────────────────────
+       O login conferia só `usuario.ativo`, e não a conta. Um tenant vencido e
+       desativado pela faxina continuava deixando entrar: o token saía, o painel
+       carregava, e só então cada requisição batia no `requireTenant` e falhava.
+       A pessoa via uma tela meio montada quebrando aos poucos, sem nunca ler o
+       motivo.
+
+       A mensagem é ESPECÍFICA, e não o "usuário ou senha inválidos" genérico
+       das linhas acima. Ali o texto vago existe para não confirmar quais logins
+       existem; aqui as credenciais estão certas e quem entrou tem direito de
+       saber o que aconteceu com a conta dele — esconder só geraria um chamado
+       de suporte para uma pergunta que o e-mail de vencimento já respondeu. */
+    if (!usuario.tenant?.ativo) {
+      return res.status(403).json({
+        error:
+          "O acesso desta imobiliária está suspenso porque o plano venceu. " +
+          "Seus dados continuam guardados: assine um plano para recuperar o ambiente, ou responda ao e-mail que enviamos.",
+        code: "TENANT_SUSPENSO",
+      });
+    }
+    if (usuario.tenant.statusPagamento === "CANCELADO") {
+      return res.status(403).json({
+        error: "A assinatura desta imobiliária foi cancelada. Fale com o administrador da conta.",
+        code: "TENANT_CANCELADO",
+      });
     }
 
     // Usuário recém-criado ainda pode não ter senha definida. Nesse caso o
@@ -162,6 +196,32 @@ authRouter.post("/definir-senha", async (req, res) => {
   }
 });
 
+/* ── A preferência de tema desta pessoa ──────────────────────────────────────
+   Fica em `/auth`, e não em `/usuarios`: aquela rota exige `gerenciarUsuarios`
+   porque administra OUTRAS pessoas. Esta é sobre si mesmo, e todo mundo que
+   entra no painel pode ter uma opinião sobre a própria tela.
+
+   `null` DESFAZ a escolha e devolve a pessoa ao tema da imobiliária — é o
+   caminho de volta, e ele precisa existir: quem experimentou o claro e se
+   arrependeu não deveria ficar preso a uma escolha.
+
+   Sem `requireTenant`: a preferência é do usuário e não depende do cabeçalho de
+   imobiliária. */
+authRouter.put("/meu-tema", requireAuth, async (req, res) => {
+  try {
+    const bruto = req.body?.tema;
+    const tema = bruto === null || bruto === "" ? null : String(bruto);
+    if (tema !== null && !["claro", "escuro", "auto"].includes(tema)) {
+      return res.status(400).json({ error: "Tema inválido." });
+    }
+    await prisma.usuario.update({ where: { id: req.authUserId }, data: { temaPainel: tema } });
+    return res.json({ temaPainel: tema });
+  } catch (erro) {
+    console.error("[auth] tema:", erro);
+    return res.status(500).json({ error: "Erro ao salvar o tema." });
+  }
+});
+
 authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {
   try {
     const usuario = await prisma.usuario.findFirst({
@@ -176,6 +236,8 @@ authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {
       nome: usuario.nome,
       login: usuario.login,
       cargo: cargoDaSessao(usuario.cargo),
+      // Mesma regra do login: nulo significa "nunca escolhi tema".
+      temaPainel: usuario.temaPainel ?? null,
     });
   } catch (err) {
     console.error("[GET /auth/me]", err);

@@ -74,14 +74,14 @@ function HomePage({ session }) {
       icon: <Buildings size={32} weight="duotone" />,
       title: "Gerenciar Imóveis",
       description: "Adicione um novo ativo ao portfólio da imobiliária.",
-      onClick: () => navigate("/imoveis/novo"),
+      onClick: () => navigate("/imoveis"),
       accent: "#6366f1",
     },
     cargo?.gerenciarImoveis && {
       icon: <SquaresFour size={32} weight="duotone" />,
       title: "Portfólio Ativo",
       description: "Visualize e gerencie os imóveis cadastrados.",
-      onClick: () => navigate("/imoveis"),
+      onClick: () => navigate("/imoveis/portfolio"),
       accent: "#6366f1",
     },
     /* Um atalho só para tudo que é acompanhamento — leads, relatório mensal,
@@ -162,32 +162,29 @@ function HomePage({ session }) {
           <button
             key={card.title}
             onClick={card.onClick}
-            className="pg-follow"
+            className="pg-follow inicio-atalho"
+            /* O realce do hover é COR, e cor pertence ao CSS — este cartão já
+               teve o dele escrito nos handlers de mouse, e o preço apareceu no
+               tema claro: a folha precisava de `!important` para clarear o
+               fundo, e o `!important` matava junto o brilho do hover.
+
+               Agora o JS só entrega a cor do cartão em variáveis (o accent com
+               as três opacidades que o gradiente usa) e cuida do movimento; o
+               desenho é regra de estilo, e cada tema escreve a sua. */
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              gap: "16px",
+              "--pg-accent": card.accent,
+              "--pg-accent-borda": `${card.accent}55`,
+              "--pg-accent-brilho": `${card.accent}33`,
+              "--pg-accent-veu": `${card.accent}18`,
               padding: "28px 28px",
               borderRadius: "16px",
-              cursor: "pointer",
               textAlign: "left",
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
-              color: "inherit",
-              transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s, box-shadow 0.25s",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = "translateY(-4px)";
-              e.currentTarget.style.border = `1px solid ${card.accent}55`;
-              e.currentTarget.style.background = `radial-gradient(circle at var(--px, 50%) var(--py, 50%), ${card.accent}33 0%, transparent 90%), linear-gradient(var(--pg-angle, 145deg), ${card.accent}18 0%, rgba(255,255,255,0.02) 100%)`;
-              e.currentTarget.style.boxShadow = `0 12px 32px rgba(0,0,0,0.2)`;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.border = "1px solid rgba(255,255,255,0.1)";
-              e.currentTarget.style.background = "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)";
-              e.currentTarget.style.boxShadow = "none";
             }}
             onMouseDown={(e) => {
               spawnRipple(e, card.accent);
@@ -343,10 +340,10 @@ export function ImovelFormPage({ session }) {
   const [error, setError] = useState("");
 
   // /imoveis/editar exige um imóvel no state. Sem ele (ex.: refresh da página),
-  // volta para a lista em vez de mostrar o menu de "novo imóvel".
+  // volta para o portfólio em vez de mostrar o menu de "novo imóvel".
   useEffect(() => {
     if (pathname === "/imoveis/editar" && !editingProperty) {
-      navigate("/imoveis", { replace: true });
+      navigate("/imoveis/portfolio", { replace: true });
     }
   }, [pathname, editingProperty, navigate]);
 
@@ -362,7 +359,7 @@ export function ImovelFormPage({ session }) {
         const updated = await api.updateProperty(tenantSlug, editingProperty.id, propertyPayload);
         targetPropertyId = updated.id;
         showToast?.("Imóvel atualizado com sucesso!");
-        navigate("/imoveis");
+        navigate("/imoveis/portfolio");
       } else {
         const created = await api.createProperty(tenantSlug, propertyPayload);
         targetPropertyId = created.id;
@@ -430,7 +427,7 @@ export function DashboardPage({ session }) {
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab === "create") navigate("/imoveis/novo", { replace: true });
-    else if (tab === "list") navigate("/imoveis", { replace: true });
+    else if (tab === "list") navigate("/imoveis/portfolio", { replace: true });
   }, []);
 
   return <HomePage session={session} />;

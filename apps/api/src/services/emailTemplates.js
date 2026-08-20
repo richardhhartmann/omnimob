@@ -356,14 +356,26 @@ export function emailAssinaturaConfirmada({
 
 // ─── 6. Teste vencido (vai para o cliente) ───────────────────────────────────
 
-export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, urlVitrine }) {
-  const subject = `O teste da ${imobiliaria} venceu — ainda dá para recuperar`;
+export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, urlVitrine, eraTeste = true }) {
+  /* O mesmo e-mail serve aos dois desfechos — teste que acabou e plano que
+     venceu —, mudando só o nome do que acabou. São a mesma mensagem para quem
+     lê: "você perdeu o acesso, nada foi apagado, tem 30 dias".
+
+     O que NÃO pode acontecer é falar de "período de teste" para quem estava
+     pagando: a frase é falsa, e uma mensagem que erra o fato básico perde a
+     credibilidade justo quando precisa dela para trazer o cliente de volta. */
+  const oQueAcabou = eraTeste ? "O período de teste" : "A assinatura";
+  const subject = eraTeste
+    ? `O teste da ${imobiliaria} venceu — ainda dá para recuperar`
+    : `A assinatura da ${imobiliaria} venceu — ainda dá para recuperar`;
 
   const body = [
-    `O período de teste da ${imobiliaria} chegou ao fim e o ambiente foi desativado.`,
+    `${oQueAcabou} da ${imobiliaria} chegou ao fim e o ambiente foi desativado.`,
+    "",
+    "Enquanto isso, ninguém da sua equipe consegue entrar no painel.",
     "",
     `Nada foi apagado ainda: seus imóveis, fotos, leads e a vitrine continuam guardados por mais ${diasAteRemover} dias.`,
-    "Se você assinar dentro desse prazo, tudo volta exatamente como estava.",
+    "Se você assinar um plano dentro desse prazo, tudo volta exatamente como estava.",
     "",
     `Painel: ${base}/login`,
     "",
@@ -374,10 +386,11 @@ export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, ur
   const html = layoutEmail({
     preheader: `Seus dados ficam guardados por ${diasAteRemover} dias. Dá para recuperar.`,
     conteudo: [
-      eyebrow("● TESTE ENCERRADO", "#f59e0b"),
-      titulo("Seu teste venceu — mas nada foi apagado"),
+      eyebrow(eraTeste ? "● TESTE ENCERRADO" : "● ACESSO SUSPENSO", "#f59e0b"),
+      titulo(eraTeste ? "Seu teste venceu — mas nada foi apagado" : "Sua assinatura venceu — mas nada foi apagado"),
       paragrafo(
-        `O período de teste da ${forte(imobiliaria)} chegou ao fim e o ambiente foi desativado.`,
+        `${oQueAcabou} da ${forte(imobiliaria)} chegou ao fim e o ambiente foi desativado. ` +
+          "Ninguém da sua equipe consegue entrar no painel enquanto isso.",
       ),
       aviso(
         `Seus imóveis, fotos, leads e a vitrine continuam guardados por mais <strong style="color:${COR.forte};">${diasAteRemover} dias</strong>. Assinando dentro desse prazo, tudo volta exatamente como estava.`,

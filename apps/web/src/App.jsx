@@ -375,14 +375,35 @@ export default function App() {
         }
       >
         <Route path="/" element={<DashboardPage session={session} />} />
+        {/* ── Imóveis ───────────────────────────────────────────────────────
+            Cada endereço diz o que a tela é, e é isso que mudou aqui.
+
+            Antes, "Gerenciar Imóveis" — o índice de cartões — morava em
+            `/imoveis/novo`, e o formulário só aparecia com `?ver=novo` grudado
+            atrás. Quem olhava a barra do navegador lia "novo" numa tela que não
+            cadastra nada, e o link do formulário carregava um parâmetro que
+            repetia o que o caminho já dizia.
+
+            A lista, que ocupava `/imoveis`, passa a ter nome próprio:
+            `/imoveis/portfolio`. É ela que os botões "Ver portfólio", "Voltar" e
+            o atalho da tela inicial procuram — todos foram atualizados junto.
+
+            `/imoveis/portfolio` vem antes de `/imoveis/:propertyId` por clareza;
+            o roteador já prefere o trecho literal ao parâmetro, mas ler as duas
+            linhas na ordem em que se resolvem poupa a dúvida. */}
         <Route path="/imoveis" element={
           cargo?.gerenciarImoveis
-            ? <ImovelListPage session={session} />
+            ? <ImovelFormPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/imoveis/novo" element={
           cargo?.gerenciarImoveis
             ? <ImovelFormPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/imoveis/portfolio" element={
+          cargo?.gerenciarImoveis
+            ? <ImovelListPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/imoveis/editar" element={

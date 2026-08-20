@@ -43,11 +43,28 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
     [fluxo],
   );
 
-  /* ── Decide se este acesso mostra alguma coisa ──────────────────────────── */
+  /* ── Decide se este acesso mostra alguma coisa ────────────────────────────
+
+     ── A CONSULTA SAI NA MONTAGEM, NÃO QUANDO O MODAL FECHA ──
+
+     Aqui estava o vão de cinco a dez segundos entre o modal de boas-vindas e o
+     convite do tour. A consulta ao progresso do tutorial só começava quando
+     `pronto` virava verdadeiro — ou seja, DEPOIS de o modal anterior sair — e o
+     que a pessoa via era a tela vazia pelo tempo de uma ida e volta ao
+     Supabase, que nesta API custa segundos.
+
+     A pergunta ("esta pessoa já viu o tour?") não depende do modal anterior.
+     Então ela sai assim que o componente monta, em paralelo com o que estiver
+     na tela, e o resultado espera guardado. Quando o modal fecha, a resposta já
+     está aqui e o convite aparece no mesmo quadro.
+
+     `pronto` continua governando o que APARECE — só deixou de governar quando a
+     pergunta é feita. */
+  const [decidido, setDecidido] = useState(null); // null = ainda perguntando
 
   useEffect(() => {
-    if (!tenantSlug || !pronto || !fluxo.length) return;
-    if (window.innerWidth < LARGURA_MINIMA) { setFase("oculto"); return; }
+    if (!tenantSlug || !fluxo.length) return undefined;
+    if (window.innerWidth < LARGURA_MINIMA) { setDecidido("oculto"); return undefined; }
 
     let vivo = true;
     api.getTutorial(tenantSlug)
@@ -60,12 +77,19 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
             .filter((e) => e.status === "FINALIZADO" || e.status === "PULADO")
             .map((e) => e.etapa),
         );
-        setFase(resolvidas.has(ETAPA_BOAS_VINDAS) ? "oculto" : "convite");
+        setDecidido(resolvidas.has(ETAPA_BOAS_VINDAS) ? "oculto" : "convite");
       })
-      .catch(() => { if (vivo) setFase("oculto"); });
+      .catch(() => { if (vivo) setDecidido("oculto"); });
 
     return () => { vivo = false; };
-  }, [tenantSlug, pronto, fluxo.length]);
+  }, [tenantSlug, fluxo.length]);
+
+  /* A decisão só vira estado visível quando a fila libera. Separado do efeito
+     acima de propósito: um é sobre SABER, o outro sobre MOSTRAR. */
+  useEffect(() => {
+    if (!pronto || !decidido) return;
+    setFase((atual) => (atual === "carregando" ? decidido : atual));
+  }, [pronto, decidido]);
 
   /* Avisa quem está na fila atrás: enquanto o tour global ocupa a tela, os
      tours de tela ficam calados (eles visitam as mesmas páginas). */
@@ -140,7 +164,30 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
 
   /* ── Render ─────────────────────────────────────────────────────────────── */
 
-  if (fase === "carregando" || fase === "oculto") return null;
+  if (fase === "oculto") return null;
+
+  /* ── A espera, quando ainda houver ────────────────────────────────────────
+     Com a consulta saindo na montagem, o normal é a resposta já estar aqui
+     quando o modal anterior sai — e este véu nunca aparecer.
+
+     Ele existe para a rede ruim: sem ele, a pessoa fecharia o modal de
+     cadastro e cairia num painel que parece pronto, começaria a clicar, e
+     seria interrompida por um modal de tour em cima do que estava fazendo. Um
+     véu segurando por meio segundo é melhor que um sobressalto depois.
+
+     Só enquanto a fila já liberou (`pronto`) e a resposta não chegou. Antes
+     disso quem segura a tela é o modal de boas-vindas, e dois véus empilhados
+     escureceriam a página duas vezes. */
+  if (fase === "carregando") {
+    if (!pronto || decidido) return null;
+    return (
+      <div className="pat-espera" role="status" aria-live="polite">
+        <style>{CSS_ESPERA}</style>
+        <span className="pat-espera__giro" aria-hidden="true" />
+        <span>Preparando seu painel…</span>
+      </div>
+    );
+  }
 
   if (fase === "convite") {
     return (
@@ -160,6 +207,28 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
 
   return <TourConcluido nome={nome} aoFechar={() => setFase("oculto")} />;
 }
+
+/* O véu de espera. Mesmo peso do véu do modal de boas-vindas, para a transição
+   entre os dois não piscar de claro para escuro. */
+const CSS_ESPERA = `
+.pat-espera {
+  position: fixed; inset: 0; z-index: 9996;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  background: rgba(6, 8, 15, 0.72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  color: #cbd5e1; font-size: 14px; font-weight: 500;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+.pat-espera__giro {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.18);
+  border-top-color: #818cf8;
+  animation: pat-gira 0.7s linear infinite;
+}
+@keyframes pat-gira { to { transform: rotate(360deg); } }
+/* Sem movimento, fica o texto: ele já diz que algo está acontecendo. */
+@media (prefers-reduced-motion: reduce) { .pat-espera__giro { animation: none; } }
+`;
 
 /* ── Fecho ──────────────────────────────────────────────────────────────────
    Quem chegou ao fim do tour merece o aplauso; quem pulou não vê esta tela.

@@ -93,7 +93,7 @@ export function RelatoriosPage({ session }) {
       style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}
     >
       {view === "MENU" ? (
-        <div className="glass-panel" style={{ textAlign: "center", padding: "56px 40px" }}>
+        <div data-tour="relatorios-indice" className="glass-panel" style={{ textAlign: "center", padding: "56px 40px" }}>
           <h2 style={{ marginBottom: "8px", fontSize: "28px", fontWeight: "700" }}>Relatórios</h2>
           <p style={{ marginBottom: "48px", color: "var(--text-muted)", fontSize: "16px" }}>
             Tudo que conta o que aconteceu na sua imobiliária, num lugar só.

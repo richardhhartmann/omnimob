@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
 
 export const usuarioRouter = Router();
 usuarioRouter.use(requireAuth);
@@ -51,6 +52,27 @@ async function cargoDoTenant(cargoCodigo, tenantId) {
   return prisma.cargo.findFirst({ where: { id, tenantId }, select: { id: true } });
 }
 
+/* ── O que este usuário mostra na vitrine ────────────────────────────────────
+   Os cinco campos que o widget "Equipe" lê. Normalizados aqui, e não em dois
+   lugares: criar e editar precisam da MESMA regra, e a primeira divergência
+   seria um WhatsApp gravado com máscara na edição e sem máscara na criação —
+   o que dá dois links, um deles quebrado.
+
+   Só entra no `data` o que veio no corpo. `undefined` é "não mexeu"; string
+   vazia é "apagou", e as duas coisas precisam continuar diferentes para a
+   edição parcial da tela de Usuários funcionar. */
+function camposDeVitrine(corpo) {
+  const data = {};
+  if (corpo.foto !== undefined) data.foto = String(corpo.foto || "").trim() || null;
+  if (corpo.creci !== undefined) data.creci = String(corpo.creci || "").trim() || null;
+  // Só dígitos: é o que o `wa.me` aceita, e guardar "(11) 99999-9999" obrigaria
+  // cada leitor a limpar de novo — um deles esqueceria.
+  if (corpo.whatsapp !== undefined) data.whatsapp = String(corpo.whatsapp || "").replace(/\D/g, "");
+  if (corpo.cargoVitrine !== undefined) data.cargoVitrine = String(corpo.cargoVitrine || "").trim() || null;
+  if (corpo.exibirNaVitrine !== undefined) data.exibirNaVitrine = Boolean(corpo.exibirNaVitrine);
+  return data;
+}
+
 usuarioRouter.post("/", async (req, res) => {
   try {
     const { nome, senha, cargoCodigo, email } = req.body;
@@ -78,9 +100,11 @@ usuarioRouter.post("/", async (req, res) => {
         cargoCodigo: Number(cargoCodigo),
         forcaAlterarSenha: true, // novos usuários sempre trocam a senha no 1º acesso
         ativo: true,
+        ...camposDeVitrine(req.body),
       },
       include: { cargo: true },
     });
+    limparCacheDaVitrine(req.tenant.id);
     return res.status(201).json(usuario);
   } catch (err) {
     if (err.code === "P2002") return res.status(400).json({ error: "Login já está em uso." });
@@ -117,12 +141,14 @@ usuarioRouter.put("/:id", async (req, res) => {
     if (cargoCodigo !== undefined) data.cargoCodigo = Number(cargoCodigo);
     if (ativo !== undefined) data.ativo = Boolean(ativo);
     if (forcaAlterarSenha !== undefined) data.forcaAlterarSenha = Boolean(forcaAlterarSenha);
+    Object.assign(data, camposDeVitrine(req.body));
 
     const usuario = await prisma.usuario.update({
       where: { id: req.params.id },
       data,
       include: { cargo: true },
     });
+    limparCacheDaVitrine(req.tenant.id);
     return res.json(usuario);
   } catch (err) {
     if (err.code === "P2002") return res.status(400).json({ error: "Login já está em uso." });
@@ -143,6 +169,8 @@ usuarioRouter.delete("/:id", async (req, res) => {
       return res.status(400).json({ error: "Você não pode desativar o seu próprio usuário." });
     }
     await prisma.usuario.update({ where: { id: req.params.id }, data: { ativo: false } });
+    // Desativado sai da vitrine junto: a consulta da equipe filtra por `ativo`.
+    limparCacheDaVitrine(req.tenant.id);
     return res.status(204).send();
   } catch (err) {
     console.error(err);
@@ -203,6 +231,7 @@ usuarioRouter.delete("/:id/permanente", async (req, res) => {
     }
 
     await prisma.usuario.delete({ where: { id: alvo.id } });
+    limparCacheDaVitrine(req.tenant.id);
     return res.status(204).send();
   } catch (err) {
     // Rede de segurança para qualquer vínculo que venha a existir depois desta

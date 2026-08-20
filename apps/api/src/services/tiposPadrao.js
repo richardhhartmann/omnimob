@@ -315,26 +315,72 @@ export const TIPOS_IMOVEL = [
  * @returns {Promise<number>} quantos tipos existem para o tenant ao final
  */
 export async function criarTiposPadrao(prisma, tenantId) {
-  for (const tipo of TIPOS_IMOVEL) {
-    const existente = await prisma.tipoImovel.findFirst({
-      where: { tenantId, descricao: tipo.descricao },
-      select: { id: true },
-    });
-    if (existente) continue;
+  /* ── QUATRO instruções, não trinta e oito ──────────────────────────────────
+     Aqui estava a maior parte da demora de criar um tenant.
 
-    await prisma.tipoImovel.create({
-      data: {
-        tenantId,
-        descricao: tipo.descricao,
-        areaFields: tipo.areaFields ?? [],
-        atributos: {
-          create: (tipo.atributos || []).map((a) => ({
-            descricao: a.descricao,
-            grupo: a.grupo || null,
-          })),
-        },
-      },
-    });
+     Era um laço com `findFirst` + `create` POR TIPO: dezenove tipos, trinta e
+     oito idas ao banco, cada uma esperando a anterior. Contra o pooler do
+     Supabase isso media quase sete segundos, e era o grosso do botão
+     "Salvando…" preso.
+
+     Paralelizar os `create` ajudou pouco, e o motivo é instrutivo: `create` com
+     filhos aninhados abre uma TRANSAÇÃO por chamada, e o pooler serializa boa
+     parte delas. O ganho real vem de mandar menos instruções, não de mandá-las
+     juntas.
+
+     Então:
+       1. uma consulta para saber o que já existe;
+       2. um `createMany` com todos os tipos que faltam;
+       3. uma leitura para descobrir os ids que o Postgres gerou;
+       4. um `createMany` com TODOS os atributos de todos os tipos.
+
+     O passo 3 existe porque `createMany` não devolve os registros criados — e
+     os atributos precisam do id do tipo a que pertencem.
+
+     Continua idempotente por descrição: rodar duas vezes não duplica. É o que
+     permite chamá-la tanto do provisionamento quanto do seed. */
+  const existentes = await prisma.tipoImovel.findMany({
+    where: { tenantId },
+    select: { id: true, descricao: true },
+  });
+  const jaTem = new Set(existentes.map((t) => t.descricao));
+  const faltando = TIPOS_IMOVEL.filter((tipo) => !jaTem.has(tipo.descricao));
+
+  if (!faltando.length) return existentes.length;
+
+  await prisma.tipoImovel.createMany({
+    data: faltando.map((tipo) => ({
+      tenantId,
+      descricao: tipo.descricao,
+      areaFields: tipo.areaFields ?? [],
+    })),
+    /* Duas criações simultâneas do mesmo tenant (provisionamento e seed, por
+       exemplo) não podem derrubar uma à outra. */
+    skipDuplicates: true,
+  });
+
+  /* Só os que acabaram de nascer precisam de atributos. Reler tudo e montar o
+     mapa é uma instrução; filtrar em memória é de graça. */
+  const agora = await prisma.tipoImovel.findMany({
+    where: { tenantId, descricao: { in: faltando.map((t) => t.descricao) } },
+    select: { id: true, descricao: true },
+  });
+  const idPorDescricao = new Map(agora.map((t) => [t.descricao, t.id]));
+
+  const atributos = faltando.flatMap((tipo) => {
+    const tipoId = idPorDescricao.get(tipo.descricao);
+    if (!tipoId) return [];
+    return (tipo.atributos || []).map((a) => ({
+      tipoId,
+      descricao: a.descricao,
+      grupo: a.grupo || null,
+    }));
+  });
+
+  if (atributos.length) {
+    await prisma.modeloAtributo.createMany({ data: atributos });
   }
-  return prisma.tipoImovel.count({ where: { tenantId } });
+
+  // Já sabemos a conta sem perguntar de novo.
+  return existentes.length + agora.length;
 }

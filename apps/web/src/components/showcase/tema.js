@@ -44,13 +44,52 @@ export function modoDoViewport(larguraDaJanela) {
 export function estiloDoTema(tenant, config) {
   const fonte = config?.globalFont || "Inter";
   const familia = `'${fonte}', system-ui, sans-serif`;
+  const { primaria, secundaria } = coresDaVitrine(tenant, config);
   return {
-    "--accent": tenant?.primaryColor || "#818cf8",
-    "--accent-hover": tenant?.primaryColor || "#6366f1",
-    "--tenant-secondary": tenant?.secondaryColor || "#d4af37",
+    "--accent": primaria,
+    "--accent-hover": primaria,
+    "--tenant-secondary": secundaria,
     "--showcase-font": familia,
     fontFamily: familia,
   };
+}
+
+/* ── De onde vêm as cores da vitrine ─────────────────────────────────────────
+   Herdadas do painel, ou próprias. A escolha vive no `showcaseConfig` porque é
+   uma decisão sobre a VITRINE — quem a toma é quem desenha a página, no editor
+   dela, e não quem configura a ferramenta de trabalho da equipe.
+
+   Herdar é o padrão por compatibilidade: até esta separação existir, a vitrine
+   sempre usou `tenant.primaryColor`, e mudar isso repintaria a página publicada
+   de todo mundo num deploy.
+
+   Quando a herança está desligada mas a cor própria está vazia, caímos no
+   painel de novo. É o desfecho seguro: uma vitrine sem cor de acento nenhuma
+   ficaria com botões cinzentos, e ninguém pediu isso. */
+export function coresDaVitrine(tenant, config) {
+  const doPainel = {
+    primaria: tenant?.primaryColor || "#818cf8",
+    secundaria: tenant?.secondaryColor || "#d4af37",
+  };
+  if (config?.herdarCoresDoPainel === false) {
+    return {
+      primaria: config.corPrimaria || doPainel.primaria,
+      secundaria: config.corSecundaria || doPainel.secundaria,
+    };
+  }
+  return doPainel;
+}
+
+/**
+ * O modo claro/escuro da vitrine, já resolvida a herança do painel.
+ * @param {object} config  o `showcaseConfig`
+ * @param {"claro"|"escuro"} temaDoPainel  o tema EFETIVO do painel
+ */
+export function aparenciaDaVitrine(config, temaDoPainel) {
+  if (config?.herdarTemaDoPainel === true) {
+    return temaDoPainel === "claro" ? "light" : "dark";
+  }
+  return config?.appearanceMode === "light" ? "light" : "dark";
 }
 
 /**
@@ -69,9 +108,14 @@ export function linkWhatsApp(tenant) {
   return `https://wa.me/${numero}?text=${encodeURIComponent(`Olá, tenho interesse nos imóveis da ${nome}.`)}`;
 }
 
-/** Classe do modo claro/escuro, para não repetir o ternário em cada página. */
-export function classeDeAparencia(config) {
-  return config?.appearanceMode === "light" ? "showcase-theme-light" : "";
+/* Classe do modo claro/escuro, para não repetir o ternário em cada página.
+
+   `temaDoPainel` só é passado pelo EDITOR e pela vitrine dentro do painel: a
+   página pública não sabe nem deve saber que existe um painel, e quem a abre
+   não tem tema de painel nenhum. Ausente, vale o `appearanceMode` gravado — que
+   é o que a herança já resolveu no momento de salvar. */
+export function classeDeAparencia(config, temaDoPainel) {
+  return aparenciaDaVitrine(config, temaDoPainel) === "light" ? "showcase-theme-light" : "";
 }
 
 /* Textos de fallback quando a imobiliária ainda não escreveu os dela.

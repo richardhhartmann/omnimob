@@ -1867,6 +1867,10 @@ function EditorAoVivo() {
    porque carrossel que continua andando embaixo do dedo é armadilha.
    ────────────────────────────────────────────────────────────────────────── */
 const CARROSSEL = "(max-width: 640px)";
+/* Tela BAIXA. 820px cobre o 1366×768 e o 1440×900 com barra de tarefas — os
+   dois monitores em que o cartão de plano completo passava da dobra.
+   É `max-height` e não `max-width` de propósito: o problema é vertical. */
+const TELA_BAIXA = "(max-height: 820px)";
 /* Onde o leque de canais deixa de caber na tela — ver BaralhoDeCanais. Bate com
    o ponto em que o próprio BounceCards.css já encolhe a peça, que era o sinal
    de que ali o arranjo já estava no limite. */
@@ -1932,7 +1936,18 @@ const BORDA_ELETRICA = {
    pixels, esse primeiro ajuste não anima — que é justamente o certo, porque
    ninguém abriu nada ainda.
    ────────────────────────────────────────────────────────────────────────── */
-function PlanoRecursos({ id, plano, resumido, emCarrossel }) {
+/* `compacto` e não `emCarrossel`: são duas perguntas que estavam coladas numa
+   só, e separá-las é o conserto.
+
+   O resumo com "Ver todos os recursos" existia SÓ no carrossel, disparado por
+   `(max-width: 640px)`. Num monitor de 1366×768 a largura passa de 640, então
+   o cartão abria com a lista inteira — e a tela é BAIXA, não estreita. O
+   resultado era um cartão de plano ocupando a altura inteira do monitor.
+
+   Largura decide o LAYOUT (três colunas ou carrossel). Altura decide o TAMANHO
+   do conteúdo. Um monitor largo e baixo precisa da segunda coisa sem a
+   primeira. */
+function PlanoRecursos({ id, plano, resumido, compacto }) {
   const completaRef = useRef(null);
   const resumoRef = useRef(null);
   const [alturas, setAlturas] = useState(null);
@@ -1941,7 +1956,7 @@ function PlanoRecursos({ id, plano, resumido, emCarrossel }) {
     // Fora do carrossel não existe o botão: a lista completa fica solta, sem
     // altura escrita, e volta a ser o item flexível que empurra o botão de
     // teste para o pé do cartão.
-    if (!emCarrossel) {
+    if (!compacto) {
       setAlturas(null);
       return undefined;
     }
@@ -1958,7 +1973,7 @@ function PlanoRecursos({ id, plano, resumido, emCarrossel }) {
     if (completaRef.current) observer.observe(completaRef.current);
     if (resumoRef.current) observer.observe(resumoRef.current);
     return () => observer.disconnect();
-  }, [emCarrossel]);
+  }, [compacto]);
 
   const altura = alturas ? (resumido ? alturas.resumo : alturas.completa) : null;
 
@@ -1977,9 +1992,10 @@ function PlanoRecursos({ id, plano, resumido, emCarrossel }) {
         ))}
       </ul>
 
-      {/* O resumo só existe no carrossel: no desktop os três planos aparecem
-          lado a lado e é a tabela inteira que permite comparar de relance. */}
-      {emCarrossel ? (
+      {/* O resumo só existe no modo compacto. Numa tela alta os três planos
+          cabem inteiros lado a lado, e é a tabela completa que permite comparar
+          de relance — resumir ali tiraria a única vantagem do desktop. */}
+      {compacto ? (
         <ul className="dl-plan__list dl-plan__list--resumo" ref={resumoRef} aria-hidden={!resumido || undefined}>
           {plano.resumo.map((l) => (
             <li key={l.label} className={l.heranca ? "is-heranca" : ""}>
@@ -2014,6 +2030,9 @@ function Planos({ planos, aoTestar }) {
   atualRef.current = atual;
 
   const emCarrossel = useMedia(CARROSSEL);
+  const telaBaixa = useMedia(TELA_BAIXA);
+  // Carrossel implica compacto; tela baixa também, mesmo em três colunas.
+  const compacto = emCarrossel || telaBaixa;
 
   /* Cartão sob o mouse. É o que rege o fundo no desktop, onde não existe
      "cartão em foco": lá os três estão à vista ao mesmo tempo, e quem escolhe
@@ -2233,7 +2252,7 @@ function Planos({ planos, aoTestar }) {
         {planos.map((p, i) => {
           // Resumido só no carrossel: no desktop os três aparecem juntos e a
           // tabela inteira é o que permite comparar de relance.
-          const resumido = emCarrossel && !abertos[p.key];
+          const resumido = compacto && !abertos[p.key];
           return (
           <Reveal
             key={p.key}
@@ -2334,11 +2353,12 @@ function Planos({ planos, aoTestar }) {
               id={`plano-lista-${p.key}`}
               plano={p}
               resumido={resumido}
-              emCarrossel={emCarrossel}
+              compacto={compacto}
             />
 
-
-            {emCarrossel ? (
+            {/* O botão acompanha o modo compacto, não o carrossel: sem ele, num
+                monitor baixo a lista viria resumida e não haveria como abrir. */}
+            {compacto ? (
               <button
                 type="button"
                 className="dl-plan__mais"
@@ -5333,6 +5353,105 @@ ${editorCSS()}
   .dl-rec-slide__texto .dl-index { display: block; margin-bottom: 6px; }
 }
 
+/* ── O mecanismo do cartão compacto, FORA de qualquer media query ────────────
+   (Sem crases neste comentário: ele vive num template literal.)
+
+   Estas regras viviam dentro do media query de 640px de largura, e foi por isso
+   que o cartão apareceu quebrado num monitor largo e baixo: o JS passou a ligar
+   o modo compacto por ALTURA, mas o CSS que faz ele funcionar só existia abaixo
+   de 640px de LARGURA.
+
+   O resultado era visível: as duas listas desenhadas uma embaixo da outra (a
+   regra que esconde uma delas não valia), o painel sem altura animada, e o
+   botão "Ver todos os recursos" caindo no estilo global de botão — roxo e
+   ocupando a linha inteira.
+
+   Aqui não há condição de tela nenhuma, e não precisa haver: o resumo e o botão
+   só são RENDERIZADOS quando o modo compacto está ativo. Quem decide é o JS;
+   estas regras só descrevem como a coisa se comporta quando existe.
+
+   O que continua no media query é o que é mesmo sobre tela estreita — tamanho
+   de fonte, espaçamento, margens.
+   ────────────────────────────────────────────────────────────────────────── */
+  .dl-plan__list--resumo li.is-heranca { color: var(--strong); font-weight: 600; }
+  .dl-plan__list--resumo li.is-heranca span { color: var(--accent-soft); }
+
+  /* ── Abrir e fechar a lista ──
+     Quem cresce é o painel, com a altura escrita pelo JS (PlanoRecursos) e
+     transição na altura. As duas listas moram na MESMA célula da grade e se
+     cruzam lá dentro: sem isso, a que sai empurraria a que entra para baixo
+     antes de desaparecer, e o painel animaria a altura das duas somadas. */
+  .dl-plan__recursos {
+    display: grid; flex: none; margin: 16px 0 8px;
+    overflow: hidden;
+    transition: height 0.42s var(--ease-out);
+  }
+  .dl-plan__recursos > .dl-plan__list {
+    grid-area: 1 / 1;
+    /* No topo da célula, e não esticadas: esticada, cada lista passaria a ter a
+       altura do painel — que é exatamente a altura que se quer medir a partir
+       delas. A medida viraria a própria resposta. */
+    align-self: start; flex: none;
+  }
+  /* A lista escondida continua no DOM (é dela que sai a medida da outra ponta
+     da animação), mas não pega toque nem seleção. */
+  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo),
+  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
+    pointer-events: none;
+  }
+
+  /* O resumo entra e sai inteiro: são quatro linhas, e escaloná-las seria mais
+     enfeite do que leitura. */
+  .dl-plan__list--resumo {
+    transition: opacity 0.24s ease 0.12s, transform 0.34s var(--ease-out) 0.12s;
+  }
+  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
+    opacity: 0; transform: translateY(-5px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+  }
+
+  /* A tabela completa entra linha a linha, de cima para baixo, acompanhando o
+     painel que desce.
+
+     A cascata inteira cabe DENTRO dos 0,42s do painel: a última das dez linhas
+     fecha em 0,07 + 9×0,016 + 0,24 ≈ 0,45s. Com passo maior ela terminava por
+     volta dos 0,58s, e as últimas linhas acendiam num painel que já tinha
+     parado de crescer — o movimento acabava duas vezes.
+
+     E os 0,07s de espera na largada são curtos de propósito: eles existem para
+     não cruzar com o resumo apagando (0,12s), mas alongá-los abria um vão em
+     que o painel crescia vazio.
+
+     Fechar não escalona: o painel sobe em 0,42s, e linhas saindo em cascata
+     seriam recortadas pela borda dele no meio do próprio desaparecimento. */
+  .dl-plan__recursos > .dl-plan__list:not(.dl-plan__list--resumo) li {
+    transition:
+      opacity 0.24s ease calc(0.07s + var(--i, 0) * 16ms),
+      transform 0.32s var(--ease-out) calc(0.07s + var(--i, 0) * 16ms);
+  }
+  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo) li {
+    opacity: 0; transform: translateY(-6px);
+    transition: opacity 0.14s ease, transform 0.14s ease;
+  }
+  .dl-root .dl-plan__mais {
+    width: 100%; margin: 0 0 18px; padding: 9px 0;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    background: none; border: 0; border-radius: 0; box-shadow: none; transform: none;
+    font-family: inherit; font-size: 12.5px; font-weight: 600;
+    /* Cada cartão pinta o seu, então o botão acompanha o plano que está sendo
+       lido — e no Básico o --realce é o próprio lilás do tema, que é a cor que
+       ele já tinha. */
+    color: var(--realce, var(--accent-soft));
+    cursor: pointer;
+    transition: color 0.3s ease;
+  }
+  .dl-root .dl-plan__mais:hover,
+  .dl-root .dl-plan__mais:active {
+    background: none; box-shadow: none; transform: none; scale: 1; color: var(--strong);
+  }
+  .dl-plan__mais svg { transition: transform 0.3s var(--ease-out); }
+  .dl-plan__mais[aria-expanded="true"] svg { transform: rotate(180deg); }
+
 @media (max-width: 640px) {
   .dl-checks { display: none; }
   /* ── Ações do hero ──
@@ -5643,84 +5762,6 @@ ${editorCSS()}
      nada aqui: um cartão por vez, com sete linhas iguais em todos. Fica o que
      este plano acrescenta ao anterior; a tabela inteira continua a um toque. */
   .dl-plan__list { gap: 9px; }
-  .dl-plan__list--resumo li.is-heranca { color: var(--strong); font-weight: 600; }
-  .dl-plan__list--resumo li.is-heranca span { color: var(--accent-soft); }
-
-  /* ── Abrir e fechar a lista ──
-     Quem cresce é o painel, com a altura escrita pelo JS (PlanoRecursos) e
-     transição na altura. As duas listas moram na MESMA célula da grade e se
-     cruzam lá dentro: sem isso, a que sai empurraria a que entra para baixo
-     antes de desaparecer, e o painel animaria a altura das duas somadas. */
-  .dl-plan__recursos {
-    display: grid; flex: none; margin: 16px 0 8px;
-    overflow: hidden;
-    transition: height 0.42s var(--ease-out);
-  }
-  .dl-plan__recursos > .dl-plan__list {
-    grid-area: 1 / 1;
-    /* No topo da célula, e não esticadas: esticada, cada lista passaria a ter a
-       altura do painel — que é exatamente a altura que se quer medir a partir
-       delas. A medida viraria a própria resposta. */
-    align-self: start; flex: none;
-  }
-  /* A lista escondida continua no DOM (é dela que sai a medida da outra ponta
-     da animação), mas não pega toque nem seleção. */
-  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo),
-  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
-    pointer-events: none;
-  }
-
-  /* O resumo entra e sai inteiro: são quatro linhas, e escaloná-las seria mais
-     enfeite do que leitura. */
-  .dl-plan__list--resumo {
-    transition: opacity 0.24s ease 0.12s, transform 0.34s var(--ease-out) 0.12s;
-  }
-  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
-    opacity: 0; transform: translateY(-5px);
-    transition: opacity 0.12s ease, transform 0.12s ease;
-  }
-
-  /* A tabela completa entra linha a linha, de cima para baixo, acompanhando o
-     painel que desce.
-
-     A cascata inteira cabe DENTRO dos 0,42s do painel: a última das dez linhas
-     fecha em 0,07 + 9×0,016 + 0,24 ≈ 0,45s. Com passo maior ela terminava por
-     volta dos 0,58s, e as últimas linhas acendiam num painel que já tinha
-     parado de crescer — o movimento acabava duas vezes.
-
-     E os 0,07s de espera na largada são curtos de propósito: eles existem para
-     não cruzar com o resumo apagando (0,12s), mas alongá-los abria um vão em
-     que o painel crescia vazio.
-
-     Fechar não escalona: o painel sobe em 0,42s, e linhas saindo em cascata
-     seriam recortadas pela borda dele no meio do próprio desaparecimento. */
-  .dl-plan__recursos > .dl-plan__list:not(.dl-plan__list--resumo) li {
-    transition:
-      opacity 0.24s ease calc(0.07s + var(--i, 0) * 16ms),
-      transform 0.32s var(--ease-out) calc(0.07s + var(--i, 0) * 16ms);
-  }
-  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo) li {
-    opacity: 0; transform: translateY(-6px);
-    transition: opacity 0.14s ease, transform 0.14s ease;
-  }
-  .dl-root .dl-plan__mais {
-    width: 100%; margin: 0 0 18px; padding: 9px 0;
-    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-    background: none; border: 0; border-radius: 0; box-shadow: none; transform: none;
-    font-family: inherit; font-size: 12.5px; font-weight: 600;
-    /* Cada cartão pinta o seu, então o botão acompanha o plano que está sendo
-       lido — e no Básico o --realce é o próprio lilás do tema, que é a cor que
-       ele já tinha. */
-    color: var(--realce, var(--accent-soft));
-    cursor: pointer;
-    transition: color 0.3s ease;
-  }
-  .dl-root .dl-plan__mais:hover,
-  .dl-root .dl-plan__mais:active {
-    background: none; box-shadow: none; transform: none; scale: 1; color: var(--strong);
-  }
-  .dl-plan__mais svg { transition: transform 0.3s var(--ease-out); }
-  .dl-plan__mais[aria-expanded="true"] svg { transform: rotate(180deg); }
 
   .dl-callout { padding: 22px 20px; }
 

@@ -23,13 +23,16 @@ import dns from "node:dns/promises";
    voltar para esse caminho, é melhor falhar em 10 s do que segurar a resposta
    por dois minutos. */
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+/* Leitores, não constantes. Ver a explicação em `emailTransport`: constante
+   congela o ambiente no import, e a ordem de import passa a decidir se o
+   produto manda e-mail de verdade durante os testes. */
+const chaveResend = () => process.env.RESEND_API_KEY || "";
+const usuarioSmtp = () => process.env.SMTP_USER || "notifications@omnimob.app";
+const senhaSmtp = () => process.env.SMTP_PASS || "";
 
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.hostinger.com";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = process.env.SMTP_SECURE !== "false"; // true para 465
-const SMTP_USER = process.env.SMTP_USER || "notifications@omnimob.app";
-const SMTP_PASS = process.env.SMTP_PASS || "";
 const EMAIL_REMETENTE =
   process.env.EMAIL_REMETENTE || "Omnimob <notifications@omnimob.app>";
 
@@ -79,7 +82,7 @@ async function criarTransporte({ porta = SMTP_PORT, seguro = SMTP_SECURE } = {})
     host,
     port: porta,
     secure: seguro,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    auth: { user: usuarioSmtp(), pass: senhaSmtp() },
     connectionTimeout: TIMEOUT_MS,
     greetingTimeout: TIMEOUT_MS,
     socketTimeout: TIMEOUT_MS,
@@ -100,10 +103,37 @@ function esquecerTransporter() {
   transporter = null;
 }
 
-/** Qual transporte está de fato utilizável — serve para log e diagnóstico. */
+/* Qual transporte está de fato utilizável — serve para log e diagnóstico.
+
+   LÊ O AMBIENTE NA HORA DA CHAMADA, e não as constantes capturadas no topo do
+   arquivo. A diferença parece cosmética e não é: as constantes congelam o
+   ambiente no instante em que ESTE módulo é importado, e quem importa primeiro
+   decide o que vale.
+
+   Foi assim que a suíte de testes passou a mandar e-mail de verdade. O
+   `test/helpers.js` apaga `RESEND_API_KEY` justamente para neutralizar o envio,
+   mas um arquivo de teste que importe uma rota ANTES do helper carrega esta
+   cadeia com a chave ainda no ambiente — e a partir daí todo `sendEmail` sai
+   para o mundo, com endereços `@exemplo.test` e imobiliárias `zz-teste-…`.
+
+   Lendo aqui, a ordem de import deixa de importar: o que vale é o ambiente no
+   momento do envio, que é quando a decisão realmente é tomada. */
 export function emailTransport() {
-  if (RESEND_API_KEY) return "resend";
-  if (SMTP_USER && SMTP_PASS) return "smtp";
+  /* Trava dura para a suíte de testes. NÃO é redundante com o `delete` das
+     variáveis que o `test/helpers.js` faz — apagar não funciona aqui.
+
+     O `new PrismaClient()` RECARREGA o `.env` ao ser construído (ele precisa
+     do DATABASE_URL), e o helper o constrói depois de apagar. Resultado:
+     `RESEND_API_KEY`, que não existe no `.env` de desenvolvimento, some de
+     verdade; `SMTP_USER` e `SMTP_PASS`, que existem, VOLTAM. A suíte passou a
+     mandar e-mail real, por SMTP, sobre imobiliárias `zz-teste-…` para a caixa
+     de quem estava rodando os testes.
+
+     Um sinalizador resolve porque nada o repõe: ele não está em arquivo
+     nenhum, só na memória do processo que o ligou. */
+  if (process.env.EMAIL_DESLIGADO === "1") return null;
+  if (process.env.RESEND_API_KEY) return "resend";
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) return "smtp";
   return null;
 }
 
@@ -137,7 +167,7 @@ export async function verificarEmail({ porta, seguro } = {}) {
       const relogio = setTimeout(() => controlador.abort(), TIMEOUT_MS);
       try {
         const r = await fetch("https://api.resend.com/domains", {
-          headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+          headers: { Authorization: `Bearer ${chaveResend()}` },
           signal: controlador.signal,
         });
         if (!r.ok) throw new Error(`Resend respondeu ${r.status}`);
@@ -189,7 +219,7 @@ async function viaResend({ to, subject, body, html, replyTo }) {
     const resposta = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${chaveResend()}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

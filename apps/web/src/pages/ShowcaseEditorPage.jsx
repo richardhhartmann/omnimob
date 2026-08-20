@@ -32,6 +32,7 @@ import {
   toPieces,
   widgetPieceId,
 } from "../components/showcase/engine/pieces.js";
+import { observarSistema, temaEfetivo, temaEscolhido } from "../utils/temaDoPainel";
 import {
   alinharPecas,
   alturaDoConteudo,
@@ -119,6 +120,9 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
   const [pronto, setPronto] = useState(false);
   const [erroCarga, setErroCarga] = useState("");
   const [previewProperties, setPreviewProperties] = useState([]);
+  /* Equipe, endereço, números e regiões de verdade — o mesmo bloco que a
+     vitrine pública recebe, da mesma chamada. */
+  const [dadosDaVitrine, setDadosDaVitrine] = useState(null);
   const [carouselIndexes, setCarouselIndexes] = useState({});
 
   // ── Estado da ferramenta ──────────────────────────────────────────────────
@@ -223,6 +227,34 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
     setGestoVivo(null);
   }, [registrar]);
 
+  /* ── A herança de tema é resolvida AQUI, e gravada ─────────────────────────
+     A página pública não sabe que existe um painel — e não deveria. Quem a abre
+     é um visitante, que não tem tema de painel nenhum.
+
+     Então "seguir o tema do painel" não é uma pergunta feita na hora de exibir:
+     é uma conveniência do editor que ESCREVE em `appearanceMode`. O documento
+     sai daqui já resolvido, e a vitrine continua lendo um campo só.
+
+     Sem isto, marcar a caixa mudaria a prancheta e não mudaria a página no ar. */
+  const temaDoPainel = temaEfetivo(
+    temaEscolhido(session?.usuario?.temaPainel, session?.tenant?.temaImobiliaria),
+  );
+  const [temaVivo, setTemaVivo] = useState(temaDoPainel);
+  useEffect(() => { setTemaVivo(temaDoPainel); }, [temaDoPainel]);
+  useEffect(
+    () => observarSistema(temaEscolhido(session?.usuario?.temaPainel, session?.tenant?.temaImobiliaria), setTemaVivo),
+    [session?.usuario?.temaPainel, session?.tenant?.temaImobiliaria],
+  );
+
+  useEffect(() => {
+    if (!pronto) return;
+    const cfg = form.showcaseConfig;
+    if (cfg?.herdarTemaDoPainel !== true) return;
+    const alvo = temaVivo === "claro" ? "light" : "dark";
+    if (cfg.appearanceMode === alvo) return;
+    atualizarConfig((prev) => ({ ...prev, appearanceMode: alvo }));
+  }, [pronto, temaVivo, form.showcaseConfig?.herdarTemaDoPainel, form.showcaseConfig?.appearanceMode]);
+
   /* `reempilhar` só é declarado lá embaixo (depende da medição de alturas), e o
      assistente é declarado aqui. A ref liga os dois sem obrigar nenhum deles a
      mudar de lugar por causa do outro. */
@@ -276,6 +308,7 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
           showcaseConfig: assentarLayout(normalizeShowcaseConfig(perfil.showcaseConfig)),
         });
         setPreviewProperties(vitrine.properties || []);
+        setDadosDaVitrine(vitrine.vitrine || null);
         const indices = {};
         (vitrine.properties || []).forEach((p) => { indices[p.id] = 0; });
         setCarouselIndexes(indices);
@@ -886,6 +919,12 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
   const acoesInspetor = {
     // Página
     atualizarCampo,
+    /* Escreve UM campo no `showcaseConfig`. Existe separado de `atualizarCampo`
+       porque este grava no `form` (o perfil do tenant) e aquele no documento da
+       vitrine — e a separação entre os dois é justamente o que este trabalho
+       fez: cor do painel é do tenant, cor da vitrine é do documento. */
+    atualizarConfigDireto: (campo, valor) =>
+      atualizarConfig((prev) => ({ ...prev, [campo]: valor })),
     definirModoAparencia,
     definirFonte: (fonte) => atualizarConfig((prev) => ({ ...prev, globalFont: fonte })),
     aplicarPreset,
@@ -1090,6 +1129,7 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
                   tenant={previewTenant}
                   tenantSlug={tenantSlug}
                   properties={previewProperties}
+                  dadosDaVitrine={dadosDaVitrine}
                   carouselIndexes={carouselIndexes}
                   onProxima={proximaFoto}
                   onAnterior={fotoAnterior}

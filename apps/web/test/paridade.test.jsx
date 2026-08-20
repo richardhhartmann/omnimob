@@ -51,21 +51,71 @@ function semAfordanciasDeEdicao(html) {
     .trim();
 }
 
-function desenhar(no, modo) {
+function desenhar(no, modo, dados) {
   return renderToStaticMarkup(
     <MemoryRouter>
-      <VitrineProvider modo={modo} aoEditar={() => {}} tenantSlug="imobiliaria-teste">
+      <VitrineProvider modo={modo} aoEditar={() => {}} tenantSlug="imobiliaria-teste" dados={dados}>
         {no}
       </VitrineProvider>
     </MemoryRouter>
   );
 }
 
-function exigirParidade(no, nome) {
-  const publico = semAfordanciasDeEdicao(desenhar(no, "public"));
-  const editor = semAfordanciasDeEdicao(desenhar(no, "editor"));
+function exigirParidade(no, nome, dados) {
+  const publico = semAfordanciasDeEdicao(desenhar(no, "public", dados));
+  const editor = semAfordanciasDeEdicao(desenhar(no, "editor", dados));
   assert.equal(editor, publico, `${nome}: o editor desenha algo diferente da vitrine publicada`);
 }
+
+/* ── Os dados REAIS da imobiliária ───────────────────────────────────────────
+   O segundo caminho de cada widget, e o que a maioria das vitrines vai usar:
+   com este bloco presente, Localização desenha um mapa, Equipe lista os
+   corretores do banco, Números conta imóveis e Regiões vira uma fila de chips
+   que filtram a grade.
+
+   Sem um teste aqui, a paridade estaria verificada só no caminho de fallback —
+   justamente o que o cliente NÃO vê. E a divergência tem onde nascer: o modo
+   real troca `ShowcaseTexto` por texto simples no bloco de Números, e chip de
+   região por `<button>` em vez de `<a>`. Se um desses passar a depender do
+   modo, é aqui que aparece.
+   ────────────────────────────────────────────────────────────────────────── */
+const DADOS_REAIS = {
+  endereco: {
+    logradouro: "Avenida Paulista, 1000",
+    cidade: "São Paulo",
+    estado: "SP",
+    cep: "01310-100",
+    completo: "Avenida Paulista, 1000, São Paulo, SP — 01310100",
+  },
+  contato: { whatsapp: "5511999999999", telefone: "1133334444", email: "contato@centro.com", creci: "12345" },
+  horarios: [
+    { dias: "Segunda a sexta", abre: "09:00", fecha: "18:00", fechado: false },
+    { dias: "Sábado", abre: "09:00", fecha: "13:00", fechado: false },
+    { dias: "Domingo", abre: "", fecha: "", fechado: true },
+  ],
+  /* Os nomes NÃO podem coincidir com os de `DADOS_EQUIPE_PADRAO` (Ana Souza,
+     João Lima, Marina Alves). A primeira versão deste bloco usava "Marina
+     Alves" e a asserção de fallback passava por acidente nos dois caminhos —
+     um teste que não distinguia o que existe para distinguir. */
+  equipe: [
+    { id: "u1", nome: "Beatriz Nogueira", cargo: "Corretora", creci: "CRECI 12345", whatsapp: "5511988887777", foto: "" },
+    { id: "u2", nome: "Otávio Ribeiro", cargo: "Especialista em locação", creci: "", whatsapp: "", foto: "" },
+  ],
+  numeros: { imoveisAtivos: 24, vendas: 8, anosDeMercado: 12, cidadesAtendidas: 3 },
+  regioes: [
+    { nome: "Centro", cidade: "São Paulo", total: 9 },
+    { nome: "Pinheiros", cidade: "São Paulo", total: 5 },
+  ],
+  filtros: {
+    tipos: ["Apartamento", "Casa"],
+    cidades: ["São Paulo", "Campinas"],
+    bairros: [{ nome: "Centro", cidade: "São Paulo" }],
+    contratos: ["VENDA", "LOCACAO"],
+    precoMin: 250000,
+    precoMax: 1800000,
+  },
+  redes: { whatsapp: "https://wa.me/5511999999999", facebook: "https://facebook.com/123", facebookNome: "Centro", instagram: "" },
+};
 
 const TENANT = {
   name: "Imobiliária Centro",
@@ -110,7 +160,44 @@ for (const tipo of TIPOS_DE_WIDGET) {
   test(`widget "${tipo}" desenha igual no editor e na vitrine`, () => {
     exigirParidade(<ShowcaseWidget widget={widgetDeTeste(tipo)} />, `widget ${tipo}`);
   });
+
+  test(`widget "${tipo}" desenha igual nos dois modos com dados reais`, () => {
+    exigirParidade(
+      <ShowcaseWidget widget={widgetDeTeste(tipo)} />,
+      `widget ${tipo} (dados reais)`,
+      DADOS_REAIS,
+    );
+  });
 }
+
+/* Os dados reais precisam CHEGAR na peça — um widget que ignorasse o bloco
+   passaria nos dois testes de paridade acima sem desenhar nada de novo, porque
+   paridade só compara os dois modos entre si. */
+test("com dados reais, os widgets mostram o que veio do banco", () => {
+  const html = desenhar(<ShowcaseWidget widget={widgetDeTeste("team")} />, "public", DADOS_REAIS);
+  assert.match(html, /Beatriz Nogueira/, "equipe: o corretor do banco não apareceu");
+  assert.doesNotMatch(html, /Ana Souza/, "equipe: o nome de exemplo sobreviveu aos dados reais");
+
+  const mapa = desenhar(<ShowcaseWidget widget={widgetDeTeste("map")} />, "public", DADOS_REAIS);
+  assert.match(mapa, /maps\.google\.com/, "localização: o mapa não foi embutido");
+  assert.match(mapa, /Avenida Paulista/, "localização: o endereço do cadastro não apareceu");
+
+  const numeros = desenhar(<ShowcaseWidget widget={widgetDeTeste("stats")} />, "public", DADOS_REAIS);
+  assert.match(numeros, /24/, "números: a contagem de imóveis não apareceu");
+  assert.doesNotMatch(numeros, /200\+/, "números: o valor inventado sobreviveu aos dados reais");
+
+  const horas = desenhar(<ShowcaseWidget widget={widgetDeTeste("hours")} />, "public", DADOS_REAIS);
+  assert.match(horas, /Segunda a sexta/, "horários: a faixa do cadastro não apareceu");
+});
+
+/* A sobrescrita manual: quem desliga a fonte real no inspetor recupera o
+   conteúdo que digitou, e o dado do banco para de mandar. */
+test("com `usarDadosReais: false`, a peça volta ao conteúdo digitado", () => {
+  const widget = { ...widgetDeTeste("team"), usarDadosReais: false };
+  const html = desenhar(<ShowcaseWidget widget={widget} />, "public", DADOS_REAIS);
+  assert.doesNotMatch(html, /Beatriz Nogueira/, "a fonte real continuou mandando mesmo desligada");
+  assert.match(html, /Ana Souza/, "o conteúdo digitado não voltou");
+});
 
 test("hero desenha igual nos dois modos", () => {
   const cfg = normalizeShowcaseConfig(null);

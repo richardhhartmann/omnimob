@@ -196,6 +196,16 @@ function normalizeWidget(widget, index) {
     h: desktop.h,
     hidden: w.hidden === true,
     locked: w.locked === true,
+    /* ── Fonte de conteúdo da peça ─────────────────────────────────────────
+       `false` = o cliente desligou os dados reais e escreve tudo à mão.
+       AUSENTE = usa a fonte real, que é o padrão.
+
+       Repare que NÃO normalizamos para booleano. Um `usarDadosReais: true`
+       gravado em toda peça diria que a escolha foi feita, quando não foi — e a
+       ausência é o que permite mudar o padrão no futuro sem reescrever a
+       configuração de todo mundo. Só o `false` é um fato, porque só ele foi
+       alguém clicando. */
+    ...(w.usarDadosReais === false ? { usarDadosReais: false } : {}),
   };
 }
 
@@ -288,6 +298,25 @@ export function normalizeShowcaseConfig(raw) {
 
   const appearanceMode = cfg.appearanceMode === "light" ? "light" : "dark";
 
+  /* ── As cores da VITRINE ───────────────────────────────────────────────────
+     Nasceram aqui porque não são as do painel. Eram uma coisa só —
+     `tenant.primaryColor` pintava a ferramenta de trabalho da equipe E a página
+     que o cliente da imobiliária vê —, e as duas respondem a perguntas
+     diferentes: uma é conforto de quem opera oito horas por dia, a outra é a
+     marca de quem vende.
+
+     `herdarCoresDoPainel` começa LIGADO por omissão, e isso é o que preserva
+     quem já tinha uma vitrine: a cor continua sendo a mesma do painel até
+     alguém decidir o contrário. Só o `false` é um fato, porque só ele foi
+     alguém clicando.
+
+     `herdarTemaDoPainel` é a mesma ideia para claro/escuro, e começa DESLIGADO:
+     a vitrine sempre teve o próprio `appearanceMode`, e herdar por omissão
+     mudaria a página publicada de quem nunca pediu isso. */
+  const herdarCores = cfg.herdarCoresDoPainel !== false;
+  const herdarTema = cfg.herdarTemaDoPainel === true;
+  const corHex = (v, padrao) => (typeof v === "string" && /^#[0-9a-f]{3,8}$/i.test(v) ? v : padrao);
+
   // Widgets: use saved array or DEFAULT_WIDGETS
   const widgetsRaw = Array.isArray(cfg.widgets) ? cfg.widgets : null;
   const widgets = widgetsRaw === null
@@ -326,6 +355,12 @@ export function normalizeShowcaseConfig(raw) {
     layout: mergedLayout,
     mobileLayout,
     appearanceMode,
+    herdarCoresDoPainel: herdarCores,
+    herdarTemaDoPainel: herdarTema,
+    /* Guardadas mesmo quando a herança está ligada: desligar a herança
+       devolve a escolha anterior em vez de um branco. */
+    corPrimaria: corHex(cfg.corPrimaria, ""),
+    corSecundaria: corHex(cfg.corSecundaria, ""),
     blockStyles: normalizeBlockStyles(cfg.blockStyles),
     highlightStyles,
     widgets,

@@ -51,6 +51,19 @@ omnimob/
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`
 - `/api/social/*` — publicação e OAuth Meta (+ webhook em `/api/social/webhook`)
 - `/api/ai/*` — geração de conteúdo com IA (Gemini)
+- `/api/v1/*` — **a API da imobiliária**, autenticada por CHAVE (não por JWT).
+  Leitura e escrita de imóveis, clientes, usuários e leads, em JSON ou XML
+  (`?formato=xml`). Escopos por chave; `GET /api/v1/eu` diz o que a chave
+  alcança. `/api/chaves-api/*` é a gerência dessas chaves, pelo painel
+- `/api/importacao/fonte/*` — importar de uma URL de feed (prévia e execução);
+  `/api/importacao/fontes/*` guarda o endereço para reler depois. Substituiu a
+  importação por planilha; ver `formatosImportacao.js`
+- `/api/webhooks-saida/*` — webhooks de saída (Profissional+). O inverso do
+  feed: o evento é nosso, e nós avisamos
+- `/api/canais/*` — a central de canais: retrato de onde os imóveis aparecem,
+  OAuth e publicação no Mercado Livre, e a ponte de WhatsApp
+- `GET /api/tenants/me/exportar` — tudo da imobiliária num JSON, para
+  portabilidade e LGPD
 - `/public/*` — showcase público (sem auth); inclui `GET /public/vitrines` (galeria da landing) e `GET /public/sitemap.xml`, servido em `omnimob.app/sitemap.xml` por reescrita da Vercel, e `GET /public/:slug/feed.xml` — o feed **VRSync** que ZAP/VivaReal/OLX Imóveis vêm buscar (carga agendada; nós não empurramos nada)
 - `/previa/*` — HTML com Open Graph para robôs de prévia (WhatsApp, Facebook, LinkedIn). A Vercel reescreve `/vitrine/*` para cá **só** quando o user-agent é de robô; pessoa continua recebendo o SPA. Ver `previaRoutes.js`
 - `/health` — health check real (DB + latência + versão do schema)
@@ -67,6 +80,11 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/isolamento.test.js` | A pede recurso da B pelo id real → 404 (cargos, tipos, atributos, usuários) |
 | `test/recuperacao.test.js` | resposta igual para conta existente/inexistente; link de uso único |
 | `test/previa.test.js` | Open Graph com foto e preço; escape de HTML no texto do cliente |
+| `test/importacaoFormatos.test.js` | leitura de VRSync/XML/JSON — **não toca no banco**. O risco ali não é vazamento, é INTERPRETAÇÃO: preço lido da tag errada importa quinhentos imóveis errados em silêncio |
+| `test/apiPublica.test.js` | A chave de A não enxerga nada de B nem pelo id real; escopo cobrado; senha nunca sai; escrita por chave deixa rastro na trilha; plano abaixo de Profissional recusado |
+| `test/documentacaoApi.test.js` | a especificação descreve a API que existe — rota nova sem documentação, ou documentação apontando para rota morta, falha aqui |
+| `test/enderecoPublico.test.js` | o endereço oculto some do PAYLOAD, não só da tela. Verifica o texto cru da resposta, o CEP junto, e o feed seguindo a mesma marcação |
+| `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
 cada requisição (ativo? qual cargo?) e ignora o que veio dentro do JWT. Sem
@@ -97,10 +115,47 @@ invisíveis porque com um cliente só o sintoma não aparece.
   sentidos. Elástica de propósito (10% acima do teto de preço, um quarto a
   menos) e marca os aproximados; filtro literal devolve pouco e ensina o
   corretor a não confiar na ferramenta.
+- `chavesApi.js` — chaves da API do tenant. Guarda o HASH (SHA-256, não bcrypt —
+  o motivo está no arquivo), nunca o texto; ele aparece uma vez e some. A
+  autenticação por chave abre o contexto da AUDITORIA (`apiKeyMiddleware`):
+  sem isso a escrita por integração não deixava rastro nenhum.
+- `sincronizacao.js` — relê uma fonte guardada. A política de ausência
+  (desativar o que sumiu do feed) é opt-in, nunca apaga, e ignora leitura
+  vazia — um feed quebrado não derruba o acervo. Agendador com
+  `SINCRONIZACAO_AUTOMATICA=true`.
+- `webhooks.js` — entrega assinada por HMAC, disparada e esquecida (um CRM
+  lento não pode atrasar o formulário da vitrine). Desarma sozinho após
+  falhas seguidas.
+- `documentacaoApi.js` — a especificação OpenAPI, escrita à mão de propósito;
+  `test/documentacaoApi.test.js` compara com a tabela de rotas do Express.
+- `exportacaoCompleta.js` — tudo da imobiliária num JSON. Sem senha, sem token.
+- `formatosImportacao.js` — VRSync, XML da Omnimob e JSON → as linhas que o
+  `importacaoService` já sabe importar. `fonteRemota.js` busca a URL com as
+  travas de SSRF (o servidor abrindo endereço arbitrário é a forma exata do
+  ataque). `copiaDeFotos.js` traz as imagens do sistema antigo para a nossa
+  conta do Cloudinary — sem ele o acervo importado depende do servidor que a
+  imobiliária está deixando.
+- `dadosDaVitrine.js` — o que a vitrine sabe de VERDADE sobre a imobiliária:
+  endereço, horários, equipe visível, números do acervo, regiões e filtros.
+  Viaja no mesmo payload de `GET /public/:slug`, que a vitrine pública e o
+  editor já buscam — endpoint separado faria a página desenhar duas vezes.
+  Três regras no cabeçalho do arquivo; a que mais importa é **número que não
+  existe é `null`, não zero** (ninguém anuncia "0 imóveis vendidos").
 - `feedPortais.js` — monta o XML VRSync. `distribuicaoLeads.js` — roleta de
   corretores por carga, não por sorteio. `cofre.js` — cifragem em repouso.
   `auditoria.js` — a trilha.
-- `provisioningService.js`, `migrationService.js`, `healthService.js`, `notificationService.js` (stub), `socialPublisher.js`.
+- `mercadoLivre.js` — o primeiro portal EMPURRADO. ZAP/VivaReal/OLX vêm buscar
+  o XML; o ML exige criar cada anúncio pela API em nome do vendedor, com token
+  por tenant e renovação. **Escrito contra a documentação, não verificado contra
+  a API real** (exige app registrado + conta de vendedor + pacote contratado);
+  os pontos duvidosos estão marcados `REVISAR`. Publicar exige um **pacote de
+  anúncios** contratado com o comercial deles — é a causa nº 1 de "conectei e
+  não publica", e a tela avisa antes.
+- `pontewhatsapp.js` — a ponte NÃO oficial para status. Não hospedamos sessão:
+  falamos com um serviço que a imobiliária contrata. A diferença não é técnica,
+  é de responsabilidade — hospedar faria a Omnimob operar a violação dos termos
+  da Meta em nome de centenas de clientes.
+- `provisioningService.js`, `migrationService.js`, `healthService.js`, `notificationService.js` (stub).
 
 **Versionamento de banco:** migrado de `db push` → **Prisma Migrate**. Baseline em `prisma/migrations/0_init`. Ver [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) para o passo de baseline e o roadmap completo.
 
@@ -129,11 +184,14 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `ALLOWED_ORIGINS` | **FRONT** | `http://localhost:5173,http://localhost:3000` | `https://omnimob.app,https://www.omnimob.app` |
 | `META_CALLBACK_URL` | **API** | `http://localhost:4000/api/social/oauth/callback` | `https://api.omnimob.app/api/social/oauth/callback` |
 | `META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN` | — | do app Meta | idem |
+| `MERCADOLIVRE_APP_ID` / `_APP_SECRET` | — | do app no ML (opcional) | idem — sem elas o canal aparece indisponível |
+| `MERCADOLIVRE_CALLBACK_URL` | **API** | `http://localhost:4000/api/canais/mercadolivre/callback` | `https://api.omnimob.app/api/canais/mercadolivre/callback` |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | — | Google AI Studio / `gemini-2.5-flash` | idem |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | `sk_test_…` | **`sk_live_…`** |
 | `STRIPE_PRICE_BASIC` / `_PRO` / `_PREMIUM` | — | preços de teste | preços live |
 | `STRIPE_PRICE_BASICO_ANUAL` / `STRIPE_PRICE_PROFISSIONAL_ANUAL` / `STRIPE_PRICE_PREMIUM_ANUAL` | — | preços **anuais** de teste (opcionais) | preços anuais live |
 | `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
+| `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_UPLOAD_PRESET` | — | `dpwuxmbli` / `domus-app` | idem — **os mesmos valores dos `VITE_`** |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
 
 **Sobre o preço anual:** cada plano tem dois preços no Stripe — o mensal
@@ -158,7 +216,8 @@ Com padrão no código, defina só para sobrescrever: `EMAIL_REMETENTE`,
 `SMTP_USER`, `SMTP_PASS`).
 
 Opcionais: `FAXINA_AUTOMATICA=true` (agendador de limpeza — só com uma
-instância), `SEED_DEV=true`, `SUPER_ADMIN_EMAIL` / `_NOME` / `_PASSWORD` (só o
+instância), `SINCRONIZACAO_AUTOMATICA=true` (relê as fontes de importação de
+hora em hora; mesma trava de instância única), `SEED_DEV=true`, `SUPER_ADMIN_EMAIL` / `_NOME` / `_PASSWORD` (só o
 seed lê; **sem `SUPER_ADMIN_PASSWORD` a senha vira `superadmin`**).
 
 Em produção defina também `NODE_ENV=production`: é ele que fecha o atalho de
@@ -197,8 +256,18 @@ Modelos principais:
 | `LeadEvento` | Histórico do lead (mudou de estágio, trocou de dono, nota) |
 | `Auditoria` | Quem criou/alterou/excluiu o quê. Sem FK para `Usuario` — o registro sobrevive à remoção de quem o gerou |
 | `PerfilBusca` | O que um cliente procura; base do cruzamento com o acervo |
+| `ChaveApi` | Crachá de integração de terceiro. Hash, prefixo visível, escopos, revogação por marcação |
+| `FonteImportacao` | Endereço de feed guardado, para reler. `desativarAusentes` é a política de ausência |
+| `Webhook` | Endereço que recebe aviso de evento, com segredo de assinatura e desarme por falhas |
 | `PropertyPublication` | Fila de publicação social (Facebook/Instagram/WhatsApp) |
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
+
+**Campos que a vitrine lê:** `Usuario.exibirNaVitrine` (opt-in), `foto`,
+`creci`, `whatsapp` e `cargoVitrine` alimentam o widget de Equipe;
+`Tenant.horarioAtendimento` (Json) e `Tenant.fundadaEm` alimentam Horários e
+Números. Os widgets nasceram com dado inventado no código — "Ana Souza",
+"200+ imóveis vendidos", "Rua das Flores, 123" — porque não havia coluna de
+onde tirar o verdadeiro.
 
 **Roles:** `ADMIN` | `AGENT` | `SHOWCASE_EDITOR`
 **Estágios do lead:** `NOVO` | `EM_ATENDIMENTO` | `VISITA` | `PROPOSTA` | `GANHO` | `PERDIDO`
@@ -266,7 +335,7 @@ src/
 │   │   ├── ShowcaseHeader/Hero/Highlights/PropertyGrid/PropertyCard/Footer
 │   │   ├── ShowcaseWidget.jsx    — despachante único de tipos de widget
 │   │   ├── widgets/              — um componente por tipo
-│   │   ├── contexto.jsx          — público × editor (texto, links)
+│   │   ├── contexto.jsx          — público × editor (texto, links) + dados reais e filtro
 │   │   ├── tema.js               — cores, fonte, breakpoint, link do WhatsApp
 │   │   ├── engine/               — física de layout, sem DOM e sem React
 │   │   ├── useAlturasReais.js    — medição por ResizeObserver
@@ -340,6 +409,8 @@ editor mostrando 49%.
 |---|---|
 | texto é texto | o mesmo elemento com `contentEditable` |
 | link navega | link sem destino |
+| busca e chips filtram a grade | filtro é no-op (esconder imóveis da prancheta assustaria) |
+| o mapa recebe o ponteiro | `pointer-events: none` (iframe engoliria o arrasto) |
 
 Nunca: padding, fonte, estrutura, largura, posição, cores, componentes internos.
 
@@ -575,6 +646,11 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 
 ## O que NÃO existe ainda (oportunidades futuras)
 
+- **Status do WhatsApp automático não existe e não vai existir por caminho
+  oficial**: o Cloud API entrega mensagens, e status é recurso de consumidor que
+  a Meta nunca expôs. O produto gera a arte 1080×1920 e a pessoa publica com um
+  toque (`utils/arteParaStatus.js`); quem quiser automação liga uma ponte não
+  oficial por conta e risco (ver `pontewhatsapp.js`)
 - Envio automático de mensagem por WhatsApp (a publicação em Facebook/Instagram **já é real** — ver `socialRoutes.js`, que chama a Graph API; falta só o app Meta sair do modo de desenvolvimento)
 - UI de IA no frontend (backend `/api/ai/*` pronto)
 - Notification Service com provedores reais (interface pronta, envio é stub)
@@ -582,7 +658,6 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 - Isolamento por schema/banco-por-tenant (seam pronto em `tenantRegistry.js`)
 - Coordenadas (lat/lng) e busca por raio — hoje endereço é texto
 - Exclusão lógica (`deletedAt`) e retenção/anonimização (LGPD)
-- API pública por imobiliária (chave por tenant)
 - Módulos ERP: Contratos, Agenda, Financeiro, Vistorias, Proprietários, Corretores
 - Blog/conteúdo para SEO (o site institucional já existe: `/sobre`, `/contato`, `/termos`, `/privacidade`, `/vitrines`)
 - Testes automatizados e deploy CI/CD (recuperação de senha **já existe** — `POST /api/auth/recuperar-senha`)

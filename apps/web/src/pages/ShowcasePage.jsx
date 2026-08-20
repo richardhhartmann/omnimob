@@ -137,7 +137,12 @@ export function ShowcasePage({ slugFixo }) {
   }
 
   return (
-    <VitrineProvider modo="public" tenantSlug={tenantSlug}>
+    /* `dados` é o bloco de dados reais que a mesma resposta traz (equipe,
+       endereço, números, regiões). Ele desce por contexto e não por prop
+       porque os widgets estão a quatro níveis daqui, dentro do renderizador
+       compartilhado — e passar de mão em mão até lá seria a porta para alguém
+       resolver que é mais fácil o widget buscar sozinho. */
+    <VitrineProvider modo="public" tenantSlug={tenantSlug} dados={payload?.vitrine}>
       <div className={`showcase-body ${classeDeAparencia(layout)}`} style={estiloDoTema(tenant, layout)}>
         <div
           className="showcase-container showcase-builder-canvas showcase-palco"

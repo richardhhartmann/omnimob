@@ -10,8 +10,11 @@ import { IconeCelular, IconeCheck, IconeEnvelope, IconeTelefone, IconeX } from "
 import { DominioVitrine } from "../components/DominioVitrine.jsx";
 import { ModalCiencia } from "../components/ModalCiencia.jsx";
 import { ImportadorDados, podeImportar } from "../components/ImportadorDados.jsx";
+import { ApiDoTenant } from "../components/ApiDoTenant.jsx";
+import { CentralDeCanais } from "../components/CentralDeCanais.jsx";
 import { MarcaDaguaConfig } from "../components/MarcaDaguaConfig.jsx";
 import { OPACIDADE_PADRAO } from "../utils/marcaDagua";
+import { TEMAS } from "../utils/temaDoPainel";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -48,16 +51,24 @@ function formatarData(valor) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-/* Esqueleto da tela de Configurações.
+/* Esqueleto de UMA SEÇÃO de Configurações — nunca do índice.
 
    Substitui um "Carregando configurações..." centralizado. A frase informava,
    mas empurrava a página inteira para baixo e depois a puxava de volta quando
    os dados chegavam — e nesta API, com os segundos de latência que ela tem, o
    salto era longo o suficiente para a pessoa clicar no lugar errado.
 
-   O esqueleto ocupa desde já a forma que o conteúdo vai ter: três blocos com
-   cabeçalho e campos, nas mesmas medidas das seções reais. Quando os dados
-   entram, nada se move.
+   O ÍNDICE não passa por aqui. Ele é uma grade de cartões montada a partir do
+   cargo que já está na sessão: não espera resposta nenhuma do servidor, e
+   segurá-lo atrás do `loading` era mostrar a silhueta de um formulário para
+   quem ia receber botões — uma tela piscando na forma de outra. Abre direto,
+   como Relatórios, que faz a mesma pergunta e nunca teve espera.
+
+   O que sobra é a espera legítima: entrar direto num endereço de seção
+   (`/configuracoes?ver=perfil`) enquanto o perfil da imobiliária ainda vem. Aí
+   o esqueleto ocupa desde já a forma do conteúdo — três blocos com cabeçalho e
+   campos, nas medidas das seções reais —, e quando os dados entram nada se
+   move.
 
    Não é uma cópia fiel de cada seção de propósito: manter duas árvores em
    sincronia daria trabalho a cada campo novo, e ninguém lê um esqueleto — o
@@ -147,12 +158,15 @@ function Campo({ label, hint, children }) {
   );
 }
 
+/* Classes em vez de só estilo inline: o tema claro precisa de um gancho para
+   trocar fundo e borda, e `rgba(255,255,255,α)` inline é invisível sobre fundo
+   claro. O layout continua inline; virou classe só o que muda com o tema. */
 function Secao({ icone, titulo, cor, children }) {
   const accent = cor || "rgba(99,102,241,0.7)";
   return (
-    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "18px", overflow: "hidden" }}>
+    <div className="cfg-secao" style={{ borderRadius: "18px", overflow: "hidden" }}>
       {/* Header da seção */}
-      <div style={{ padding: "18px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: "12px" }}>
+      <div className="cfg-secao__cab" style={{ padding: "18px 24px", display: "flex", alignItems: "center", gap: "12px" }}>
         <div style={{ width: "32px", height: "32px", borderRadius: "9px", background: `${accent}20`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           {icone}
         </div>
@@ -287,9 +301,22 @@ const EMPTY = {
   whatsapp: "", telefone: "", email: "",
   cep: "", endereco: "", cidade: "", estado: "",
   logoUrl: "", primaryColor: "#6366f1", secondaryColor: "#d4af37",
+  // Tema do painel para toda a imobiliária. Padrão do produto é escuro.
+  temaImobiliaria: "escuro",
   autoGerarIA: true,
   marcaDaguaAtiva: true, marcaDaguaOpacidade: OPACIDADE_PADRAO,
+  /* Os dois campos que a vitrine passou a mostrar de verdade: o widget de
+     Números usa `fundadaEm` para dizer "X anos de mercado", e o de Horários
+     desenha as faixas de `horarioAtendimento`. Antes os dois eram texto
+     digitado dentro da peça — "15 anos de experiência" saía igual para toda
+     imobiliária que arrastasse o bloco. */
+  fundadaEm: "", horarioAtendimento: [],
 };
+
+/* Uma faixa de atendimento em branco. Texto livre no `dias` porque a realidade
+   é "Segunda a sexta", "Sábado", "Plantão de domingo" — e sete pares de
+   colunas, um por dia da semana, não descrevem nenhuma imobiliária de verdade. */
+const FAIXA_VAZIA = { dias: "", abre: "09:00", fecha: "18:00", fechado: false };
 
 /* ─── Rever o tour ────────────────────────────────────────────────────────────
    Apaga o progresso deste usuário e recarrega. O recarregar não é preguiça: o
@@ -391,11 +418,10 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
 
   // ── Redes Sociais ──
   const [socialStatus, setSocialStatus] = useState(null);
-  const [feedCopiado, setFeedCopiado] = useState(false);
-  /* O endereço do feed dos portais. Sai da mesma base que o resto do cliente
-     HTTP usa — cravar "api.omnimob.app" aqui daria um link quebrado em
-     desenvolvimento e um endereço errado se a API mudar de casa. */
-  const enderecoDoFeed = `${(import.meta.env.VITE_API_URL || "https://api.omnimob.app").replace(/\/+$/, "")}/public/${tenantSlug}/feed.xml`;
+  /* O endereço do feed saiu daqui junto com a seção de portais: quem o monta
+     agora é o servidor, e a `CentralDeCanais` o recebe pronto. Montá-lo dos
+     dois lados daria duas verdades sobre o mesmo endereço no dia em que a API
+     mudar de casa. */
   const [socialLoading, setSocialLoading] = useState(false);
   const [socialMsg, setSocialMsg] = useState(null); // { type: "success"|"error", text }
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -586,10 +612,15 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           estado: t.estado || "",
           logoUrl: t.logoUrl || "",
           primaryColor: t.primaryColor || "#6366f1",
+          temaImobiliaria: t.temaImobiliaria || "escuro",
           secondaryColor: t.secondaryColor || "#d4af37",
           autoGerarIA: t.autoGerarIA ?? true,
           marcaDaguaAtiva: t.marcaDaguaAtiva ?? true,
           marcaDaguaOpacidade: t.marcaDaguaOpacidade ?? OPACIDADE_PADRAO,
+          // Número vira string: o input é controlado e `null` o tornaria
+          // não-controlado na primeira digitação.
+          fundadaEm: t.fundadaEm == null ? "" : String(t.fundadaEm),
+          horarioAtendimento: Array.isArray(t.horarioAtendimento) ? t.horarioAtendimento : [],
         });
         setPlano(t.plano || "BASICO");
         loadedRef.current = true;
@@ -608,6 +639,14 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
         await api.updateTenantConfiguracao(tenantSlug, {
           ...form,
           cep: form.cep.replace(/\D/g, ""),
+          /* Campo vazio vira `null`, não `0`: o validador aceita nulo como
+             "não informado", e `Number("")` é zero — que passaria a valer como
+             ano 0 e seria recusado pelo mínimo de 1900. */
+          fundadaEm: form.fundadaEm === "" ? null : Number(form.fundadaEm),
+          /* Faixa sem dia descrito não vai para o servidor. Ela existe no
+             formulário porque a pessoa acabou de clicar em "adicionar" e ainda
+             não digitou — mandar assim só encheria o banco de linhas mudas. */
+          horarioAtendimento: form.horarioAtendimento.filter((f) => String(f.dias || "").trim()),
         });
         setSaveStatus("saved");
         /* Sincroniza a sessão local para o painel refletir a identidade na hora.
@@ -627,6 +666,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               slogan: form.slogan,
               logoUrl: form.logoUrl,
               primaryColor: form.primaryColor,
+              temaImobiliaria: form.temaImobiliaria,
               secondaryColor: form.secondaryColor,
               autoGerarIA: form.autoGerarIA,
               /* Sem estas duas na sessao, mudar a marca aqui so valeria no
@@ -686,8 +726,6 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
     } catch {}
     finally { setCepLoading(false); }
   }
-
-  if (loading) return <EsqueletoConfiguracoes />;
 
   const saveIndicator = {
     idle: null,
@@ -788,14 +826,19 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
       ) : (
         <>
         {/* ── Cabeçalho da seção ─── */}
-        <div data-tour="config-cabecalho" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+        <div data-tour="config-secao" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
           <VoltarAoIndice onClick={() => setTab("MENU")} rotulo="Configurações" titulo={rotuloDaAba(tab)} />
           {/* A mesma margem do botão de voltar, para os dois ficarem na mesma linha. */}
           <div style={{ minHeight: "24px", marginBottom: "20px" }}>{saveIndicator}</div>
         </div>
 
-        {/* ── Conteúdo da seção ─── */}
+        {/* ── Conteúdo da seção ───
+            O esqueleto entra AQUI e não no lugar da página inteira: o cabeçalho
+            acima (voltar ao índice + nome da seção) não depende de dado nenhum,
+            então desenhá-lo desde o primeiro quadro evita o pulo que o esqueleto
+            existe para evitar. */}
         <div key={tab} style={{ display: "flex", flexDirection: "column", gap: "16px", animation: "fadeIn 0.3s ease-out" }}>
+          {loading ? <EsqueletoConfiguracoes /> : <>
 
           {tab === "perfil" && (<>
           {/* Dados da Empresa */}
@@ -818,6 +861,21 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                 <input style={inputStyle} value={form.creci} onChange={(e) => set("creci", e.target.value)} placeholder="CRECI-SP 12345-F" />
               </Campo>
             </div>
+            {/* O widget "Números" da vitrine dizia "15 anos de experiência" para
+                toda imobiliária que arrastasse o bloco. A alternativa óbvia era
+                contar a partir da criação da conta aqui — e aí uma imobiliária
+                de trinta anos que assinou no mês passado anunciaria "0 anos" na
+                própria página. O ano de fundação é dela, e só ela sabe. */}
+            <Campo label="Ano de fundação" hint="A vitrine usa isto para mostrar seus anos de mercado. Em branco, o número não aparece.">
+              <input
+                style={{ ...inputStyle, maxWidth: "150px" }}
+                value={form.fundadaEm}
+                onChange={(e) => set("fundadaEm", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="Ex: 1998"
+                inputMode="numeric"
+                maxLength={4}
+              />
+            </Campo>
           </Secao>
 
           {/* Contato */}
@@ -871,6 +929,79 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                 <input style={inputStyle} value={form.estado} onChange={(e) => set("estado", e.target.value.toUpperCase())} placeholder="SP" maxLength={2} />
               </Campo>
             </div>
+          </Secao>
+
+          {/* ── Horário de atendimento ──────────────────────────────────────
+              O widget de Horários guardava isto como HTML solto dentro da peça
+              ("Segunda a Sexta: 09h às 18h<br>Sábados: 09h às 13h"). Dava um
+              texto apresentável e um dado que nenhuma outra parte do sistema
+              conseguia ler — nem o rodapé, nem uma futura resposta automática
+              fora do expediente. Aqui ele vira estrutura. */}
+          <Secao cor="#38bdf8" titulo="Horário de atendimento" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+          }>
+            <p style={{ margin: "0 0 4px", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+              A vitrine mostra estas faixas e calcula sozinha se você está aberto agora.
+            </p>
+
+            {form.horarioAtendimento.length === 0 ? (
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
+                Nenhuma faixa cadastrada — o widget de horários usa o texto escrito no editor de vitrine.
+              </p>
+            ) : null}
+
+            {form.horarioAtendimento.map((faixa, i) => {
+              const trocar = (campo, valor) =>
+                set("horarioAtendimento", form.horarioAtendimento.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)));
+              return (
+                <div key={i} className="cfg-faixa">
+                  <input
+                    style={inputStyle}
+                    value={faixa.dias}
+                    onChange={(e) => trocar("dias", e.target.value)}
+                    placeholder="Ex: Segunda a sexta"
+                  />
+                  {/* Faixa marcada como fechada não tem hora para mostrar, e os
+                      dois campos saem de cena em vez de ficarem desabilitados:
+                      um "09:00 às 18:00" apagado ao lado de "Fechado" é a
+                      contradição que a pessoa lê primeiro. */}
+                  {faixa.fechado ? (
+                    <span className="cfg-faixa__fechado">Sem atendimento</span>
+                  ) : (
+                    <div className="cfg-faixa__horas">
+                      <input style={inputStyle} type="time" value={faixa.abre} onChange={(e) => trocar("abre", e.target.value)} />
+                      <span>às</span>
+                      <input style={inputStyle} type="time" value={faixa.fecha} onChange={(e) => trocar("fecha", e.target.value)} />
+                    </div>
+                  )}
+                  <label className="cfg-faixa__chave">
+                    <input type="checkbox" checked={Boolean(faixa.fechado)} onChange={(e) => trocar("fechado", e.target.checked)} />
+                    Fechado
+                  </label>
+                  <button
+                    type="button"
+                    className="cfg-faixa__remover"
+                    title="Remover faixa"
+                    onClick={() => set("horarioAtendimento", form.horarioAtendimento.filter((_, j) => j !== i))}
+                  >
+                    <IconeX size={13} />
+                  </button>
+                </div>
+              );
+            })}
+
+            {form.horarioAtendimento.length < 8 ? (
+              <button
+                type="button"
+                className="button-secondary"
+                style={{ width: "auto", marginTop: "4px" }}
+                onClick={() => set("horarioAtendimento", [...form.horarioAtendimento, { ...FAIXA_VAZIA }])}
+              >
+                + Adicionar faixa
+              </button>
+            ) : null}
           </Secao>
 
           {/* Endereço da vitrine. Fica no Perfil, junto de "Dados da Empresa",
@@ -937,20 +1068,58 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               {logoMsg && <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "8px 0 0" }}>{logoMsg}</p>}
             </Campo>
 
+            {/* ── Tema do painel, para a imobiliária ────────────────────────
+                O PADRÃO da casa, não uma imposição: vale para quem ainda não
+                escolheu o próprio tema no perfil. Quem já escolheu continua com
+                o seu — o administrador define o ponto de partida de todo mundo,
+                não a tela de cada um.
+
+                "Automático" é um valor gravado, não um atalho: quem escolhe
+                continua espelhando o sistema operacional a cada acesso. */}
+            <Campo
+              label="Tema do painel"
+              hint="Vale para quem ainda não escolheu um tema no próprio perfil. Não afeta a vitrine."
+            >
+              <div className="cfg-temas">
+                {TEMAS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`cfg-tema${form.temaImobiliaria === t.id ? " is-ativo" : ""}`}
+                    onClick={() => set("temaImobiliaria", t.id)}
+                  >
+                    <span className={`cfg-tema__amostra is-${t.id}`} aria-hidden />
+                    <span>
+                      <strong>{t.rotulo}</strong>
+                      {t.nota ? <small>{t.nota}</small> : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Campo>
+
+            {/* As cores são do PAINEL. As da vitrine moram no editor dela, com
+                a opção de herdar estas — ver `ShowcaseEditorPage`. Antes eram
+                uma coisa só, e mudar a marca da vitrine repintava a ferramenta
+                de trabalho da equipe junto. */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
               <ColorPicker
-                label="Cor Primária"
-                hint="Botões, destaques e elementos principais."
+                label="Cor primária do painel"
+                hint="Botões, destaques e elementos principais do painel."
                 value={form.primaryColor}
                 onChange={(v) => set("primaryColor", v)}
               />
               <ColorPicker
-                label="Cor Secundária"
-                hint="Badges, acentos e elementos complementares."
+                label="Cor secundária do painel"
+                hint="Selos, acentos e elementos complementares."
                 value={form.secondaryColor}
                 onChange={(v) => set("secondaryColor", v)}
               />
             </div>
+            <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+              Estas cores valem só para o painel. As da vitrine pública são definidas no editor de
+              vitrine, onde dá para herdar estas ou escolher outras.
+            </p>
 
             {/* Pré-visualização de botões */}
             <div style={{ marginTop: "4px", padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
@@ -994,61 +1163,21 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           )}
 
           {tab === "redes" && (<>
-          {/* ── Portais imobiliários ──────────────────────────────────────────
-              Fica junto de Redes Sociais porque responde a mesma pergunta —
-              "onde mais os meus imóveis aparecem?" —, e não junto de Aparência,
-              que é sobre como a vitrine se parece.
+          {/* ── Onde os imóveis aparecem ──────────────────────────────────────
+              Substitui a seção "Portais imobiliários", que mostrava o endereço
+              do feed e mais nada. O endereço continua aqui — junto de quantos
+              imóveis estão no arquivo e de quando um portal veio buscar pela
+              última vez, que é o que responde "cadastrei lá, funcionou?".
 
-              O endereço é só leitura: quem cadastra é a imobiliária, no painel
-              do portal. Não há o que configurar aqui além de copiar. */}
-          <Secao cor="#0ea5e9" titulo="Portais imobiliários" icone={
+              E junto dos outros canais, porque a pergunta de quem divulga é uma
+              só: onde meus imóveis aparecem? Que uns sejam buscados, outros
+              empurrados e um seja manual é mecânica nossa, não dela. */}
+          <Secao cor="#0ea5e9" titulo="Onde seus imóveis aparecem" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1.5" />
             </svg>
           }>
-            <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-              Cadastre o endereço abaixo no painel do <strong>ZAP</strong>, <strong>VivaReal</strong> ou{" "}
-              <strong>OLX Imóveis</strong> como fonte de importação XML. Eles passam a buscar o seu
-              acervo sozinhos, algumas vezes por dia.
-            </p>
-
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-              <input
-                readOnly
-                value={enderecoDoFeed}
-                onFocus={(e) => e.target.select()}
-                style={{ ...inputStyle, flex: 1, minWidth: "260px", fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: "12.5px" }}
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(enderecoDoFeed);
-                    setFeedCopiado(true);
-                    setTimeout(() => setFeedCopiado(false), 1800);
-                  } catch {
-                    showToast?.("Não consegui copiar. Selecione o texto e use Ctrl+C.", "error");
-                  }
-                }}
-                style={{ width: "auto", padding: "11px 18px", fontSize: "13px", whiteSpace: "nowrap" }}
-              >
-                {feedCopiado ? "Copiado!" : "Copiar endereço"}
-              </button>
-              <a
-                href={enderecoDoFeed}
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: "12.5px", color: "var(--accent, #818cf8)", whiteSpace: "nowrap" }}
-              >
-                Ver o arquivo
-              </a>
-            </div>
-
-            <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-              Entram no arquivo os imóveis <strong>ativos</strong>, com pelo menos uma foto e com
-              “Enviar aos portais” marcado no cadastro. Cada imóvel tem esse interruptor — dá para
-              manter um só na sua vitrine sem tirá-lo do ar.
-            </p>
+            <CentralDeCanais session={session} />
           </Secao>
 
           {/* Redes Sociais */}
@@ -1068,7 +1197,11 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                 display: "flex", alignItems: "flex-start", gap: "10px",
               }}>
                 <span style={{ marginTop: "2px", display: "flex" }}>{socialMsg.type === "success" ? <IconeCheck size={13} /> : <IconeX size={13} />}</span>
-                <span>{socialMsg.text}</span>
+                {/* `flex: 1` e `minWidth: 0`: sem eles o texto é um filho de
+                    flex que encolhe até a largura da MENOR palavra, e a
+                    mensagem sai quebrada uma palavra por linha. O botão de
+                    fechar tem `margin-left: auto` e ficava com todo o espaço. */}
+                <span style={{ flex: 1, minWidth: 0 }}>{socialMsg.text}</span>
                 <button type="button" onClick={() => setSocialMsg(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.6, fontSize: "14px", flexShrink: 0 }}>✕</button>
               </div>
             )}
@@ -1138,6 +1271,26 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           </>)}
 
           {tab === "dados" && (<>
+          {/* ── Sair vem antes de entrar ─────────────────────────────────────
+              "Disponibilizar" fica acima de "Importar" de propósito. A pergunta
+              que uma imobiliária faz antes de assinar é "os dados são meus, eu
+              consigo tirá-los daqui?" — e a resposta não pode estar embaixo do
+              formulário que os traz para dentro. Também é ordem prática: o
+              caminho de importar pela API precisa de uma chave, e a chave é
+              gerada na seção de cima. */}
+          <Secao cor="#22c55e" titulo="Disponibilizar dados" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+          }>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+              Seus imóveis, clientes, equipe e leads acessíveis por API e XML, para o seu site, um
+              CRM ou qualquer plataforma que você use. Você controla o que cada chave enxerga e
+              revoga qualquer uma a qualquer momento.
+            </p>
+            <ApiDoTenant session={session} />
+          </Secao>
+
           <Secao cor="#0ea5e9" titulo="Importar de outra plataforma" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
@@ -1145,8 +1298,9 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             </svg>
           }>
             <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-              Traga imóveis, clientes e usuários do sistema que você usava antes, a partir de uma
-              planilha. Nada é publicado sozinho: os imóveis entram como rascunho para você revisar.
+              Traga imóveis, clientes e usuários do sistema que você usava antes — pelo feed XML
+              dele ou pela nossa API. Nada é publicado sozinho: os imóveis entram como rascunho
+              para você revisar.
             </p>
             <ImportadorDados session={session} />
           </Secao>
@@ -1335,6 +1489,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           </Secao>
           </>)}
 
+          </>}
         </div>
         </>
       )}

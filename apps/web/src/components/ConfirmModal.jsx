@@ -56,6 +56,7 @@ export function ConfirmModal({ open, message, confirmLabel = "Confirmar", tone =
         }}
       >
         <div
+          className="modal-cartao"
           style={{
             width: "100%",
             maxWidth: "400px",

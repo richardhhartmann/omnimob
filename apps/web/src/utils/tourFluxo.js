@@ -72,7 +72,7 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
     podeImoveis && {
       chave: "imoveis",
       titulo: "Imóveis",
-      rota: "/imoveis",
+      rota: "/imoveis/portfolio",
       passos: [
         {
           alvo: '[data-tour="portfolio-cabecalho"]',
@@ -102,26 +102,45 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
       ],
     },
 
+    /* ── Relatórios ──────────────────────────────────────────────────────────
+       Era a etapa "Leads", e ela ficou para trás quando a tela virou um ÍNDICE.
+
+       Três coisas estavam erradas ao mesmo tempo. A rota era `/leads`, que hoje
+       só redireciona para `/relatorios` — e o motor navegava, era desviado e
+       navegava de novo, sem fim. Os dois alvos (`leads-cabecalho`,
+       `leads-lista`) moram dentro da LeadsPage, que só aparece em
+       `?ver=leads`; parados no índice, nenhum dos dois existia. E o texto
+       descrevia uma tela de lista para quem estava olhando quatro cartões.
+
+       Agora a etapa é sobre o que a tela virou: um índice com quatro
+       relatórios, e um submenu que leva direto a cada um. */
     podeLeads && {
-      chave: "leads",
-      titulo: "Leads",
-      rota: "/leads",
+      chave: "relatorios",
+      titulo: "Relatórios",
+      rota: "/relatorios",
       passos: [
         {
-          alvo: '[data-tour="leads-cabecalho"]',
-          titulo: "Quem demonstrou interesse",
+          alvo: '[data-tour="relatorios-indice"]',
+          titulo: "Tudo que já aconteceu, num lugar só",
           texto:
-            "Cada contato deixado na sua vitrine cai aqui, com o imóvel que a pessoa estava " +
-            "vendo. Responder rápido é o que separa a visita da venda.",
+            "<strong>Leads</strong> traz cada contato deixado na sua vitrine, com o imóvel que a " +
+            "pessoa estava vendo — responder rápido é o que separa a visita da venda. Ao lado " +
+            "dele, o relatório do mês, o funil de vendas e as comissões da equipe.",
           lado: "bottom",
         },
         {
-          alvo: '[data-tour="leads-lista"]',
-          titulo: "Trabalhando a lista",
+          alvo: '[data-tour="nav-rel-leads"]',
+          titulo: "Depois, vá direto",
           texto:
-            "Dá para filtrar, marcar o que já foi atendido e abrir a conversa direto no " +
-            "WhatsApp de quem chamou.",
-          lado: ["top", "bottom"],
+            "O item <strong>Relatórios</strong> no menu abre um atalho para cada um dos quatro. " +
+            "Passar por esta tela de escolha é só do primeiro dia — quando você já souber o que " +
+            "quer ver, clique no nome dele aqui.",
+          lado: "right",
+          respiro: 6,
+          /* Menu recolhido não desenha submenu — em 64px não cabe "Relatório
+             mensal". Sem isto o passo ficaria 3,5s procurando um botão que a
+             barra decidiu não ter. */
+          pularSe: ".ds-side.is-collapsed",
         },
       ],
     },
@@ -209,6 +228,10 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
       ],
     },
 
+    /* Mesma forma de Relatórios, e por isso a mesma dupla de passos: o índice
+       e o atalho. Falar do submenu nas duas telas não é repetição — é o que
+       ensina que o padrão vale para as duas, e é o que faz a pessoa parar de
+       passar pelo índice toda vez. */
     podeConfig && {
       chave: "configuracoes",
       titulo: "Configurações",
@@ -218,10 +241,21 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
           alvo: '[data-tour="config-cabecalho"]',
           titulo: "A cara da sua imobiliária",
           texto:
-            "Logo, cores, dados de contato e informações legais — cada assunto no seu " +
+            "Logo, cores, dados de contato, redes sociais e plano — cada assunto no seu " +
             "cartão. É o que aparece para o cliente na vitrine e nos materiais gerados " +
             "pela plataforma.",
           lado: "bottom",
+        },
+        {
+          alvo: '[data-tour="nav-config-perfil"]',
+          titulo: "Cada seção tem atalho",
+          texto:
+            "Como em Relatórios, o menu abre as seções uma a uma. É por aqui que você volta " +
+            "para <strong>Aparência</strong> quando trocar a logo, ou para <strong>Plano</strong> " +
+            "quando precisar de mais espaço — sem passar pelos cartões de novo.",
+          lado: "right",
+          respiro: 6,
+          pularSe: ".ds-side.is-collapsed",
         },
       ],
     },

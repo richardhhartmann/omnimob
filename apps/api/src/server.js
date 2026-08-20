@@ -12,6 +12,11 @@ import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
 import { chamadoRouter } from "./routes/chamadoRoutes.js";
 import { importacaoRouter } from "./routes/importacaoRoutes.js";
+import { apiPublicaRouter } from "./routes/apiPublicaRoutes.js";
+import { chavesApiRouter } from "./routes/chavesApiRoutes.js";
+import { webhookRouter } from "./routes/webhookRoutes.js";
+import { canaisRouter } from "./routes/canaisRoutes.js";
+import { agendarSincronizacoes } from "./services/sincronizacao.js";
 import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
 import { perfilBuscaRouter } from "./routes/perfilBuscaRoutes.js";
@@ -157,6 +162,15 @@ app.use("/api/social/webhook", express.raw({ type: "*/*" }), socialWebhookRouter
 // Mesmo motivo: a assinatura do Stripe é sobre os bytes crus do corpo.
 app.use("/api/webhooks/stripe", express.raw({ type: "*/*" }), stripeWebhookRouter);
 
+/* A API da imobiliária aceita XML no corpo, e para isso precisa do texto CRU.
+
+   Montado antes do `express.json()` e restrito por tipo: o parser de JSON não
+   sabe o que fazer com `application/xml` e deixaria `req.body` vazio, o que
+   apareceria do outro lado como "nenhum registro no corpo" — a mensagem que
+   menos ajuda a descobrir que o problema é o cabeçalho. Só o `text` roda para
+   estes tipos; JSON continua caindo no parser de sempre, logo abaixo. */
+app.use("/api/v1", express.text({ type: ["application/xml", "text/xml"], limit: "12mb" }));
+
 // Limite maior que o padrão (100kb) para acomodar imagens em base64 enviadas
 // à IA (rota /api/ai/imovel/sugerir). Demais rotas continuam pequenas.
 app.use(express.json({ limit: "12mb" }));
@@ -200,6 +214,18 @@ app.use("/api/usuarios", usuarioRouter);
 app.use("/api/tutorial", tutorialRouter);
 app.use("/api/chamados", chamadoRouter);
 app.use("/api/importacao", importacaoRouter);
+app.use("/api/chaves-api", chavesApiRouter);
+app.use("/api/webhooks-saida", webhookRouter);
+app.use("/api/canais", canaisRouter);
+/* A API pública da imobiliária.
+
+   Passa pelo `generalLimiter` (300/min por IP) como todo o resto, E tem um teto
+   próprio por CHAVE dentro do router. Os dois medem coisas diferentes de
+   propósito: o de IP protege o processo de um cliente barulhento, o de chave
+   impede que UMA integração descontrolada consuma a cota da imobiliária
+   inteira. Quem bater no de IP primeiro depende de quantas integrações a mesma
+   máquina hospeda. */
+app.use("/api/v1", apiPublicaRouter);
 app.use("/api/cargos", cargoRouter);
 app.use("/api/clientes", clienteRouter);
 app.use("/api/social", socialRouter);
@@ -222,4 +248,8 @@ app.listen(port, () => {
   // Só liga com FAXINA_AUTOMATICA=true — ver o porquê em faxinaScheduler.js.
   iniciarFaxinaAutomatica();
   iniciarRelatorioMensal();
+  /* Releitura das fontes de importação guardadas. Mesma trava dos dois acima:
+     só com `SINCRONIZACAO_AUTOMATICA=true`, porque com mais de uma instância no
+     ar todas leriam as mesmas fontes ao mesmo tempo. */
+  agendarSincronizacoes();
 });

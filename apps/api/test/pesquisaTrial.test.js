@@ -1,10 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { tenantRouter } from "../src/routes/tenantRoutes.js";
+/* O HELPER VEM PRIMEIRO, e a ordem não é estética.
+
+   Módulos ES avaliam na ordem em que aparecem. O `helpers.js` apaga
+   `RESEND_API_KEY` para neutralizar o envio de e-mail; importar uma rota antes
+   dele carregava o `notificationService` com a chave ainda no ambiente — e a
+   suíte passou a mandar e-mail DE VERDADE, sobre imobiliárias `zz-teste-…`,
+   para a caixa de quem estava rodando os testes.
+
+   O conserto de fundo está no `notificationService`, que agora lê o ambiente na
+   hora do envio em vez de congelá-lo no import. Esta ordem é a segunda linha de
+   defesa. */
 import {
   prisma, limparRestos, criarImobiliariaDeTeste, apagarImobiliaria, subirApi,
 } from "./helpers.js";
+import { tenantRouter } from "../src/routes/tenantRoutes.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Pesquisa espontânea do teste e o prazo extra.

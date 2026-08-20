@@ -15,45 +15,26 @@ import { spawnRipple } from "../utils/rippleDrop";
    listener global) e o clique solta a onda na cor do cartão.
    ──────────────────────────────────────────────────────────────────────────── */
 
-const REPOUSO = {
-  borda: "1px solid rgba(255,255,255,0.15)",
-  fundo: "linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
-};
-
 export function CartaoDeMenu({ icon, title, desc, accent, onClick, tourId }) {
   return (
     <button
       type="button"
       onClick={onClick}
       data-tour={tourId}
-      className="pg-follow"
-      style={{
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "48px 32px", borderRadius: "24px", cursor: "pointer",
-        transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s, box-shadow 0.3s",
-        border: REPOUSO.borda,
-        background: REPOUSO.fundo,
-        backdropFilter: "blur(12px)", color: "inherit", gap: "24px",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-6px)";
-        e.currentTarget.style.border = "1px solid rgba(255,255,255,0.3)";
-        e.currentTarget.style.background = "radial-gradient(circle at var(--px, 50%) var(--py, 50%), rgba(255,255,255,0.18) 0%, transparent 90%), linear-gradient(var(--pg-angle, 145deg), rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%)";
-        e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.15)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.border = REPOUSO.borda;
-        e.currentTarget.style.background = REPOUSO.fundo;
-        e.currentTarget.style.boxShadow = "none";
-      }}
+      className="pg-follow menu-cartao"
+      /* Repouso e hover moram no CSS (`.menu-cartao`), não aqui. Escritos nos
+         handlers de mouse, eles eram brancos translúcidos fixos — corretos no
+         escuro e invisíveis no claro, sem forma de o tema alcançá-los. */
+      style={{ "--pg-accent": accent || "#94a3b8" }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-6px)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
       onMouseDown={(e) => {
         spawnRipple(e, accent || "rgba(255,255,255,0.85)");
         e.currentTarget.style.transform = "translateY(-1px) scale(0.98)";
       }}
       onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(-6px)"; }}
     >
-      <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="menu-cartao__disco">
         {icon}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "8px", textAlign: "center" }}>
@@ -72,10 +53,10 @@ export function VoltarAoIndice({ onClick, rotulo, titulo }) {
       <button
         type="button"
         onClick={onClick}
+        className="ui-pilula"
         style={{
           width: "auto", padding: "7px 13px", borderRadius: "999px", cursor: "pointer",
           display: "inline-flex", alignItems: "center", gap: "7px", fontSize: "12.5px",
-          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "inherit",
         }}
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

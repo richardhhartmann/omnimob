@@ -111,11 +111,23 @@ export async function provisionTenant(input = {}) {
      dali em diante as duas dividiam as mesmas permissões: mexer numa mexia na
      outra. Também dependia de o seed ter rodado, o que fazia a criação de
      tenant falhar em banco limpo. */
+  /* ── Cargos e tipos SÃO INDEPENDENTES, então vão juntos ────────────────────
+     Os dois só precisam do `tenant.id`, e nenhum lê o resultado do outro.
+     Em série, a imobiliária esperava a soma dos dois; juntos, espera o maior.
+
+     `allSettled` e não `all`: uma falha no catálogo de tipos não pode impedir a
+     criação dos cargos, que é o que decide se o administrador consegue entrar.
+     Cada um trata a própria falha abaixo. */
   let cargo = null;
-  try {
-    cargo = await criarCargosPadrao(prisma, tenant.id);
-  } catch (e) {
-    warning = `Tenant criado, mas falha ao criar os cargos: ${e.message}`;
+  const [resCargos, resTipos] = await Promise.allSettled([
+    criarCargosPadrao(prisma, tenant.id),
+    criarTiposPadrao(prisma, tenant.id),
+  ]);
+
+  if (resCargos.status === "fulfilled") {
+    cargo = resCargos.value;
+  } else {
+    warning = `Tenant criado, mas falha ao criar os cargos: ${resCargos.reason?.message}`;
   }
 
   /* Catálogo de tipos de imóvel da casa.
@@ -125,12 +137,11 @@ export async function provisionTenant(input = {}) {
      tipo tem dono: sem este passo, o primeiro cadastro de imóvel abriria com a
      lista de tipos vazia. Falha não derruba o tenant — dá para recriar depois,
      e é melhor um catálogo faltando que um cadastro perdido. */
-  try {
-    await criarTiposPadrao(prisma, tenant.id);
-  } catch (e) {
-    console.warn(`[provisionamento] falha ao criar tipos de imóvel de ${slug}: ${e.message}`);
-    warning = warning || `Tenant criado, mas falha ao criar os tipos de imóvel: ${e.message}`;
+  if (resTipos.status === "rejected") {
+    console.warn(`[provisionamento] falha ao criar tipos de imóvel de ${slug}: ${resTipos.reason?.message}`);
+    warning = warning || `Tenant criado, mas falha ao criar os tipos de imóvel: ${resTipos.reason?.message}`;
   }
+
   if (!cargo) {
     warning = warning || `Tenant criado, mas o cargo '${CARGO_ADMIN}' não foi criado.`;
   } else {

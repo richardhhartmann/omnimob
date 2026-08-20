@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { linkDoImovel } from "../utils/enderecoVitrine";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
@@ -13,6 +13,8 @@ import { overlay360 } from "../utils/cloudinaryOverlay.js";
 import { spawnRipple } from "../utils/rippleDrop.js";
 import { CartaoDeMenu } from "./CartaoDeMenu.jsx";
 import { shareWhatsapp } from "../utils/shareWhatsapp.js";
+import { gerarArteDeStatus } from "../utils/arteParaStatus.js";
+import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { IconeCheck, IconeX } from "./Icones.jsx";
 
 function formatCep(value) {
@@ -88,6 +90,11 @@ const EMPTY = {
   andamento: "PRONTO_PARA_MORAR",
   aceitaPermuta: false,
   publicarPortais: true,
+  /* Rua e número na página pública. Desmarcado por padrão de propósito: o
+     endereço exato é o que transforma um anúncio em convite para bater na porta
+     de quem ainda mora lá — e o que permite fechar negócio por fora da
+     imobiliária que anunciou. Bairro e cidade continuam aparecendo sempre. */
+  exibirEnderecoCompleto: false,
   status: "ACTIVE",
   comodidades: { ...EMPTY_COMODIDADES },
 };
@@ -251,7 +258,10 @@ function IconCheck() {
 
 function StepIndicator({ current, onStepClick, lockedSteps = [], steps = STEPS }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
+    /* A linha em si é só layout — o que precisava de tema são os discos, o
+       trilho entre eles e o cinza do passo travado, todos escritos em branco
+       translúcido. Viraram variáveis com o valor escuro como reserva. */
+    <div className="pf-passos" style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
       {steps.map((step, i) => {
         const done = i < current;
         const active = i === current;
@@ -265,9 +275,9 @@ function StepIndicator({ current, onStepClick, lockedSteps = [], steps = STEPS }
                 style={{
                   width: "32px", height: "32px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: "12px", fontWeight: "700", flexShrink: 0, transition: "all 0.3s ease",
-                  background: locked ? "rgba(255,255,255,0.03)" : done ? "var(--primary, #6366f1)" : active ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
-                  border: locked ? "2px dashed rgba(255,255,255,0.12)" : done ? "2px solid var(--primary, #6366f1)" : active ? "2px solid rgba(99,102,241,0.8)" : "2px solid rgba(255,255,255,0.12)",
-                  color: locked ? "rgba(255,255,255,0.2)" : done ? "#fff" : active ? "rgba(99,102,241,1)" : "var(--text-muted)",
+                  background: locked ? "var(--passo-travado-fundo, rgba(255,255,255,0.03))" : done ? "var(--primary, #6366f1)" : active ? "rgba(99,102,241,0.2)" : "var(--passo-fundo, rgba(255,255,255,0.06))",
+                  border: locked ? "2px dashed var(--passo-borda, rgba(255,255,255,0.12))" : done ? "2px solid var(--primary, #6366f1)" : active ? "2px solid rgba(99,102,241,0.8)" : "2px solid var(--passo-borda, rgba(255,255,255,0.12))",
+                  color: locked ? "var(--passo-travado-cor, rgba(255,255,255,0.2))" : done ? "#fff" : active ? "rgba(99,102,241,1)" : "var(--text-muted)",
                   boxShadow: active ? "0 0 0 4px rgba(99,102,241,0.15)" : "none",
                   cursor: locked ? "not-allowed" : clickable ? "pointer" : "default",
                   opacity: locked ? 0.5 : 1,
@@ -279,7 +289,7 @@ function StepIndicator({ current, onStepClick, lockedSteps = [], steps = STEPS }
                 onClick={() => clickable && onStepClick(i)}
                 style={{
                   fontSize: "11px", fontWeight: active ? "600" : "400",
-                  color: locked ? "rgba(255,255,255,0.2)" : active ? "var(--text)" : "var(--text-muted)",
+                  color: locked ? "var(--passo-travado-cor, rgba(255,255,255,0.2))" : active ? "var(--text)" : "var(--text-muted)",
                   whiteSpace: "nowrap", transition: "all 0.3s",
                   cursor: locked ? "not-allowed" : clickable ? "pointer" : "default",
                   opacity: locked ? 0.5 : 1,
@@ -289,7 +299,7 @@ function StepIndicator({ current, onStepClick, lockedSteps = [], steps = STEPS }
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div style={{ flex: 1, height: "2px", marginBottom: "18px", marginLeft: "8px", marginRight: "8px", background: done ? "var(--primary, #6366f1)" : "rgba(255,255,255,0.08)", borderRadius: "2px", transition: "background 0.4s ease" }} />
+              <div style={{ flex: 1, height: "2px", marginBottom: "18px", marginLeft: "8px", marginRight: "8px", background: done ? "var(--primary, #6366f1)" : "var(--passo-trilho, rgba(255,255,255,0.08))", borderRadius: "2px", transition: "background 0.4s ease" }} />
             )}
           </div>
         );
@@ -389,8 +399,11 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
         </span>
       </div>
 
-      <article ref={cardRef} style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "20px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        <div style={{ position: "relative", width: "100%", height: "200px", overflow: "hidden", background: "rgba(255,255,255,0.04)" }}>
+      {/* O cartão de vidro da prévia. O fundo e a borda saíram do inline para a
+          folha (`.pf-previa`): eram branco translúcido, que sobre o painel
+          claro deixava o cartão sem caixa nenhuma. */}
+      <article ref={cardRef} className="pf-previa" style={{ backdropFilter: "blur(15px)", borderRadius: "20px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div className="pf-previa__foto" style={{ position: "relative", width: "100%", height: "200px", overflow: "hidden" }}>
           {currentUrl && current360 ? (
             <Panorama360 key={`pano-${currentUrl}`} src={currentUrl} height={200} />
           ) : currentUrl ? (
@@ -1011,22 +1024,52 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
   );
 }
 
+/* Os dois endereços do fluxo de cadastro, escritos uma vez.
+
+   Eles aparecem em quatro lugares (rota, barra lateral, atalho do Início e
+   aqui), e o par índice/formulário só faz sentido junto — cravar a string em
+   cada ponto é como as duas telas acabaram com nomes trocados da primeira vez. */
+const EnderecoDoIndice = "/imoveis";
+const EnderecoDoFormulario = "/imoveis/novo";
+
 export function PropertyManagement({ onSubmitProperty, disabled, initialData, logoUrl }) {
   const navigate = useNavigate();
-  /* ── Qual das duas telas está aberta vive na URL, não num `useState` ────────
+  const { pathname, search } = useLocation();
+  /* ── Qual das duas telas está aberta vive NO CAMINHO, não num `useState` ────
      Era estado interno, e isso tinha dois custos: não dava para mandar link do
      formulário para ninguém, e o menu lateral não tinha como abrir "Novo
      Imóvel" — ele só sabia levar até o menu de escolha, de onde a pessoa
      precisava clicar de novo.
 
-     Com `?ver=novo` no endereço, o submenu da barra lateral aponta para cá
-     direto, o botão Voltar do navegador funciona entre as duas telas, e a
-     edição (que chega com `initialData`) continua abrindo o formulário sem
-     depender de parâmetro nenhum. */
-  const [parametros, setParametros] = useSearchParams();
-  const view = initialData?.id || parametros.get("ver") === "novo" ? "PROPERTY" : "MENU";
-  const abrirFormulario = () => setParametros({ ver: "novo" });
-  const voltarAoMenu = () => setParametros({});
+     A primeira correção pôs a escolha na URL como parâmetro (`?ver=novo`), e
+     isso resolveu o link mas deixou os dois endereços torcidos: o índice ficava
+     em `/imoveis/novo` — a palavra "novo" numa tela que não cadastra nada — e o
+     formulário em `/imoveis/novo?ver=novo`, dizendo duas vezes a mesma coisa.
+     Agora o caminho é a resposta: `/imoveis` é o índice, `/imoveis/novo` é o
+     formulário. Botão Voltar do navegador segue funcionando entre os dois, e a
+     edição (que chega com `initialData`) abre o formulário por outro caminho
+     ainda, `/imoveis/editar`, sem depender de nada disso. */
+  const view = initialData?.id || pathname === EnderecoDoFormulario ? "PROPERTY" : "MENU";
+  const abrirFormulario = () => navigate(EnderecoDoFormulario);
+  /* O botão de sair do formulário tem dois nomes ("Voltar ao menu" ao cadastrar,
+     "Cancelar edição" ao editar) e agora dois destinos, porque são duas
+     perguntas diferentes: quem desistiu de cadastrar volta ao índice de onde
+     partiu; quem desistiu de editar quer o imóvel de volta na lista.
+
+     Enquanto a tela era escolhida por parâmetro, o botão apagava o `?ver=novo` —
+     e em `/imoveis/editar` isso não levava a lugar nenhum, porque o formulário
+     abria pelo `initialData` e continuava aberto. "Cancelar edição" não
+     cancelava nada. */
+  const voltarAoMenu = () => navigate(initialData?.id ? "/imoveis/portfolio" : EnderecoDoIndice);
+
+  /* Link antigo com `?ver=novo` ainda circula — em favorito, em tour gravado, no
+     histórico de quem já usava. Traduzir para o endereço de hoje em vez de
+     aceitar as duas grafias para sempre: o link velho continua levando ao
+     formulário, e a barra do navegador passa a mostrar o caminho de verdade. */
+  useEffect(() => {
+    if (new URLSearchParams(search).get("ver") !== "novo") return;
+    navigate(EnderecoDoFormulario, { replace: true });
+  }, [pathname, search, navigate]);
 
   return (
     <div className="management-container">
@@ -1262,9 +1305,15 @@ function IaSkeleton({ active, radius = "10px" }) {
         // Fade-out mais longo e suave: ao terminar, o skeleton se dissolve e revela
         // gradualmente o texto por baixo (dissolve/crossfade), em vez de sumir seco.
         opacity: active ? 1 : 0, transition: "opacity 0.7s cubic-bezier(.4, 0, .2, 1)",
-        border: "1px solid rgba(255,255,255,0.05)",
-        backgroundColor: "#20293c",
-        backgroundImage: "linear-gradient(90deg, #20293c 25%, #2c3851 50%, #20293c 75%)",
+        /* As cores saem de variáveis para o tema claro poder trocá-las: o
+           azul-noite cravado aqui era invisível sobre fundo claro — o campo
+           ficava com um retângulo escuro no meio do formulário branco.
+           Os valores abaixo são os do tema escuro, que continua sendo o
+           padrão; quem redefine é o CSS, em `main[data-tema="claro"]`. */
+        border: "1px solid var(--ia-esq-borda, rgba(255,255,255,0.05))",
+        backgroundColor: "var(--ia-esq-base, #20293c)",
+        backgroundImage:
+          "linear-gradient(90deg, var(--ia-esq-base, #20293c) 25%, var(--ia-esq-brilho, #2c3851) 50%, var(--ia-esq-base, #20293c) 75%)",
         backgroundSize: "200% 100%",
         // Shimmer segue rodando mesmo durante o fade-out (invisível ao chegar em
         // opacity 0), para o dissolve não "congelar" no meio.
@@ -1287,6 +1336,10 @@ function ComSkeleton({ active, radius = "10px", style, children }) {
 }
 
 export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, logoUrl }) {
+  /* O toast vem do AdminLayout, pelo contexto do <Outlet>. `?.` porque este
+     componente também é montado em teste, fora de qualquer Outlet — e uma
+     publicação não pode falhar por falta de um aviso na tela. */
+  const showToast = useOutletContext()?.showToast;
   const { confirm, modal: confirmModal } = useConfirm();
   const [form, setForm] = useState(EMPTY);
   const [step, setStep] = useState(0);
@@ -1316,6 +1369,13 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   const [existingImages, setExistingImages] = useState([]);
 
   const [savedPropertyId, setSavedPropertyId] = useState(null);
+  // Montar a arte do status carrega e compõe imagens; sem isto o botão fica
+  // mudo por um segundo e a pessoa clica de novo.
+  const [gerandoArte, setGerandoArte] = useState(false);
+  /* Há ponte de WhatsApp conectada? É o que decide se o botão publica de
+     verdade ou entrega a arte para a pessoa publicar. `null` = ainda não
+     sabemos, e nesse caso o botão faz o caminho manual — que é o seguro. */
+  const [pontePronta, setPontePronta] = useState(null);
   const [captions, setCaptions] = useState({ facebook: "", instagram: "", whatsapp: "" });
   const [descHover, setDescHover] = useState(null);
   const [redeIaLoading, setRedeIaLoading] = useState({});
@@ -1387,6 +1447,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   useEffect(() => {
     if (step !== 3 || !tenantSlug || !savedPropertyId) return;
     api.getSocialStatus(tenantSlug).then(setSocialStatus).catch(() => {});
+    /* Falha silenciosa de propósito: a central de canais é Profissional+, e
+       quem está no Básico não tem ponte nenhuma — o botão simplesmente segue
+       manual, sem erro na tela. */
+    api.listarCanais(tenantSlug)
+      .then((r) => setPontePronta(Boolean(r.canais?.find((c) => c.id === "whatsapp-status")?.ponte)))
+      .catch(() => setPontePronta(false));
     api.listPublications(tenantSlug, savedPropertyId)
       .then((list) => setPublications((Array.isArray(list) ? list : []).filter((p) => p.status === "PUBLISHED")))
       .catch(() => {});
@@ -1632,6 +1698,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       aceitaPermuta: Boolean(initialData.aceitaPermuta),
       // Ausente nos imóveis anteriores ao campo: o padrão é publicar.
       publicarPortais: initialData.publicarPortais !== false,
+      // `=== true` e não `!== false`: o padrão aqui é NÃO exibir, então a
+      // ausência do campo (imóvel salvo antes desta opção existir) conta como
+      // desmarcado, e não como marcado.
+      exibirEnderecoCompleto: initialData.exibirEnderecoCompleto === true,
       status: initialData.status || "DRAFT",
       comodidades: { ...EMPTY_COMODIDADES, ...(initialData.comodidades || {}) },
     });
@@ -1797,6 +1867,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       tipoContrato: form.tipoContrato,
       aceitaPermuta: form.aceitaPermuta,
       publicarPortais: form.publicarPortais,
+      exibirEnderecoCompleto: form.exibirEnderecoCompleto,
       atributos,
     };
   }
@@ -2130,6 +2201,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       tipoContrato: form.tipoContrato || null,
       aceitaPermuta: Boolean(form.aceitaPermuta),
       publicarPortais: Boolean(form.publicarPortais),
+      exibirEnderecoCompleto: Boolean(form.exibirEnderecoCompleto),
       status: form.status,
       comodidades: form.comodidades,
       imageFiles: images.map((img) => img.file),
@@ -2146,7 +2218,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
         setStep(3);
       } else {
         // Sem permissão de publicar: cadastro finaliza aqui, volta ao portfólio.
-        navigate("/imoveis");
+        navigate("/imoveis/portfolio");
       }
     }
   }
@@ -2304,15 +2376,119 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
     }
   }
 
+  /* ── Publicar no status ────────────────────────────────────────────────────
+     NÃO existe API oficial para status do WhatsApp: o Cloud API entrega
+     MENSAGENS, e status é recurso de consumidor que a Meta nunca expôs. As
+     pontes que existem dirigem uma sessão do WhatsApp Web por fora, violam os
+     termos e arriscam banir o número — que costuma ser o principal canal de
+     vendas da imobiliária.
+
+     Então o caminho é este: montamos a peça vertical pronta e entregamos ao
+     compartilhamento do celular, onde a pessoa escolhe WhatsApp › Status. Um
+     toque humano por post, e nenhum risco.
+
+     A arte é gerada no NAVEGADOR (canvas), como a marca d'água das fotos. */
+  async function handleStatus() {
+    setGerandoArte(true);
+    try {
+      const vitrineUrl = linkDoImovel(savedPropertyId);
+      const arte = await gerarArteDeStatus(form, {
+        fotoUrl: coverUrls[0] || "",
+        logoUrl: session?.tenant?.logoUrl || "",
+        corPrimaria: session?.tenant?.primaryColor || "#6366f1",
+        nomeDaImobiliaria: session?.tenant?.name || "",
+        enderecoDaVitrine: String(vitrineUrl || "").replace(/^https?:\/\//, ""),
+      });
+
+      const texto = captions.whatsapp || `${form.title} — ${vitrineUrl}`;
+
+      /* ── Com ponte conectada, publica de verdade ─────────────────────────
+         Este ramo faltava, e era o defeito: o backend da ponte existia, a
+         rota existia, e o botão nunca a chamava — sempre caía no caminho
+         manual, mesmo com a ponte ligada.
+
+         O passo do meio é o que torna isto não-óbvio: a arte nasce como
+         arquivo NO NAVEGADOR, e a ponte roda no servidor, que precisa de uma
+         URL pública. Então ela sobe para o Cloudinary primeiro, pelo mesmo
+         caminho das fotos do imóvel. */
+      if (pontePronta) {
+        try {
+          const { url } = await uploadToCloudinary(arte);
+          /* ── UM STATUS POR FOTO ────────────────────────────────────────────
+             Status do WhatsApp não tem carrossel: cada imagem é uma publicação.
+             Mandar só a arte deixaria de fora as fotos do imóvel, que são o que
+             faz alguém parar de rolar — quem vende imóvel vende ambiente, e um
+             cartão com preço não mostra a sala.
+
+             A arte vai primeiro, com a ficha e o endereço da vitrine; as demais
+             vão CRUAS, já com a marca d'água que o cadastro aplicou no envio.
+             Repetir a faixa de preço em cinco fotos transformaria o anúncio em
+             panfleto. Quem publica em sequência é o servidor, que respeita um
+             intervalo entre elas. */
+          const r = await api.publicarStatusPelaPonte(tenantSlug, savedPropertyId, {
+            imagemUrl: url,
+            imagensExtras: coverUrls.slice(1),
+            legenda: texto,
+          });
+          const quantos = r?.publicados ?? 1;
+          showToast?.(
+            quantos === 1
+              ? "Publicado no seu status do WhatsApp."
+              : `${quantos} status publicados no seu WhatsApp.` +
+                (r?.falhas?.length ? ` ${r.falhas.length} foto(s) não foram aceitas.` : ""),
+          );
+        } catch (falha) {
+          /* A mensagem traz a resposta CRUA da ponte (ver `pontewhatsapp.js`).
+             É feia e é útil: cada serviço tem o próprio contrato, e ler o que
+             ele reclamou transforma um ajuste de campo em trinta segundos. */
+          showToast?.(falha.message || "A ponte recusou a publicação.", "error");
+        }
+        return;
+      }
+
+      /* `navigator.share` com arquivo é o único caminho manual que chega ao
+         status. O `wa.me` abre a CONVERSA, não o status — mandar para lá seria
+         oferecer um botão que não faz o que promete. */
+      if (navigator.canShare?.({ files: [arte] })) {
+        await navigator.share({ title: form.title, text: texto, files: [arte] });
+        return;
+      }
+
+      /* Sem compartilhamento de arquivo (quase todo desktop), baixamos a arte.
+         A pessoa manda para o próprio celular e publica de lá — que é o que ela
+         faria de qualquer jeito, já que status se posta do telefone. */
+      const url = URL.createObjectURL(arte);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = arte.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (erro) {
+      if (erro?.name !== "AbortError") console.warn("[status] não consegui montar a arte:", erro);
+    } finally {
+      setGerandoArte(false);
+    }
+  }
+
   function handleWhatsApp() {
     const vitrineUrl = linkDoImovel(savedPropertyId);
     const text = captions.whatsapp || `🏠 ${form.title}\n🔗 ${vitrineUrl}`;
     shareWhatsapp({ text, imageUrls: coverUrls, title: form.title });
   }
 
+  /* Campos de texto e listas de seleção do formulário.
+
+     O fundo e a borda saem de variáveis porque este objeto vira estilo INLINE,
+     e inline vence qualquer regra de folha: com os valores cravados aqui, o
+     tema claro do painel não tinha como alcançá-los — a lista e as entradas
+     continuavam quase pretas no meio de uma tela branca. O valor de reserva é o
+     do tema escuro, então quem lê `inputStyle` sem tema definido vê o de antes. */
   const inputStyle = {
     width: "100%", boxSizing: "border-box",
-    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+    background: "var(--campo-fundo, rgba(255,255,255,0.04))",
+    border: "1px solid var(--campo-borda, rgba(255,255,255,0.1))",
     borderRadius: "10px", color: "inherit", padding: "12px 14px", fontSize: "14px",
     outline: "none", transition: "border-color 0.2s",
   };
@@ -2931,6 +3107,39 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                   </span>
                 </div>
               </label>
+
+              {/* Endereço completo na página pública.
+                  Desmarcado por padrão, e isso é a decisão — não um detalhe de
+                  interface. Bairro e cidade continuam aparecendo sempre; o que
+                  este campo libera é a RUA E O NÚMERO.
+
+                  Quando desmarcado, o endereço não é escondido: ele não sai da
+                  API (ver `semEnderecoOculto` em publicRoutes), e o feed pede
+                  aos portais que exibam só o bairro. Esconder na tela e mandar
+                  no JSON seria esconder de quem olha e entregar a quem procura. */}
+              <label style={{
+                display: "flex", alignItems: "flex-start", gap: "14px", padding: "16px 18px", borderRadius: "14px",
+                cursor: disabled ? "not-allowed" : "pointer",
+                border: form.exibirEnderecoCompleto ? "1px solid rgba(139,92,246,0.45)" : "1px solid rgba(255,255,255,0.08)",
+                background: form.exibirEnderecoCompleto ? "rgba(139,92,246,0.09)" : "rgba(255,255,255,0.02)",
+                transition: "all 0.2s ease", userSelect: "none", opacity: disabled ? 0.55 : 1,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={form.exibirEnderecoCompleto}
+                  onChange={(e) => set("exibirEnderecoCompleto", e.target.checked)}
+                  disabled={disabled}
+                  style={{ accentColor: "#8b5cf6", width: "16px", height: "16px", flexShrink: 0, marginTop: "2px" }}
+                />
+                <div>
+                  <span style={{ fontSize: "14px", fontWeight: "500" }}>Mostrar o endereço completo na vitrine</span>
+                  <span style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.5 }}>
+                    {form.exibirEnderecoCompleto
+                      ? "A rua, o número e o CEP aparecem na página do imóvel para qualquer visitante."
+                      : "Só o bairro, a cidade e o estado aparecem. A rua fica com você e com quem entrar em contato."}
+                  </span>
+                </div>
+              </label>
             </>
           )}
 
@@ -3035,9 +3244,31 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                   iaErro={redeIaErro.whatsapp}
                   statusText="Sempre disponível"
                   acao={
-                    <button type="button" className="divulgar-pub btn-whatsapp" onClick={handleWhatsApp} style={{ ...pubBtnBase, background: "#25d366", cursor: "pointer" }}>
-                      Compartilhar
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <button type="button" className="divulgar-pub btn-whatsapp" onClick={handleWhatsApp} style={{ ...pubBtnBase, background: "#25d366", cursor: "pointer" }}>
+                        Compartilhar
+                      </button>
+                      {/* Peça vertical 1080×1920, o formato do status. Mandar a
+                          foto quadrada faz o WhatsApp preencher o resto com um
+                          borrão da própria imagem, e o post sai com tarjas. */}
+                      <button
+                        type="button"
+                        className="divulgar-pub"
+                        onClick={handleStatus}
+                        disabled={gerandoArte}
+                        style={{
+                          ...pubBtnBase,
+                          background: "rgba(37,211,102,0.14)",
+                          border: "1px solid rgba(37,211,102,0.45)",
+                          color: "#25d366",
+                          cursor: gerandoArte ? "default" : "pointer",
+                        }}
+                      >
+                        {gerandoArte
+                          ? (pontePronta ? "Publicando…" : "Montando a arte…")
+                          : (pontePronta ? "Publicar no status" : "Gerar arte para o status")}
+                      </button>
+                    </div>
                   }
                 />
               </div>
@@ -3153,7 +3384,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                 <button
                   type="button"
                   className="button-secondary"
-                  onClick={() => navigate("/imoveis")}
+                  onClick={() => navigate("/imoveis/portfolio")}
                   style={{ fontSize: "13px", padding: "9px 20px", width: "auto" }}
                 >
                   Ver portfólio

@@ -71,7 +71,8 @@ export function ModalCiencia({
           pointerEvents: aberto ? "auto" : "none",
         }}
       >
-        <div style={{
+        <div
+          className="modal-cartao" style={{
           width: "100%", maxWidth: "480px",
           background: "rgba(18,22,36,0.98)",
           border: "1px solid rgba(245,158,11,0.28)",

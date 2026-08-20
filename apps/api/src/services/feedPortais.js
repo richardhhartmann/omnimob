@@ -88,6 +88,14 @@ const numero = (v) => {
 const areaUtil = (p) => numero(p.areaPrivativa) || numero(p.areaConstruida) || numero(p.squareFootage);
 const areaTotal = (p) => numero(p.areaTotal) || numero(p.areaTerreno) || areaUtil(p);
 
+/* `displayAddress` diz ao PORTAL o quanto do endereço ele pode mostrar. O
+   `<Address>` continua indo — o portal precisa dele para geolocalizar o anúncio
+   no mapa e para o corretor achar o imóvel —, mas com "Neighborhood" o anúncio
+   público exibe só o bairro.
+
+   Segue a mesma marcação da vitrine, e é isso que importa: se o cliente decidiu
+   não publicar a rua, essa decisão não pode valer na página dele e ser ignorada
+   no ZAP. Antes o valor era fixo, e a política era acidental. */
 function anuncio(imovel, urlDoImovel) {
   const [categoria, subtipo] = tipoVRSync(imovel);
   const aluguel = imovel.tipoContrato === "LOCACAO";
@@ -125,7 +133,7 @@ function anuncio(imovel, urlDoImovel) {
         ${tag("Garage", imovel.parkingSpots || null)}
         ${caracteristicas.length ? `<Features>\n${caracteristicas.map((f) => `          <Feature>${xmlEscape(f)}</Feature>`).join("\n")}\n        </Features>` : ""}
       </Details>
-      <Location displayAddress="Neighborhood">
+      <Location displayAddress="${imovel.exibirEnderecoCompleto ? "Street" : "Neighborhood"}">
         <Country abbreviation="BR">Brasil</Country>
         ${tag("State", imovel.state)}
         ${tag("City", imovel.city)}

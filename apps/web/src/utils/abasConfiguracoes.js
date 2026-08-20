@@ -51,7 +51,7 @@ export const ABAS_CONFIG = [
     label: "Dados",
     cor: "#0ea5e9",
     Icon: Database,
-    desc: "Traga imóveis e clientes de outro sistema por planilha, de uma vez só.",
+    desc: "Traga imóveis, clientes e usuários do sistema que você usava antes — pelo feed XML dele ou pela nossa API.",
   },
   {
     key: "plano",

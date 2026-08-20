@@ -312,7 +312,7 @@ export function PropertyInsightsPage({ session }) {
         <div>
           <button
             type="button"
-            onClick={() => navigate("/imoveis")}
+            onClick={() => navigate("/imoveis/portfolio")}
             style={{ display: "inline-flex", alignItems: "center", gap: "6px", width: "auto", alignSelf: "flex-start", background: "none", border: "none", color: "var(--text-muted)", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "12px" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>

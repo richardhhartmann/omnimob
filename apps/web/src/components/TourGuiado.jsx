@@ -130,19 +130,44 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
 
   /* ── Navegação de rota entre etapas ─────────────────────────────────────── */
 
+  /* UMA navegação por etapa, e ela leva ao endereço COMPLETO.
+
+     As duas coisas nasceram do mesmo defeito. A etapa de Relatórios apontava
+     para `/leads`, que hoje é um redirecionamento para `/relatorios`: o efeito
+     navegava, o roteador desviava, o efeito via `pathname !== "/leads"` e
+     navegava de novo — ping-pong sem fim, com o tour parado porque a busca do
+     alvo abaixo só começa quando a rota bate. O alvo daquela etapa foi
+     corrigido, mas a armadilha continuaria armada para a próxima rota que
+     ganhasse um desvio.
+
+     A comparação usa caminho + parâmetros porque telas de índice guardam a
+     seção aberta em `?ver=`: quem estivesse em `/configuracoes?ver=plano`
+     casava com a rota `/configuracoes` e o tour falava dos cartões apontando
+     para um formulário.
+
+     O ref guarda a etapa já levada ao destino. Ele não impede a pessoa de sair
+     — impede o tour de brigar com o roteador, que é outra coisa. */
+  const rotaLevadaRef = useRef(null);
   useEffect(() => {
     if (!etapa?.rota) return;
-    if (local.pathname === etapa.rota) return;
+    if (rotaLevadaRef.current === etapa.chave) return;
+    rotaLevadaRef.current = etapa.chave;
+    if (`${local.pathname}${local.search}` === etapa.rota) return;
     navegar(etapa.rota);
-  }, [etapa, local.pathname, navegar]);
+  }, [etapa, local.pathname, local.search, navegar]);
 
   /* ── Localizar o alvo do passo ──────────────────────────────────────────── */
 
   useEffect(() => {
     if (!passo) return undefined;
-    // Etapa com rota própria só procura o alvo depois de chegar lá; procurar
-    // antes acharia um elemento de mesmo nome na tela anterior.
-    if (etapa?.rota && local.pathname !== etapa.rota) return undefined;
+    /* Etapa com rota própria só procura o alvo depois de chegar lá; procurar
+       antes acharia um elemento de mesmo nome na tela anterior.
+
+       Compara só o CAMINHO: a navegação acima já levou ao endereço completo, e
+       exigir os parâmetros aqui deixaria o passo cego se a própria tela mexesse
+       na barra depois (o retorno do OAuth em Configurações faz exatamente
+       isso). */
+    if (etapa?.rota && local.pathname !== etapa.rota.split("?")[0]) return undefined;
 
     let vivo = true;
     let timer = 0;
