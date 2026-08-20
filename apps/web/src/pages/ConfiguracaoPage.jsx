@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
-import { CartaoDeMenu, VoltarAoIndice } from "../components/CartaoDeMenu.jsx";
-import { ABAS_CONFIG, ehAbaDeConfig, rotuloDaAba } from "../utils/abasConfiguracoes";
+import { CartaoDeMenu } from "../components/CartaoDeMenu.jsx";
+import { Trilha } from "../components/Trilha.jsx";
+import { ABAS_CONFIG, ICONES_CONFIG, ehAbaDeConfig, rotuloDaAba } from "../utils/abasConfiguracoes";
+import { GearSix } from "@phosphor-icons/react";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
 import { planoInfo, PLANOS } from "../utils/planos";
@@ -827,8 +829,16 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
         <>
         {/* ── Cabeçalho da seção ─── */}
         <div data-tour="config-secao" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-          <VoltarAoIndice onClick={() => setTab("MENU")} rotulo="Configurações" titulo={rotuloDaAba(tab)} />
-          {/* A mesma margem do botão de voltar, para os dois ficarem na mesma linha. */}
+          {/* `GearSix` é o mesmo ícone que Configurações tem na barra lateral, e
+              o da seção sai de `ICONES_CONFIG` — a mesma lista que desenha os
+              cartões do índice e o submenu. */}
+          <Trilha
+            itens={[
+              { chave: "indice", rotulo: "Configurações", Icone: GearSix, aoIr: () => setTab("MENU") },
+              { chave: tab, rotulo: rotuloDaAba(tab), Icone: ICONES_CONFIG[tab], aoIr: () => setTab(tab) },
+            ]}
+          />
+          {/* A mesma margem da trilha, para os dois ficarem na mesma linha. */}
           <div style={{ minHeight: "24px", marginBottom: "20px" }}>{saveIndicator}</div>
         </div>
 

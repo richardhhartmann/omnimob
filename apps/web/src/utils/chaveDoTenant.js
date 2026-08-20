@@ -61,4 +61,9 @@ export const CHAVES = {
   leadsVistos: "domus_leads_seen",
   historicoEditor: "domus_builder_history",
   pulsoTrial: "domus_pulso_trial",
+  /* ATALHO de leitura, não fonte de verdade: quem manda sobre o tour continua
+     sendo o banco. Guardamos só o "já resolvido" para o recarregamento não
+     esperar uma ida e voltar ao servidor mostrando um véu. Ver
+     `PrimeiroAcessoTour`. */
+  tourResolvido: "domus_tour_resolvido",
 };

@@ -3,6 +3,7 @@ import { getGlobalPrisma } from "./tenantRegistry.js";
 import { provisionTenant, senhaTemporaria } from "./provisioningService.js";
 import { sendEmail } from "./notificationService.js";
 import { emailTrialExpirado } from "./emailTemplates.js";
+import { enderecoDaVitrine } from "./dominioService.js";
 
 /**
  * ─── Trial Service ───────────────────────────────────────────────────────────
@@ -46,8 +47,38 @@ const DIAS_ATE_REMOVER = 30;
 const DIAS_ATE_REMOVER_PAGANTE = 90;
 
 /** Prazo de graça desta conta, conforme o que ela era quando venceu. */
-function diasDeGraca(statusPagamento) {
+export function diasDeGraca(statusPagamento) {
   return statusPagamento === "TRIAL" ? DIAS_ATE_REMOVER : DIAS_ATE_REMOVER_PAGANTE;
+}
+
+/* Quanto tempo ainda resta DEPOIS do vencimento.
+
+   Existe porque `diasRestantes` da rota de situação é cortado em zero: ele
+   responde "quanto falta para vencer", e depois do vencimento a resposta certa
+   passa a ser outra pergunta — "quanto falta para os dados sumirem".
+
+   A conta sai da MESMA constante que a faxina usa para apagar. Repetir o número
+   na tela seria a forma mais fácil de prometer trinta dias e remover em vinte:
+   quem mexesse no prazo mexeria num lugar só, e o outro seguiria mentindo. */
+export function situacaoDeGraca({ statusPagamento, proximoVencimento, suspensoEm = null, ativo = true } = {}) {
+  if (!proximoVencimento) return null;
+  const vence = new Date(proximoVencimento);
+  const prazo = diasDeGraca(statusPagamento);
+  /* De onde o prazo conta: da SUSPENSÃO quando ela já aconteceu, do vencimento
+     enquanto não aconteceu. É a mesma regra da faxina — e tem que ser, senão a
+     tela promete uma data e a remoção obedece outra. */
+  const inicio = suspensoEm ? new Date(suspensoEm) : vence;
+  const removidoEm = new Date(inicio.getTime() + prazo * 86400000);
+  const agora = Date.now();
+  return {
+    venceu: vence.getTime() <= agora,
+    // A conta só é desativada quando a faxina roda; entre o vencimento e a
+    // varredura a pessoa ainda entra. Os dois estados são diferentes na tela.
+    suspenso: !ativo,
+    diasDeGraca: prazo,
+    removidoEm,
+    diasAteRemocao: Math.max(0, Math.ceil((removidoEm.getTime() - agora) / 86400000)),
+  };
 }
 
 /* Prazo extra que a pesquisa do painel pode dar, UMA vez por imobiliária.
@@ -258,9 +289,19 @@ export async function criarTrial({ imobiliaria, email, telefone = "", plano = "P
  * e cascateia para imóveis, fotos, leads e usuários — não é coisa para disparar
  * sem olhar antes.
  */
-export async function limparTrials({ aplicar = false } = {}) {
+export async function limparTrials({ aplicar = false, somenteIds = null } = {}) {
   const prisma = getGlobalPrisma();
   const agora = new Date();
+
+  /* Recorte opcional. A faxina de verdade nunca passa `somenteIds` — ela varre
+     tudo, que é o trabalho dela.
+
+     Ele existe porque esta função DESATIVA E APAGA, e o teste dela roda contra
+     o banco de desenvolvimento (ver `test/helpers.js`). Sem o recorte, um único
+     `limparTrials({ aplicar: true })` na suíte levaria junto qualquer conta
+     vencida de verdade que estivesse ali — inclusive as que a pessoa usa para
+     trabalhar. */
+  const recorte = somenteIds?.length ? { id: { in: somenteIds } } : {};
   const limiteTrial = new Date(agora.getTime() - DIAS_ATE_REMOVER * 86400000);
   const limitePagante = new Date(agora.getTime() - DIAS_ATE_REMOVER_PAGANTE * 86400000);
 
@@ -278,25 +319,49 @@ export async function limparTrials({ aplicar = false } = {}) {
   const VENCIVEIS = ["TRIAL", "ATRASADO"];
 
   const aDesativar = await prisma.tenant.findMany({
-    where: { statusPagamento: { in: VENCIVEIS }, ativo: true, proximoVencimento: { lt: agora } },
+    where: { ...recorte, statusPagamento: { in: VENCIVEIS }, ativo: true, proximoVencimento: { lt: agora } },
     // Os campos de domínio entram aqui porque o e-mail de expiração linka a
     // vitrine, e o endereço dela depende deles.
-    select: { id: true, slug: true, name: true, email: true, statusPagamento: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
+    select: { id: true, slug: true, name: true, email: true, statusPagamento: true, proximoVencimento: true, suspensoEm: true, dominioProprio: true, dominioStatus: true },
   });
 
   /* Cada status com o seu prazo. Um `lt` só, com o limite mais longo, apagaria
      trials com trinta dias de atraso apenas depois de noventa; com o mais
      curto, apagaria pagantes cedo demais. */
+  /* ── SÓ QUEM JÁ ESTÁ DESATIVADO, e contando da suspensão ──────────────────
+
+     Aqui havia perda de dado com aviso enganoso. O prazo contava de
+     `proximoVencimento`, mas o e-mail que anuncia esse prazo só sai quando a
+     faxina roda — e ela é opt-in (`FAXINA_AUTOMATICA`). Numa instalação onde
+     ela nunca rodou, o relógio corria sem ninguém ter sido avisado: uma conta
+     parada há 31 dias entrava nas DUAS listas da mesma rodada, recebia
+     "seus dados ficam guardados por mais 30 dias" e era apagada no instante
+     seguinte.
+
+     Duas travas, e a primeira sozinha já resolveria o caso acima:
+
+       1. `ativo: false` — a rodada que desativa nunca é a que remove, porque
+          quem acabou de ser desativado ainda estava ativo quando esta consulta
+          leu o banco.
+       2. o prazo conta de `suspensoEm`, a marca posta no momento do corte.
+
+     Contas desativadas ANTES desta coluna existir têm `suspensoEm` nulo; para
+     elas o `proximoVencimento` segue valendo, que é o prazo sobre o qual elas
+     de fato foram avisadas. */
   const aRemover = await prisma.tenant.findMany({
     where: {
+      ...recorte,
+      ativo: false,
       OR: [
-        { statusPagamento: "TRIAL", proximoVencimento: { lt: limiteTrial } },
-        { statusPagamento: "ATRASADO", proximoVencimento: { lt: limitePagante } },
+        { statusPagamento: "TRIAL", suspensoEm: { lt: limiteTrial } },
+        { statusPagamento: "ATRASADO", suspensoEm: { lt: limitePagante } },
+        { statusPagamento: "TRIAL", suspensoEm: null, proximoVencimento: { lt: limiteTrial } },
+        { statusPagamento: "ATRASADO", suspensoEm: null, proximoVencimento: { lt: limitePagante } },
       ],
     },
     // Os campos de domínio entram aqui porque o e-mail de expiração linka a
     // vitrine, e o endereço dela depende deles.
-    select: { id: true, slug: true, name: true, email: true, statusPagamento: true, proximoVencimento: true, dominioProprio: true, dominioStatus: true },
+    select: { id: true, slug: true, name: true, email: true, statusPagamento: true, proximoVencimento: true, suspensoEm: true, dominioProprio: true, dominioStatus: true },
   });
 
   if (!aplicar) {
@@ -306,7 +371,9 @@ export async function limparTrials({ aplicar = false } = {}) {
   if (aDesativar.length) {
     await prisma.tenant.updateMany({
       where: { id: { in: aDesativar.map((t) => t.id) } },
-      data: { ativo: false },
+      // A marca é o começo do prazo de remoção. Sem ela o e-mail promete um
+      // prazo que o banco não sabe contar. Ver o comentário de `aRemover`.
+      data: { ativo: false, suspensoEm: agora },
     });
 
     /* Avisa quem acabou de perder o acesso. Vai um a um e sem derrubar a
@@ -315,6 +382,7 @@ export async function limparTrials({ aplicar = false } = {}) {
     const base = (process.env.APP_URL || "").replace(/\/+$/, "");
     for (const t of aDesativar) {
       if (!t.email) continue;
+      try {
       const modelo = emailTrialExpirado({
         imobiliaria: t.name,
         slug: t.slug,
@@ -336,6 +404,14 @@ export async function limparTrials({ aplicar = false } = {}) {
         body: modelo.body,
         html: modelo.html,
       }).catch((e) => console.error("[faxina] aviso de vencimento falhou:", e.message));
+      } catch (e) {
+        /* O `.catch` acima cobria só o ENVIO. MONTAR o modelo ficava de fora —
+           e foi exatamente ali que um import faltando derrubou a faxina inteira,
+           DEPOIS de as contas já terem sido desativadas: acesso cortado, nenhum
+           aviso enviado, e a remoção nunca alcançada. O aviso é acessório; a
+           limpeza não pode depender dele. */
+        console.error("[faxina] não consegui montar o aviso de", t.slug, "—", e.message);
+      }
     }
   }
   if (aRemover.length) {
@@ -419,6 +495,10 @@ export async function fidelizarTrial(tenantId, { plano, valorMensal, proximoVenc
     data: {
       statusPagamento: "EM_DIA",
       ativo: true,
+      // Volta a ser conta viva: o relógio da remoção some junto com a suspensão.
+      // Sem isto, uma conta reativada e vencida DE NOVO herdaria o prazo antigo
+      // e poderia ser removida sem uma janela nova.
+      suspensoEm: null,
       ...(plano ? { plano } : {}),
       ...(valorMensal != null && valorMensal !== "" ? { valorMensal: Number(valorMensal) } : {}),
       ...(proximoVencimento ? { proximoVencimento: new Date(proximoVencimento) } : {}),

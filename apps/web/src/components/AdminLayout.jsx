@@ -255,6 +255,38 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     document.documentElement.dataset.temaPainel = efetivo;
     return () => { delete document.documentElement.dataset.temaPainel; };
   }, [efetivo]);
+
+  /* ── O esmaecido entre um tema e outro ────────────────────────────────────
+     A troca é instantânea porque ela é uma troca de TOKENS: o navegador
+     recalcula tudo no mesmo quadro e a tela pisca de um estado ao outro.
+
+     A marca fica na raiz do documento e vale por um terço de segundo. Nesse
+     intervalo — e só nele — uma regra no styles.css põe transição de cor em
+     tudo. Deixar essa transição sempre ligada seria pagar por ela em cada
+     hover, cada foco, cada abertura de menu, e ainda atrasaria realces que
+     precisam ser imediatos para parecerem resposta ao clique.
+
+     Na RAIZ e não no shell porque a troca também alcança o que mora fora dele:
+     o tour, os modais de trial, a lista aberta do SelectCustom (que sai por
+     portal). Um deles ficando para trás estragaria o efeito inteiro.
+
+     Reage a `efetivo`, e não a quem clicou: assim vale para o atalho do perfil,
+     para Configurações › Aparência e para o sistema operacional mudando de tema
+     com a pessoa no modo automático. */
+  const temaPintado = useRef(efetivo);
+  useEffect(() => {
+    if (temaPintado.current === efetivo) return undefined;
+    temaPintado.current = efetivo;
+
+    // Quem pediu menos movimento não pede menos contraste: a troca acontece,
+    // só não é encenada.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+
+    const raiz = document.documentElement;
+    raiz.classList.add("trocando-tema");
+    const t = setTimeout(() => raiz.classList.remove("trocando-tema"), 360);
+    return () => { clearTimeout(t); raiz.classList.remove("trocando-tema"); };
+  }, [efetivo]);
   // Só com "auto" o sistema operacional manda; nos outros a escolha é explícita.
   useEffect(() => observarSistema(escolhido, setEfetivo), [escolhido]);
 
@@ -430,7 +462,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
           /* Registro de atividade vive em EQUIPE, e não em Configurações: a
              pergunta que ele responde é sobre PESSOAS — quem apagou, quem
              alterou —, e é ao lado de Usuários e Cargos que ela é feita. */
-          cargo?.verAuditoria && { key: "auditoria", Icon: ClockCounterClockwise, label: "Registro de atividade", active: isAuditoria, onClick: () => navigate("/auditoria") },
+          cargo?.verAuditoria && { key: "auditoria", Icon: ClockCounterClockwise, label: "Registro de Atividade", active: isAuditoria, onClick: () => navigate("/auditoria") },
         ].filter(Boolean),
       },
       {
@@ -1036,7 +1068,19 @@ const CSS = `
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ── Toasts ── */
+/* ── Toasts ──────────────────────────────────────────────────────────────────
+   Seguem o tema do conteúdo, e o atributo data-tema que os alcança é o do
+   SHELL: eles ficam fora do main.
+   (Sem crases neste comentário: ele vive dentro de um template literal, e uma
+   crase aqui encerra a string e derruba o build.)
+
+   Antes eu os deixara escuros nos dois temas, argumentando que flutuam sobre a
+   tela inteira, inclusive sobre a barra lateral. O argumento é fraco: o toast
+   comenta o que acabou de acontecer NO CONTEÚDO ("imóvel salvo", "lead
+   excluído"), e é sobre o conteúdo que ele aparece — a barra tem 240px e nem
+   fica embaixo dele. Um cartão quase preto sobre um painel claro lê como aviso
+   do sistema operacional, não do produto.
+   ────────────────────────────────────────────────────────────────────────── */
 .ds-toasts {
   position: fixed; bottom: 24px; right: 24px; z-index: 99999;
   display: flex; flex-direction: column; gap: 8px; pointer-events: none;
@@ -1053,6 +1097,16 @@ const CSS = `
   animation: toastIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .ds-toast__icon { display: flex; flex-shrink: 0; }
+
+.ds-shell[data-tema="claro"] .ds-toast {
+  color: #0f172a;
+  background: rgba(255,255,255,0.94);
+  border-color: rgba(15,23,42,0.10);
+  /* A sombra do escuro é preta a 90%: sobre fundo claro ela vira uma nuvem
+     cinza em volta do cartão. Aqui ela encolhe e clareia, e o realce interno
+     inverte — no escuro é um fio de luz no topo, no claro seria invisível. */
+  box-shadow: 0 18px 40px -16px rgba(15,23,42,0.28), inset 0 1px 0 rgba(255,255,255,0.9);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .ds-side { transition: none; }

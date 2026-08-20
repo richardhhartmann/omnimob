@@ -21,15 +21,15 @@ import {
    logo abaixo. */
 const PERMISSOES = [
   { key: "acessarPainel",     label: "Acessar Painel",     Icon: House },
-  { key: "editarPagina",      label: "Editar Página",     Icon: PencilSimple },
-  { key: "gerenciarImoveis",  label: "Gerenciar Imóveis",  Icon: Buildings },
-  { key: "gerenciarUsuarios", label: "Gerenciar Usuários", Icon: UserSquare },
-  { key: "gerenciarClientes", label: "Gerenciar Clientes", Icon: UserCircle },
   { key: "gerenciarCargos",   label: "Gerenciar Cargos",   Icon: Shield },
+  { key: "gerenciarImoveis",  label: "Gerenciar Imóveis",  Icon: Buildings },
+  { key: "verRelatorios",     label: "Ver Relatórios",     Icon: IconeRelatorios },
+  { key: "gerenciarClientes", label: "Gerenciar Clientes", Icon: UserCircle },
+  { key: "gerenciarUsuarios", label: "Gerenciar Usuários", Icon: UserSquare },
+  { key: "verAuditoria",      label: "Registro de Atividade", Icon: ClockCounterClockwise },
+  { key: "editarPagina",      label: "Editar Página",     Icon: PencilSimple },
   /* "Ver Relatórios" absorveu o antigo "Gerenciar Leads": ela abre a página
      Relatórios inteira — leads, relatório mensal, funil e comissões. */
-  { key: "verRelatorios",     label: "Ver Relatórios",     Icon: IconeRelatorios },
-  { key: "verAuditoria",      label: "Registro de Atividade", Icon: ClockCounterClockwise },
   { key: "publicarRedes",     label: "Publicar em Redes",  Icon: ShareNetwork },
 ];
 

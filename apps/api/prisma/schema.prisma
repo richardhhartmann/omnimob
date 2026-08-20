@@ -188,6 +188,24 @@ model Tenant {
    */
   feedLidoEm         DateTime? @map("feed_lido_em")
   ativo               Boolean         @default(true)
+  /**
+   * QUANDO o acesso foi cortado — e é daqui que o prazo de remoção conta.
+   *
+   * Contava de `proximoVencimento`, e havia um buraco sério nisso: o aviso de
+   * vencimento só sai quando a faxina roda. Enquanto ela não rodava (ela é
+   * opt-in, `FAXINA_AUTOMATICA`), o relógio da remoção corria mesmo sem
+   * ninguém ter sido avisado. Uma conta parada há 31 dias recebia o e-mail
+   * dizendo "seus dados ficam guardados por 30 dias" e era APAGADA na mesma
+   * rodada, um instante depois.
+   *
+   * Com a marca aqui, o prazo começa quando o acesso realmente acaba. A faxina
+   * que desativa nunca é a que remove.
+   *
+   * Nulo em conta ativa, e também nas que já estavam desativadas antes desta
+   * coluna existir — para essas o `proximoVencimento` segue valendo, que é o
+   * prazo que elas foram avisadas.
+   */
+  suspensoEm          DateTime?       @map("tnt_suspenso_em")
   plano               String? // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
   autoGerarIA         Boolean         @default(true) // auto-preenche imóvel por IA ao lançar foto
   /**

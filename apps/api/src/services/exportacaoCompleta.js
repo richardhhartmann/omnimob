@@ -60,7 +60,12 @@ export async function exportarTudo(tenantId) {
       include: {
         tipoImovel: { select: { descricao: true } },
         images: { orderBy: { position: "asc" }, select: { url: true, is360: true, position: true } },
-        atributos: { select: { valor: true, modelo: { select: { descricao: true } } } },
+        /* `ImovelAtributo` é tabela de LIGAÇÃO pura: a linha existir já significa
+           que o atributo se aplica ao imóvel. Aqui se pedia um campo `valor` e
+           uma relação `modelo`, e nenhum dos dois existe no schema — a consulta
+           estourava, e como é a primeira do lote, a exportação inteira caía com
+           500. A rota nunca chegou a devolver um arquivo. */
+        atributos: { select: { atributo: { select: { descricao: true } } } },
       },
     }),
     prisma.cliente.findMany({ where: { tenantId }, orderBy: { nome: "asc" } }),
@@ -109,7 +114,9 @@ export async function exportarTudo(tenantId) {
       price: p.price === null ? null : Number(p.price),
       tipoImovel: p.tipoImovel?.descricao || p.propertyType || "",
       fotos: p.images.map((i) => i.url),
-      atributos: p.atributos.map((a) => ({ nome: a.modelo?.descricao || "", valor: a.valor })),
+      // Lista de nomes, e não pares nome/valor: não há valor para exportar —
+      // o atributo se aplica ou não se aplica.
+      atributos: p.atributos.map((a) => a.atributo?.descricao).filter(Boolean),
       images: undefined,
     })),
     clientes,

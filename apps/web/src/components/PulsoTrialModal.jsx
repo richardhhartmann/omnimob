@@ -3,7 +3,6 @@ import { useLocation } from "react-router-dom";
 import { api } from "../api";
 import { getTrialStatusCompartilhado, avisarMudancaDeTrial } from "../utils/trialStatus";
 import {
-  ouvirAcaoCrud,
   devePerguntar,
   marcarPerguntado,
   definirTenantDoPulso,
@@ -16,8 +15,9 @@ import { IconeCheck } from "./Icones.jsx";
 /* ────────────────────────────────────────────────────────────────────────────
    "Como está sendo?" — a pergunta que aparece sozinha durante o teste.
 
-   Ela nasce de uma AÇÃO concluída (cadastrou um imóvel, salvou um cliente,
-   mexeu na vitrine) e não de um cronômetro. Quem decide se hoje é dia é o
+   Ela nasce de trabalho FEITO (cadastrou um imóvel, salvou um cliente, mexeu na
+   vitrine) e não de um cronômetro — mas só aparece quando a pessoa SAI da
+   página onde aquilo aconteceu. Quem decide se hoje é dia é o
    `utils/pulsoTrial.js`; aqui é só a conversa.
 
    DUAS SAÍDAS, E AS DUAS SERVEM À PESSOA. "Quero assinar" abre o fluxo de
@@ -31,17 +31,22 @@ import { IconeCheck } from "./Icones.jsx";
    compra três dias de silêncio — em qualquer aparelho, porque a marca fica no
    servidor. O teto de três aparições na vida da imobiliária está no pulso.
 
-   A pergunta chega ATRASADA de propósito (ver ESPERA_MS). Abrir no mesmo quadro
-   do "salvo com sucesso" rouba o clique de quem já ia seguir para a próxima
-   coisa, e o modal leva um Enter que era para o formulário.
+   A pergunta chega ATRASADA de propósito, e o atraso não é o principal: ela
+   espera a TROCA DE PÁGINA. Abrir no mesmo quadro do "salvo com sucesso" rouba
+   o clique de quem já ia seguir para a próxima coisa, e o modal leva um Enter
+   que era para o formulário — mas o erro maior era outro. Salvar não é
+   terminar: quem cadastra um imóvel salva e continua subindo foto e ajustando
+   preço, e a pergunta caía no meio disso. Sair da tela é o único sinal
+   confiável de que a tarefa acabou.
    ──────────────────────────────────────────────────────────────────────────── */
 
-/* Respiro entre o fim da ação e a pergunta. Tempo de o aviso de "salvo"
-   aparecer, de a lista se refazer e de a pessoa levantar os olhos da tela. */
+/* Respiro padrão entre o gatilho e a pergunta. Hoje nada usa o valor curto —
+   ele fica como piso do `avaliarEAbrir` para quem chamar sem dizer a espera. */
 const ESPERA_MS = 1600;
 
-/* Saindo do editor a espera é maior: a pessoa acabou de trocar de tela e a
-   nova ainda está carregando os dados dela. */
+/* O respiro de verdade. A pessoa acabou de trocar de tela e a de destino ainda
+   está carregando os dados dela; subir um modal por cima disso trocaria uma
+   interrupção por outra. */
 const ESPERA_SAIDA_MS = 2400;
 
 /* Duração da saída — precisa bater com a animação `ptSaida` no CSS. */
@@ -215,25 +220,28 @@ export function PulsoTrialModal({ tenantSlug, tenantId, pronto = true }) {
       .catch(() => { /* sem situação de teste, sem pergunta */ });
   }, []);
 
-  // ── Gatilho 1: uma ação concluída (cadastro, edição, exclusão) ────────────
-  useEffect(() => ouvirAcaoCrud((qualOrigem) => avaliarEAbrir(qualOrigem)), [avaliarEAbrir]);
+  /* ── Gatilho único: a SAÍDA da página onde houve trabalho ─────────────────
 
-  /* ── Gatilho 2: a saída do editor de vitrine ──────────────────────────────
-     O auto-save de lá não acorda ninguém (ver `adiada` em pulsoTrial.js); ele
-     só deixa uma pendência. É este efeito que a cobra, quando a rota deixa de
-     ser a do editor — e só se houve edição de verdade, porque quem entrou,
-     olhou e saiu não editou nada para comentar.
+     Havia dois, e o primeiro era o problema. Ele ouvia cada ação concluída e
+     abria a pergunta 1,6s depois de um "salvo com sucesso" — no papel, o
+     instante perfeito; na prática, o meio do trabalho. Salvar quase nunca é
+     terminar: quem cadastra um imóvel salva e continua subindo foto, marcando
+     360°, corrigindo o preço. A pergunta caía em cima disso.
 
-     O respiro aqui é maior que o das outras origens: a pessoa acabou de
-     navegar, e a tela de destino ainda está montando. */
-  const estavaNoEditorRef = useRef(noEditor);
+     Sobrou o segundo, generalizado. Nenhuma ação abre nada na hora — ela deixa
+     uma pendência (ver `pulsoTrial.js`), e é a troca de rota que a cobra. Sair
+     é o único sinal confiável de que a tarefa acabou.
+
+     A comparação de caminho é feita lá dentro, não aqui: recarregar a própria
+     tela de cadastro não é sair dela, e sem essa conferência um F5 no meio do
+     trabalho cobraria a pendência de quem não foi a lugar nenhum.
+
+     O respiro é o maior dos dois que existiam: a pessoa acabou de navegar, e a
+     tela de destino ainda está montando os dados dela. */
   useEffect(() => {
-    const saiu = estavaNoEditorRef.current && !noEditor;
-    estavaNoEditorRef.current = noEditor;
-    if (!saiu) return;
-    const pendente = consumirPendencia();
+    const pendente = consumirPendencia(pathname);
     if (pendente) avaliarEAbrir(pendente, ESPERA_SAIDA_MS);
-  }, [noEditor, avaliarEAbrir]);
+  }, [pathname, avaliarEAbrir]);
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 

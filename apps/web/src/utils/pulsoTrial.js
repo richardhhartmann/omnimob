@@ -38,6 +38,20 @@ import { lerDoTenant, gravarNoTenant, CHAVES } from "./chaveDoTenant";
    colado em cada tela. Rota nova de cadastro passa a contar sozinha; tela que
    for reescrita não esquece de avisar. */
 
+/* ── TODA ação é adiada. A pergunta espera a pessoa SAIR da página ──────────
+
+   O desenho original abria o modal logo depois de um "salvo com sucesso",
+   argumentando que ali a pessoa tem opinião formada e nenhuma tela pela metade
+   na frente. A premissa está errada na prática: salvar quase nunca é o fim do
+   trabalho. Quem cadastra um imóvel salva e continua — sobe foto, marca 360°,
+   volta para corrigir o preço. O modal caía no meio disso.
+
+   O editor de vitrine já era exceção, por um motivo que vale para todo mundo:
+   "salvei" não é "terminei". Generalizar a exceção é reconhecer que ela era a
+   regra. Agora nenhuma ação abre nada na hora — ela deixa uma PENDÊNCIA, e
+   quem a cobra é a troca de página. Sair é o único sinal confiável de que a
+   tarefa acabou.
+   ────────────────────────────────────────────────────────────────────────── */
 const ROTAS = [
   { padrao: /^\/api\/properties(\/|$)/, origem: "imovel" },
   { padrao: /^\/api\/clientes(\/|$)/, origem: "cliente" },
@@ -51,7 +65,7 @@ const ROTAS = [
      meio de um arrasto; um modal subindo no meio disso interrompe o trabalho
      em vez de comentá-lo. Fica marcada uma pendência, e quem a cobra é a SAÍDA
      do editor — aí sim a pessoa terminou, e a pergunta tem do que falar. */
-  { padrao: /^\/api\/tenants\/me$/, origem: "vitrine", adiada: true },
+  { padrao: /^\/api\/tenants\/me$/, origem: "vitrine" },
 ];
 
 const METODOS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -67,14 +81,6 @@ const IGNORADAS = [
   /^\/api\/properties\/[^/]+\/metrics/,
 ];
 
-const ouvintes = new Set();
-
-/** Assina o pulso. Devolve a função que cancela. */
-export function ouvirAcaoCrud(fn) {
-  ouvintes.add(fn);
-  return () => ouvintes.delete(fn);
-}
-
 /**
  * Chamado pelo cliente HTTP a cada resposta OK. Traduz caminho + método em
  * "origem" e avisa quem estiver ouvindo. Nada aqui pode lançar: uma falha
@@ -88,14 +94,8 @@ export function notificarRequisicao(path, metodo) {
     const achada = ROTAS.find((r) => r.padrao.test(caminho));
     if (!achada) return;
     registrarAcao(achada.origem);
-    // Adiada: conta como uso, mas a pergunta espera a pessoa sair de lá.
-    if (achada.adiada) {
-      marcarPendencia(achada.origem);
-      return;
-    }
-    ouvintes.forEach((fn) => {
-      try { fn(achada.origem); } catch { /* ouvinte quebrado não derruba o resto */ }
-    });
+    // Conta como uso; a pergunta espera a pessoa sair da página.
+    marcarPendencia(achada.origem);
   } catch { /* o pulso é acessório: nunca atrapalha a requisição */ }
 }
 
@@ -158,23 +158,43 @@ export function marcarPerguntado() {
 }
 
 /* ── Pendência ──────────────────────────────────────────────────────────────
-   "Houve trabalho aqui, mas a pergunta fica para quando a pessoa terminar."
-   Hoje só o editor de vitrine usa isso. Fica no `localStorage` junto do resto
-   para sobreviver a um F5 no meio da edição — que é justamente quando alguém
-   mexeu bastante na página. */
+   "Houve trabalho aqui, mas a pergunta fica para quando a pessoa sair."
+
+   Fica no `localStorage` junto do resto para sobreviver a um F5 no meio do
+   trabalho — que é justamente quando alguém mexeu bastante na página.
+
+   Guarda a ROTA junto. É ela que define o que conta como "sair": a pendência
+   só é cobrada quando a pessoa está em OUTRO caminho, não ao voltar para o
+   mesmo depois de um recarregamento. */
+
+const VALIDADE_PENDENCIA_MS = 6 * 60 * 60 * 1000;
 
 function marcarPendencia(origem) {
-  gravar({ ...ler(), pendencia: { origem, em: Date.now() } });
+  const rota = typeof window !== "undefined" ? window.location.pathname : "";
+  gravar({ ...ler(), pendencia: { origem, em: Date.now(), rota } });
 }
 
 /**
- * Havia trabalho pendente? Devolve a origem e apaga a marca — a mesma edição
- * não pode render duas perguntas se a pessoa entrar e sair do editor de novo.
+ * Havia trabalho pendente, feito em OUTRA página? Devolve a origem e apaga a
+ * marca — o mesmo trabalho não pode render duas perguntas.
+ *
+ * `rotaAtual` é onde a pessoa está agora. Sem a comparação, um F5 na própria
+ * tela de cadastro cobraria a pendência de quem não saiu de lugar nenhum.
+ *
+ * A validade existe para quem fechou a aba logo depois de salvar: sem ela, a
+ * pendência esperaria dias no armazenamento e a pergunta apareceria na primeira
+ * navegação de uma sessão que não tem nada a ver com aquele trabalho.
  */
-export function consumirPendencia() {
+export function consumirPendencia(rotaAtual = "") {
   const dados = ler();
   const pendencia = dados.pendencia;
   if (!pendencia) return null;
+  if (Date.now() - (pendencia.em || 0) > VALIDADE_PENDENCIA_MS) {
+    gravar({ ...dados, pendencia: null });
+    return null;
+  }
+  // Ainda na mesma página: o trabalho pode não ter terminado.
+  if (pendencia.rota && rotaAtual && pendencia.rota === rotaAtual) return null;
   gravar({ ...dados, pendencia: null });
   return pendencia.origem;
 }

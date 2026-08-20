@@ -5,6 +5,7 @@ import { PrimeiroAcessoModal } from "./PrimeiroAcessoModal";
 import { TourGuiado } from "./TourGuiado";
 import { ETAPA_BOAS_VINDAS, chavesDoFluxo, montarFluxoTour } from "../utils/tourFluxo";
 import { chavesDasTelas } from "../utils/tourTelas";
+import { lerDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
 import { IconeChapeuFormatura } from "./Icones.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ const LARGURA_MINIMA = 900;
 
 export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   const tenantSlug = session?.tenant?.slug || "";
+  const tenantId = session?.tenant?.id || "";
   const tenantName = session?.tenant?.name || "";
   const cargo = session?.usuario?.cargo;
   const nome = session?.usuario?.nome || "";
@@ -60,7 +62,23 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
 
      `pronto` continua governando o que APARECE — só deixou de governar quando a
      pergunta é feita. */
-  const [decidido, setDecidido] = useState(null); // null = ainda perguntando
+  /* ── O atalho que evita o véu no recarregamento ──────────────────────────
+     Quem manda continua sendo o banco: a pergunta "esta pessoa já viu o tour?"
+     tem que seguir a pessoa entre navegadores, e marca local não segue.
+
+     Mas o SIM é definitivo. Uma vez resolvido, nada no produto volta a
+     desresolver — "rever o tour" é outro caminho, pelo pedido explícito em
+     Configurações. Então guardamos só esse lado, e ele serve para uma coisa
+     apenas: decidir "não mostrar nada" no primeiro quadro.
+
+     Sem isso, todo recarregamento de um tenant com tudo concluído segurava a
+     tela num "Preparando seu painel…" pelo tempo de uma ida e volta ao
+     servidor — um véu esperando por uma resposta que só podia ser "não tem
+     nada para mostrar". O atalho nunca faz aparecer o que não deveria: ele só
+     silencia, e só depois de o servidor ter dito para silenciar. */
+  const [decidido, setDecidido] = useState(
+    () => (tenantId && lerDoTenant(CHAVES.tourResolvido, tenantId) === "1" ? "oculto" : null),
+  ); // null = ainda perguntando
 
   useEffect(() => {
     if (!tenantSlug || !fluxo.length) return undefined;
@@ -77,12 +95,15 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
             .filter((e) => e.status === "FINALIZADO" || e.status === "PULADO")
             .map((e) => e.etapa),
         );
-        setDecidido(resolvidas.has(ETAPA_BOAS_VINDAS) ? "oculto" : "convite");
+        const resolvido = resolvidas.has(ETAPA_BOAS_VINDAS);
+        // Grava o atalho para o próximo recarregamento não esperar por isto.
+        if (resolvido && tenantId) gravarNoTenant(CHAVES.tourResolvido, tenantId, "1");
+        setDecidido(resolvido ? "oculto" : "convite");
       })
       .catch(() => { if (vivo) setDecidido("oculto"); });
 
     return () => { vivo = false; };
-  }, [tenantSlug, fluxo.length]);
+  }, [tenantSlug, tenantId, fluxo.length]);
 
   /* A decisão só vira estado visível quando a fila libera. Separado do efeito
      acima de propósito: um é sobre SABER, o outro sobre MOSTRAR. */
@@ -113,6 +134,15 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
     });
   }, [tenantSlug]);
 
+  /* Só é chamado onde o desfecho JÁ FOI comunicado ao servidor. Marcar em
+     `fase === "oculto"` seria mais curto e estaria errado: a tela estreita
+     também esconde o tour, de propósito e sem gravar nada — cacheá-la
+     silenciaria o tour naquele navegador para sempre, e a pessoa nunca mais
+     veria o primeiro acesso ao abrir no desktop. */
+  const marcarResolvido = useCallback(() => {
+    if (tenantId) gravarNoTenant(CHAVES.tourResolvido, tenantId, "1");
+  }, [tenantId]);
+
   const pularTudo = useCallback((chaves, passoParou) => {
     if (!tenantSlug || !chaves.length) return Promise.resolve();
     return api.pularTutorialTodo(tenantSlug, {
@@ -126,11 +156,15 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   /* ── Desfechos ──────────────────────────────────────────────────────────── */
 
   function comecar() {
+    // O convite foi respondido: mesmo que a pessoa abandone o tour no meio, o
+    // que este atalho guarda é "as boas-vindas já aconteceram".
+    marcarResolvido();
     registrar(ETAPA_BOAS_VINDAS, "FINALIZADO", 1, 1);
     setFase("tour");
   }
 
   function dispensarConvite() {
+    marcarResolvido();
     /* "Explorar por conta própria" é uma escolha sobre SER GUIADO, não só sobre
        este modal. Cala o tour global e também os tours de tela — quem disse que
        prefere se virar sozinho não vai gostar de ser abordado de novo ao abrir
@@ -140,6 +174,7 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   }
 
   function terminarTour(motivo, info) {
+    marcarResolvido();
     if (motivo === "concluiu") {
       // O tour termina apontando a sidebar, ou seja, na última tela visitada.
       // Deixar a pessoa ali é largá-la em Configurações depois de um passo que

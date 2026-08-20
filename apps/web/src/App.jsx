@@ -19,6 +19,7 @@ import { ConfiguracaoPage } from "./pages/ConfiguracaoPage";
 import { TiposImovelPage } from "./pages/TiposImovelPage";
 import { UsuariosPage } from "./pages/UsuariosPage";
 import { clearSession, loadSession, saveSession } from "./session";
+import { ContaSuspensaPage } from "./pages/ContaSuspensaPage";
 import { ehDominioDaOmnimob, slugDoDominioAtual } from "./utils/dominioVitrine";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
@@ -109,6 +110,7 @@ export default function App() {
     setApiToken(session?.token || null);
   }, [session]);
 
+
   // Realce/gradiente dos botões seguindo o ponteiro (estilo Windows).
   useEffect(() => initPointerGradient(), []);
 
@@ -163,6 +165,20 @@ export default function App() {
     function refreshPermissoes() {
       const s = sessionRef.current;
       if (!s?.token || !s?.tenant?.slug) return;
+      /* A sessão de uma conta SUSPENSA não passa por aqui.
+
+         Ela tem escopo reduzido: alcança ver a situação e assinar, e o
+         `authMiddleware` recusa o resto com 403 — de propósito. Só que o 403 é
+         justamente o que este efeito trata como "sessão morta, derruba".
+
+         O resultado era absurdo de ver: a pessoa abria a parede de reativação,
+         dava um alt+tab, a janela recuperava o foco, este efeito perguntava por
+         `/auth/me`, levava o 403 previsto e a mandava para o login. O caminho
+         de recuperar a conta se auto-destruía a cada troca de janela.
+
+         E não há o que reler aqui: o cargo dela veio no login e não vai mudar
+         enquanto a conta estiver suspensa. */
+      if (s.suspenso) return;
       api.getMe(s.tenant.slug)
         .then((usuario) => {
           /* A sessão pode ter acabado enquanto esta resposta vinha.
@@ -268,6 +284,19 @@ export default function App() {
   const cargo = session?.usuario?.cargo;
   const canAccessTenantPanel = Boolean(cargo?.acessarPainel || cargo?.editarPagina);
   const defaultPublicPath = session?.tenant?.slug ? `/vitrine/${session.tenant.slug}` : DEFAULT_PUBLIC_SHOWCASE;
+
+  /* ── Conta suspensa: a parede antes de qualquer rota ──────────────────────
+     A sessão de uma conta vencida vem marcada com `suspenso`. Ela alcança duas
+     rotas no servidor — ver a situação e assinar — e mais nada; o painel não é
+     montado aqui de propósito, e não por falta de dados: montar telas que só
+     dariam 403 mostraria uma interface quebrando aos poucos, sem nunca dizer o
+     motivo.
+
+     Vem ANTES da resolução de domínio porque não depende dela: quem chegou com
+     esta sessão chegou pelo painel. */
+  if (session?.suspenso) {
+    return <ContaSuspensaPage session={session} onLogout={handleLogout} />;
+  }
 
   // Ainda perguntando de quem é este domínio: não decide nada antes da resposta.
   if (slugDoDominio === undefined) {

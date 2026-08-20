@@ -414,7 +414,7 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
               style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.3s ease-in-out" }}
             />
           ) : (
-            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", color: "rgba(255,255,255,0.15)" }}>
+            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", color: "var(--previa-apagado, rgba(255,255,255,0.15))" }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
@@ -451,7 +451,7 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
         </div>
 
         <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-          <h3 style={{ fontSize: "16px", fontWeight: "600", color: form.title ? "#fff" : "rgba(255,255,255,0.2)", lineHeight: "1.3", margin: 0 }}>
+          <h3 style={{ fontSize: "16px", fontWeight: "600", color: form.title ? "var(--previa-forte, #fff)" : "var(--previa-fantasma, rgba(255,255,255,0.2))", lineHeight: "1.3", margin: 0 }}>
             {form.title || "Título do imóvel"}
           </h3>
 
@@ -500,9 +500,9 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
             </div>
           )}
 
-          <div style={{ marginTop: "4px", paddingTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ marginTop: "4px", paddingTop: "12px", borderTop: "1px solid var(--previa-risco, rgba(255,255,255,0.06))" }}>
             <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "600" }}>Valor</span>
-            <p style={{ fontSize: "22px", fontWeight: "700", color: hasPrice ? "#fff" : "rgba(255,255,255,0.15)", margin: "2px 0 0 0", letterSpacing: "-0.5px" }}>
+            <p style={{ fontSize: "22px", fontWeight: "700", color: hasPrice ? "var(--previa-forte, #fff)" : "var(--previa-apagado, rgba(255,255,255,0.15))", margin: "2px 0 0 0", letterSpacing: "-0.5px" }}>
               {hasPrice ? `R$ ${price.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "R$ —"}
             </p>
           </div>
@@ -950,8 +950,14 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onRemove(i); }}
+              /* `padding: 0` não é enfeite: o seletor global de button no
+                 styles.css declara `padding: 14px 20px`. Com box-sizing
+                 border-box, a largura usada nunca fica abaixo do padding —
+                 os 22px viravam 40x28, que é o oval —, e a caixa de conteúdo
+                 sobrava com zero de largura, onde o ícone encolhia até sumir. */
               style={{
                 position: "absolute", top: "6px", right: "6px", width: "22px", height: "22px",
+                padding: 0,
                 borderRadius: "50%", background: "rgba(239,68,68,0.9)", border: "none",
                 color: "#fff", fontSize: "14px", lineHeight: 1, cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -995,24 +1001,8 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
         <label
           htmlFor={disabled ? undefined : addInputId}
           title="Adicionar mais fotos"
-          style={{
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            gap: "8px", aspectRatio: "1", borderRadius: "10px",
-            border: "2px dashed rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.02)",
-            color: "rgba(255,255,255,0.4)", cursor: disabled ? "not-allowed" : "pointer",
-            transition: "border-color 0.15s, color 0.15s, background 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            if (disabled) return;
-            e.currentTarget.style.borderColor = "rgba(99,102,241,0.6)";
-            e.currentTarget.style.color = "rgba(129,140,248,1)";
-            e.currentTarget.style.background = "rgba(99,102,241,0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.16)";
-            e.currentTarget.style.color = "rgba(255,255,255,0.4)";
-            e.currentTarget.style.background = "rgba(255,255,255,0.02)";
-          }}
+          className={`pf-add-foto${disabled ? " is-disabled" : ""}`}
+          style={{ cursor: disabled ? "not-allowed" : "pointer" }}
         >
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />

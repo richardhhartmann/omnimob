@@ -32,7 +32,41 @@ const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
    maioria — o número de consultas continua o mesmo de antes.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export async function requireAuth(req, res, next) {
+/* ── O token de REATIVAÇÃO ───────────────────────────────────────────────────
+   Conta vencida perde o painel, e é para perder mesmo. Só que o pagamento mora
+   DENTRO do painel — então bloquear o login por completo trancava a pessoa do
+   lado de fora justamente da tela que resolveria o problema. O e-mail de
+   vencimento mandava para `/login`, e o login recusava.
+
+   A saída é uma sessão de escopo reduzido: entra, mas só alcança duas rotas —
+   ver a situação da conta e assinar. Qualquer outra recusa aqui, antes de
+   chegar na regra de permissão, então nenhuma rota nova nasce alcançável por
+   engano: para abrir uma para este escopo é preciso dizer isso explicitamente.
+   ────────────────────────────────────────────────────────────────────────── */
+export const ESCOPO_REATIVACAO = "reativar";
+
+function autenticar({ aceitaReativacao = false } = {}) {
+  return async function middlewareDeAutenticacao(req, res, next) {
+    if (!aceitaReativacao) {
+      const cru = req.headers.authorization?.replace("Bearer ", "");
+      let escopo = null;
+      try { escopo = cru ? jwt.verify(cru, JWT_SECRET).escopo : null; } catch { escopo = null; }
+      if (escopo === ESCOPO_REATIVACAO) {
+        return res.status(403).json({
+          error: "Esta conta está suspensa. Assine um plano para voltar a usar o painel.",
+          code: "SOMENTE_REATIVACAO",
+        });
+      }
+    }
+    return autenticarBase(req, res, next);
+  };
+}
+
+export const requireAuth = autenticar();
+/** Aceita também a sessão de escopo reduzido de uma conta vencida. */
+export const requireAuthOuReativacao = autenticar({ aceitaReativacao: true });
+
+async function autenticarBase(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) {
     return res.status(401).json({ error: "Autenticacao necessaria." });

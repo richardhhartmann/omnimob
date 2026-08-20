@@ -4,7 +4,19 @@ import { preencherContexto } from "../services/auditoria.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
-export async function requireTenant(req, res, next) {
+/* `aceitaSuspenso` abre a exceção para as duas rotas de reativação — ver a
+   situação da conta e assinar. Sem ela a conta vencida não conseguiria pagar:
+   a checagem de `ativo` abaixo derruba tudo, inclusive a tela de assinatura. */
+export function requireTenant(req, res, next) {
+  return resolverTenant(req, res, next, { aceitaSuspenso: false });
+}
+
+/** Só para as rotas de reativação. Ver `requireAuthOuReativacao`. */
+export function requireTenantMesmoSuspenso(req, res, next) {
+  return resolverTenant(req, res, next, { aceitaSuspenso: true });
+}
+
+async function resolverTenant(req, res, next, { aceitaSuspenso }) {
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) {
     return res.status(401).json({ error: "Autenticacao necessaria." });
@@ -35,7 +47,7 @@ export async function requireTenant(req, res, next) {
 
        A mensagem é específica porque o motivo é específico: um 403 genérico
        aqui faria a conta parecer quebrada em vez de vencida. */
-    if (!tenant.ativo) {
+    if (!tenant.ativo && !aceitaSuspenso) {
       return res.status(403).json({
         error: "Esta conta está desativada. Assine um plano para voltar a usar o painel.",
         contaInativa: true,

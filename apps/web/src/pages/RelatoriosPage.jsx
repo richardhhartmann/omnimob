@@ -2,8 +2,9 @@ import { useSearchParams } from "react-router-dom";
 import { LeadsPage } from "./LeadsPage";
 import { RelatorioMensal } from "../components/RelatorioMensal";
 import { FunilDeVendas, Comissoes } from "../components/FunilVendas";
-import { ICONES_RELATORIOS } from "../utils/iconesRelatorios";
-import { CartaoDeMenu, VoltarAoIndice } from "../components/CartaoDeMenu.jsx";
+import { ICONES_RELATORIOS, IconeRelatorios } from "../utils/iconesRelatorios";
+import { CartaoDeMenu } from "../components/CartaoDeMenu.jsx";
+import { Trilha } from "../components/Trilha.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Relatórios — a página que reúne tudo que é LEITURA do que aconteceu.
@@ -30,25 +31,25 @@ const CARDS = [
     chave: "LEADS",
     title: "Leads",
     desc: "Quem entrou em contato pela vitrine, com o imóvel de origem e o histórico.",
-    accent: "#10b981",
+    accent: "#94a3b8",
   },
   {
     chave: "MENSAL",
     title: "Relatório mensal",
     desc: "Visitas, leads, vendas e conversão do mês — na tela ou por e-mail.",
-    accent: "#38bdf8",
+    accent: "#94a3b8",
   },
   {
     chave: "FUNIL",
     title: "Funil de vendas",
     desc: "De visita a lead, de lead a fechamento — e onde o caminho aperta.",
-    accent: "#34d399",
+    accent: "#94a3b8",
   },
   {
     chave: "COMISSOES",
     title: "Comissões",
     desc: "Quanto cada corretor fechou no período e quanto tem a receber.",
-    accent: "#e8cf7a",
+    accent: "#94a3b8",
   },
 ];
 
@@ -116,7 +117,15 @@ export function RelatoriosPage({ session }) {
         </div>
       ) : (
         <>
-          <VoltarAoIndice onClick={() => setView("MENU")} rotulo="Relatórios" titulo={TITULO[view]} />
+          {/* Os ícones saem da MESMA fonte que desenha os cartões do índice e o
+              submenu da barra lateral (`iconesRelatorios`). Uma escolha à mão
+              aqui daria um funil de um jeito na barra e de outro na trilha. */}
+          <Trilha
+            itens={[
+              { chave: "indice", rotulo: "Relatórios", Icone: IconeRelatorios, aoIr: () => setView("MENU") },
+              { chave: view, rotulo: TITULO[view], Icone: ICONES_RELATORIOS[view], aoIr: () => setView(view) },
+            ]}
+          />
           {conteudo}
         </>
       )}

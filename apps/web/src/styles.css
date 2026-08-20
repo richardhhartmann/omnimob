@@ -2604,7 +2604,7 @@ input[type="checkbox"].sw {
   padding: 0;
   border: 0;
   border-radius: 50px;
-  background: #292727;
+  background: var(--sw-trilho, #292727);
   /* Recorta os dois botões enquanto eles entram e saem pelas pontas. */
   overflow: hidden;
   cursor: pointer;
@@ -2621,7 +2621,7 @@ input[type="checkbox"].sw::before {
   right: 0.3em;
   bottom: 0.3em;
   transform: translateX(150%);
-  background-color: #818cf8;
+  background-color: var(--sw-aceso, #818cf8);
   border-radius: inherit;
   transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
   /* Anula o halo do checkbox comum, que aqui não faz sentido. */
@@ -2639,7 +2639,7 @@ input[type="checkbox"].sw::after {
   left: 0.3em;
   bottom: 0.3em;
   top: auto;
-  background-color: #ccc;
+  background-color: var(--sw-apagado, #ccc);
   border: 0;
   border-radius: inherit;
   transform: none;
@@ -2656,6 +2656,24 @@ input[type="checkbox"].sw:focus-visible {
   outline-offset: 3px;
 }
 input[type="checkbox"].sw:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── O interruptor no tema claro ─────────────────────────────────────────────
+   O trilho era `#292727` nos DOIS estados — quase preto. Sobre o painel escuro
+   ele é um sulco discreto; sobre o claro vira uma pílula preta no meio do
+   formulário, e o desenho inteiro passa a ler como "algo errado aqui" em vez de
+   "ligado/desligado".
+
+   O botão apagado inverte junto, e tem de inverter: `#ccc` sobre um trilho
+   claro seria cinza sobre cinza, e o estado desligado ficaria sem forma.
+
+   Na RAIZ do documento e não no `main` porque estes interruptores também
+   aparecem em sobreposições que moram fora dele — o modal de trial, por
+   exemplo. Definir no `main` deixaria metade deles para trás. */
+html[data-tema-painel="claro"] {
+  --sw-trilho: rgba(15, 23, 42, 0.16);
+  --sw-apagado: #ffffff;
+  --sw-aceso: #4f46e5;
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    EDITOR DE VITRINE
@@ -6283,18 +6301,6 @@ main[data-tema="claro"] .menu-cartao:hover {
 }
 main[data-tema="claro"] .menu-cartao__disco { background: color-mix(in srgb, var(--pg-accent) 12%, transparent); }
 
-/* ── Pílula de navegação (.ui-pilula) ── */
-.ui-pilula {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: inherit;
-}
-main[data-tema="claro"] .ui-pilula {
-  background: #ffffff;
-  border-color: rgba(15, 23, 42, 0.14);
-}
-main[data-tema="claro"] .ui-pilula:hover { background: rgba(15, 23, 42, 0.04); }
-
 /* ── Campos do cadastro de imóvel ────────────────────────────────────────────
    `inputStyle`/`selectStyle` do PropertyForm são objetos inline reusados em
    dezenas de campos. Sem estas variáveis, a lista de tipos e as entradas de
@@ -6328,3 +6334,214 @@ main[data-tema="claro"] .pf-previa {
 /* O espaço da foto continua sendo um vazio — cinza claro, não branco, senão
    não se distingue do cartão enquanto nenhuma imagem foi escolhida. */
 main[data-tema="claro"] .pf-previa__foto { background: rgba(15, 23, 42, 0.05); }
+
+/* ─── Tema claro: quinta passada (o passo 1 do cadastro) ─────────────────────
+   Mesma causa das anteriores, num canto que faltou: a lista de seleção, o
+   ladrilho de adicionar foto e os textos da prévia.
+
+   Um deles é diferente dos outros e vale registrar: a lista ABERTA do
+   `SelectCustom` sai por PORTAL, para fora do `<main>`. O `data-tema` do shell
+   não a alcança de jeito nenhum — quem alcança é o marcador que o AdminLayout
+   põe na raiz do documento, o mesmo usado pelo tour e pelos modais.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── Gatilho da lista de seleção ─────────────────────────────────────────────
+   Fundo e borda já vêm de `--campo-*` (definidos na passada anterior); falta
+   só o texto de espera, que era branco a 35% e sumia sobre o campo claro. */
+main[data-tema="claro"] { --campo-placeholder: #94a3b8; }
+
+/* ── A lista aberta ──────────────────────────────────────────────────────────
+   Na raiz porque ela é portal. Cartão branco, com a sombra recalibrada: a do
+   escuro é preta a 55%, que sobre fundo claro vira uma nuvem cinza. */
+html[data-tema-painel="claro"] {
+  --menu-fundo: rgba(255, 255, 255, 0.98);
+  --menu-borda: rgba(15, 23, 42, 0.12);
+  --menu-sombra: 0 22px 48px -16px rgba(15, 23, 42, 0.28);
+  --menu-cor: #0f172a;
+  --menu-realce: rgba(15, 23, 42, 0.06);
+}
+
+/* ── Ladrilho de adicionar foto ──────────────────────────────────────────────
+   O hover morava nos handlers de mouse, que reescreviam borda, cor e fundo em
+   valores fixos. Aqui ele é regra, e cada tema escreve o seu — o de repouso
+   inclusive, que é o que o `onMouseLeave` restaurava à força. */
+.pf-add-foto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 2px dashed var(--add-foto-borda, rgba(255, 255, 255, 0.16));
+  background: var(--add-foto-fundo, rgba(255, 255, 255, 0.02));
+  color: var(--add-foto-cor, rgba(255, 255, 255, 0.4));
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.pf-add-foto:not(.is-disabled):hover {
+  border-color: rgba(99, 102, 241, 0.6);
+  color: rgba(129, 140, 248, 1);
+  background: rgba(99, 102, 241, 0.08);
+}
+main[data-tema="claro"] {
+  --add-foto-borda: rgba(15, 23, 42, 0.18);
+  --add-foto-fundo: rgba(15, 23, 42, 0.02);
+  --add-foto-cor: #94a3b8;
+}
+main[data-tema="claro"] .pf-add-foto:not(.is-disabled):hover {
+  border-color: rgba(79, 70, 229, 0.55);
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.06);
+}
+
+/* ── Textos da prévia ────────────────────────────────────────────────────────
+   Título e preço têm dois estados: preenchido (cor cheia) e vazio (fantasma,
+   que é o texto de exemplo). Os dois eram brancos — no claro, o preenchido
+   sumia e o fantasma sumia mais ainda. */
+main[data-tema="claro"] {
+  --previa-forte: #0f172a;
+  --previa-fantasma: rgba(15, 23, 42, 0.28);
+  --previa-apagado: rgba(15, 23, 42, 0.18);
+  --previa-risco: rgba(15, 23, 42, 0.08);
+}
+
+/* ─── A passagem de um tema ao outro ─────────────────────────────────────────
+   A marca `trocando-tema` é posta na raiz pelo AdminLayout e vale 360ms — o
+   suficiente para a transição abaixo terminar.
+
+   ── POR QUE UM SELETOR UNIVERSAL, QUE NORMALMENTE SE EVITA ──
+
+   Porque o alvo É universal: mudar de tema muda a cor de praticamente todo
+   elemento da tela, e enumerá-los daria uma lista que envelhece mal — cada
+   componente novo nasceria piscando enquanto o resto esmaece, e ninguém
+   lembraria de vir aqui.
+
+   O custo some junto com a marca. Fora desses 360ms não existe regra nenhuma,
+   então hover, foco e abertura de menu seguem com a transição que cada um
+   declarou. Ligar isto permanentemente é que seria caro — e pior: atrasaria
+   realces que precisam ser imediatos para parecerem resposta ao clique.
+
+   ── O QUE ESTÁ DE FORA, E POR QUÊ ──
+
+   `transform` e `opacity` não entram na lista. São as duas propriedades com que
+   o resto do produto anima (modais entrando, submenu abrindo, o flare do
+   clique), e o `!important` daqui atropelaria a duração delas no meio do
+   movimento — um modal abrindo durante a troca de tema terminaria a entrada em
+   360ms de esmaecido de cor em vez da coreografia dele.
+
+   O `!important` é necessário: sem ele, cada elemento que declara a própria
+   `transition` continuaria mandando, e a cor mudaria de estalo justamente nos
+   componentes mais trabalhados da tela.
+   ────────────────────────────────────────────────────────────────────────── */
+html.trocando-tema,
+html.trocando-tema *,
+html.trocando-tema *::before,
+html.trocando-tema *::after {
+  transition:
+    background-color 0.3s ease,
+    background-image 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease !important;
+}
+
+/* O flare do clique é criado e destruído em menos tempo que a troca: pegá-lo no
+   meio deixaria uma mancha parada na tela até o fim dos 360ms. */
+html.trocando-tema .ripple-drop { transition: none !important; }
+
+/* A prancheta do editor desenha a VITRINE, que tem tema próprio. Ela não muda
+   quando o painel muda, e uma transição ali só atrasaria o que já está certo. */
+html.trocando-tema .editor-canvas-surface,
+html.trocando-tema .editor-canvas-surface * { transition: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  html.trocando-tema,
+  html.trocando-tema *,
+  html.trocando-tema *::before,
+  html.trocando-tema *::after { transition: none !important; }
+}
+
+/* ─── Trilha de navegação (breadcrumb) ───────────────────────────────────────
+   Substitui o botão de voltar nas sub-páginas de Relatórios e Configurações.
+   Ver `components/Trilha.jsx` para o porquê da troca.
+
+   Os degraus são <button> e não <a> porque a navegação aqui é de PARÂMETRO na
+   mesma rota (`?ver=funil`), feita pelo React Router — uma âncora com href real
+   recarregaria a aplicação inteira ao ser clicada com o botão do meio ou com
+   Ctrl, e o destino dela não existe como documento separado.
+   ────────────────────────────────────────────────────────────────────────── */
+.trilha {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 20px;
+  min-width: 0;
+}
+.trilha__par { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+
+/* `width: auto` e `transform: none` neutralizam o seletor global de button, que
+   declara largura total e um levantamento no hover — aqui os degraus são texto
+   numa linha, e um deles saltando ao passar o mouse leria como erro de layout. */
+.trilha__degrau {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.trilha__degrau:hover:not(:disabled) {
+  background: var(--trilha-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-main);
+  transform: none;
+  box-shadow: none;
+}
+.trilha__degrau:disabled { cursor: default; opacity: 1; }
+
+.trilha__icone { display: inline-flex; flex-shrink: 0; }
+.trilha__texto { overflow: hidden; text-overflow: ellipsis; }
+
+/* O degrau atual tem o MESMO tamanho e o MESMO peso dos outros. A trilha é um
+   caminho, e caminho não tem parte mais importante — dar destaque ao último a
+   transformava num título com um link colado na frente.
+
+   A única diferença é a cor, e ela é sutil de propósito: diz "você está aqui"
+   sem virar hierarquia. */
+.trilha__degrau.is-atual { color: var(--text-main); }
+/* Ele leva ao próprio endereço, então o hover não promete navegação: some o
+   fundo e fica só o cursor, que basta para dizer que responde ao clique. */
+.trilha__degrau.is-atual:hover:not(:disabled) { background: transparent; }
+
+.trilha__seta {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1;
+  opacity: 0.55;
+  padding: 0 1px;
+  user-select: none;
+}
+
+main[data-tema="claro"] { --trilha-hover: rgba(15, 23, 42, 0.06); }
+
+/* Em telas estreitas a trilha quebra em duas linhas em vez de espremer os
+   nomes: "Funil de vendas" cortado em "Funil de ven…" perde justamente a
+   palavra que distingue esta seção das outras três. */
+@media (max-width: 560px) {
+  .trilha__degrau { padding: 5px 7px; }
+}

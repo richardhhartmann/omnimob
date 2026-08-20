@@ -374,10 +374,11 @@ export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, ur
     "",
     "Enquanto isso, ninguém da sua equipe consegue entrar no painel.",
     "",
-    `Nada foi apagado ainda: seus imóveis, fotos, leads e a vitrine continuam guardados por mais ${diasAteRemover} dias.`,
+    `Nada foi apagado ainda: imóveis, fotos, leads e a vitrine continuam guardados por mais ${diasAteRemover} dias.`,
     "Se você assinar um plano dentro desse prazo, tudo volta exatamente como estava.",
     "",
-    `Painel: ${base}/login`,
+    `Para reativar, entre com seu login de sempre: ${base}/login`,
+    "Quem responde pela conta cai direto na tela de assinatura — o painel continua fechado até o pagamento passar.",
     "",
     "Depois desse prazo o ambiente é removido e não há como recuperar.",
     "Se precisar de mais tempo ou quiser conversar sobre o plano, é só responder este e-mail.",
@@ -393,10 +394,19 @@ export function emailTrialExpirado({ imobiliaria, slug, diasAteRemover, base, ur
           "Ninguém da sua equipe consegue entrar no painel enquanto isso.",
       ),
       aviso(
-        `Seus imóveis, fotos, leads e a vitrine continuam guardados por mais <strong style="color:${COR.forte};">${diasAteRemover} dias</strong>. Assinando dentro desse prazo, tudo volta exatamente como estava.`,
+        `Imóveis, fotos, leads e a vitrine continuam guardados por mais <strong style="color:${COR.forte};">${diasAteRemover} dias</strong>. Assinando dentro desse prazo, tudo volta exatamente como estava.`,
         "#f59e0b",
       ),
+      /* O botão manda para o LOGIN, e isso já foi um beco sem saída: a conta
+         vencida perdia o painel, o pagamento morava no painel, e o login
+         recusava. Hoje quem responde pela conta entra numa sessão de escopo
+         reduzido e cai direto na tela de assinatura — ver `ContaSuspensaPage`
+         e `authMiddleware`. Sem isso este botão levaria a pessoa a uma porta
+         trancada, que é o pior lugar para terminar um e-mail de recuperação. */
       botao("Assinar e recuperar meu ambiente", `${base}/login`),
+      paragrafo(
+        `<span style="color:${COR.apagado};font-size:13px;">Use seu login de sempre. Quem responde pela conta cai direto na tela de assinatura; o resto do painel continua fechado até o pagamento passar.</span>`,
+      ),
       divisor(),
       paragrafo(
         `<span style="color:${COR.apagado};font-size:13px;">Passado esse prazo o ambiente é removido, e aí não há como recuperar. Precisa de mais tempo? Responda este e-mail que a gente resolve.</span>`,

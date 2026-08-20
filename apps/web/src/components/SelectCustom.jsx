@@ -161,7 +161,7 @@ export function SelectCustom({
 
   const corBorda = invalid
     ? "rgba(239,68,68,0.6)"
-    : aberto ? "rgba(99,102,241,0.7)" : "rgba(255,255,255,0.1)";
+    : aberto ? "rgba(99,102,241,0.7)" : "var(--campo-borda, rgba(255,255,255,0.1))";
 
   return (
     <div ref={rootRef} style={{ position: "relative", ...style }}>
@@ -178,7 +178,7 @@ export function SelectCustom({
         style={{
           display: "flex", alignItems: "center", gap: t.gap, width: "100%",
           boxSizing: "border-box", padding: t.padding, borderRadius: t.radius,
-          background: "rgba(255,255,255,0.04)", border: `1px solid ${corBorda}`,
+          background: "var(--campo-fundo, rgba(255,255,255,0.04))", border: `1px solid ${corBorda}`,
           color: "inherit", fontSize: t.fonte, fontFamily: "inherit", fontWeight: 400,
           textAlign: "left", lineHeight: 1.3,
           cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1,
@@ -204,7 +204,7 @@ export function SelectCustom({
             )}
           </>
         ) : (
-          <span style={{ color: "rgba(255,255,255,0.35)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ color: "var(--campo-placeholder, rgba(255,255,255,0.35))", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {placeholder}
           </span>
         )}
@@ -215,6 +215,7 @@ export function SelectCustom({
 
       {aberto && pos && createPortal(
         <ul
+          className="sel-menu"
           ref={listRef}
           role="listbox"
           aria-labelledby={id}
@@ -232,13 +233,13 @@ export function SelectCustom({
             // do editor usa o máximo do int e passa um zIndex próprio.
             zIndex,
             listStyle: "none", margin: 0, padding: "6px", overflowY: "auto",
-            background: "rgba(18,18,26,0.98)",
+            background: "var(--menu-fundo, rgba(18,18,26,0.98))",
             backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-            border: "1px solid rgba(255,255,255,0.12)", borderRadius: "12px",
-            boxShadow: "0 22px 48px rgba(0,0,0,0.55)",
+            border: "1px solid var(--menu-borda, rgba(255,255,255,0.12))", borderRadius: "12px",
+            boxShadow: "var(--menu-sombra, 0 22px 48px rgba(0,0,0,0.55))",
             animation: "fadeIn 0.15s ease-out",
             fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-            color: "#f8fafc",
+            color: "var(--menu-cor, #f8fafc)",
           }}
         >
           {options.length === 0 && (
@@ -258,7 +259,7 @@ export function SelectCustom({
                 style={{
                   display: "flex", alignItems: opt.description ? "flex-start" : "center", gap: "10px",
                   padding: t.optPadding, borderRadius: "9px", cursor: "pointer",
-                  background: escolhido && cor ? `${cor}1f` : escolhido ? "rgba(99,102,241,0.14)" : ativo ? "rgba(255,255,255,0.06)" : "transparent",
+                  background: escolhido && cor ? `${cor}1f` : escolhido ? "rgba(99,102,241,0.14)" : ativo ? "var(--menu-realce, rgba(255,255,255,0.06))" : "transparent",
                   border: `1px solid ${escolhido ? (cor ? `${cor}59` : "rgba(99,102,241,0.4)") : "transparent"}`,
                   transition: "background 0.12s",
                 }}

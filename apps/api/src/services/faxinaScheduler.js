@@ -40,7 +40,6 @@ export function iniciarFaxinaAutomatica() {
   inicial.unref?.();
   repetido.unref?.();
 
-  console.log("[faxina] automática ligada (uma passada por dia).");
   return () => {
     clearTimeout(inicial);
     clearInterval(repetido);

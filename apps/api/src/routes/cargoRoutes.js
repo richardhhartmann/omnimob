@@ -3,15 +3,27 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import { PERMISSOES } from "../services/cargosPadrao.js";
 
 export const cargoRouter = Router();
 cargoRouter.use(requireAuth);
 cargoRouter.use(requireTenant);
 cargoRouter.use(requirePermissao("gerenciarUsuarios", "gerenciarCargos"));
 
-const PERMISSOES = ["acessarPainel", "editarPagina", "gerenciarImoveis",
-  "gerenciarUsuarios", "gerenciarClientes", "gerenciarCargos", "verConfiguracoes",
-  "verRelatorios", "publicarRedes"];
+/* A lista vem de `cargosPadrao.js`, que é a canônica — a mesma que o seed usa
+   para criar os cargos e que `cargoDaSessao` percorre para montar a sessão.
+
+   Aqui havia uma CÓPIA escrita à mão, e ela ficou para trás: `verAuditoria`
+   entrou na lista canônica e nunca chegou nesta. O efeito era o pior tipo de
+   defeito silencioso — a tela mostrava a caixa, o clique ia para o servidor, o
+   servidor respondia 200, e o laço abaixo simplesmente não tinha aquele nome
+   para copiar. A permissão voltava marcada, sem erro em lugar nenhum.
+
+   Na criação era pior ainda: `data[p] = Boolean(perms[p])` para cada nome da
+   lista significa que um cargo novo nascia SEM a permissão, qualquer que fosse
+   a caixa marcada na tela.
+
+   Por isso não existe mais lista local. Permissão nova entra num lugar só. */
 
 /* ─── O cargo que administra a casa ──────────────────────────────────────────
    Reconhecido pelo nome, e é a parte frágil desta regra: `descricao` é editável

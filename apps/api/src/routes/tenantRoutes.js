@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
-import { requireAuth } from "../middlewares/authMiddleware.js";
+import { requireAuth, requireAuthOuReativacao } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
-import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import { requireTenant, requireTenantMesmoSuspenso } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
 import {
   criarAssinatura,
@@ -12,6 +12,7 @@ import {
 } from "../services/pagamentoService.js";
 import {
   fidelizarTrial,
+  situacaoDeGraca,
   estenderTrial,
   registrarPesquisa,
   DIAS_DE_EXTENSAO,
@@ -401,7 +402,10 @@ tenantRouter.post(
   },
 );
 
-tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
+/* As duas rotas de reativação (esta e `/me/assinar`) usam a dupla tolerante a
+   conta suspensa. É a exceção que fecha o círculo: sem ela, quem venceu não
+   consegue nem VER que venceu, nem pagar para voltar. */
+tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspenso, async (req, res) => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenant.id },
@@ -457,6 +461,16 @@ tenantRouter.get("/me/trial", requireAuth, requireTenant, async (req, res) => {
     return res.json({
       emTrial,
       assinaturaAtiva,
+      /* O que acontece DEPOIS do vencimento. `diasRestantes` acima é cortado em
+         zero — ele responde "quanto falta para vencer", e passada essa data a
+         pergunta vira outra: "quanto falta para os dados sumirem". A conta sai
+         da mesma constante que a faxina usa para apagar. */
+      graca: situacaoDeGraca({
+        statusPagamento: tenant.statusPagamento,
+        proximoVencimento: tenant.proximoVencimento,
+        suspensoEm: req.tenant.suspensoEm,
+        ativo: req.tenant.ativo,
+      }),
       nomeTenant: tenant.name,
       valorMensal: tenant.valorMensal ? Number(tenant.valorMensal) : null,
       plano: tenant.plano,
@@ -708,9 +722,17 @@ tenantRouter.post(
 
 tenantRouter.post(
   "/me/assinar",
-  requireAuth,
-  requireTenant,
-  requirePermissao("gerenciarUsuarios"),
+  requireAuthOuReativacao,
+  requireTenantMesmoSuspenso,
+  /* `verConfiguracoes`, e não `gerenciarUsuarios`.
+
+     A barra lateral já oferecia o botão por `verConfiguracoes` (assinar é
+     decisão de quem responde pela conta, não de quem administra gente), mas a
+     rota continuou exigindo a permissão antiga. Um cargo com uma e sem a outra
+     via o botão e levava 403 — e agora seria pior: a parede de reativação é
+     liberada por `verConfiguracoes`, então a pessoa entraria nela sem conseguir
+     concluir a compra. */
+  requirePermissao("verConfiguracoes"),
   async (req, res) => {
     const { plano, periodo, tokenPagamento } = req.body || {};
     if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {

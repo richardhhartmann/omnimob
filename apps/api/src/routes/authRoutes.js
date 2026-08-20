@@ -5,7 +5,8 @@ import crypto from "node:crypto";
 import { prisma } from "../db.js";
 import { sendEmail } from "../services/notificationService.js";
 import { emailRecuperarSenha } from "../services/emailTemplates.js";
-import { requireAuth } from "../middlewares/authMiddleware.js";
+import { requireAuth, ESCOPO_REATIVACAO } from "../middlewares/authMiddleware.js";
+import { situacaoDeGraca } from "../services/trialService.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { loginSchema } from "../validators/authValidators.js";
 import { PERMISSOES } from "../services/cargosPadrao.js";
@@ -34,14 +35,26 @@ function cargoDaSessao(cargo) {
 
 // Monta o payload de sessão (token + usuario + tenant) devolvido no login e ao
 // definir a senha. `usuario` deve vir com include { tenant, cargo }.
-function montarSessao(usuario) {
+function montarSessao(usuario, { escopo = null } = {}) {
   const token = jwt.sign(
-    { userId: usuario.id, tenantId: usuario.tenantId, cargoCodigo: usuario.cargoCodigo },
+    {
+      userId: usuario.id,
+      tenantId: usuario.tenantId,
+      cargoCodigo: usuario.cargoCodigo,
+      // Só a sessão de reativação carrega escopo. Ver `authMiddleware.js`.
+      ...(escopo ? { escopo } : {}),
+    },
     JWT_SECRET,
-    { expiresIn: "7d" }
+    // A sessão de reativação é curta de propósito: ela existe para uma compra,
+    // não para acompanhar a conta suspensa por uma semana.
+    { expiresIn: escopo === ESCOPO_REATIVACAO ? "2h" : "7d" }
   );
   return {
     token,
+    /* O painel inteiro olha para isto: com a conta suspensa, nenhuma tela é
+       montada — só a parede de reativação. Ver `App.jsx`. */
+    suspenso: escopo === ESCOPO_REATIVACAO,
+    graca: escopo === ESCOPO_REATIVACAO ? situacaoDeGraca(usuario.tenant) : null,
     usuario: {
       id: usuario.id,
       nome: usuario.nome,
@@ -115,11 +128,28 @@ authRouter.post("/login", async (req, res) => {
        existem; aqui as credenciais estão certas e quem entrou tem direito de
        saber o que aconteceu com a conta dele — esconder só geraria um chamado
        de suporte para uma pergunta que o e-mail de vencimento já respondeu. */
+    /* ── Conta suspensa: parede, não porta trancada ────────────────────────
+       Antes isto era um 403 seco, e havia um problema circular nele: a conta
+       vencida perde o painel, mas o pagamento MORA no painel. O e-mail de
+       vencimento mandava para o login, o login recusava, e a única forma de
+       voltar a ser cliente era responder o e-mail e esperar alguém.
+
+       Agora quem responde pela conta entra numa sessão de escopo reduzido —
+       alcança duas rotas, ver a situação e assinar, e mais nada (a recusa é no
+       `authMiddleware`, antes de qualquer regra de permissão). O painel não é
+       montado: a pessoa cai na parede de reativação.
+
+       Quem NÃO responde pela conta continua recebendo a recusa. Não é
+       arbitrário: a parede existe para quem pode pagar, e um corretor preso
+       nela sem poder fazer nada seria pior que a mensagem clara. */
     if (!usuario.tenant?.ativo) {
+      if (usuario.cargo?.verConfiguracoes) {
+        return res.json(montarSessao(usuario, { escopo: ESCOPO_REATIVACAO }));
+      }
       return res.status(403).json({
         error:
           "O acesso desta imobiliária está suspenso porque o plano venceu. " +
-          "Seus dados continuam guardados: assine um plano para recuperar o ambiente, ou responda ao e-mail que enviamos.",
+          "Fale com quem responde pela conta: é preciso assinar um plano para recuperar o ambiente.",
         code: "TENANT_SUSPENSO",
       });
     }

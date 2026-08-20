@@ -165,7 +165,16 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
     };
   }, [passo, plano, periodo, precosVivos]);
 
-  if (!situacao?.emTrial) return null;
+  /* O que sobra DEPOIS do vencimento. Vem do servidor, da mesma constante que
+     a faxina usa para apagar — cravar o número aqui seria a forma mais fácil de
+     prometer trinta dias na tela e remover em vinte. */
+  const graca = situacao?.graca || null;
+
+  /* `emTrial` sozinho escondia o selo justamente de quem mais precisa dele: o
+     cliente que PAGAVA e cuja cobrança falhou nunca teve `emTrial`, então a
+     conta vencia, entrava na contagem para remoção, e o painel não dizia nada.
+     A janela de graça é a mesma para os dois, e o aviso também. */
+  if (!situacao?.emTrial && !graca?.venceu) return null;
 
   /* Com o Stripe ligado, só oferecemos plano que tem preço lá — oferecer um
      plano sem preço daria 503 na hora de cobrar, depois de a pessoa já ter
@@ -208,7 +217,14 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
     inv.vitrinePersonalizada ? "a vitrine que você montou" : null,
   ].filter(Boolean);
 
-  const rotulo = restante.semPrazo
+  /* Vencido, a pergunta que a pessoa tem deixa de ser "quanto falta para
+     vencer" e passa a ser "quanto tempo tenho para não perder tudo". O rótulo
+     responde a essa, que é a única que ainda importa. */
+  const rotulo = graca?.venceu
+    ? graca.diasAteRemocao === 0
+      ? "Último dia dos seus dados"
+      : plural(graca.diasAteRemocao, "dia até apagar", "dias até apagar")
+    : restante.semPrazo
     ? "Você está em teste"
     : restante.expirado
       ? "Teste expirado"
@@ -271,9 +287,13 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
 
       <button
         type="button"
-        className={`tv-botao${restante.expirado ? " is-expirado" : ""}`}
+        className={`tv-botao${restante.expirado || graca?.venceu ? " is-expirado" : ""}`}
         onClick={() => setAberto(true)}
-        title="Assinar a Omnimob"
+        title={
+          graca?.venceu
+            ? `O plano venceu. Seus dados ficam guardados até ${new Date(graca.removidoEm).toLocaleDateString("pt-BR")} — assine para recuperar o ambiente.`
+            : "Assinar a Omnimob"
+        }
       >
         <span className="tv-ponto" aria-hidden="true" />
         <span className="tv-rotulo">

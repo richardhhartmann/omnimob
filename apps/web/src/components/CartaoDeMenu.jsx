@@ -44,27 +44,3 @@ export function CartaoDeMenu({ icon, title, desc, accent, onClick, tourId }) {
     </button>
   );
 }
-
-/* O caminho de volta ao índice. Também repetido: Relatórios tinha o seu, e
-   Configurações precisaria de outro igual. */
-export function VoltarAoIndice({ onClick, rotulo, titulo }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
-      <button
-        type="button"
-        onClick={onClick}
-        className="ui-pilula"
-        style={{
-          width: "auto", padding: "7px 13px", borderRadius: "999px", cursor: "pointer",
-          display: "inline-flex", alignItems: "center", gap: "7px", fontSize: "12.5px",
-        }}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-        {rotulo}
-      </button>
-      <h2 style={{ margin: 0, fontSize: "21px", fontWeight: 700 }}>{titulo}</h2>
-    </div>
-  );
-}
