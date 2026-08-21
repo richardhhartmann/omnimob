@@ -6,6 +6,11 @@ import { requireTenant, requireTenantMesmoSuspenso } from "../middlewares/tenant
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
 import {
   criarAssinatura,
+  criarAssinaturaPix,
+  criarAssinaturaBoleto,
+  meiosDisponiveis,
+  marcaDaConta,
+  cobrancaEmAberto,
   precosDosPlanos,
   agendarCancelamentoDoSlug,
   normalizarPeriodo,
@@ -24,6 +29,8 @@ import {
   emailPesquisaTrial,
 } from "../services/emailTemplates.js";
 import { montarRelatorioMensal, mesFechadoAnterior } from "../services/relatorioService.js";
+import { montarPainelGestor } from "../services/painelGestor.js";
+import { normalizarAtalhos } from "../services/atalhos.js";
 import {
   enderecoDaVitrine,
   cadastrarDominio,
@@ -333,6 +340,70 @@ tenantRouter.delete(
   },
 );
 
+/* ── Atalhos padrão da imobiliária ───────────────────────────────────────────
+   O administrador define a convenção da casa; cada pessoa ainda pode discordar
+   dela em `PUT /auth/meus-atalhos`. `verConfiguracoes` porque é uma decisão que
+   vale para todo mundo que entra no painel. */
+tenantRouter.put(
+  "/me/atalhos",
+  requireAuth,
+  requireTenant,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    try {
+      const dados = {};
+
+      /* As duas coisas viajam na mesma rota, e cada uma é opcional: a tela do
+         interruptor manda só `ativos`, e o editor manda só o mapa. Um PUT que
+         exigisse as duas faria cada tela apagar o que a outra acabou de gravar. */
+      if (req.body?.atalhos !== undefined) {
+        const atalhos = normalizarAtalhos(req.body.atalhos);
+        if (atalhos === null) return res.status(400).json({ error: "Atalhos inválidos." });
+        dados.atalhos = atalhos;
+      }
+      if (req.body?.ativos !== undefined) {
+        dados.atalhosAtivos = Boolean(req.body.ativos);
+      }
+      if (!Object.keys(dados).length) {
+        return res.status(400).json({ error: "Nada a alterar." });
+      }
+
+      const t = await prisma.tenant.update({ where: { id: req.tenant.id }, data: dados });
+      return res.json({ atalhos: t.atalhos, ativos: t.atalhosAtivos });
+    } catch (err) {
+      console.error("[PUT /tenants/me/atalhos]", err);
+      return res.status(500).json({ error: "Erro ao salvar os atalhos." });
+    }
+  },
+);
+
+/* ── Painel do Gestor ────────────────────────────────────────────────────────
+   A tela "/". Faturamento do mês, interessados de hoje, imóvel em destaque e
+   desempenho por corretor — ver `services/painelGestor.js`.
+
+   `verPainelGestor`, e não `acessarPainel`: é o único lugar do produto que
+   mostra quanto entrou e quanto cada pessoa da equipe fechou, pelo nome. Um
+   corretor precisa do painel para trabalhar; não precisa do faturamento da
+   casa nem da comissão do colega.
+
+   Sem trava de PLANO: gerir a própria imobiliária não é recurso premium, e os
+   números saem de dado que o Básico já produz. O que a tela faz com plano é
+   OUTRA coisa — ela esconde os blocos de canais que o Básico não tem. */
+tenantRouter.get(
+  "/me/painel-gestor",
+  requireAuth,
+  requireTenant,
+  requirePermissao("verPainelGestor"),
+  async (req, res) => {
+    try {
+      return res.json(await montarPainelGestor(req.tenant.id));
+    } catch (err) {
+      console.error("[GET /tenants/me/painel-gestor]", err);
+      return res.status(500).json({ error: "Erro ao montar o painel." });
+    }
+  },
+);
+
 /* ── Relatório mensal (Profissional+) ────────────────────────────────────────
    Duas rotas para o mesmo relatório: uma MOSTRA na tela, outra MANDA por
    e-mail. A separação existe porque o e-mail chega uma vez por mês e some na
@@ -341,8 +412,17 @@ tenantRouter.delete(
    relatório está errado é depois de ele ter ido para o cliente.
 
    `?ano=&mes=` opcionais: sem eles, vale o último mês FECHADO. O mês corrente
-   dá um número que muda a cada visita e não se compara com nada. */
-const requirePlanoRelatorio = requirePlano(1, "Profissional");
+   dá um número que muda a cada visita e não se compara com nada.
+
+   ── SÓ O ENVIO É PAGO ──
+
+   As duas rotas exigiam Profissional, e não é isso que o produto vende. A
+   tabela de recursos põe "Relatórios e métricas de desempenho" no BÁSICO; a
+   linha do Profissional é "Relatório mensal de desempenho POR E-MAIL".
+
+   Ver na tela é do Básico. Mandar por e-mail é que sobe de plano — e o custo
+   real está no envio, não na consulta. */
+const requirePlanoEnvioRelatorio = requirePlano(1, "Profissional");
 
 function periodoDaQuery(query) {
   const ano = Number(query.ano);
@@ -356,7 +436,6 @@ tenantRouter.get(
   "/me/relatorio-mensal",
   requireAuth,
   requireTenant,
-  requirePlanoRelatorio,
   requirePermissao("verRelatorios"),
   async (req, res) => {
     try {
@@ -373,7 +452,7 @@ tenantRouter.post(
   "/me/relatorio-mensal/enviar",
   requireAuth,
   requireTenant,
-  requirePlanoRelatorio,
+  requirePlanoEnvioRelatorio,
   requirePermissao("verRelatorios"),
   async (req, res) => {
     try {
@@ -412,6 +491,8 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
       select: {
         id: true, name: true, plano: true, statusPagamento: true, valorMensal: true,
         proximoVencimento: true, createdAt: true, showcaseConfig: true,
+        // Para pré-preencher o pagador do boleto, que exige endereço completo.
+        email: true, cnpj: true, cep: true, endereco: true, cidade: true, estado: true,
         migracaoIntencao: true, migracaoResolvidaEm: true, trialEstendidoEm: true,
       },
     });
@@ -441,6 +522,13 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
     // Quais planos dá para assinar agora, com o preço que está valendo no
     // provedor. Sem isso a tela ofereceria plano que a cobrança recusa.
     const precos = await precosDosPlanos();
+    /* O que a CONTA consegue cobrar. Vai junto porque a tela precisa decidir
+       quais meios oferecer — ela chegou a mostrar Pix num ambiente onde ele
+       nunca funcionaria, e o cliente só descobria no clique. */
+    const meios = await meiosDisponiveis();
+    const contaStripe = await marcaDaConta();
+    // "Gerei um boleto — ele foi pago?" O painel não sabia responder.
+    const cobranca = await cobrancaEmAberto(tenant.id);
 
     const expiraEm = tenant.proximoVencimento;
     const diasRestantes = expiraEm
@@ -481,6 +569,20 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
          entre esta data e `expiraEm`. */
       criadoEm: tenant.createdAt,
       precos,
+      meios,
+      contaStripe,
+      cobranca,
+      /* Quem paga já se cadastrou. Pedir de novo endereço e documento na hora
+         de fechar o plano é a forma mais fácil de perder alguém no último
+         passo — e a informação está a uma coluna de distância. */
+      email: tenant.email || null,
+      documento: tenant.cnpj || null,
+      endereco: {
+        linha: tenant.endereco || "",
+        cidade: tenant.cidade || "",
+        estado: tenant.estado || "",
+        cep: tenant.cep || "",
+      },
       inventario: {
         imoveis, clientes, usuarios, leads, fotos,
         vitrinePersonalizada: Boolean(tenant.showcaseConfig),
@@ -716,6 +818,63 @@ tenantRouter.post(
     } catch (err) {
       console.error("[POST /tenants/me/plano]", err);
       return res.status(500).json({ error: "Erro ao trocar o plano." });
+    }
+  },
+);
+
+/* ─── Assinar por Pix ────────────────────────────────────────────────────────
+   Irmã de `/me/assinar`, e separada dela de propósito: o cartão resolve tudo
+   numa requisição, e o Pix não pode — ele devolve um segredo para a tela
+   terminar o trabalho com o cliente no app do banco.
+
+   Enfiar os dois na mesma rota daria uma resposta que às vezes é "assinado" e
+   às vezes é "continue aí"; quem chama teria de adivinhar qual. Duas rotas
+   dizem o que cada uma faz.
+
+   Aqui NÃO se toca no tenant. Quem vira a chave é o webhook `invoice.paid`,
+   depois de o dinheiro entrar — marcar EM_DIA agora liberaria o plano a quem
+   só abriu o app do banco e desistiu. */
+tenantRouter.post(
+  "/me/assinar-assincrono",
+  requireAuthOuReativacao,
+  requireTenantMesmoSuspenso,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    const { plano, periodo, meio, tokenPagamento } = req.body || {};
+    if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
+      return res.status(400).json({ error: "Plano inválido." });
+    }
+    if (!["pix", "boleto"].includes(meio)) {
+      return res.status(400).json({ error: "Meio de pagamento inválido." });
+    }
+    /* Recusa aqui, e não no provedor. Sem esta guarda a tela poderia pedir um
+       meio que a conta não tem e o cliente receberia o erro cru da Stripe —
+       que fala de capabilities e não quer dizer nada para quem só quer pagar. */
+    const disponiveis = await meiosDisponiveis();
+    if (!disponiveis[meio]) {
+      return res.status(503).json({
+        error: "Este meio de pagamento não está disponível nesta conta.",
+        code: "MEIO_INDISPONIVEL",
+      });
+    }
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.tenant.id } });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      const r = meio === "boleto"
+        ? await criarAssinaturaBoleto({ tenant, plano, periodo, tokenPagamento })
+        : await criarAssinaturaPix({ tenant, plano, periodo });
+      return res.json(r);
+    } catch (err) {
+      if (
+        err.code === "PROVEDOR_NAO_CONFIGURADO" ||
+        err.code === "PLANO_SOB_CONSULTA" ||
+        err.code === "PERIODO_INDISPONIVEL"
+      ) {
+        return res.status(503).json({ error: err.message, code: err.code });
+      }
+      console.error("[POST /tenants/me/assinar-assincrono]", err);
+      return res.status(500).json({ error: "Erro ao preparar o pagamento." });
     }
   },
 );

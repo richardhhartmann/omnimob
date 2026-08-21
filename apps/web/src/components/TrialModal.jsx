@@ -830,7 +830,7 @@ const CSS = `${MODAL_CSS}
 .tm-endereco {
   display: grid; gap: 5px; margin-top: 1px;
   padding: 9px 12px; border-radius: 10px;
-  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--line);
   transition: background 0.22s ease, border-color 0.22s ease;
 }
 .tm-endereco__linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -853,7 +853,7 @@ const CSS = `${MODAL_CSS}
    divisão, as duas frases se lêem como uma só e a segunda parece contradizer
    a primeira. */
 .tm-endereco__bonus {
-  margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--linha-08, rgba(255,255,255,0.08));
   font-size: 11px; line-height: 1.5; color: var(--subtle);
 }
 
@@ -1044,7 +1044,7 @@ const CSS = `${MODAL_CSS}
   .tm-opcao__acao {
     margin-top: 4px; justify-self: start;
     padding: 9px 8px 9px 16px; border-radius: 999px;
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10);
+    background: var(--sup-05, rgba(255,255,255,0.05)); border: 1px solid var(--linha-10, rgba(255,255,255,0.10));
     transition: background 0.18s ease, border-color 0.18s ease;
   }
   .tm-opcao:hover .tm-opcao__acao,
@@ -1055,7 +1055,7 @@ const CSS = `${MODAL_CSS}
   .tm-opcao__seta {
     width: 22px; height: 22px; border-radius: 999px;
     display: grid; place-items: center; font-size: 13px; line-height: 1;
-    background: rgba(255,255,255,0.10); color: var(--strong);
+    background: var(--sup-10, rgba(255,255,255,0.10)); color: var(--strong);
   }
   .tm-opcao:hover .tm-opcao__seta { background: rgba(212,175,55,0.22); color: var(--gold); }
 

@@ -161,7 +161,7 @@ const CSS = `${MODAL_CSS}
 
 .tc-girando {
   width: 34px; height: 34px; border-radius: 999px; margin-bottom: 4px;
-  border: 2px solid rgba(255,255,255,0.14); border-top-color: var(--accent-soft);
+  border: 2px solid var(--linha-14, rgba(255,255,255,0.14)); border-top-color: var(--accent-soft);
   animation: tcGira 0.8s linear infinite;
 }
 @keyframes tcGira { to { transform: rotate(360deg); } }

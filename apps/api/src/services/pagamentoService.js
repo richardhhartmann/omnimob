@@ -302,6 +302,19 @@ export async function criarAssinatura({ tenant, plano, periodo, tokenPagamento }
     throw err;
   }
 
+/* ── A CHAVE DE IDEMPOTÊNCIA PRECISA INCLUIR O MÉTODO DE PAGAMENTO ──────────
+
+   Ela era só `cliente-<tenant>`, e o Stripe recusa reutilizar uma chave com
+   parâmetros diferentes. Como o corpo carrega `payment_method`, que muda a cada
+   tentativa, a SEGUNDA tentativa morria com `idempotency_error` — e o texto do
+   erro fala de chaves, não de cartão, então quem tentasse outro cartão depois
+   de uma recusa levava uma parede sem relação aparente com o que fez.
+
+   Incluindo o método, a chave passa a identificar A TENTATIVA. A proteção que
+   ela existia para dar continua de pé: clique duplo e retentativa de rede
+   mandam o MESMO método, caem na mesma chave, e o Stripe devolve o mesmo
+   cliente em vez de criar dois. Tentativa nova, com outro cartão, é outro
+   pedido — e deve ser tratada como tal. */
   // 1. Cliente no Stripe, já com o método de pagamento como padrão das faturas.
   const cliente = await stripe("/customers", {
     dados: {
@@ -311,7 +324,7 @@ export async function criarAssinatura({ tenant, plano, periodo, tokenPagamento }
       invoice_settings: { default_payment_method: tokenPagamento },
       metadata: { tenantId: tenant.id, slug: tenant.slug },
     },
-    idempotencia: `cliente-${tenant.id}`,
+    idempotencia: `cliente-${tenant.id}-${tokenPagamento}`,
   });
 
   // 2. Assinatura. `expand` traz o PaymentIntent da primeira fatura, que é onde
@@ -368,6 +381,355 @@ export async function criarAssinatura({ tenant, plano, periodo, tokenPagamento }
         assinatura.items?.data?.[0]?.current_period_end ?? assinatura.current_period_end;
       return fim ? new Date(fim * 1000) : null;
     })(),
+  };
+}
+
+/* O id do PaymentIntent da fatura, nas DUAS formas.
+
+   Nas versões recentes da API (`2026-07-29.dahlia` em diante) o
+   `latest_invoice.payment_intent` deixou de existir: ele agora mora em
+   `latest_invoice.payments[].payment.payment_intent`. A chave antiga volta
+   `undefined`, sem erro nenhum.
+
+   Foi assim que o boleto passou a nascer morto: sem o id, a confirmação era
+   simplesmente pulada, o PaymentIntent ficava em `requires_confirmation`, e
+   nenhuma guia era gerada — enquanto a tela anunciava "boleto gerado". É a
+   mesma armadilha que já custou o `current_period_end` neste arquivo. */
+function idDoIntent(fatura) {
+  return (
+    fatura?.payments?.data?.[0]?.payment?.payment_intent ||
+    fatura?.payment_intent?.id ||
+    fatura?.payment_intent ||
+    null
+  );
+}
+
+/* ─── A cobrança em aberto ───────────────────────────────────────────────────
+
+   Responde uma pergunta que o painel não sabia responder: "gerei um boleto —
+   ele foi pago?".
+
+   Ela existe porque o boleto separa em dois o que o cartão faz num passo só.
+   Com cartão, ou passou ou não passou, e a resposta da requisição já conta a
+   história. Com boleto a assinatura fica `incomplete` até o dinheiro entrar, e
+   nesse intervalo — que pode ser dias — o produto não tinha nada a mostrar. A
+   pessoa gerava a guia, fechava a tela, e não havia mais onde reencontrá-la.
+
+   Não guardamos o id da assinatura em lugar nenhum, então achamos pela busca do
+   provedor, por `metadata.tenantId` — que já gravamos desde sempre. Uma coluna
+   nova seria mais rápida, e também mais uma coisa para sair de sincronia com a
+   verdade, que mora lá.
+   ────────────────────────────────────────────────────────────────────────── */
+export async function cobrancaEmAberto(tenantId) {
+  if (!pagamentoConfigurado() || !tenantId) return null;
+  try {
+    const busca = await stripe(
+      `/subscriptions/search?limit=1&query=${encodeURIComponent(`metadata['tenantId']:'${tenantId}'`)}&expand[]=data.latest_invoice.payments`,
+      { method: "GET" },
+    );
+    const assinatura = busca?.data?.[0];
+    if (!assinatura) return null;
+
+    /* Só o id vem no `expand`; os detalhes da guia exigem buscar o intent. */
+    const intentId = idDoIntent(assinatura.latest_invoice);
+    const intent = intentId ? await stripe(`/payment_intents/${intentId}`, { method: "GET" }) : null;
+    const guia = intent?.next_action?.boleto_display_details || null;
+
+    /* `incomplete` é o estado que interessa: existe uma cobrança criada e não
+       liquidada. `active` significa pago, e aí não há nada em aberto para
+       avisar. `incomplete_expired` é o boleto que venceu sem pagamento. */
+    const situacao =
+      assinatura.status === "active" || assinatura.status === "trialing" ? "paga"
+      : assinatura.status === "incomplete_expired" ? "vencida"
+      : intent?.status === "processing" || intent?.status === "requires_action" ? "aberta"
+      : assinatura.status === "incomplete" ? "aberta"
+      : null;
+
+    if (!situacao || situacao === "paga") return null;
+
+    return {
+      meio: assinatura.metadata?.meio || intent?.payment_method_types?.[0] || null,
+      situacao,
+      plano: assinatura.metadata?.plano || null,
+      valor: (assinatura.items?.data?.[0]?.price?.unit_amount ?? 0) / 100 || null,
+      guia: guia
+        ? {
+            url: guia.hosted_voucher_url || null,
+            pdf: guia.pdf || null,
+            numero: guia.number || null,
+            venceEm: guia.expires_at ? new Date(guia.expires_at * 1000) : null,
+          }
+        : null,
+    };
+  } catch {
+    /* Falha aqui não pode derrubar a tela do painel: é informação ACESSÓRIA
+       sobre uma cobrança, não o que decide se a pessoa entra. */
+    return null;
+  }
+}
+
+/* ─── O que a CONTA consegue cobrar ──────────────────────────────────────────
+
+   Não é o que o produto suporta — é o que a Stripe liberou para esta conta.
+   `available: false` não significa "desligado, é só clicar": significa que a
+   capacidade não foi concedida.
+
+   Existe porque a tela ofereceu Pix num ambiente onde ele nunca funcionaria, e
+   o cliente só descobria no clique. Oferecer um meio de pagamento que falha é
+   pior que não oferecer.
+
+   Em cache: isto muda quando alguém fala com o suporte da Stripe, não a cada
+   requisição, e é consultado na montagem de uma tela que já é pesada. */
+let meiosEmCache = null;
+let meiosLidosEm = 0;
+const VALIDADE_DOS_MEIOS_MS = 10 * 60 * 1000;
+
+/* A MARCA da conta, embutida nas chaves do Stripe.
+
+   Serve para uma coisa só, e ela é importante: a chave publicável mora no
+   `.env` do web e o servidor nunca a vê. Se ela for de OUTRA conta — duas
+   sandboxes, um copiar-colar trocado —, tudo parece certo até o último passo:
+   o servidor cria o PaymentIntent na conta dele, o navegador tenta confirmar na
+   conta da chave publicável, e o Stripe responde 404 porque ali aquele
+   PaymentIntent não existe.
+
+   O erro é mudo e caro: aparece só na hora de pagar, num stack trace de dentro
+   do Stripe.js, sem dizer que o problema é de configuração. Publicando a marca,
+   a tela compara e avisa antes. */
+export async function marcaDaConta() {
+  if (!pagamentoConfigurado()) return null;
+  try {
+    const conta = await stripe("/account", { method: "GET" });
+    return String(conta?.id || "").replace(/^acct_1/, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function meiosDisponiveis() {
+  if (!pagamentoConfigurado()) return { cartao: false, pix: false, boleto: false };
+  if (meiosEmCache && Date.now() - meiosLidosEm < VALIDADE_DOS_MEIOS_MS) return meiosEmCache;
+
+  try {
+    const r = await stripe("/payment_method_configurations", { method: "GET" });
+    const c = r?.data?.[0] || {};
+    const ligado = (m) => Boolean(c[m]?.available);
+    meiosEmCache = { cartao: ligado("card"), pix: ligado("pix"), boleto: ligado("boleto") };
+    meiosLidosEm = Date.now();
+  } catch {
+    /* Falha de rede não pode esconder o cartão, que é o caminho principal.
+       Assume o mínimo que sempre existiu. */
+    meiosEmCache = { cartao: true, pix: false, boleto: false };
+    meiosLidosEm = Date.now();
+  }
+  return meiosEmCache;
+}
+
+/* ─── Pix Automático ─────────────────────────────────────────────────────────
+
+   ⚠️  NÃO FUNCIONA EM CONTA STRIPE BRASILEIRA, e não é questão de esperar.
+
+   A documentação do Pix Automático descreve mandato, notificação prévia e
+   cobrança recorrente — tudo real, e tudo indisponível para quem tem a conta no
+   Brasil. O artigo de suporte da Stripe é explícito: conta brasileira aceita
+   "apenas pagamentos únicos com Pix", e "o Pix Automático (pagamentos
+   recorrentes) não está disponível".
+
+   O código fica porque está correto para as contas que TÊM a capacidade, e
+   porque a alternativa — apagar e reescrever quando liberar — perde o trabalho
+   de ler a especificação. Mas quem decide se ele aparece na tela é
+   `meiosDisponiveis()`, não a esperança.
+
+   Para conta brasileira, os caminhos que existem hoje são: BOLETO, que suporta
+   recorrência de verdade com o Stripe Billing, e PIX AVULSO, que serviria para
+   o plano anual cobrado por fatura. Os dois exigem elegibilidade (60 dias
+   processando + pedido ao suporte).
+   ── COMO ELE FUNCIONA, PARA QUEM PODE USAR ──
+
+   Assinatura recorrente paga por Pix. O cliente autoriza um MANDATO no app do
+   banco dele uma vez, e as cobranças seguintes saem sozinhas — não é o Pix
+   avulso em que alguém precisa lembrar de pagar todo mês.
+
+   ── O QUE MUDA EM RELAÇÃO AO CARTÃO ──
+
+   O cartão é síncrono: o navegador manda o método de pagamento, o servidor cria
+   a assinatura, e ou passou ou não passou. O Pix é o contrário — a assinatura
+   nasce `incomplete`, o cliente autoriza no banco, e a confirmação chega DEPOIS,
+   por webhook. Por isso esta função devolve um `clientSecret` em vez de um
+   desfecho: quem termina o trabalho é a tela, e quem avisa que deu certo é o
+   `invoice.paid` (que já existe e já ativa o tenant).
+
+   ── OS TRÊS DIAS ──
+
+   O banco do cliente é obrigado a avisá-lo 3 dias antes de cada débito. Então a
+   cobrança cai no ciclo + 3 dias, e nesse intervalo o pagamento fica em
+   `processing`. Quem cortar acesso por vencimento precisa saber disso.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Teto que o cliente autoriza por ciclo. O padrão do Stripe é 400 BRL, e um
+   Premium anual passa disso — a cobrança seguinte falharia por estourar o
+   mandato, meses depois, sem ninguém relacionar as duas coisas.
+
+   A folga de 30% existe porque o mandato é assinado UMA VEZ e vale para sempre:
+   reajuste de preço, IOF e imposto entram por dentro dele. Pedir um teto justo
+   significaria trazer o cliente de volta ao app do banco a cada centavo a mais. */
+const FOLGA_DO_MANDATO = 1.3;
+
+/* Pix e boleto são o MESMO fluxo com dois campos diferentes: assinatura nasce
+   pendente, o cliente conclui por fora, o webhook confirma. Duas funções quase
+   idênticas divergiriam no primeiro ajuste — e o ajuste sempre chega. */
+export async function criarAssinaturaBoleto({ tenant, plano, periodo, tokenPagamento }) {
+  return criarAssinaturaAssincrona({ tenant, plano, periodo, meio: "boleto", tokenPagamento });
+}
+
+export async function criarAssinaturaPix({ tenant, plano, periodo }) {
+  return criarAssinaturaAssincrona({ tenant, plano, periodo, meio: "pix" });
+}
+
+async function criarAssinaturaAssincrona({ tenant, plano, periodo, meio, tokenPagamento }) {
+  if (!pagamentoConfigurado()) {
+    const err = new Error(
+      "Cobrança automática ainda não está conectada. Fale com o time para fechar o plano.",
+    );
+    err.code = "PROVEDOR_NAO_CONFIGURADO";
+    throw err;
+  }
+
+  const periodoEscolhido = normalizarPeriodo(periodo);
+  const preco = idDoPreco(plano, periodoEscolhido);
+  if (!preco) {
+    const temMensal = Boolean(idDoPreco(plano, "mensal"));
+    const err = new Error(
+      temMensal && periodoEscolhido === "anual"
+        ? "A cobrança anual deste plano ainda não está disponível. Escolha mensal ou fale com o time."
+        : "Este plano é fechado sob consulta. Fale com o time.",
+    );
+    err.code = temMensal && periodoEscolhido === "anual" ? "PERIODO_INDISPONIVEL" : "PLANO_SOB_CONSULTA";
+    throw err;
+  }
+
+  // Quanto o Stripe vai cobrar, para dimensionar o teto do mandato.
+  const objetoPreco = await stripe(`/prices/${preco}`, { method: "GET" });
+  const centavos = Number(objetoPreco?.unit_amount || 0);
+  if (!centavos) {
+    const err = new Error("Não consegui ler o valor deste plano no provedor.");
+    err.code = "PROVEDOR_FALHOU";
+    throw err;
+  }
+
+  const cliente = await stripe("/customers", {
+    dados: {
+      name: tenant.name,
+      email: tenant.email || undefined,
+      /* O método já vem pronto do navegador — o Payment Element coletou o
+         documento e o endereço que o boleto exige, e nós não vemos nem
+         guardamos nada disso. */
+      ...(tokenPagamento ? { payment_method: tokenPagamento } : {}),
+      metadata: { tenantId: tenant.id, slug: tenant.slug },
+    },
+    idempotencia: `cliente-assinc-${tenant.id}-${tokenPagamento || "sem-metodo"}`,
+  });
+
+  const assinatura = await stripe("/subscriptions", {
+    dados: {
+      customer: cliente.id,
+      items: [{ price: preco }],
+      /* `default_incomplete`, e não o `error_if_incomplete` do cartão: aqui
+         nascer pendente é o caminho normal, não uma falha. A assinatura espera
+         o cliente autorizar o mandato no banco. */
+      payment_behavior: "default_incomplete",
+      payment_settings: {
+        save_default_payment_method: "on_subscription",
+        payment_method_types: [meio],
+        payment_method_options: meio !== "pix" ? undefined : {
+          pix: {
+            mandate_options: {
+              amount: Math.ceil(centavos * FOLGA_DO_MANDATO),
+              /* Só `amount`. `amount_type` e `reference` existem na
+                 documentação, mas numa versão da API mais nova que a desta
+                 conta — mandá-los devolve "Received unknown parameters".
+                 `amount_type` cai no padrão `maximum`, que é o que queremos;
+                 o `reference` (nome exibido no app do banco) cai no nome
+                 comercial da conta, e é o que se perde por ora. */
+              /* Deixamos o `payment_schedule` no padrão (mensal) mesmo no plano
+                 anual. O campo diz com que FREQUÊNCIA se pode cobrar, não com
+                 que frequência se cobra — mensal permite cobrar uma vez ao ano;
+                 o inverso é que falharia. */
+            },
+          },
+        },
+      },
+      ...(tokenPagamento ? { default_payment_method: tokenPagamento } : {}),
+      expand: ["latest_invoice.confirmation_secret", "latest_invoice.payments"],
+      metadata: { tenantId: tenant.id, slug: tenant.slug, plano, periodo: periodoEscolhido, meio },
+    },
+    /* Mesmo motivo da chave do cliente: o corpo leva `default_payment_method`.
+       Sem o método aqui, trocar de cartão depois de uma recusa reencontrava a
+       chave antiga com corpo novo e o pedido morria. */
+    idempotencia: `assinatura-${meio}-${tenant.id}-${plano}-${periodoEscolhido}-${tokenPagamento || "sem-metodo"}`,
+  });
+
+  const segredo = assinatura?.latest_invoice?.confirmation_secret?.client_secret;
+
+  /* ── Confirmar do lado do SERVIDOR ────────────────────────────────────────
+     Com o método já em mãos, confirmar aqui é melhor que devolver um segredo
+     para a tela confirmar de novo: o boleto nasce nesta chamada e volta com a
+     URL da guia, então a tela recebe algo para MOSTRAR em vez de mais um passo
+     para executar.
+
+     E resolve o problema que originou tudo isto: o Payment Element já é o
+     seletor de meio de pagamento. Um segundo seletor nosso em cima dele
+     perguntava duas vezes a mesma coisa. */
+  let guia = null;
+  const intentId = idDoIntent(assinatura?.latest_invoice);
+  if (tokenPagamento && intentId) {
+    /* `receipt_email` decide PARA ONDE o Stripe manda as instruções do boleto
+       (quando o envio está ligado no painel dele). Sem ele, o destino é o
+       e-mail que a pessoa digitou no formulário de pagamento — que costuma ser
+       o certo, mas é o que ela digitou, não o que a imobiliária cadastrou.
+
+       Mandamos o do CADASTRO: a cobrança é da empresa, e quem paga hoje pode
+       não ser quem paga no mês que vem. Quem digitou o próprio e-mail continua
+       recebendo pelo recibo do método de pagamento. */
+    const intent = await stripe(`/payment_intents/${intentId}/confirm`, {
+      dados: {
+        payment_method: tokenPagamento,
+        ...(tenant.email ? { receipt_email: tenant.email } : {}),
+      },
+    });
+    const detalhes = intent?.next_action?.boleto_display_details;
+    if (detalhes) {
+      guia = {
+        url: detalhes.hosted_voucher_url || null,
+        pdf: detalhes.pdf || null,
+        /* A linha digitável é o que a maioria usa: copia e cola no app do
+           banco. O PDF é para quem imprime ou repassa ao financeiro — comum
+           em imobiliária, e por isso os dois vão. */
+        numero: detalhes.number || null,
+        venceEm: detalhes.expires_at ? new Date(detalhes.expires_at * 1000) : null,
+      };
+    }
+  }
+
+  if (!segredo && !guia) {
+    const err = new Error(`O provedor não devolveu os dados para concluir o ${meio}.`);
+    err.code = "PROVEDOR_FALHOU";
+    throw err;
+  }
+
+  const valorCobrado = centavos / 100;
+  return {
+    meio,
+    guia,
+    clientSecret: segredo,
+    assinaturaId: assinatura.id,
+    clienteId: cliente.id,
+    periodo: periodoEscolhido,
+    valorCobrado,
+    valorMensal:
+      periodoEscolhido === "anual"
+        ? Math.round((valorCobrado / 12) * 100) / 100
+        : valorCobrado,
   };
 }
 

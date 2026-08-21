@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { canaisAutomaticos } from "../services/publicacaoAutomatica.js";
+import { dispararPublicacaoAutomatica } from "../services/disparoAutomatico.js";
 import prismaPkg from "@prisma/client";
 import { prisma } from "../db.js";
+import { opcoesDeRemocao, removerDosCanais } from "../services/remocaoDeCanais.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
@@ -298,6 +301,59 @@ async function validarAtributos(atributosIds, tipoImovelId, tenantId) {
 
 // ─── Criar ────────────────────────────────────────────────────────────────────
 
+/* ─── Cadastro concluído: publica o que for automático ───────────────────────
+
+   Existe porque o painel cria o imóvel e sobe as fotos DEPOIS, uma a uma. O
+   disparo na criação publicava um anúncio sem imagem — o Facebook postava só
+   texto e o Instagram recusava. Esta rota é o sinal de que o cadastro terminou
+   de verdade.
+
+   IDEMPOTENTE por canal: só publica onde ainda não há registro. Sem isso, quem
+   editasse o imóvel e voltasse ao último passo ganharia um segundo anúncio do
+   mesmo imóvel — no Mercado Livre isso custa dinheiro, e no Instagram não dá
+   para apagar. */
+propertyRouter.post("/:id/publicar-automatico", requireImoveis, async (req, res) => {
+  try {
+    const automaticos = canaisAutomaticos(req.tenant);
+    if (!Object.values(automaticos).some(Boolean)) return res.json({ publicado: {} });
+
+    const imovel = await prisma.property.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+      include: { images: { orderBy: { position: "asc" } } },
+    });
+    if (!imovel) return res.status(404).json({ error: "Imóvel não encontrado." });
+
+    /* O que já saiu não sai de novo. Conta PUBLISHED apenas: uma tentativa que
+       falhou deve poder ser refeita. */
+    const jaPublicado = await prisma.propertyPublication.findMany({
+      where: { propertyId: imovel.id, tenantId: req.tenant.id, status: "PUBLISHED" },
+      select: { channel: true },
+    });
+    const feitos = new Set(jaPublicado.map((p) => p.channel));
+    const pendentes = {
+      portais: automaticos.portais,
+      mercadoLivre: automaticos.mercadoLivre && !feitos.has("MERCADO_LIVRE"),
+      facebook: automaticos.facebook && !feitos.has("FACEBOOK"),
+      instagram: automaticos.instagram && !feitos.has("INSTAGRAM"),
+    };
+
+    if (!Object.values(pendentes).some(Boolean)) return res.json({ publicado: {} });
+
+    /* Aqui a espera É devida, ao contrário do disparo na criação: a tela está
+       no último passo e vai MOSTRAR o resultado. Devolver antes deixaria os
+       cards dizendo "pronto" sobre algo que ainda não saiu. */
+    await dispararPublicacaoAutomatica({ tenant: req.tenant, imovel, canais: pendentes });
+
+    const depois = await prisma.propertyPublication.findMany({
+      where: { propertyId: imovel.id, tenantId: req.tenant.id },
+      orderBy: { createdAt: "desc" },
+    });
+    return res.json({ publicado: pendentes, publicacoes: depois });
+  } catch (erro) {
+    console.error("[POST /properties/:id/publicar-automatico]", erro);
+    return res.status(500).json({ error: "Erro ao publicar automaticamente." });
+  }
+});
 propertyRouter.post("/", requireImoveis, async (req, res) => {
   try {
     const parsed = createPropertySchema.safeParse(req.body);
@@ -336,9 +392,23 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
       },
       include: PROPERTY_INCLUDE,
     });
+    /* ── O disparo NÃO acontece aqui, e a razão é uma armadilha real ──────
 
-    // Publicação nas redes acontece SÓ quando o usuário publica de fato
-    // (rota /api/social/publish/*). Não marcamos nada como publicado aqui.
+       O painel cria o imóvel e SÓ DEPOIS sobe as fotos, uma a uma. Disparar
+       na criação publicava um imóvel sem imagem nenhuma: o Facebook postava
+       só texto, e o Instagram — que exige ao menos uma foto — recusava.
+       Aconteceu exatamente assim no primeiro teste.
+
+       Quem chama o disparo é a rota publicar-automatico, depois que as
+       fotos terminam de subir. A exceção é quem já cria COM imagem (ainda
+       ninguém, mas o dia em que a API aceitar isso, funciona sozinho). */
+    if ((property.images?.length || 0) > 0) {
+      const automaticos = canaisAutomaticos(req.tenant);
+      if (Object.values(automaticos).some(Boolean)) {
+        void dispararPublicacaoAutomatica({ tenant: req.tenant, imovel: property, canais: automaticos })
+          .catch((e) => console.error("[automacao] falhou:", e.message));
+      }
+    }
 
     return res.status(201).json(gate360Property(property, req.tenant.plano));
   } catch (err) {
@@ -419,6 +489,28 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
 
 // ─── Deletar ──────────────────────────────────────────────────────────────────
 
+/* Antes de apagar, a tela pergunta o que fazer com os anúncios que este imóvel
+   tem espalhados por aí. Esta rota diz o que existe e o que dá para fazer com
+   cada um — ver `services/remocaoDeCanais.js`. */
+propertyRouter.get("/:id/canais-para-remover", requireImoveis, async (req, res) => {
+  try {
+    const existe = await prisma.property.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+      select: { id: true },
+    });
+    if (!existe) {
+      return res.status(404).json({ error: "Imovel nao encontrado para este tenant." });
+    }
+    const opcoes = await opcoesDeRemocao(req.tenant, req.params.id);
+    return res.json({ opcoes });
+  } catch (erro) {
+    console.error("[imoveis] canais-para-remover:", erro);
+    /* Lista vazia, não 500: não saber o que há nos canais não pode IMPEDIR a
+       exclusão do imóvel. A tela cai no aviso genérico e segue. */
+    return res.json({ opcoes: [] });
+  }
+});
+
 propertyRouter.delete("/:id", requireImoveis, async (req, res) => {
   try {
     const current = await prisma.property.findFirst({
@@ -428,9 +520,23 @@ propertyRouter.delete("/:id", requireImoveis, async (req, res) => {
       return res.status(404).json({ error: "Imovel nao encontrado para este tenant." });
     }
 
+    /* A remoção nos canais vem ANTES do delete: as linhas de publicação caem
+       junto com o imóvel (cascade), e é nelas que mora o `externalRef` — sem
+       ele não há como alcançar o anúncio lá fora nunca mais. */
+    const pedidos = String(req.query.canais || "").split(",").filter(Boolean);
+    let canais = [];
+    if (pedidos.length) {
+      canais = await removerDosCanais(req.tenant, req.params.id, pedidos);
+    }
+
     await prisma.property.delete({ where: { id: req.params.id } });
-    return res.status(204).send();
-  } catch {
+
+    /* 200 com o relato, e não 204: falhar em encerrar no Mercado Livre não
+       desfaz a exclusão aqui — mas a pessoa precisa saber que ficou anúncio no
+       ar. Um 204 mudo esconderia exatamente isso. */
+    return res.json({ ok: true, canais });
+  } catch (erro) {
+    console.error("[imoveis] excluir:", erro);
     return res.status(500).json({ error: "Erro ao deletar imovel." });
   }
 });

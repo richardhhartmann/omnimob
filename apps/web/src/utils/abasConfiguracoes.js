@@ -1,10 +1,12 @@
 import {
+  Keyboard,
   IdentificationCard,
   Palette,
   ShareNetwork,
   Database,
   Crown,
 } from "@phosphor-icons/react";
+import { planoLiberaRedes } from "./planos";
 
 /* ────────────────────────────────────────────────────────────────────────────
    As seções de Configurações, num lugar só.
@@ -37,6 +39,13 @@ export const ABAS_CONFIG = [
     desc: "Logotipo, cores da marca e a logo aplicada nas fotos dos imóveis.",
   },
   {
+    key: "atalhos",
+    label: "Atalhos de teclado",
+    cor: "#94a3b8",
+    Icon: Keyboard,
+    desc: "As teclas que valem para a imobiliária inteira. Cada pessoa ainda pode ter as suas.",
+  },
+  {
     key: "redes",
     label: "Redes Sociais",
     cor: "#94a3b8",
@@ -67,3 +76,24 @@ export const ICONES_CONFIG = Object.fromEntries(ABAS_CONFIG.map((a) => [a.key, a
 export const ehAbaDeConfig = (chave) => ABAS_CONFIG.some((a) => a.key === chave);
 
 export const rotuloDaAba = (chave) => ABAS_CONFIG.find((a) => a.key === chave)?.label || "";
+
+/* ── Quais seções esta pessoa, neste plano, deve VER ─────────────────────────
+
+   Uma função, porque duas telas perguntam: os cartões de `/configuracoes` e o
+   submenu da barra lateral. Elas tinham cada uma o seu `filter`, e divergiram
+   na primeira regra nova — a barra continuou oferecendo "Redes sociais" para o
+   plano Básico depois que a página parou de mostrar o cartão. O menu prometia
+   uma seção que a tela não abria.
+
+   Escondido, e não bloqueado: quem vende plano é a tela de planos. Uma seção
+   cheia de cadeados vende pior e frustra mais.
+   ────────────────────────────────────────────────────────────────────────── */
+export function abasVisiveis(cargo, plano, { podeImportar }) {
+  return ABAS_CONFIG.filter((a) => {
+    if (a.key === "dados") return podeImportar(cargo);
+    /* Tudo o que mora em Redes — Facebook, Instagram, Mercado Livre, ponte de
+       WhatsApp, portais — começa no Profissional. */
+    if (a.key === "redes") return planoLiberaRedes(plano);
+    return true;
+  });
+}

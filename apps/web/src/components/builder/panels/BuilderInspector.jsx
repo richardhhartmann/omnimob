@@ -373,7 +373,7 @@ const FONTES_REAIS = {
   social: {
     rotulo: "Perfis conectados",
     onde: "Configurações › Redes Sociais",
-    explica: "Usa o WhatsApp do cadastro e a página do Facebook conectada.",
+    explica: "Usa o WhatsApp do cadastro e as páginas da Meta conectadas.",
   },
 };
 

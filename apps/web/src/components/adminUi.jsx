@@ -95,8 +95,8 @@ export function SearchInput({ value, onChange, placeholder, style }) {
         value={value}
         onChange={onChange}
         style={{
-          width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", color: "inherit",
+          width: "100%", boxSizing: "border-box", background: "var(--sup-04, rgba(255,255,255,0.04))",
+          border: "1px solid var(--linha-10, rgba(255,255,255,0.1))", borderRadius: "10px", color: "inherit",
           padding: "10px 12px 10px 36px", fontSize: "14px", outline: "none",
         }}
       />
@@ -109,7 +109,7 @@ export function StatusPill({ active }) {
   return (
     <span style={{
       fontSize: "11px", fontWeight: "600", padding: "3px 10px", borderRadius: "20px",
-      background: active ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.06)",
+      background: active ? "rgba(16,185,129,0.15)" : "var(--sup-06, rgba(255,255,255,0.06))",
       color: active ? "#10b981" : "var(--text-muted)",
     }}>
       {active ? "Ativo" : "Inativo"}

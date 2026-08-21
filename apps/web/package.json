@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --import ./test/registrar.mjs --test \"test/*.test.js\" \"test/*.test.jsx\""
+    "tokenizar-cores": "node scripts/tokenizar-cores.mjs src",
+    "conferir-imports": "node scripts/conferir-imports.mjs src",
+    "test": "node --import ./test/registrar.mjs --test \"test/*.test.js\" \"test/*.test.jsx\"",
+    "conferir-nomes": "node scripts/conferir-imports.mjs src"
   },
   "dependencies": {
     "@dnd-kit/helpers": "^0.5.0",

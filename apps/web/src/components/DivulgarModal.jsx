@@ -199,7 +199,7 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
       >
         <div
           className="input-scroll"
-          style={{ background: "rgba(18,18,30,0.99)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "20px", padding: "24px 28px", width: "100%", maxWidth: "1120px", maxHeight: "92vh", overflowY: "auto", overscrollBehavior: "contain" }}
+          style={{ background: "rgba(18,18,30,0.99)", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", borderRadius: "20px", padding: "24px 28px", width: "100%", maxWidth: "1120px", maxHeight: "92vh", overflowY: "auto", overscrollBehavior: "contain" }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -208,7 +208,7 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
               <div style={{ fontSize: "18px", fontWeight: "700" }}>Divulgar Imóvel</div>
             </div>
             <button onClick={onClose} aria-label="Fechar"
-              style={{ width: "32px", height: "32px", padding: 0, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", cursor: "pointer", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              style={{ width: "32px", height: "32px", padding: 0, background: "transparent", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: "var(--text-muted)", cursor: "pointer", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -334,8 +334,8 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
                   const captionReal = pub.caption ?? captions[pub.channel.toLowerCase()] ?? "";
                   return (
                     <div key={pub.id} style={{
-                      borderRadius: "10px", border: `1px solid ${isOpen ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)"}`,
-                      background: "rgba(255,255,255,0.03)", overflow: "hidden",
+                      borderRadius: "10px", border: `1px solid ${isOpen ? "var(--linha-16, rgba(255,255,255,0.16))" : "var(--linha-08, rgba(255,255,255,0.08))"}`,
+                      background: "var(--sup-03, rgba(255,255,255,0.03))", overflow: "hidden",
                       transition: "border-color 0.15s",
                       animation: removing ? "divulgar-post-out 0.4s ease forwards" : undefined,
                     }}>

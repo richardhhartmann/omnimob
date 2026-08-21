@@ -2670,9 +2670,9 @@ input[type="checkbox"].sw:disabled { opacity: 0.5; cursor: not-allowed; }
    aparecem em sobreposições que moram fora dele — o modal de trial, por
    exemplo. Definir no `main` deixaria metade deles para trás. */
 html[data-tema-painel="claro"] {
-  --sw-trilho: rgba(15, 23, 42, 0.16);
+  --sw-trilho: rgba(15, 23, 42, 0.055);
   --sw-apagado: #ffffff;
-  --sw-aceso: #4f46e5;
+  --sw-aceso: #aff171;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -5268,8 +5268,8 @@ html[data-tema-painel="claro"] {
   margin-top: 20px;
   padding: 16px 18px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  background: var(--sup-02, rgba(255, 255, 255, 0.02));
 }
 
 .usuario-vitrine__chave {
@@ -5388,6 +5388,9 @@ html[data-tema-painel="claro"] {
 
 /* ── Endereços ── */
 .api-grupo { margin-top: 14px; }
+/* No escuro o agrupamento se lê pelo espaçamento; sobre fundo claro o olho
+   perde a costura e os grupos viram uma lista só. Uma linha à esquerda basta. */
+main[data-tema="claro"] .api-grupo { border-left: 2px solid var(--linha-08); padding-left: 12px; }
 .api-grupo__nome {
   display: block;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -5453,14 +5456,14 @@ html[data-tema-painel="claro"] {
   align-items: center;
   gap: 5px;
 }
-.api-copiar:hover { background: rgba(255, 255, 255, 0.07); color: var(--text-main); }
+.api-copiar:hover { background: var(--sup-07, rgba(255, 255, 255, 0.07)); color: var(--text-main); }
 
 .api-exemplo {
   margin-top: 16px;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--codigo-fundo, rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -5500,14 +5503,14 @@ html[data-tema-painel="claro"] {
 .api-nova__fechar {
   width: 26px; height: 26px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px; border: 1px solid var(--linha-12, rgba(255, 255, 255, 0.12));
   background: transparent; box-shadow: none; color: var(--text-muted); cursor: pointer;
 }
 .api-nova p { margin: 8px 0 12px; font-size: 12.5px; color: var(--text-muted); line-height: 1.6; }
 .api-nova__valor {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 11px 13px; border-radius: 10px;
-  background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--codigo-fundo, rgba(0, 0, 0, 0.3)); border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
 }
 /* `break-all` porque a chave não tem espaços: sem isso ela estoura a caixa em
    vez de quebrar, e some pela direita da tela. */
@@ -5579,11 +5582,12 @@ html[data-tema-painel="claro"] {
 .imp-entidade {
   display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left;
   width: 100%; padding: 13px 15px; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  background: var(--sup-02, rgba(255, 255, 255, 0.02));
   box-shadow: none; color: inherit; font-family: inherit; cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
-.imp-entidade:hover { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.045); }
+.imp-entidade:hover { border-color: var(--linha-20, rgba(255, 255, 255, 0.2)); background: var(--sup-05, rgba(255, 255, 255, 0.045)); }
 .imp-entidade.is-ativa {
   border-color: color-mix(in srgb, var(--tenant-primary, #6366f1) 60%, transparent);
   background: color-mix(in srgb, var(--tenant-primary, #6366f1) 12%, transparent);
@@ -6545,3 +6549,1360 @@ main[data-tema="claro"] { --trilha-hover: rgba(15, 23, 42, 0.06); }
 @media (max-width: 560px) {
   .trilha__degrau { padding: 5px 7px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OS TOKENS QUE ACABAM COM A CAÇA AO RATO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ── O PROBLEMA, EM UMA FRASE ──
+
+   O painel escrevia cor em ESTILO INLINE, e estilo inline vence folha de
+   estilo. Cada tela quebrada no tema claro exigia descobrir o seletor certo e
+   escrever um `!important` — e a próxima tela quebrava do mesmo jeito, porque
+   a causa nunca era tratada. Foram cinco passadas assim.
+
+   ── A CORREÇÃO ──
+
+   Os 159 literais `rgba(255,255,255,α)` do painel viraram
+   `var(--token, rgba(255,255,255,α))` por um codemod. O valor de reserva é o
+   valor de antes, então o tema ESCURO não mudou um pixel — e é por isso que
+   não existe bloco de definição para ele aqui: definir seria arriscar mudar o
+   que já estava certo.
+
+   ── AS TRÊS FAMÍLIAS ──
+
+   O nome sai da PROPRIEDADE, não da opacidade, e essa é a decisão que faz o
+   esquema funcionar. O mesmo `0.08` é fundo num lugar e borda em outro; no
+   claro os dois querem coisas opostas — o fundo quase some, a borda precisa
+   aparecer mais. Um token por opacidade teria devolvido o mesmo problema com
+   outro nome.
+
+     --sup-NN    superfície  (background)  → no claro, tinta escura BEM leve
+     --linha-NN  borda       (border)      → no claro, MAIS contraste que no escuro
+     --tinta-NN  texto       (color)       → no claro, bem mais opaco
+
+   ── PARA QUEM ESCREVER TELA NOVA ──
+
+   Não escreva `rgba(255,255,255,0.05)` inline. Use `var(--sup-05, …)`, ou uma
+   classe. O codemod está no scratchpad e pode rodar de novo, mas o hábito é o
+   que evita a sexta passada.
+
+   ── O QUE FICOU DE FORA, E POR QUÊ ──
+
+   Vitrine e editor (tema do cliente), landing e login (moldura escura do
+   produto), a barra lateral e a dica dela (escuras nos dois temas), controles
+   sobre foto panorâmica (branco é certo em qualquer tema) e a aparência do
+   Payment Element — que vive num iframe do Stripe, onde variável nossa não
+   atravessa.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Na RAIZ, e não só no `main`: modais, tour e a lista aberta do SelectCustom
+   saem por portal, fora do `main`, e ficariam para trás. */
+html[data-tema-painel="claro"],
+main[data-tema="claro"] {
+  /* Superfícies. A escala é achatada de propósito: no escuro, 0.02 e 0.13
+     separam bem; sobre fundo claro, qualquer coisa acima de 0.08 já lê como
+     "caixa cinza" e a hierarquia vira sujeira. */
+  /* Blocos de CÓDIGO. No escuro eles são um poço preto sobre o cinza do painel
+     — mais escuros que o fundo, para o monoespaçado saltar. Sobre fundo claro a
+     mesma ideia se inverte: precisam ser mais ESCUROS que o branco, mas só um
+     degrau, senão viram uma tarja preta no meio do texto. */
+  --codigo-fundo: rgba(15, 23, 42, 0.05);
+  --sup-01: rgba(15, 23, 42, 0.015);
+  --sup-02: rgba(15, 23, 42, 0.02);
+  --sup-03: rgba(15, 23, 42, 0.03);
+  --sup-04: rgba(15, 23, 42, 0.04);
+  --sup-05: rgba(15, 23, 42, 0.05);
+  --sup-06: rgba(15, 23, 42, 0.05);
+  --sup-07: rgba(15, 23, 42, 0.06);
+  --sup-08: rgba(15, 23, 42, 0.06);
+  --sup-09: rgba(15, 23, 42, 0.07);
+  --sup-10: rgba(15, 23, 42, 0.07);
+  --sup-13: rgba(15, 23, 42, 0.08);
+  --sup-15: rgba(15, 23, 42, 0.08);
+  /* O brilho do esqueleto: a faixa que atravessa a caixa cinza. No escuro é
+     branco sobre quase preto; no claro precisa ser BRANCO também, e não tinta —
+     é luz passando, e luz não escurece. */
+  --sup-50: rgba(255, 255, 255, 0.75);
+
+  /* Bordas, e aqui a escala SOBE. Branco a 8% sobre preto é uma linha nítida;
+     tinta a 8% sobre branco quase não existe — o olho perde a separação entre
+     cartão e fundo, que é justamente o que a borda existe para dar. */
+  --linha-04: rgba(15, 23, 42, 0.08);
+  --linha-05: rgba(15, 23, 42, 0.09);
+  --linha-06: rgba(15, 23, 42, 0.10);
+  --linha-07: rgba(15, 23, 42, 0.10);
+  --linha-08: rgba(15, 23, 42, 0.11);
+  --linha-09: rgba(15, 23, 42, 0.12);
+  --linha-10: rgba(15, 23, 42, 0.13);
+  --linha-12: rgba(15, 23, 42, 0.14);
+  --linha-14: rgba(15, 23, 42, 0.15);
+  --linha-15: rgba(15, 23, 42, 0.16);
+  --linha-16: rgba(15, 23, 42, 0.17);
+  --linha-18: rgba(15, 23, 42, 0.19);
+  --linha-20: rgba(15, 23, 42, 0.20);
+  --linha-22: rgba(15, 23, 42, 0.22);
+  --linha-25: rgba(15, 23, 42, 0.24);
+  --linha-28: rgba(15, 23, 42, 0.26);
+  --linha-30: rgba(15, 23, 42, 0.28);
+
+  /* Texto. Sobe mais ainda: branco a 55% sobre preto é legível, tinta a 55%
+     sobre branco é um cinza apagado que cansa. */
+  --tinta-15: rgba(15, 23, 42, 0.30);
+  --tinta-18: rgba(15, 23, 42, 0.34);
+  --tinta-20: rgba(15, 23, 42, 0.38);
+  --tinta-28: rgba(15, 23, 42, 0.44);
+  --tinta-35: rgba(15, 23, 42, 0.50);
+  --tinta-42: rgba(15, 23, 42, 0.55);
+  --tinta-50: rgba(15, 23, 42, 0.60);
+  --tinta-55: rgba(15, 23, 42, 0.62);
+  --tinta-60: rgba(15, 23, 42, 0.66);
+  --tinta-62: rgba(15, 23, 42, 0.68);
+  --tinta-65: rgba(15, 23, 42, 0.70);
+  --tinta-72: rgba(15, 23, 42, 0.76);
+  --tinta-75: rgba(15, 23, 42, 0.78);
+  --tinta-78: rgba(15, 23, 42, 0.82);
+  --tinta-80: rgba(15, 23, 42, 0.85);
+  --tinta-85: rgba(15, 23, 42, 0.88);
+}
+
+/* ── As cores de ESTADO, no tema claro ───────────────────────────────────────
+   O padrão seguinte ao dos brancos translúcidos, e a mesma armadilha noutra
+   forma: o painel escuro escreve estado com tons CLAROS — vermelho-claro para
+   erro, âmbar para aviso, índigo-claro para realce. Eles brilham sobre preto e
+   somem sobre branco: `#fca5a5` num cartão branco é rosa-bebê, e a mensagem de
+   erro deixa de parecer erro.
+
+   O tom correto no claro é o ESCURO da mesma família — o mesmo vermelho, o
+   mesmo âmbar, com luminosidade invertida. A cor continua dizendo a mesma
+   coisa; o que muda é sobre o que ela está.
+
+   Aqui vai por seletor de atributo, e não por token, porque estes valores estão
+   cravados em `color: "#fca5a5"` dentro do JSX. Tokenizar exigiria outra
+   passada do codemod; a correção por atributo alcança os mesmos elementos hoje
+   e não conflita com a tokenização quando ela vier — `var()` no atributo deixa
+   de casar com estes seletores, e a regra simplesmente para de se aplicar.
+   ────────────────────────────────────────────────────────────────────────── */
+main[data-tema="claro"] [style*="color: rgb(252, 165, 165)"],
+main[data-tema="claro"] [style*="#fca5a5"] { color: #b91c1c !important; }
+main[data-tema="claro"] [style*="color: rgb(248, 113, 113)"],
+main[data-tema="claro"] [style*="#f87171"] { color: #b91c1c !important; }
+main[data-tema="claro"] [style*="color: rgb(251, 191, 36)"],
+main[data-tema="claro"] [style*="#fbbf24"] { color: #a16207 !important; }
+main[data-tema="claro"] [style*="color: rgb(110, 231, 183)"],
+main[data-tema="claro"] [style*="#6ee7b7"] { color: #047857 !important; }
+main[data-tema="claro"] [style*="color: rgb(165, 180, 252)"],
+main[data-tema="claro"] [style*="#a5b4fc"] { color: #4338ca !important; }
+main[data-tema="claro"] [style*="color: rgb(199, 210, 254)"],
+main[data-tema="claro"] [style*="#c7d2fe"] { color: #4338ca !important; }
+main[data-tema="claro"] [style*="color: rgb(129, 140, 248)"],
+main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
+
+/* ═══ MENU DO PERFIL ═════════════════════════════════════════════════════════
+   O balão que sobe do rodapé da barra lateral, e os dois modais que ele abre.
+   Ver `components/MenuDoPerfil.jsx` para o porquê de Ajuda e Sair terem saído
+   da navegação.
+
+   Vive fora do `main`, então segue o tema pelo marcador da raiz — e por isso as
+   cores aqui são escritas duas vezes, não herdadas dos tokens do conteúdo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ds-profile-caixa { position: relative; margin-top: 4px; border-top: 1px solid var(--s-sep); }
+
+/* O perfil virou botão. Estes valores repetem os de `.ds-profile` porque o
+   seletor global de button reescreveria largura, padding e fundo — é mais curto
+   reafirmar que travar cada um com !important. */
+.ds-shell button.ds-profile {
+  width: 100%; padding: 10px; border-radius: 10px;
+  background: transparent; border: 1px solid transparent;
+  box-shadow: none; transform: none; cursor: pointer;
+  justify-content: flex-start; text-align: left;
+  transition: background 0.15s ease;
+}
+.ds-shell button.ds-profile:hover { background: var(--s-hover); transform: none; box-shadow: none; }
+/* Enquanto o balão está no ar, o item que o abriu continua aceso — senão ele se
+   apaga quando o ponteiro entra no menu, e o balão parece vir de lugar nenhum. */
+.ds-shell button.ds-profile.is-menu-aberto { background: var(--s-hover); }
+.ds-profile__tema { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+
+/* ── O balão ── */
+.mp-balao {
+  /* `fixed` porque o menu sai por portal, ancorado em coordenadas de tela — o
+     JSX injeta `left` e `bottom`. Ver o cabeçalho de `MenuDoPerfil`. */
+  position: fixed;
+  min-width: 232px; z-index: 60;
+  padding: 6px; border-radius: 14px;
+  background: #141821; border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.9);
+  display: flex; flex-direction: column; gap: 1px;
+  animation: mpSobe 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes mpSobe { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mp-balao { animation: none; } }
+
+.mp-linha-caixa { position: relative; }
+
+.ds-shell .mp-linha, .mp-linha {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; padding: 9px 10px; border-radius: 9px;
+  background: transparent; border: 1px solid transparent; box-shadow: none; transform: none;
+  color: #cbd5e1; font-family: inherit; font-size: 13.5px; font-weight: 500;
+  text-align: left; text-decoration: none; cursor: pointer;
+  justify-content: flex-start;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+.ds-shell .mp-linha:hover, .mp-linha:hover,
+.ds-shell .mp-linha.is-aberta {
+  background: rgba(255, 255, 255, 0.07); color: #f8fafc;
+  transform: none; box-shadow: none; border-color: transparent;
+}
+.ds-shell .mp-linha:disabled, .mp-linha:disabled { opacity: 0.45; cursor: default; }
+.ds-shell .mp-linha:disabled:hover { background: transparent; }
+.mp-linha__icone { display: flex; flex-shrink: 0; }
+.mp-linha__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mp-linha__texto small { font-size: 11px; color: #64748b; }
+.mp-linha__seta { flex-shrink: 0; opacity: 0.5; }
+.mp-risco { display: block; height: 1px; margin: 5px 8px; background: rgba(255, 255, 255, 0.08); }
+
+/* ── A primeira linha: foto e nome ── */
+.mp-conta { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.mp-conta__foto {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; object-fit: cover;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--tenant-primary, #4f46e5); color: var(--tenant-primary-ink, #fff);
+  font-size: 13px; font-weight: 700;
+}
+.mp-conta__texto { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mp-conta__texto strong { font-size: 13.5px; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-conta__texto small { font-size: 11.5px; color: #94a3b8; }
+
+/* ── Submenu, à direita ──────────────────────────────────────────────────────
+   `left: 100%` e não `right`: a barra fica na borda esquerda da tela, então há
+   espaço à direita e nunca à esquerda.
+
+   E cresce PARA CIMA, alinhado pela base. Alinhado pelo topo, o submenu de
+   Ajuda — que é o mais alto, com seis itens — descia abaixo da borda inferior
+   da tela e ficava com metade cortada. O balão nasce no rodapé da barra, então
+   espaço sobra em cima e nunca embaixo.
+
+   O `max-height` é a rede: numa janela baixa, um submenu que ainda não caiba
+   rola por dentro em vez de vazar. */
+.mp-flutuante {
+  position: absolute; left: calc(100% + 6px); bottom: -6px;
+  max-height: calc(100vh - 24px); overflow-y: auto;
+  min-width: 216px; z-index: 61;
+  padding: 6px; border-radius: 14px;
+  background: #141821; border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.9);
+  display: flex; flex-direction: column; gap: 1px;
+}
+
+/* ── O balão NÃO segue o tema do painel ──────────────────────────────────────
+   Ele brota colado na barra lateral, que é escura nos dois temas de propósito
+   (é a âncora visual que identifica o produto). Um balão branco saindo de uma
+   barra preta lê como um programa diferente aberto por cima.
+
+   Quem segue o tema são os MODAIS que este menu abre — eles aparecem
+   centralizados sobre o conteúdo, que é a área que muda de cor.
+
+   Por isso não há bloco de tema claro aqui, e a ausência é a decisão. */
+
+/* ═══ MODAIS DO PERFIL ═══════════════════════════════════════════════════════ */
+.mp-veu {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+}
+.mp-modal {
+  position: fixed; z-index: 9001; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 40px)); max-height: min(78vh, 720px);
+  display: flex; flex-direction: column;
+  border-radius: 18px; overflow: hidden;
+  background: #12161f; border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.85);
+  font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  color: #e2e8f0;
+}
+.mp-modal__cab {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  padding: 20px 22px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.mp-modal__cab h2 { margin: 0; font-size: 17px; font-weight: 700; color: #f8fafc; }
+.mp-modal__cab p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: #94a3b8; }
+.ds-shell .mp-modal__fechar, .mp-modal__fechar {
+  width: 30px; height: 30px; padding: 0; flex-shrink: 0; border-radius: 8px;
+  background: transparent; border: 1px solid transparent; box-shadow: none; transform: none;
+  color: #94a3b8; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.mp-modal__fechar:hover { background: rgba(255, 255, 255, 0.08); color: #f8fafc; transform: none; }
+.mp-modal__corpo { padding: 6px 22px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+
+.mp-secao { padding: 16px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.mp-secao:last-of-type { border-bottom: none; }
+.mp-secao__cab { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 12px; }
+.mp-secao__icone {
+  display: flex; flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px;
+  align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.06); color: #a5b4fc;
+}
+.mp-secao__cab strong { display: block; font-size: 13.5px; color: #f1f5f9; }
+.mp-secao__cab small { display: block; font-size: 11.5px; line-height: 1.5; color: #94a3b8; margin-top: 2px; }
+
+.mp-opcoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.ds-shell .mp-opcao, .mp-opcao {
+  width: auto; padding: 8px 16px; border-radius: 9px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1; font-size: 13px; font-weight: 600; box-shadow: none; transform: none;
+}
+.mp-opcao:hover { background: rgba(255, 255, 255, 0.09); transform: none; }
+.mp-opcao.is-on { background: rgba(99, 102, 241, 0.18); border-color: rgba(129, 140, 248, 0.6); color: #c7d2fe; }
+
+.mp-nota { margin: 0; font-size: 12.5px; line-height: 1.6; color: #94a3b8; }
+.mp-nota strong { color: #cbd5e1; }
+
+.mp-atalhos { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.mp-atalhos td { padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; }
+.mp-atalhos tr:last-child td { border-bottom: none; }
+.mp-atalhos td:last-child { text-align: right; }
+.mp-atalhos small { color: #64748b; font-size: 11px; }
+.mp-atalhos kbd {
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+  padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.mp-ficha { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 0; font-size: 13px; }
+.mp-ficha dt { color: #94a3b8; }
+.mp-ficha dd { margin: 0; color: #f1f5f9; overflow-wrap: anywhere; }
+.mp-permissoes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+
+html[data-tema-painel="claro"] .mp-modal {
+  background: #ffffff; border-color: rgba(15, 23, 42, 0.12); color: #334155;
+  box-shadow: 0 40px 90px -30px rgba(15, 23, 42, 0.35);
+}
+html[data-tema-painel="claro"] .mp-modal__cab { border-bottom-color: rgba(15, 23, 42, 0.09); }
+html[data-tema-painel="claro"] .mp-modal__cab h2,
+html[data-tema-painel="claro"] .mp-secao__cab strong,
+html[data-tema-painel="claro"] .mp-ficha dd { color: #0f172a; }
+html[data-tema-painel="claro"] .mp-secao { border-bottom-color: rgba(15, 23, 42, 0.08); }
+html[data-tema-painel="claro"] .mp-secao__icone { background: rgba(79, 70, 229, 0.1); color: #4f46e5; }
+html[data-tema-painel="claro"] .mp-opcao {
+  background: #ffffff; border-color: rgba(15, 23, 42, 0.14); color: #334155;
+}
+html[data-tema-painel="claro"] .mp-opcao:hover { background: rgba(15, 23, 42, 0.04); }
+html[data-tema-painel="claro"] .mp-opcao.is-on {
+  background: rgba(79, 70, 229, 0.12); border-color: rgba(79, 70, 229, 0.5); color: #4338ca;
+}
+html[data-tema-painel="claro"] .mp-atalhos kbd {
+  background: rgba(15, 23, 42, 0.05); border-color: rgba(15, 23, 42, 0.12);
+}
+html[data-tema-painel="claro"] .mp-atalhos td { border-bottom-color: rgba(15, 23, 42, 0.07); }
+html[data-tema-painel="claro"] .mp-modal__fechar:hover { background: rgba(15, 23, 42, 0.06); color: #0f172a; }
+
+.mp-opcao--icone { display: inline-flex; align-items: center; gap: 8px; }
+
+/* ── Tela de ajuda e chamado, no tema claro ──────────────────────────────────
+   O `aj-*` é o único bloco do painel com paleta ROXA própria — ele tem uma cara
+   deliberadamente diferente do resto, porque é onde a pessoa pede socorro e não
+   deve parecer mais uma tela de cadastro.
+
+   No claro a paleta se mantém: o roxo continua roxo, o dourado continua
+   dourado. O que inverte é a LUMINOSIDADE — fundo quase preto vira branco,
+   texto claro vira escuro. Trocar o roxo por outra cor no tema claro faria a
+   tela de ajuda deixar de se reconhecer.
+
+   Renderiza fora do `main`, então quem o alcança é o marcador da raiz. */
+html[data-tema-painel="claro"] .aj-caixa {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+  color: #2a2536;
+  box-shadow: 0 40px 90px -30px rgba(76, 29, 149, 0.28);
+}
+html[data-tema-painel="claro"] .aj-caixa h2,
+html[data-tema-painel="claro"] .aj-caixa h3,
+html[data-tema-painel="claro"] .aj-caixa strong { color: #1e1b2e; }
+
+/* Os cinzas-lilás do escuro (#a9a3ba, #7c748f, #6f6883) são claros demais sobre
+   branco — viram lavanda apagada e o texto de apoio some. */
+html[data-tema-painel="claro"] .aj-caixa [style*="#a9a3ba"],
+html[data-tema-painel="claro"] .aj-caixa [style*="#7c748f"],
+html[data-tema-painel="claro"] .aj-caixa [style*="#6f6883"] { color: #6b6480 !important; }
+
+/* O dourado da marca precisa escurecer: #d4af37 sobre branco é quase ilegível. */
+html[data-tema-painel="claro"] .aj-caixa [style*="#d4af37"] { color: #8a6d10 !important; }
+html[data-tema-painel="claro"] .aj-caixa [style*="#c4b5fd"] { color: #6d28d9 !important; }
+
+html[data-tema-painel="claro"] .aj-caixa .aj-fechar {
+  background: rgba(124, 58, 237, 0.1); color: #6d28d9;
+}
+html[data-tema-painel="claro"] .aj-caixa .aj-fechar:hover {
+  background: rgba(180, 140, 20, 0.2); color: #4c1d95;
+}
+
+/* Cartões de escolha e campos. O roxo a 7% sobre preto é um véu; sobre branco
+   precisa de mais corpo para o cartão existir. */
+html[data-tema-painel="claro"] .aj-opcao,
+html[data-tema-painel="claro"] .aj-caixa button:not(.aj-fechar):not(.aj-enviar) {
+  background: rgba(124, 58, 237, 0.05);
+  border-color: rgba(124, 58, 237, 0.18);
+  color: #2a2536;
+}
+html[data-tema-painel="claro"] .aj-opcao:hover {
+  background: rgba(124, 58, 237, 0.1);
+  border-color: rgba(124, 58, 237, 0.32);
+}
+html[data-tema-painel="claro"] .aj-caixa input,
+html[data-tema-painel="claro"] .aj-caixa textarea,
+html[data-tema-painel="claro"] .aj-caixa select {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #1e1b2e;
+}
+html[data-tema-painel="claro"] .aj-caixa input::placeholder,
+html[data-tema-painel="claro"] .aj-caixa textarea::placeholder { color: #9b95ab; }
+
+/* ── O selo do teste na barra recolhida ──────────────────────────────────────
+   Ele é um botão de largura cheia com duas linhas de texto ("N dias restantes"
+   / "Assine já"). Em 64px o texto não cabe e vazava por fora do ícone.
+
+   Recolhido, sobra o ponto pulsante — que é o que precisa ser visto: ele diz
+   "há algo aqui sobre a sua conta". O número volta quando a barra abre.
+
+   Fora do `main`, então quem o alcança é a barra, não o tema. */
+.ds-side:not(:hover):not(:focus-within) .tv-rotulo { display: none; }
+.ds-side:not(:hover):not(:focus-within) .ds-shell .tv-botao,
+.ds-side:not(:hover):not(:focus-within) .tv-botao {
+  justify-content: center; padding: 9px 0; gap: 0;
+}
+
+/* O título da ajuda é `#f8fafc` cravado no bloco `aj-*` — branco sobre branco
+   no tema claro. A regra genérica de `h2` não o alcança porque a cor está no
+   seletor de classe, que ganha por especificidade. */
+html[data-tema-painel="claro"] .aj-titulo,
+html[data-tema-painel="claro"] .aj-caixa .aj-titulo { color: #1e1b2e; }
+
+/* ── Entrar com Google, na tela de login ─────────────────────────────────────
+   O login é escuro nos dois temas (é a moldura do produto), então este bloco
+   não tem variante clara — e a ausência é a decisão, não esquecimento. */
+.lg-ou {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px 0 14px; color: rgba(255, 255, 255, 0.35); font-size: 12px;
+}
+.lg-ou::before, .lg-ou::after {
+  content: ""; flex: 1; height: 1px; background: rgba(255, 255, 255, 0.12);
+}
+.lg-google {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 13px 18px; border-radius: 12px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f1f5f9; font-family: inherit; font-size: 14px; font-weight: 600;
+  box-shadow: none; transform: none;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.lg-google:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.28);
+  transform: none; box-shadow: none;
+}
+.lg-google:disabled { opacity: 0.55; cursor: default; }
+
+/* A conta Google dentro de "Meus dados". */
+.mp-google { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.mp-google img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.mp-google div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mp-google strong { font-size: 14px; color: #f1f5f9; }
+.mp-google small { font-size: 12px; color: #94a3b8; overflow-wrap: anywhere; }
+html[data-tema-painel="claro"] .mp-google strong { color: #0f172a; }
+html[data-tema-painel="claro"] .mp-google small { color: #64748b; }
+
+/* Linha de canal automático, em Configurações › Canais. */
+.canal__auto { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.canal__auto input { margin-top: 2px; }
+.canal__auto span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.canal__auto strong { font-size: 13.5px; font-weight: 600; }
+.canal__auto small { font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.canal__auto input:disabled { cursor: not-allowed; }
+
+/* ── Portais e Mercado Livre no último passo do cadastro ─────────────────────
+   Grade própria, e não a mesma das redes sociais: aqueles cards têm prévia do
+   post e botão que publica na hora; estes têm uma chave e uma explicação de
+   QUANDO o anúncio aparece. Igualá-los visualmente prometeria o mesmo efeito. */
+.ci-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px; }
+.ci-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 16px 18px; border-radius: 14px;
+  background: var(--sup-03, rgba(255,255,255,0.03));
+  border: 1px solid var(--linha-08, rgba(255,255,255,0.08));
+}
+.ci-card__topo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ci-card__icone {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.ci-card__topo strong { font-size: 14px; }
+.ci-card__texto { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+.ci-selo {
+  margin-left: auto; flex-shrink: 0;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.ci-selo.is-on { background: rgba(16,185,129,0.16); color: #34d399; }
+.ci-selo.is-off { background: var(--sup-06, rgba(255,255,255,0.06)); color: var(--text-muted); }
+.ci-selo.is-neutro { background: rgba(99,102,241,0.16); color: #a5b4fc; }
+/* Âmbar para "automático": não é sucesso nem ausência — é um estado em que a
+   pessoa não decide nada, e a cor precisa dizer isso antes do texto. */
+.ci-selo.is-auto { background: rgba(245,158,11,0.16); color: #fbbf24; }
+.ci-chave { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; }
+.ds-shell .ci-botao, .ci-botao {
+  width: auto; padding: 9px 16px; border-radius: 9px; cursor: pointer;
+  font-size: 13px; font-weight: 600; align-self: flex-start;
+  background: var(--sup-06, rgba(255,255,255,0.06));
+  border: 1px solid var(--linha-12, rgba(255,255,255,0.12));
+  color: inherit; box-shadow: none; transform: none;
+}
+.ci-botao:hover:not(:disabled) { background: var(--sup-10, rgba(255,255,255,0.1)); transform: none; }
+.ci-botao:disabled { opacity: 0.5; cursor: not-allowed; }
+.ci-link { display: inline-flex; align-items: center; gap: 4px; color: #a5b4fc; }
+.ci-erro { grid-column: 1 / -1; margin: 0; font-size: 12.5px; color: #f87171; }
+
+/* ── Pulso do teste, no tema claro ───────────────────────────────────────────
+   O modal já ficou claro numa passada anterior, mas o rótulo das opções e os
+   botões continuavam com as cores do escuro: `#f1f5f9` de texto (branco sobre
+   branco) e o botão primário INVERTIDO — fundo quase branco com tinta escura,
+   que sobre um cartão branco vira um retângulo invisível com texto solto.
+
+   Renderiza fora do `main`, então quem alcança é o marcador da raiz. */
+html[data-tema-painel="claro"] .pt-opcao__rotulo { color: #0f172a; }
+
+html[data-tema-painel="claro"] .pt-btn {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #334155;
+}
+html[data-tema-painel="claro"] .pt-btn:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: #0f172a;
+}
+/* O primário inverte de novo: sobre claro, quem precisa de peso é o botão, não
+   o fundo dele. Tinta escura com texto branco — o oposto exato do tema escuro. */
+html[data-tema-painel="claro"] .pt-btn--primario {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+html[data-tema-painel="claro"] .pt-btn--primario:hover { background: #1e293b; color: #ffffff; }
+
+/* ═══ CRIAR CARGO NO MEIO DO CADASTRO DE USUÁRIO ═════════════════════════════
+   Ver `components/CargoEmLinha.jsx`. */
+.cel-caixa { display: flex; flex-direction: column; gap: 12px; }
+.cel-linha { display: flex; align-items: stretch; gap: 8px; }
+.cel-select { flex: 1; min-width: 0; }
+
+/* O + acompanha a altura do combo em vez de ter altura própria: com um valor
+   fixo ele desalinhava a cada mudança de padding do SelectCustom. */
+.ds-shell .cel-mais, .cel-mais {
+  width: 44px; flex-shrink: 0; padding: 0; border-radius: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--sup-05, rgba(255,255,255,0.05));
+  border: 1px solid var(--linha-10, rgba(255,255,255,0.1));
+  color: inherit; box-shadow: none; transform: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.cel-mais:hover:not(:disabled) {
+  background: var(--sup-09, rgba(255,255,255,0.09));
+  border-color: var(--linha-20, rgba(255,255,255,0.2));
+  transform: none;
+}
+.cel-mais.is-aberto { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); color: #f87171; }
+.cel-mais:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cel-form {
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 16px 18px; border-radius: 14px;
+  background: var(--sup-03, rgba(255,255,255,0.03));
+  border: 1px solid var(--linha-08, rgba(255,255,255,0.08));
+  animation: fadeIn 0.2s ease-out;
+}
+.cel-campo { display: flex; flex-direction: column; gap: 6px; }
+.cel-campo span { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.cel-campo input {
+  width: 100%; box-sizing: border-box; padding: 11px 14px; border-radius: 10px;
+  background: var(--campo-fundo, rgba(255,255,255,0.04));
+  border: 1px solid var(--campo-borda, rgba(255,255,255,0.1));
+  color: inherit; font-size: 14px; font-family: inherit; outline: none;
+}
+.cel-titulo { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
+
+
+.cel-erro { margin: 0; font-size: 12.5px; color: #f87171; }
+.cel-acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.ds-shell .cel-btn, .cel-btn {
+  width: auto; padding: 10px 18px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; font-weight: 600; box-shadow: none; transform: none;
+  background: var(--sup-05, rgba(255,255,255,0.05));
+  border: 1px solid var(--linha-12, rgba(255,255,255,0.12));
+  color: inherit;
+}
+.cel-btn:hover:not(:disabled) { background: var(--sup-09, rgba(255,255,255,0.09)); transform: none; }
+.cel-btn--primario {
+  background: var(--tenant-primary, #6366f1);
+  border-color: var(--tenant-primary, #6366f1);
+  color: var(--tenant-primary-ink, #fff);
+}
+.cel-btn--primario:hover:not(:disabled) { filter: brightness(1.08); }
+.cel-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ── Excluir imóvel: o modal que pergunta sobre os outros canais ───────────── */
+/* Cores por token (`--sup-*`, `--linha-*`, `--tinta-*`): é o que faz o modo
+   claro funcionar sem uma segunda folha. Ver `scripts/tokenizar-cores.mjs`. */
+
+.exi-alerta {
+  flex: none; width: 38px; height: 38px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(239, 68, 68, 0.12); color: #f87171;
+}
+
+.exi-carregando, .exi-pergunta { margin: 0 0 12px; font-size: 13px; color: var(--tinta-72, rgba(255, 255, 255, 0.7)); }
+
+.exi-canais { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.exi-canal {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 12px; border-radius: 10px; cursor: pointer;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  transition: background 0.15s, border-color 0.15s;
+}
+.exi-canal:hover:not(.is-travado) { background: var(--sup-06, rgba(255, 255, 255, 0.06)); }
+.exi-canal.is-on { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.07); }
+/* Travado continua VISÍVEL e legível: é a linha que avisa que o Instagram fica
+   no ar. Esmaecer demais faria a informação mais importante virar ruído. */
+.exi-canal.is-travado { cursor: not-allowed; opacity: 0.75; }
+.exi-canal input { flex: none; width: 16px; height: 16px; accent-color: #ef4444; cursor: inherit; }
+.exi-canal__icone {
+  flex: none; width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+}
+.exi-canal__nome { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; }
+.exi-canal__nome small { font-size: 11.5px; font-weight: 400; line-height: 1.35; color: var(--tinta-50, rgba(255, 255, 255, 0.5)); }
+
+.exi-automatico {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
+  font-size: 12px; line-height: 1.45;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  color: var(--tinta-60, rgba(255, 255, 255, 0.6));
+}
+.exi-automatico svg { flex: none; margin-top: 2px; }
+
+.exi-aviso {
+  margin: 4px 0 18px; padding: 10px 12px; border-radius: 10px;
+  font-size: 12px; line-height: 1.45;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+main[data-tema="claro"] .exi-aviso, html[data-tema-painel="claro"] .exi-aviso { color: #b91c1c; }
+
+.exi-btn {
+  padding: 10px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer;
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: var(--tinta-80, rgba(255, 255, 255, 0.8));
+}
+.exi-btn:hover:not(:disabled) { background: var(--sup-10, rgba(255, 255, 255, 0.1)); }
+.exi-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.exi-btn--perigo { background: #dc2626; border-color: #dc2626; color: #fff; }
+.exi-btn--perigo:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; }
+
+/* ── Permissões de um cargo ──────────────────────────────────────────────────
+   Desenho ÚNICO das caixas, usado pela tela de Cargos e pelo `+` do cadastro de
+   usuário (`components/GradeDePermissoes.jsx`). As duas telas tinham cada uma o
+   seu, e divergiram: a do cadastro nem mostrava o ícone.
+
+   Cores por token, para o modo claro sair de graça. */
+
+.perm-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.perm-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 13px; user-select: none; cursor: pointer;
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  color: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.perm-item:hover:not(.is-travada) { background: var(--sup-06, rgba(255, 255, 255, 0.06)); }
+.perm-item.is-on {
+  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.12);
+}
+/* Travada continua legível: ela informa "você tem isto e não pode abrir mão".
+   Apagar demais faria parecer desligada, que é o oposto. */
+.perm-item.is-travada { cursor: not-allowed; opacity: 0.55; }
+.perm-item input {
+  flex: none; width: 14px; height: 14px; accent-color: #6366f1; cursor: inherit;
+}
+.perm-item svg { flex: none; color: var(--text-muted); }
+.perm-item.is-on svg { color: #a5b4fc; }
+main[data-tema="claro"] .perm-item.is-on svg,
+html[data-tema-painel="claro"] .perm-item.is-on svg { color: #4f46e5; }
+
+/* ── Editor da vitrine carregando ────────────────────────────────────────────
+   A silhueta das três colunas enquanto o `showcaseConfig` não chega. O shimmer
+   é o `.skeleton-block` de sempre; aqui só a paleta muda, porque o editor tem
+   a própria (`--ed-*`) e é sempre escuro, independente do tema do painel. */
+
+.ed-esq .skeleton-block {
+  background-color: rgba(255, 255, 255, 0.045);
+  background-image: linear-gradient(90deg,
+    rgba(255, 255, 255, 0) 20%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0) 80%);
+  display: block;
+}
+/* O editor é escuro nos dois temas do painel, então a versão clara do
+   `.skeleton-block` não pode alcançar estes blocos. */
+main[data-tema="claro"] .ed-esq .skeleton-block,
+html[data-tema-painel="claro"] .ed-esq .skeleton-block {
+  background-color: rgba(255, 255, 255, 0.045);
+}
+
+.ed-esq__rail,
+.ed-esq__inspetor {
+  flex-shrink: 0;
+  padding: 14px;
+  overflow: hidden;
+  background: var(--ed-panel);
+}
+.ed-esq__rail { width: 264px; border-right: 1px solid var(--ed-line); }
+.ed-esq__inspetor { width: 300px; border-left: 1px solid var(--ed-line); }
+
+.ed-esq__abas { display: flex; gap: 6px; }
+.ed-esq__biblioteca { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ed-esq__secao {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ed-line);
+}
+
+.ed-esq__palco {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  padding: 26px 20px;
+  overflow: hidden;
+  background: var(--ed-bg);
+}
+/* A folha entra com a mesma largura e o mesmo topo da folha real — é isso que
+   impede o salto quando o conteúdo verdadeiro toma o lugar. */
+.ed-esq__folha {
+  width: 100%;
+  max-width: 1180px;
+  align-self: flex-start;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--ed-panel-2);
+  border: 1px solid var(--ed-line);
+}
+.ed-esq__miolo { padding: 26px 30px 30px; }
+.ed-esq__destaques {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px;
+}
+.ed-esq__imoveis {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px; margin-top: 24px;
+}
+
+/* Com a casca `inert`, o cursor não deve prometer interação em nada. */
+.editor-shell.is-carregando { cursor: progress; }
+
+@media (max-width: 1180px) {
+  .ed-esq__rail { width: 62px; }
+  .ed-esq__biblioteca { grid-template-columns: 1fr; }
+  .ed-esq__inspetor { display: none; }
+}
+
+/* ── O rail do editor sai de baixo da barra lateral ──────────────────────────
+
+   A barra do painel vive com 64px no fluxo e cresce para 240px no hover — mas
+   quem cresce é um filho `position: fixed`, que SOBREPÕE o conteúdo em vez de
+   empurrá-lo. Isso é proposital lá (ver `AdminLayout`): empurrar a tela inteira
+   a cada passada de mouse refazia o layout por um gesto de meio segundo.
+
+   No editor, porém, o conteúdo colado na borda esquerda é o rail — 252px de
+   controles que começam exatamente onde a barra expandida termina. Os 176px de
+   diferença cobriam dois terços dele: biblioteca de peças, camadas e o painel
+   da IA sumiam atrás da barra.
+
+   Aqui o empurrão vale a pena, e só aqui. O `~` funciona porque `.ds-side` e o
+   `<main>` são irmãos dentro do `.ds-shell` — CSS puro, sem estado em
+   JavaScript e sem re-render do editor a cada hover.
+
+   ── O QUE ISTO CUSTA ──
+
+   `margin-left` é layout, então o palco encolhe 176px enquanto a barra está
+   aberta e a folha se recentra. A FOLHA NÃO REDIMENSIONA: ela tem largura fixa
+   (1280 × zoom), então nenhuma peça é remedida e nenhum reflow de altura é
+   disparado — o que se move é só o enquadramento. */
+
+.ds-side ~ main .editor-rail,
+.ds-side ~ main .ed-esq__rail {
+  /* Mesma curva e mesma duração da barra: os dois têm que parecer um movimento
+     só, e não uma coisa perseguindo a outra. */
+  transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1), width 0.18s ease;
+}
+.ds-side:hover ~ main .editor-rail,
+.ds-side:hover ~ main .ed-esq__rail,
+/* `focus-within` porque quem navega por teclado nunca passa o mouse — sem isto
+   o rail continuaria enterrado justamente para quem mais precisa vê-lo. */
+.ds-side:focus-within ~ main .editor-rail,
+.ds-side:focus-within ~ main .ed-esq__rail {
+  margin-left: 176px; /* 240 (aberta) − 64 (recolhida) */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-side ~ main .editor-rail,
+  .ds-side ~ main .ed-esq__rail { transition: none; }
+}
+
+/* ── Modal global (`components/Modal.jsx`) ───────────────────────────────────
+   Vai para o `<body>` por portal, então nada aqui depende de onde a tela que o
+   abriu está montada. Ver o cabeçalho do componente para o porquê. */
+
+.mdl-raiz {
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.mdl-veu {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: mdl-entrar-veu 0.2s ease-out;
+}
+.mdl-cartao {
+  position: relative;
+  width: 100%;
+  max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column;
+  padding: 24px;
+  border-radius: 16px;
+  background: #17171a;
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  animation: mdl-entrar-cartao 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* O claro vem de `.modal-cartao`, que o componente também aplica — a mesma
+   regra que serve todo modal do painel. */
+
+@keyframes mdl-entrar-veu { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mdl-entrar-cartao {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mdl-veu, .mdl-cartao { animation: none; }
+}
+
+.mdl-x {
+  position: absolute; top: 12px; right: 12px;
+  width: 30px; height: 30px; padding: 0; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  color: var(--tinta-60, rgba(255, 255, 255, 0.6));
+  cursor: pointer;
+}
+.mdl-x:hover:not(:disabled) { background: var(--sup-10, rgba(255, 255, 255, 0.1)); }
+.mdl-x:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.mdl-topo { display: flex; gap: 12px; align-items: flex-start; padding-right: 34px; margin-bottom: 16px; }
+.mdl-adorno { flex: none; }
+.mdl-titulos h3 { margin: 0; font-size: 17px; font-weight: 700; }
+.mdl-titulos p { margin: 3px 0 0; font-size: 13px; color: var(--tinta-55, rgba(255, 255, 255, 0.55)); }
+
+/* Só o CORPO rola: as ações ficam ancoradas embaixo, visíveis num modal alto. */
+.mdl-corpo { flex: 1; min-height: 0; overflow-y: auto; }
+.mdl-acoes { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+
+/* ── Publicando um imóvel: a tela cheia ──────────────────────────────────────
+   Vai ao `<body>` por portal (ver `components/PublicandoImovel.jsx`). */
+
+.pub-raiz {
+  position: fixed; inset: 0; z-index: 9500;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.pub-veu {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: mdl-entrar-veu 0.25s ease-out;
+}
+.pub-caixa {
+  position: relative;
+  width: 100%; max-width: 380px;
+  padding: 34px 30px 28px;
+  border-radius: 18px;
+  text-align: center;
+  background: #17171a;
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  animation: mdl-entrar-cartao 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── O anel ──────────────────────────────────────────────────────────────────
+   Duas camadas: o `conic-gradient` do progresso real, parado, e por cima um
+   arco que gira. Girar diz "estou vivo"; preencher diz "falta tanto". Só girar
+   esconderia o avanço; só preencher pareceria travado entre uma foto e outra. */
+.pub-anel {
+  --pub-pct: 0%;
+  position: relative;
+  width: 92px; height: 92px; margin: 0 auto 20px;
+  border-radius: 50%;
+  background: conic-gradient(#6366f1 var(--pub-pct), var(--sup-08, rgba(255,255,255,0.07)) 0);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.4s ease;
+}
+.pub-anel__giro {
+  position: absolute; inset: -3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: #a5b4fc;
+  animation: pub-girar 0.9s linear infinite;
+}
+.pub-anel__miolo {
+  position: relative;
+  width: 74px; height: 74px; border-radius: 50%;
+  background: #17171a;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 700;
+}
+main[data-tema="claro"] .pub-anel__miolo,
+html[data-tema-painel="claro"] .pub-anel__miolo { background: #ffffff; }
+
+@keyframes pub-girar { to { transform: rotate(360deg); } }
+
+/* Os três pontos das etapas sem contagem. */
+.pub-pontos { display: flex; gap: 5px; }
+.pub-pontos i {
+  width: 6px; height: 6px; border-radius: 50%; background: #a5b4fc;
+  animation: pub-pular 1.1s ease-in-out infinite;
+}
+.pub-pontos i:nth-child(2) { animation-delay: 0.15s; }
+.pub-pontos i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes pub-pular {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30%           { opacity: 1;   transform: translateY(-4px); }
+}
+
+.pub-titulo { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+.pub-sub {
+  margin: 0 0 22px; font-size: 12.5px; line-height: 1.5;
+  color: var(--tinta-60, rgba(255, 255, 255, 0.6));
+}
+
+.pub-etapas {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 9px; text-align: left;
+}
+.pub-etapa {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px;
+  color: var(--tinta-35, rgba(255, 255, 255, 0.35));
+  transition: color 0.25s ease;
+}
+.pub-etapa__marca {
+  flex: none; width: 24px; height: 24px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.pub-etapa.is-ativa { color: var(--tinta-85, rgba(255, 255, 255, 0.9)); font-weight: 600; }
+.pub-etapa.is-ativa .pub-etapa__marca { background: rgba(99, 102, 241, 0.18); color: #a5b4fc; }
+.pub-etapa.is-feita { color: var(--tinta-55, rgba(255, 255, 255, 0.55)); }
+.pub-etapa.is-feita .pub-etapa__marca { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pub-veu, .pub-caixa, .pub-anel__giro, .pub-pontos i { animation: none; }
+}
+
+/* ── Portais no cadastro de imóvel ───────────────────────────────────────────
+   Uma caixa por portal. Eram um interruptor só; ver `utils/portais.js`. */
+
+.pt-portais {
+  padding: 16px 18px; border-radius: 14px;
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  background: var(--sup-02, rgba(255, 255, 255, 0.02));
+}
+.pt-portais__topo { margin-bottom: 12px; }
+.pt-portais__titulo { display: block; font-size: 14px; font-weight: 500; }
+.pt-portais__ajuda {
+  display: block; margin-top: 2px; font-size: 12px; line-height: 1.5;
+  color: var(--text-muted);
+}
+.pt-portais__lista { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.pt-portal {
+  --pt-cor: #64748b;
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 13px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; user-select: none;
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.pt-portal:hover { background: var(--sup-06, rgba(255, 255, 255, 0.06)); }
+/* Marcado, a linha inteira toma a cor DO PORTAL — é o que deixa reconhecer o
+   ZAP pelo laranja sem ler, numa lista de três nomes parecidos. */
+.pt-portal.is-on {
+  border-color: color-mix(in srgb, var(--pt-cor) 55%, transparent);
+  background: color-mix(in srgb, var(--pt-cor) 12%, transparent);
+}
+.pt-portal input { flex: none; width: 15px; height: 15px; accent-color: var(--pt-cor); cursor: inherit; }
+.pt-portal__ponto { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.pt-portal:has(input:disabled) { opacity: 0.55; cursor: not-allowed; }
+
+/* Linha do menu de perfil que só INFORMA — hoje, a conta Google já vinculada.
+   Mesma altura e mesmo alinhamento das outras, sem o realce de clicável: nada
+   ali é acionável, e um `disabled` sugeriria uma ação bloqueada. */
+.mp-linha.is-informativa { cursor: default; background: transparent; }
+.mp-linha.is-informativa:hover { background: transparent; }
+.mp-linha__ok { flex: none; color: #34d399; }
+
+/* ── Botão "continuar com o Google" no login ─────────────────────────────────
+   O botão é desenhado pelo próprio Google (`renderButton`), num iframe de
+   largura FIXA — 320px. O cartão de login é mais largo que isso, então sem
+   centrar ele encostava na esquerda e ficava torto em relação ao campo de
+   e-mail e ao botão Entrar, que ocupam a linha inteira.
+
+   Centrar aqui, e não esticar o botão: a largura vem do parâmetro que o Google
+   aceita, e forçar `width: 100%` no container não alcança o conteúdo do
+   iframe — o botão continuaria com 320px, agora dentro de uma caixa larga. */
+.bg-caixa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+/* `color-scheme` fixo: o iframe do Google herda o esquema da página e, no tema
+   claro do painel, o botão escuro do GSI ficava com texto branco sobre branco. */
+.bg-caixa > div { color-scheme: light; }
+
+.bg-erro {
+  margin: 0;
+  font-size: 12.5px;
+  text-align: center;
+  color: #f87171;
+}
+
+/* ── Início: o painel do gestor ──────────────────────────────────────────────
+   Cores por token (`--sup-*`, `--linha-*`, `--tinta-*`), então o modo claro
+   sai de graça — sem uma segunda folha. Ver `scripts/tokenizar-cores.mjs`. */
+
+.ig-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.ig-card {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 18px 20px; border-radius: 14px;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+.ig-card__icone {
+  flex: none; width: 40px; height: 40px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+}
+.ig-card__corpo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ig-card__valor { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.ig-card__rotulo { font-size: 12px; color: var(--text-muted); }
+.ig-card__apoio { font-size: 11.5px; color: var(--tinta-50, rgba(255, 255, 255, 0.5)); margin-top: 2px; }
+
+/* A comparação com ontem tem COR, e é ela que carrega a leitura: o número
+   sozinho não diz se o dia foi bom. */
+.ig-delta { font-size: 11.5px; margin-top: 3px; }
+.ig-delta.is-alta  { color: #34d399; }
+.ig-delta.is-baixa { color: #fca5a5; }
+.ig-delta.is-igual { color: var(--tinta-50, rgba(255, 255, 255, 0.5)); }
+main[data-tema="claro"] .ig-delta.is-alta  { color: #047857; }
+main[data-tema="claro"] .ig-delta.is-baixa { color: #b91c1c; }
+
+.ig-bloco { padding: 20px 22px; margin-bottom: 20px; }
+.ig-titulo {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 14px; font-size: 14.5px; font-weight: 700;
+}
+.ig-vazio { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+
+.ig-limpo { display: flex; align-items: center; gap: 11px; }
+.ig-limpo p { margin: 0; font-size: 13.5px; }
+
+/* Duas colunas na largura de trabalho, uma no celular — sem media query:
+   `min(340px, 100%)` impede a coluna de ficar mais larga que a tela. */
+.ig-duas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 20px;
+}
+.ig-duas > .ig-bloco { margin-bottom: 20px; }
+
+/* ── Pendências ──────────────────────────────────────────────────────────── */
+.ig-pendencias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.ig-pendencias li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; border-radius: 11px;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
+  font-size: 13px;
+}
+.ig-pendencia__ponto { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.ig-pendencia__texto { flex: 1; min-width: 0; }
+.ig-acao {
+  flex: none; width: auto;
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  background: var(--sup-06, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: inherit;
+}
+.ig-acao:hover { background: var(--sup-10, rgba(255, 255, 255, 0.1)); }
+
+/* ── Linhas do mês ───────────────────────────────────────────────────────── */
+.ig-linhas { margin: 0; display: flex; flex-direction: column; gap: 1px; }
+.ig-linhas > div {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--linha-05, rgba(255, 255, 255, 0.05));
+}
+.ig-linhas > div:last-child { border-bottom: 0; }
+.ig-linhas dt { font-size: 13px; color: var(--text-muted); }
+.ig-linhas dd { margin: 0; font-size: 14px; font-weight: 600; }
+
+/* ── Imóvel em destaque ──────────────────────────────────────────────────── */
+.ig-destaque {
+  width: 100%; padding: 0; text-align: left; cursor: pointer;
+  display: flex; gap: 13px; align-items: center;
+  background: transparent; border: 0; color: inherit;
+}
+.ig-destaque img, .ig-destaque__semfoto {
+  flex: none; width: 84px; height: 68px; border-radius: 11px; object-fit: cover;
+  background: var(--sup-06, rgba(255, 255, 255, 0.06));
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+}
+.ig-destaque__texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ig-destaque__texto strong {
+  font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ig-destaque__texto small { font-size: 12px; color: var(--text-muted); }
+.ig-destaque__texto em { font-size: 12px; font-style: normal; color: #7dd3fc; }
+main[data-tema="claro"] .ig-destaque__texto em { color: #0369a1; }
+.ig-destaque:hover strong { text-decoration: underline; }
+
+/* ── Equipe ──────────────────────────────────────────────────────────────── */
+.ig-equipe { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ig-equipe li {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--linha-05, rgba(255, 255, 255, 0.05));
+}
+.ig-equipe li:last-child { border-bottom: 0; }
+.ig-equipe__pos {
+  flex: none; width: 20px; font-size: 12px; font-weight: 700;
+  color: var(--tinta-42, rgba(255, 255, 255, 0.42));
+}
+.ig-equipe__foto {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; object-fit: cover;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.ig-equipe__nome { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13.5px; }
+.ig-equipe__nome small { font-size: 11.5px; color: var(--text-muted); }
+.ig-equipe__valor {
+  flex: none; text-align: right; display: flex; flex-direction: column;
+  font-size: 13.5px; font-weight: 600;
+}
+.ig-equipe__valor small { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+
+@media (max-width: 520px) {
+  /* No celular a ação vai para baixo do texto: lado a lado, o rótulo da
+     pendência ficava com duas palavras por linha. */
+  .ig-pendencias li { flex-wrap: wrap; }
+  .ig-acao { margin-left: auto; }
+  .ig-equipe__valor { font-size: 12.5px; }
+}
+
+/* ── Editor de atalhos de teclado ────────────────────────────────────────────
+   Um componente, dois lugares: Configurações da imobiliária e o perfil da
+   pessoa. Ver `components/EditorDeAtalhos.jsx`. */
+
+.ea-caixa { display: flex; flex-direction: column; gap: 16px; }
+.ea-ajuda, .ea-conflito {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 0; padding: 10px 12px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.5;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  color: var(--tinta-72, rgba(255, 255, 255, 0.72));
+}
+.ea-ajuda svg, .ea-conflito svg { flex: none; margin-top: 1px; }
+.ea-conflito {
+  background: rgba(239, 68, 68, 0.09);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  color: #fca5a5;
+}
+main[data-tema="claro"] .ea-conflito, html[data-tema-painel="claro"] .ea-conflito { color: #b91c1c; }
+
+.ea-grupo h4 {
+  margin: 0 0 8px; font-size: 11.5px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ea-grupo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ea-grupo li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 10px; border-radius: 9px;
+  background: var(--sup-02, rgba(255, 255, 255, 0.02));
+}
+.ea-rotulo { font-size: 13px; min-width: 0; }
+
+/* A tecla é um <kbd> clicável: parece tecla, e é o que a pessoa aperta. */
+.ea-tecla {
+  flex: none; width: auto; min-width: 54px;
+  padding: 6px 12px; border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; font-weight: 700; cursor: pointer;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--linha-12, rgba(255, 255, 255, 0.12));
+  border-bottom-width: 2px;
+  color: inherit;
+}
+.ea-tecla:hover:not(:disabled) { background: var(--sup-10, rgba(255, 255, 255, 0.1)); }
+.ea-tecla.is-ouvindo {
+  border-color: var(--tenant-primary, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tenant-primary, #6366f1) 22%, transparent);
+}
+.ea-tecla.is-conflito { border-color: #ef4444; color: #fca5a5; }
+main[data-tema="claro"] .ea-tecla.is-conflito { color: #b91c1c; }
+/* Desligado é texto miúdo, e não uma tecla vazia: caixa vazia parece defeito. */
+.ea-tecla.is-vazio {
+  font-family: inherit; font-weight: 400; font-size: 11.5px;
+  color: var(--tinta-42, rgba(255, 255, 255, 0.42));
+  border-bottom-width: 1px;
+}
+.ea-tecla:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ea-restaurar {
+  align-self: flex-start; width: auto;
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: 9px; font-size: 12.5px; cursor: pointer;
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: inherit;
+}
+.ea-restaurar:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Abas laterais do modal de perfil ────────────────────────────────────── */
+.mp-modal__area { display: flex; min-height: 0; flex: 1; }
+.mp-modal--abas .mp-modal__corpo { flex: 1; min-width: 0; }
+.mp-abas {
+  flex: none; width: 178px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+.mp-aba {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 9px 11px; border-radius: 9px;
+  font-size: 13px; text-align: left; cursor: pointer;
+  background: transparent; border: 0; color: var(--tinta-72, rgba(255, 255, 255, 0.72));
+}
+.mp-aba:hover { background: var(--sup-05, rgba(255, 255, 255, 0.05)); }
+.mp-aba.is-on {
+  background: var(--sup-08, rgba(255, 255, 255, 0.08));
+  color: inherit; font-weight: 600;
+}
+
+.mp-acoes { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.mp-salvar {
+  width: auto; padding: 9px 18px; border-radius: 9px; font-size: 13px; font-weight: 600;
+  cursor: pointer; background: var(--tenant-primary, #6366f1);
+  border: 0; color: var(--tenant-primary-ink, #fff);
+}
+.mp-salvar:disabled { opacity: 0.5; cursor: not-allowed; }
+.mp-aviso { font-size: 12.5px; color: var(--text-muted); }
+
+/* No celular as abas viram uma tira horizontal: 178px de coluna numa tela de
+   360px não deixariam largura para o conteúdo. */
+@media (max-width: 620px) {
+  .mp-modal__area { flex-direction: column; }
+  .mp-abas {
+    width: auto; flex-direction: row; overflow-x: auto;
+    border-right: 0; border-bottom: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  }
+  .mp-aba { width: auto; white-space: nowrap; }
+  .ea-grupo li { flex-wrap: wrap; }
+}
+
+/* ── O selo da tecla, ao lado do botão ───────────────────────────────────────
+   É ele que faz a pessoa aprender o atalho sem abrir a configuração: a tecla
+   está ali, no canto do botão que ela já ia clicar.
+
+   Some sozinho quando não há tecla — `TeclaDeAtalho` devolve `null`, e não uma
+   caixa vazia. Ver `components/ContextoDeAtalhos.jsx`. */
+
+.tecla-atalho {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; font-weight: 700; line-height: 1;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--linha-12, rgba(255, 255, 255, 0.12));
+  color: var(--tinta-60, rgba(255, 255, 255, 0.6));
+  /* Nunca captura clique: ele mora DENTRO do botão, e um alvo próprio ali
+     engoliria o clique de quem mira o canto do cartão. */
+  pointer-events: none;
+  user-select: none;
+}
+
+/* No canto do cartão.
+
+   O seletor precisa dos DOIS níveis, e não é preciosismo: `.pg-follow > *` já
+   declara `position: relative` em todo filho (é o que mantém o conteúdo acima
+   do flare do clique), e com uma classe só essa regra vencia por
+   especificidade — o selo ficava no fluxo, empurrando o ícone para baixo.
+
+   O cartão é o bloco de contenção porque `.pg-follow` é `position: relative`. */
+.pg-follow > .tecla-atalho--canto {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+}
+
+/* No hover do cartão o selo acende junto: ele faz parte do botão, e um canto
+   que fica apagado enquanto o resto ilumina parece elemento de outra tela. */
+.inicio-atalho:hover .tecla-atalho,
+.menu-cartao:hover .tecla-atalho {
+  background: var(--sup-12, rgba(255, 255, 255, 0.12));
+  color: var(--tinta-80, rgba(255, 255, 255, 0.8));
+}
+
+/* Em tela de toque não existe teclado: o selo vira ruído puro. */
+@media (hover: none) and (pointer: coarse) {
+  .tecla-atalho { display: none; }
+}
+
+.ea-rodape { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ea-estado { font-size: 12.5px; color: var(--text-muted); }

@@ -101,28 +101,58 @@ export function enderecoDeEnvio(url) {
   return endereco.href;
 }
 
-function corpoDaPonte(url, { imagemUrl, legenda }) {
+/* Um número da agenda no formato que a API exige. Guardamos só dígitos; o
+   sufixo é detalhe do protocolo e não deve aparecer na tela de ninguém. */
+function comoContato(numero) {
+  const digitos = String(numero || "").replace(/\D/g, "");
+  return digitos ? `${digitos}@s.whatsapp.net` : null;
+}
+
+export function corpoDaPonte(url, { imagemUrl, legenda, contatos = [] }) {
   const endereco = new URL(url);
+  const publico = contatos.map(comoContato).filter(Boolean);
 
   if (ehWhapi(endereco)) {
-    /* `media` + `caption`, como em todos os remetentes do Whapi. O schema
-       `SenderStoriesMedia` não está publicado por inteiro na especificação
-       deles; se algum campo tiver outro nome, a resposta crua que devolvemos no
-       erro dirá qual — foi assim que os dois caminhos anteriores foram
-       descartados. */
-    return { media: imagemUrl, caption: legenda || "" };
+    return {
+      media: imagemUrl,
+      caption: legenda || "",
+      /* ── O CAMPO QUE FALTAVA ────────────────────────────────────────────
+         A documentação do Whapi é explícita: sem `contacts`, ele busca a
+         agenda inteira e manda para todos. Era o que acontecia — e a
+         privacidade configurada no APARELHO não corrige isso, porque a ponte
+         é uma sessão vinculada e publica com a lista dela.
+
+         Lista vazia continua sendo "todos", porque é o que a API faz e
+         inventar outro padrão aqui esconderia o fato. Quem avisa é a tela. */
+      ...(publico.length ? { contacts: publico } : {}),
+      /* O padrão da API é `true`: qualquer pessoa que vir o status pode
+         reencaminhá-lo. Para um anúncio de imóvel isso multiplica o alcance
+         de algo que a imobiliária escolheu mostrar a um público — e o dono do
+         alcance deixa de ser ela. Quem quiser espalhar compartilha o link da
+         vitrine, que é para isso que ele existe. */
+      allow_reshare: false,
+    };
   }
 
-  /* Evolution: `type` diz o que é o conteúdo, e `allContacts` manda para todos
-     os contatos — sem ele, o status vai para ninguém e a chamada "funciona"
-     sem nada acontecer, que é o pior desfecho possível. */
   if (ehEvolution(endereco)) {
-    return { type: "image", content: imagemUrl, caption: legenda || "", allContacts: true };
+    return {
+      type: "image",
+      content: imagemUrl,
+      caption: legenda || "",
+      /* `allContacts` só quando não há lista — antes era `true` cravado, o que
+         mandava para a agenda inteira mesmo com público escolhido. */
+      ...(publico.length
+        ? { allContacts: false, statusJidList: publico }
+        : { allContacts: true }),
+    };
   }
 
-  /* Ponte caseira: corpo pequeno e óbvio, mais fácil de adaptar do lado de lá
-     do que um cheio de campos que aquele serviço ignora. */
-  return { tipo: "status", media: imagemUrl, caption: legenda || "" };
+  return {
+    tipo: "status",
+    media: imagemUrl,
+    caption: legenda || "",
+    ...(publico.length ? { contacts: publico } : {}),
+  };
 }
 
 export function ponteConfigurada(tenant) {
@@ -167,7 +197,13 @@ export async function publicarStatus(tenant, { imagemUrl, legenda }) {
         Authorization: `Bearer ${decifrar(tenant.whatsappPonteToken)}`,
         apikey: decifrar(tenant.whatsappPonteToken),
       },
-      body: JSON.stringify(corpoDaPonte(tenant.whatsappPonteUrl, { imagemUrl, legenda })),
+      body: JSON.stringify(
+        corpoDaPonte(tenant.whatsappPonteUrl, {
+          imagemUrl,
+          legenda,
+          contatos: tenant.whatsappPonteContatos || [],
+        }),
+      ),
     });
 
     const texto = await resposta.text().catch(() => "");
@@ -181,7 +217,21 @@ export async function publicarStatus(tenant, { imagemUrl, legenda }) {
         `A ponte respondeu ${resposta.status}${texto ? `: ${texto.slice(0, 400)}` : "."}`,
       );
     }
-    return { ok: true, resposta: texto.slice(0, 400) };
+    /* ── O ID DA MENSAGEM ────────────────────────────────────────────────
+       Antes esta resposta era lida só para dizer "deu certo" e jogada fora, e o
+       preço apareceu no dia em que foi preciso saber o que estava no ar: não
+       havia registro de nada. Descobrir os status publicados virou uma consulta
+       manual à ponte, por script.
+
+       Cada ponte guarda o id num lugar diferente e nenhuma promete estabilidade
+       — por isso procuramos nos três formatos conhecidos e aceitamos não achar.
+       Publicação sem id continua sendo publicação; ela só entra no histórico
+       sem a referência externa. */
+    let corpo = null;
+    try { corpo = JSON.parse(texto); } catch { corpo = null; }
+    const id = corpo?.message?.id || corpo?.id || corpo?.key?.id || null;
+
+    return { ok: true, id, resposta: texto.slice(0, 400) };
   } catch (erro) {
     if (erro instanceof ErroDaPonte) throw erro;
     if (erro.name === "AbortError") throw new ErroDaPonte("A ponte não respondeu a tempo.");
@@ -189,6 +239,18 @@ export async function publicarStatus(tenant, { imagemUrl, legenda }) {
   } finally {
     clearTimeout(relogio);
   }
+}
+
+/* Quanto tempo um status fica no ar.
+
+   Não é escolha nossa nem configurável: é o comportamento do WhatsApp. Está
+   aqui porque o produto precisa DIZER isso na tela — apagar não é possível (o
+   Whapi não suporta remover status pela API), então "quando some" é a única
+   resposta honesta para "como tiro isso do ar". */
+export const HORAS_NO_AR = 24;
+
+export function expiraEm(publicadoEm) {
+  return new Date(new Date(publicadoEm).getTime() + HORAS_NO_AR * 3600000);
 }
 
 /**
@@ -221,13 +283,15 @@ export async function publicarSequenciaDeStatus(tenant, { imagens = [], legenda 
   if (!lista.length) throw new ErroDaPonte("Nenhuma imagem para publicar.");
 
   const falhas = [];
+  const publicacoes = [];
   let publicados = 0;
 
   for (const [i, imagemUrl] of lista.entries()) {
     if (i > 0) await espera(INTERVALO_ENTRE_STATUS_MS);
     try {
-      await publicarStatus(tenant, { imagemUrl, legenda: i === 0 ? legenda : "" });
+      const r = await publicarStatus(tenant, { imagemUrl, legenda: i === 0 ? legenda : "" });
       publicados += 1;
+      publicacoes.push({ imagemUrl, id: r.id || null, primeira: i === 0 });
     } catch (erro) {
       /* Uma foto que falha não cancela as outras. O caso real é uma URL que o
          Whapi não conseguiu baixar; abortar tudo por causa dela deixaria o
@@ -240,5 +304,5 @@ export async function publicarSequenciaDeStatus(tenant, { imagens = [], legenda 
      faz a tela mostrar o motivo em vez de dizer "0 publicados" em silêncio. */
   if (!publicados) throw new ErroDaPonte(falhas[0]?.motivo || "Nenhum status foi publicado.");
 
-  return { publicados, falhas };
+  return { publicados, falhas, publicacoes };
 }

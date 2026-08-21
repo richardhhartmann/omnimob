@@ -21,7 +21,7 @@ import { capturarTela, printComoArquivo } from "../utils/capturarTela";
    diz qual dos dois aconteceu, sem prometer o que não houve.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function AjudaModal({ open, onClose, tourDaTela, aoReverTour, contexto }) {
+export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, aoReverTour, contexto }) {
   // "menu" → "chamado" → "feito"
   const [vista, setVista] = useState("menu");
   const [form, setForm] = useState({ assunto: "", categoria: "duvida", descricao: "" });
@@ -34,6 +34,15 @@ export function AjudaModal({ open, onClose, tourDaTela, aoReverTour, contexto })
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
   const [recibo, setRecibo] = useState(null);
+
+  /* Abrir JÁ NO CHAMADO quando quem chamou pediu isso.
+
+     O menu do perfil oferece "Abrir um chamado" e "Central de ajuda" como itens
+     separados. Cair na central depois de clicar no primeiro seria cobrar um
+     passo por uma escolha que a pessoa já fez. */
+  useEffect(() => {
+    if (open && passoInicial === "chamado") setVista("chamado");
+  }, [open, passoInicial]);
 
   /* Reabrir tem que reabrir do começo: sem isto, quem mandou um chamado e
      voltou depois encontraria a tela de recibo do chamado anterior. */
@@ -481,7 +490,7 @@ const CSS = `
 .aj-caixa .aj-cat {
   width: auto; padding: 6px 11px; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 12px; font-weight: 500;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(167,139,250,0.16);
+  background: var(--sup-04, rgba(255,255,255,0.04)); border: 1px solid rgba(167,139,250,0.16);
   color: #a9a3ba; box-shadow: none; transform: none;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
@@ -492,7 +501,7 @@ const CSS = `
 
 .aj-caixa .aj-input {
   width: 100%; padding: 11px 13px; border-radius: 11px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(167,139,250,0.18);
+  background: var(--sup-04, rgba(255,255,255,0.04)); border: 1px solid rgba(167,139,250,0.18);
   color: #f1edf9; font-family: inherit; font-size: 13px; line-height: 1.55;
   box-shadow: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -510,7 +519,7 @@ const CSS = `
 .aj-print-caixa {
   display: flex; align-items: center; gap: 12px;
   padding: 11px 13px; border-radius: 12px; cursor: pointer;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(167,139,250,0.16);
+  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid rgba(167,139,250,0.16);
   transition: background 0.16s ease, border-color 0.16s ease;
 }
 .aj-print-caixa:hover { background: rgba(139,92,246,0.10); }
@@ -527,7 +536,7 @@ const CSS = `
    laterais onde costumam estar o menu e o botão que não funcionou. */
 .aj-print-mini {
   width: 96px; height: 60px; border-radius: 8px; overflow: hidden; flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.10); display: block;
+  border: 1px solid var(--linha-10, rgba(255,255,255,0.10)); display: block;
   transition: border-color 0.15s ease;
 }
 .aj-print-mini:hover { border-color: #d4af37; }
@@ -535,7 +544,7 @@ const CSS = `
 
 .aj-print__girando {
   width: 17px; height: 17px; border-radius: 999px;
-  border: 2px solid rgba(255,255,255,0.16); border-top-color: #d4af37;
+  border: 2px solid var(--linha-16, rgba(255,255,255,0.16)); border-top-color: #d4af37;
   animation: ajGira 0.8s linear infinite;
 }
 @keyframes ajGira { to { transform: rotate(360deg); } }
@@ -570,7 +579,7 @@ const CSS = `
 
 .aj-legal {
   display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap;
-  padding: 12px 20px 16px; border-top: 1px solid rgba(255,255,255,0.07);
+  padding: 12px 20px 16px; border-top: 1px solid var(--linha-07, rgba(255,255,255,0.07));
   font-size: 11.5px; color: var(--text-muted);
 }
 .aj-legal a { color: var(--text-muted); text-decoration: none; }

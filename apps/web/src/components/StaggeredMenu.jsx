@@ -387,7 +387,24 @@ export function StaggeredMenu({
         </div>
       </header>
 
-      <aside id="sm-painel" ref={painelRef} className="sm-painel" aria-hidden={!aberto}>
+      {/* `inert` em vez de `aria-hidden` sozinho.
+
+          O painel continua no DOM fechado, para poder animar — e `aria-hidden`
+          sozinho esconde o conteúdo do leitor de tela SEM tirá-lo da ordem de
+          tabulação. O navegador reclama disso com todas as letras: quem
+          navegava por Tab entrava nos links invisíveis do menu fechado, e o
+          foco parava dentro de uma região marcada como inexistente.
+
+          `inert` faz as duas coisas de uma vez: esconde da tecnologia assistiva
+          e remove do Tab. O `aria-hidden` fica junto porque navegador antigo
+          ignora `inert` e ali ele ainda é melhor que nada. */}
+      <aside
+        id="sm-painel"
+        ref={painelRef}
+        className="sm-painel"
+        aria-hidden={!aberto}
+        inert={!aberto ? "" : undefined}
+      >
         <div className="sm-painel-inner">
           <ul className="sm-lista" role="list" data-numerar={numerar || undefined}>
             {itens.map((it, i) => (

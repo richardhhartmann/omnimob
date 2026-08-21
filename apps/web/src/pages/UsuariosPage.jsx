@@ -5,6 +5,7 @@ import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../comp
 import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
+import { CargoEmLinha } from "../components/CargoEmLinha.jsx";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 
@@ -353,7 +354,7 @@ export function UsuariosPage({ session }) {
                     display: "flex", alignItems: "center", flexShrink: 0,
                     padding: "14px 16px", borderRadius: "0 12px 12px 0",
                     border: "1px solid var(--glass-border)",
-                    background: "rgba(255,255,255,0.04)",
+                    background: "var(--sup-04, rgba(255,255,255,0.04))",
                     color: "var(--text-muted)", fontSize: "14px", whiteSpace: "nowrap",
                   }}
                 >
@@ -381,12 +382,18 @@ export function UsuariosPage({ session }) {
           {/* Invólucro só para o tour ter onde ancorar o holofote: o combo em si
               é um botão, e destacar apenas ele deixaria o rótulo de fora. */}
           <div data-tour="usuario-cargo">
-            <SelectCustom
-              value={form.cargoCodigo}
-              placeholder="Selecione o cargo"
+            {/* O + ao lado abre a criação de cargo aqui mesmo. Descobrir no
+                meio do cadastro que o cargo certo não existe custava sair da
+                tela, criar em Cargos e refazer este formulário do zero. */}
+            <CargoEmLinha
+              valor={form.cargoCodigo}
+              cargos={cargos}
+              plano={session?.tenant?.plano}
+              tenantSlug={tenantSlug}
               disabled={loading}
-              options={cargos.map((c) => ({ value: String(c.id), label: c.descricao }))}
-              onChange={(v) => setForm((p) => ({ ...p, cargoCodigo: v }))}
+              aoTrocar={(v) => setForm((p) => ({ ...p, cargoCodigo: v }))}
+              aoCriar={(c) => setCargos((atuais) => [...atuais, c])}
+              aoAvisar={(msg) => showToast?.(msg)}
             />
           </div>
 

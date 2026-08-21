@@ -70,8 +70,8 @@ export function podeImportar(cargo) {
 }
 
 const bloco = {
-  background: "rgba(255,255,255,0.02)",
-  border: "1px solid rgba(255,255,255,0.07)",
+  background: "var(--sup-02, rgba(255,255,255,0.02))",
+  border: "1px solid var(--linha-07, rgba(255,255,255,0.07))",
   borderRadius: "14px",
   padding: "16px 18px",
 };

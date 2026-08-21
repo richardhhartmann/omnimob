@@ -7,7 +7,7 @@ import {
 } from "../utils/trialStatus";
 import { ouvirPedidoDeAssinatura } from "../utils/pulsoTrial";
 import { PLANOS } from "../utils/planos";
-import { carregarStripe, stripeConfigurado, APARENCIA_STRIPE } from "../utils/stripe";
+import { carregarStripe, stripeConfigurado, chavesDaMesmaConta, APARENCIA_STRIPE } from "../utils/stripe";
 import { IconeCheck } from "./Icones.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -28,6 +28,51 @@ import { IconeCheck } from "./Icones.jsx";
    valor diferente do que será cobrado. */
 const PRECOS_RESERVA = { BASICO: "R$ 99/mês", PROFISSIONAL: "R$ 199/mês", PREMIUM: "sob consulta" };
 
+/* ── A guia, com os três jeitos de pagar ────────────────────────────────────
+   A LINHA DIGITÁVEL vem primeiro porque é o que a maioria usa: copia e cola no
+   app do banco, sem sair do celular. O PDF é para quem imprime ou repassa ao
+   financeiro — comum em imobiliária, e o motivo de ele não ser opcional. A
+   página do Stripe fica por último, como saída para quem prefere o fluxo dele.
+
+   Os três existem porque o e-mail com o boleto é OPT-IN no painel do Stripe e,
+   em teste, só chega a endereços da própria conta. Depender dele para a pessoa
+   reencontrar a guia era depender de algo que pode nunca ter sido ligado. */
+function GuiaDoBoleto({ guia }) {
+  const [copiado, setCopiado] = useState(false);
+  if (!guia) return null;
+
+  function copiar() {
+    navigator.clipboard?.writeText(guia.numero || "").then(
+      () => { setCopiado(true); setTimeout(() => setCopiado(false), 2000); },
+      () => {},
+    );
+  }
+
+  return (
+    <div className="tv-guia">
+      {guia.numero ? (
+        <>
+          <span className="tv-guia__rotulo">Linha digitável</span>
+          <code className="tv-guia__numero">{guia.numero}</code>
+          <button type="button" className="tv-btn tv-btn--primario" onClick={copiar}>
+            {copiado ? "Copiado" : "Copiar código"}
+          </button>
+        </>
+      ) : null}
+      <div className="tv-guia__links">
+        {guia.pdf ? <a href={guia.pdf} target="_blank" rel="noreferrer">Baixar PDF</a> : null}
+        {guia.url ? <a href={guia.url} target="_blank" rel="noreferrer">Abrir no navegador</a> : null}
+      </div>
+      {guia.venceEm ? (
+        <span className="tv-guia__prazo">
+          Vence em {new Date(guia.venceEm).toLocaleDateString("pt-BR")} às{" "}
+          {new Date(guia.venceEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function plural(n, singular, pluralForma) {
   return `${n} ${n === 1 ? singular : pluralForma}`;
 }
@@ -40,6 +85,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   /* Mensal ou anual. Só aparece quando o provedor tem preço anual cadastrado —
      ver `temAnual` mais abaixo. */
   const [periodo, setPeriodo] = useState("mensal");
+  const [aguardandoAssinc, setAguardandoAssinc] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState("");
   const [concluido, setConcluido] = useState(null);
@@ -170,11 +216,16 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
      prometer trinta dias na tela e remover em vinte. */
   const graca = situacao?.graca || null;
 
+
   /* `emTrial` sozinho escondia o selo justamente de quem mais precisa dele: o
      cliente que PAGAVA e cuja cobrança falhou nunca teve `emTrial`, então a
      conta vencia, entrava na contagem para remoção, e o painel não dizia nada.
      A janela de graça é a mesma para os dois, e o aviso também. */
-  if (!situacao?.emTrial && !graca?.venceu) return null;
+  /* Uma cobrança esperando pagamento mantém o selo de pé mesmo fora do teste:
+     é o único lugar do painel onde se reencontra o boleto gerado. */
+  const cobranca = situacao?.cobranca || null;
+
+  if (!situacao?.emTrial && !graca?.venceu && cobranca?.situacao !== "aberta") return null;
 
   /* Com o Stripe ligado, só oferecemos plano que tem preço lá — oferecer um
      plano sem preço daria 503 na hora de cobrar, depois de a pessoa já ter
@@ -220,7 +271,9 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   /* Vencido, a pergunta que a pessoa tem deixa de ser "quanto falta para
      vencer" e passa a ser "quanto tempo tenho para não perder tudo". O rótulo
      responde a essa, que é a única que ainda importa. */
-  const rotulo = graca?.venceu
+  const rotulo = cobranca?.situacao === "aberta"
+    ? (cobranca.meio === "boleto" ? "Boleto em aberto" : "Pagamento em análise")
+    : graca?.venceu
     ? graca.diasAteRemocao === 0
       ? "Último dia dos seus dados"
       : plural(graca.diasAteRemocao, "dia até apagar", "dias até apagar")
@@ -244,34 +297,52 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
     setFalha("");
   }
 
+  /* ── O caminho de quem paga ───────────────────────────────────────────────
+
+     Um só, para todos os meios. Quem escolhe cartão ou boleto é o Payment
+     Element — ele já é um seletor, com os campos certos de cada meio (o boleto
+     pede documento e endereço; o cartão não) e traduzido pelo próprio Stripe.
+
+     Havia um segundo seletor nosso em cima dele, e a tela perguntava duas vezes
+     a mesma coisa. Some: `createPaymentMethod` devolve o TIPO que a pessoa
+     escolheu, e é ele que decide para onde vai a requisição.
+
+     A diferença que sobra é de natureza, não de interface. Cartão cobra na
+     hora. Boleto nasce como guia, e o dinheiro entra depois — quem vira a chave
+     nesse caso é o webhook `invoice.paid`. */
   async function assinar() {
     setEnviando(true);
     setFalha("");
     try {
       let tokenPagamento = null;
+      let tipo = "card";
 
       if (stripeConfigurado()) {
-        if (!elementsRef.current) throw new Error("O formulário de cartão ainda não carregou.");
+        if (!elementsRef.current) throw new Error("O formulário de pagamento ainda não carregou.");
         await elementsRef.current.submit();
         const { error, paymentMethod } = await stripeRef.current.createPaymentMethod({
           elements: elementsRef.current,
         });
-        if (error) throw new Error(error.message || "Não foi possível validar o cartão.");
+        if (error) throw new Error(error.message || "Não foi possível validar o pagamento.");
         tokenPagamento = paymentMethod.id;
+        tipo = paymentMethod.type;
+      }
+
+      const periodoDoPlano = precosVivos[plano]?.[periodo] ? periodo : "mensal";
+
+      if (tipo !== "card") {
+        const r = await api.assinarPlanoAssincrono(tenantSlug, {
+          plano, periodo: periodoDoPlano, meio: tipo, tokenPagamento,
+        });
+        esquecerTrialStatus(tenantSlug);
+        setAguardandoAssinc({ meio: tipo, guia: r.guia || null });
+        return;
       }
 
       const resposta = await api.assinarPlano(tenantSlug, {
-        plano,
-        periodo: precosVivos[plano]?.[periodo] ? periodo : "mensal",
-        tokenPagamento,
+        plano, periodo: periodoDoPlano, tokenPagamento,
       });
-      /* A situação guardada acabou de ficar velha: era "em teste" e agora é
-         assinante. Sem descartar, quem remontasse dentro da janela ainda leria
-         o estado antigo — inclusive o modal de boas-vindas, que decide por ele
-         qual mensagem mostrar. */
       esquecerTrialStatus(tenantSlug);
-      // Não recarrega aqui: a comemoração vem antes, e o recarregamento sai só
-      // quando a pessoa fecha — senão a tela some antes de ela ler.
       setConcluido(resposta?.tenant || {});
       setPasso(4);
     } catch (erro) {
@@ -287,10 +358,12 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
 
       <button
         type="button"
-        className={`tv-botao${restante.expirado || graca?.venceu ? " is-expirado" : ""}`}
+        className={`tv-botao${restante.expirado || graca?.venceu ? " is-expirado" : ""}${cobranca?.situacao === "aberta" ? " is-aguardando" : ""}`}
         onClick={() => setAberto(true)}
         title={
-          graca?.venceu
+          cobranca?.situacao === "aberta"
+            ? `Há uma cobrança de R$ ${cobranca.valor} aguardando pagamento. O plano só é liberado quando ela compensar.`
+            : graca?.venceu
             ? `O plano venceu. Seus dados ficam guardados até ${new Date(graca.removidoEm).toLocaleDateString("pt-BR")} — assine para recuperar o ambiente.`
             : "Assinar a Omnimob"
         }
@@ -325,8 +398,8 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
             </h2>
             <p className="tv-texto">
               Para assinar o plano da Omnimob, fale com o <strong>administrador</strong> da
-              {situacao?.nomeTenant ? ` ${situacao.nomeTenant}` : " sua imobiliária"} — é a pessoa com
-              acesso a Configurações, onde plano e cobrança ficam.
+              {situacao?.nomeTenant ? ` ${situacao.nomeTenant}` : " sua imobiliária"} — pois é ele quem tem
+              acesso às configurações, onde plano e cobrança ficam.
             </p>
             <p className="tv-texto tv-texto--fraco">
               {restante.expirado
@@ -349,7 +422,33 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
               ))}
             </div>
 
-            {passo === 1 ? (
+            {passo === 1 && cobranca?.situacao === "aberta" ? (
+              /* Antes de oferecer um plano de novo: já existe cobrança criada.
+                 Sem isto a pessoa gera um segundo boleto achando que o primeiro
+                 não valeu, e acaba com dois — e um deles vai vencer sozinho. */
+              <div className="tv-pendencia">
+                <span className="tv-eyebrow">● {cobranca.meio === "boleto" ? "BOLETO EM ABERTO" : "PAGAMENTO EM ANÁLISE"}</span>
+                <h2 id="tv-titulo" className="tv-titulo">Já existe uma cobrança</h2>
+                <p className="tv-texto">
+                  {cobranca.plano ? `Plano ${cobranca.plano.toLowerCase()}` : "Assinatura"}
+                  {cobranca.valor ? `, R$ ${cobranca.valor}` : ""}
+                  {cobranca.guia?.venceEm
+                    ? ` — vence em ${new Date(cobranca.guia.venceEm).toLocaleDateString("pt-BR")}.`
+                    : "."}{" "}
+                  O plano é liberado assim que o pagamento compensar.
+                </p>
+                <GuiaDoBoleto guia={cobranca.guia} />
+                <p className="tv-texto tv-texto--fraco">
+                  Não pagou? Nada acontece com sua conta: a cobrança expira sozinha e o teste
+                  segue o curso normal.
+                </p>
+                <div className="tv-acoes">
+                  <button type="button" className="tv-btn" onClick={fechar}>Entendi</button>
+                </div>
+              </div>
+            ) : null}
+
+            {passo === 1 && cobranca?.situacao !== "aberta" ? (
               <>
                 <span className="tv-eyebrow">● SEU TESTE ESTÁ CORRENDO</span>
                 <h2 id="tv-titulo" className="tv-titulo">
@@ -462,18 +561,41 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
               </>
             ) : null}
 
-            {passo === 3 ? (
+            {passo === 3 && !aguardandoAssinc ? (
               <>
                 <span className="tv-eyebrow">● PAGAMENTO</span>
                 <h2 id="tv-titulo" className="tv-titulo">
                   {stripeConfigurado() ? "Dados do cartão" : "Falta conectar a cobrança"}
                 </h2>
 
-                {stripeConfigurado() ? (
+                {stripeConfigurado() && !chavesDaMesmaConta(situacao?.contaStripe) ? (
+                  /* Configuração, não falha de pagamento — e a diferença importa
+                     para quem lê: nenhum cartão vai passar até isto ser
+                     corrigido, e insistir só produz o mesmo 404. */
+                  <div className="tv-falha">
+                    <strong>Chaves do Stripe de contas diferentes.</strong> A chave publicável do
+                    painel não pertence à mesma conta da chave secreta do servidor — o pagamento
+                    é criado numa conta e confirmado na outra. Corrija{" "}
+                    <code>VITE_STRIPE_PUBLISHABLE_KEY</code> com a chave da mesma conta.
+                  </div>
+                ) : stripeConfigurado() ? (
                   <>
+                    {/* ── UM seletor, e ele é o do Stripe ──────────────────
+                        Havia um nosso aqui — Cartão | Boleto — e o Payment
+                        Element mostrava os mesmos dois logo abaixo, porque ele
+                        JÁ é um seletor. Duas perguntas idênticas empilhadas.
+
+                        Ficou o dele porque traz junto os campos certos de cada
+                        meio (boleto exige documento e endereço; cartão não),
+                        traduzidos e validados pelo próprio Stripe. Manter o
+                        nosso significava manter um formulário que envelhece a
+                        cada meio novo — e ele envelheceu na primeira vez, no dia
+                        em que o boleto foi habilitado na conta.
+
+                        Quais meios aparecem é decisão da CONTA, não nossa. */}
                     <p className="tv-texto">
-                      Cobrança mensal automática, cancele quando quiser. O cartão é digitado num
-                      campo do próprio Stripe — os dados não passam pela Omnimob.
+                      Cobrança automática, cancele quando quiser. Os dados são digitados num
+                      campo do próprio Stripe — não passam pela Omnimob.
                     </p>
                     <div className="tv-cartao" ref={cartaoRef} />
                     {!cartaoPronto && !falha ? (
@@ -505,12 +627,50 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                     type="button"
                     className="tv-btn tv-btn--primario"
                     onClick={assinar}
+                    /* Um botão só. Qual meio a pessoa escolheu, e se os campos
+                       dele estão completos, é o Payment Element que sabe — a
+                       validação acontece no `elements.submit()`, com a mensagem
+                       na língua e no campo certos. Duplicar essa checagem aqui
+                       significava reimplementar a regra de cada meio. */
                     disabled={enviando || (stripeConfigurado() && !cartaoPronto)}
                   >
                     {enviando ? "Processando…" : "Confirmar assinatura"}
                   </button>
                 </div>
               </>
+            ) : null}
+
+            {aguardandoAssinc ? (
+              <div className="tv-festa">
+                <span className="tv-eyebrow">● AGUARDANDO O PAGAMENTO</span>
+                <h2 id="tv-titulo" className="tv-titulo">
+                  {aguardandoAssinc.meio !== "boleto"
+                    ? "Autorize no app do banco"
+                    : aguardandoAssinc.guia
+                      ? "Boleto gerado"
+                      /* Sem guia não houve boleto, e dizer que houve foi
+                         exatamente o que escondeu um defeito por dias. */
+                      : "Cobrança criada"}
+                </h2>
+                {/* Deliberadamente NÃO diz "assinado". O cliente pode ter fechado
+                    o app sem autorizar, e uma tela que comemora cedo demais faz
+                    a pessoa parar de acompanhar justamente quando ainda falta o
+                    passo dela. Quem confirma é o webhook. */}
+                <p className="tv-texto">
+                  {aguardandoAssinc.meio === "boleto"
+                    ? "Pague o boleto no seu banco, aplicativo ou caixa eletrônico. A confirmação chega em até 1 dia útil e o plano segue liberado enquanto isso."
+                    : "Abra o aplicativo do seu banco e autorize a cobrança recorrente da Omnimob. Assim que for aprovada, o plano é liberado sozinho — pode levar alguns minutos."}
+                </p>
+                {/* A guia em si. Sem este link a pessoa sai da tela sem o
+                    boleto na mão e precisa procurá-lo no e-mail — que pode nem
+                    estar habilitado na conta. */}
+                <GuiaDoBoleto guia={aguardandoAssinc.guia} />
+                <div className="tv-acoes">
+                  <button type="button" className="tv-btn tv-btn--primario" onClick={() => window.location.reload()}>
+                    Entendi
+                  </button>
+                </div>
+              </div>
             ) : null}
 
             {passo === 4 && concluido ? (
@@ -573,6 +733,47 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
 }
 
 const CSS = `
+/* Guia do boleto: linha digitavel, PDF e pagina hospedada.
+   (Sem crases neste comentario: template literal.) */
+.tv-guia { display: flex; flex-direction: column; gap: 8px; }
+.tv-guia__rotulo { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
+.tv-guia__numero {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; line-height: 1.6; word-break: break-all;
+  padding: 10px 12px; border-radius: 8px;
+  background: var(--sup-05, rgba(255,255,255,0.05)); border: 1px solid var(--linha-10, rgba(255,255,255,0.1));
+}
+.tv-guia__links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.tv-guia__links a { color: #a5b4fc; }
+.tv-guia__prazo { font-size: 12px; color: #94a3b8; }
+
+/* Selo do rodape com cobranca esperando pagamento: ambar, entre o normal e o
+   vencido. (Sem crases neste comentario: template literal.) */
+.tv-botao.is-aguardando { border-color: rgba(245,158,11,0.4); color: #fbbf24; }
+.tv-botao.is-aguardando .tv-ponto { background: #f59e0b; }
+.tv-pendencia { display: flex; flex-direction: column; gap: 12px; }
+
+/* Alternador de meio de pagamento e o campo de CPF/CNPJ do Pix.
+   (Sem crases nestes comentarios: eles vivem dentro de um template literal.) */
+.tv-meio { display: flex; padding: 3px; border-radius: 10px; margin-bottom: 4px; }
+.tv-meio__op {
+  width: auto; flex: 1; padding: 7px 14px; border-radius: 8px; border: none;
+  background: transparent; color: #94a3b8; font-size: 13px; font-weight: 600;
+  cursor: pointer; box-shadow: none; transform: none;
+}
+.tv-meio__op.is-on { background: var(--sup-10, rgba(255,255,255,0.1)); color: #f8fafc; }
+.tv-meio__op:hover { transform: none; box-shadow: none; }
+.tv-campo { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.tv-campo--curto { flex: 0 0 92px; }
+.tv-linha { display: flex; gap: 10px; flex-wrap: wrap; }
+.tv-campo span { font-size: 12px; font-weight: 600; color: #94a3b8; }
+.tv-campo input {
+  width: 100%; box-sizing: border-box; padding: 11px 14px; border-radius: 10px;
+  background: var(--campo-fundo, rgba(255,255,255,0.04));
+  border: 1px solid var(--campo-borda, rgba(255,255,255,0.12));
+  color: inherit; font-size: 14px; font-family: inherit; outline: none;
+}
+
 /* ── Botão na sidebar ── */
 .ds-shell .tv-botao {
   display: flex; align-items: center; gap: 9px; width: 100%;
@@ -625,7 +826,7 @@ const CSS = `
 
 .tv-caixa {
   width: min(520px, 100%); max-height: calc(100vh - 48px); overflow-y: auto;
-  background: #141821; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px;
+  background: #141821; border: 1px solid var(--linha-10, rgba(255,255,255,0.10)); border-radius: 18px;
   padding: 28px 28px 24px;
   box-shadow: 0 30px 70px -24px rgba(0,0,0,0.9);
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
@@ -645,7 +846,7 @@ const CSS = `
 
 .tv-passos { display: flex; gap: 5px; margin-bottom: 18px; }
 .tv-passo {
-  height: 3px; flex: 1; border-radius: 999px; background: rgba(255,255,255,0.10);
+  height: 3px; flex: 1; border-radius: 999px; background: var(--sup-10, rgba(255,255,255,0.10));
   transition: background 0.3s ease;
 }
 .tv-passo.is-on { background: #818cf8; }
@@ -677,11 +878,11 @@ const CSS = `
 .ds-shell .tv-plano, .tv-plano {
   display: grid; gap: 3px; width: 100%; text-align: left; cursor: pointer;
   padding: 12px 14px; border-radius: 12px;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09);
+  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--linha-09, rgba(255,255,255,0.09));
   font-family: inherit; box-shadow: none; transform: none;
   transition: border-color 0.18s ease, background 0.18s ease;
 }
-.tv-plano:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.18); box-shadow: none; transform: none; }
+.tv-plano:hover { background: var(--sup-06, rgba(255,255,255,0.06)); border-color: var(--linha-18, rgba(255,255,255,0.18)); box-shadow: none; transform: none; }
 .tv-plano.is-on { border-color: rgba(129,140,248,0.6); background: rgba(129,140,248,0.12); }
 .tv-plano:active { scale: 1; }
 .tv-plano__topo { display: flex; align-items: center; gap: 8px; }
@@ -707,7 +908,7 @@ const CSS = `
   display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
   padding: 4px; margin-bottom: 12px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09);
+  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--linha-09, rgba(255,255,255,0.09));
 }
 .ds-shell .tv-periodo__opt, .tv-periodo__opt {
   padding: 7px 10px; border-radius: 999px; border: 0; cursor: pointer;
@@ -716,7 +917,7 @@ const CSS = `
   box-shadow: none; transform: none;
   transition: background 0.18s ease, color 0.18s ease;
 }
-.tv-periodo__opt:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; box-shadow: none; transform: none; }
+.tv-periodo__opt:hover { background: var(--sup-05, rgba(255,255,255,0.05)); color: #f1f5f9; box-shadow: none; transform: none; }
 .tv-periodo__opt.is-on { background: rgba(129,140,248,0.18); color: #c7d2fe; }
 .tv-periodo__opt:active { scale: 1; }
 
@@ -755,7 +956,7 @@ const CSS = `
 .tv-resumo {
   width: 100%; margin: 4px 0 16px; display: grid; gap: 1px;
   border-radius: 12px; overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.09); background: rgba(255,255,255,0.09);
+  border: 1px solid var(--linha-09, rgba(255,255,255,0.09)); background: var(--sup-09, rgba(255,255,255,0.09));
 }
 .tv-resumo__linha {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -778,11 +979,11 @@ const CSS = `
   width: auto; padding: 10px 18px; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 13px; font-weight: 600; text-decoration: none;
   display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid rgba(255,255,255,0.14); color: #cbd5e1;
+  background: transparent; border: 1px solid var(--linha-14, rgba(255,255,255,0.14)); color: #cbd5e1;
   box-shadow: none; transform: none;
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
-.tv-btn:hover { background: rgba(255,255,255,0.07); color: #f1f5f9; box-shadow: none; transform: none; }
+.tv-btn:hover { background: var(--sup-07, rgba(255,255,255,0.07)); color: #f1f5f9; box-shadow: none; transform: none; }
 .tv-btn:active { scale: 1; }
 .tv-btn--primario { background: #f1f5f9; border-color: #f1f5f9; color: #0c0f1a; }
 .tv-btn--primario:hover { background: #fff; color: #0c0f1a; }

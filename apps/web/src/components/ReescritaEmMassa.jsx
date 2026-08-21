@@ -131,8 +131,8 @@ export function ReescritaEmMassa({ session, properties, aoConcluir }) {
                         style={{
                           display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px",
                           borderRadius: "9px", cursor: cheio ? "default" : "pointer",
-                          background: marcado ? "rgba(212,175,55,0.08)" : "rgba(255,255,255,0.03)",
-                          border: `1px solid ${marcado ? "rgba(212,175,55,0.30)" : "rgba(255,255,255,0.07)"}`,
+                          background: marcado ? "rgba(212,175,55,0.08)" : "var(--sup-03, rgba(255,255,255,0.03))",
+                          border: `1px solid ${marcado ? "rgba(212,175,55,0.30)" : "var(--linha-07, rgba(255,255,255,0.07))"}`,
                           opacity: cheio ? 0.45 : 1,
                         }}
                       >
@@ -153,7 +153,7 @@ export function ReescritaEmMassa({ session, properties, aoConcluir }) {
                     );
                   })
                 : resultados.map((r) => (
-                    <div key={r.id} style={{ padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div key={r.id} style={{ padding: "12px 14px", borderRadius: "10px", background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "9px", marginBottom: "8px" }}>
                         {r.erro ? null : (
                           <input

@@ -63,7 +63,7 @@ function PedirLink() {
         rodape={<Link to="/login" className="lg-alt">Voltar para o login</Link>}
         onSubmit={(e) => e.preventDefault()}
       >
-        <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6, color: "rgba(255,255,255,0.62)" }}>
+        <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6, color: "var(--tinta-62, rgba(255,255,255,0.62))" }}>
           Se o seu usuário não tiver e-mail cadastrado, o link não chega — nesse caso, quem redefine
           a sua senha é o administrador da sua imobiliária, na tela de Usuários.
         </p>
@@ -163,7 +163,7 @@ function DefinirNova({ token, onLogin }) {
         soft="o seu link…"
         onSubmit={(e) => e.preventDefault()}
       >
-        <p style={{ margin: 0, fontSize: "13px", color: "rgba(255,255,255,0.55)" }}>Um instante.</p>
+        <p style={{ margin: 0, fontSize: "13px", color: "var(--tinta-55, rgba(255,255,255,0.55))" }}>Um instante.</p>
       </AuthShell>
     );
   }

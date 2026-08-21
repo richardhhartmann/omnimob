@@ -222,7 +222,7 @@ export function AuditoriaPage({ session }) {
           <input
             value={buscaDigitada}
             onChange={(e) => setBuscaDigitada(e.target.value)}
-            placeholder="Buscar por nome do registro, autor ou código…"
+            placeholder="Buscar…"
           />
         </label>
 

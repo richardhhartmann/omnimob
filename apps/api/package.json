@@ -18,11 +18,13 @@
     "prisma:seed:dev": "node prisma/seed.js --dev",
     "faxina": "node scripts/faxina.js",
     "simular:vencimento": "node scripts/simular-vencimento.js",
+    "status:apagar": "node scripts/apagar-status-whatsapp.js",
     "relatorio": "node scripts/relatorio-mensal.js",
     "stripe:limpar": "node scripts/stripe-limpar.js",
     "subdominios": "node scripts/subdominios.js",
     "test": "node --test \"test/*.test.js\"",
-    "test:isolamento": "node --test test/isolamento.test.js"
+    "test:isolamento": "node --test test/isolamento.test.js",
+    "conferir-nomes": "node ../web/scripts/conferir-imports.mjs src"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

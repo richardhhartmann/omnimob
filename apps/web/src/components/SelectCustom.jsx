@@ -178,7 +178,7 @@ export function SelectCustom({
         style={{
           display: "flex", alignItems: "center", gap: t.gap, width: "100%",
           boxSizing: "border-box", padding: t.padding, borderRadius: t.radius,
-          background: "var(--campo-fundo, rgba(255,255,255,0.04))", border: `1px solid ${corBorda}`,
+          background: "var(--campo-fundo, var(--sup-04, rgba(255,255,255,0.04)))", border: `1px solid ${corBorda}`,
           color: "inherit", fontSize: t.fonte, fontFamily: "inherit", fontWeight: 400,
           textAlign: "left", lineHeight: 1.3,
           cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1,
@@ -204,7 +204,7 @@ export function SelectCustom({
             )}
           </>
         ) : (
-          <span style={{ color: "var(--campo-placeholder, rgba(255,255,255,0.35))", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ color: "var(--campo-placeholder, var(--tinta-35, rgba(255,255,255,0.35)))", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {placeholder}
           </span>
         )}
@@ -235,7 +235,7 @@ export function SelectCustom({
             listStyle: "none", margin: 0, padding: "6px", overflowY: "auto",
             background: "var(--menu-fundo, rgba(18,18,26,0.98))",
             backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-            border: "1px solid var(--menu-borda, rgba(255,255,255,0.12))", borderRadius: "12px",
+            border: "1px solid var(--menu-borda, var(--linha-12, rgba(255,255,255,0.12)))", borderRadius: "12px",
             boxShadow: "var(--menu-sombra, 0 22px 48px rgba(0,0,0,0.55))",
             animation: "fadeIn 0.15s ease-out",
             fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",

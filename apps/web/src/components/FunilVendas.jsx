@@ -3,6 +3,8 @@ import { api } from "../api";
 import { planoLiberaFunil } from "../utils/planos";
 import { RegistrarVenda } from "./RegistrarVenda";
 import { SkeletonFunil, SkeletonComissoes } from "./Skeleton";
+import { CascaDeRelatorio } from "./CascaDeRelatorio.jsx";
+import { Eye, ChatCircleText, Handshake, CurrencyCircleDollar, UsersThree } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Funil de vendas e comissões — Profissional e Premium.
@@ -46,7 +48,7 @@ function SemPlano() {
 function Periodo({ de, ate, setDe, setAte }) {
   const campo = {
     width: "auto", padding: "6px 10px", borderRadius: "8px", fontSize: "13px",
-    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "inherit",
+    background: "var(--sup-05, rgba(255,255,255,0.05))", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: "inherit",
   };
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap", marginBottom: "18px" }}>
@@ -108,18 +110,34 @@ export function FunilDeVendas({ session }) {
     { rotulo: "Vendas fechadas", valor: f?.vendas ?? 0, cor: "#34d399", taxa: f?.leadParaVenda, deQuem: "dos leads" },
   ];
 
+  /* Os mesmos três números que o funil desenha, também no topo — é o formato
+     de Gestão de Leads, e é o que faz as quatro telas de Relatórios parecerem a
+     mesma tela. Sem dado ainda, faixa nenhuma. */
+  const metricas = !dados ? [] : [
+    { label: "Visitas à vitrine", value: f?.visitas ?? 0, accent: "#818cf8", icon: <Eye size={20} /> },
+    { label: "Leads recebidos", value: f?.leads ?? 0, accent: "#38bdf8", icon: <ChatCircleText size={20} /> },
+    { label: "Vendas fechadas", value: f?.vendas ?? 0, accent: "#34d399", icon: <Handshake size={20} /> },
+  ];
+
   return (
-    <div className="glass-panel" style={{ padding: "22px 24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
-        <Periodo {...filtro} />
-        {/* O que ALIMENTA o funil fica ao lado de onde ele é lido. */}
-        <RegistrarVenda session={session} aoRegistrar={recarregar} />
-      </div>
+    <CascaDeRelatorio
+      titulo="Funil de vendas"
+      subtitulo="De visita a lead, de lead a fechamento — e onde o caminho aperta."
+      metricas={metricas}
+      carregando={carregando}
+      erro={erro}
+      filtros={
+        <>
+          <Periodo {...filtro} />
+          {/* O que ALIMENTA o funil fica ao lado de onde ele é lido. */}
+          <RegistrarVenda session={session} aoRegistrar={recarregar} />
+        </>
+      }
+    >
+      <div className="glass-panel" style={{ padding: "22px 24px" }}>
       {carregando ? (
         <SkeletonFunil />
-      ) : erro ? (
-        <p style={{ margin: 0, fontSize: "13px", color: "#fca5a5" }}>{erro}</p>
-      ) : !dados ? null : (
+      ) : erro ? null : !dados ? null : (
         <>
           <div style={{ display: "grid", gap: "12px", marginBottom: "22px" }}>
             {etapas.map((e) => (
@@ -135,14 +153,14 @@ export function FunilDeVendas({ session }) {
                     ) : null}
                   </span>
                 </div>
-                <div style={{ height: "10px", borderRadius: "999px", background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                <div style={{ height: "10px", borderRadius: "999px", background: "var(--sup-05, rgba(255,255,255,0.05))", overflow: "hidden" }}>
                   <div style={{ width: `${Math.max((e.valor / maior) * 100, e.valor > 0 ? 2 : 0)}%`, height: "100%", borderRadius: "999px", background: e.cor, transition: "width 0.5s ease" }} />
                 </div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "26px", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "26px", paddingTop: "16px", borderTop: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
             <Numero rotulo="Fechamentos" valor={dados.totais.quantidade} />
             <Numero rotulo="Valor movimentado" valor={brl(dados.totais.valor)} />
             <Numero rotulo="Comissões" valor={brl(dados.totais.comissao)} destaque="#e8cf7a" />
@@ -170,7 +188,8 @@ export function FunilDeVendas({ session }) {
           ) : null}
         </>
       )}
-    </div>
+      </div>
+    </CascaDeRelatorio>
   );
 }
 
@@ -182,14 +201,25 @@ export function Comissoes({ session }) {
 
   const linhas = dados?.porCorretor || [];
 
+  const metricas = !dados || !linhas.length ? [] : [
+    { label: "Total em comissões", value: brl(dados.totais.comissao), accent: "#e8cf7a", icon: <CurrencyCircleDollar size={20} /> },
+    { label: "Valor movimentado", value: brl(dados.totais.valor), accent: "#6366f1", icon: <Handshake size={20} /> },
+    { label: "Corretores com venda", value: linhas.length, accent: "#34d399", icon: <UsersThree size={20} /> },
+  ];
+
   return (
-    <div className="glass-panel" style={{ padding: "22px 24px" }}>
-      <Periodo {...filtro} />
+    <CascaDeRelatorio
+      titulo="Comissões"
+      subtitulo="Quanto cada corretor fechou no período e quanto tem a receber."
+      metricas={metricas}
+      carregando={carregando}
+      erro={erro}
+      filtros={<Periodo {...filtro} />}
+    >
+      <div className="glass-panel" style={{ padding: "22px 24px" }}>
       {carregando ? (
         <SkeletonComissoes />
-      ) : erro ? (
-        <p style={{ margin: 0, fontSize: "13px", color: "#fca5a5" }}>{erro}</p>
-      ) : !linhas.length ? (
+      ) : erro ? null : !linhas.length ? (
         <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
           Nenhuma venda registrada neste período.
         </p>
@@ -214,7 +244,7 @@ export function Comissoes({ session }) {
                 style={{
                   display: "grid", gridTemplateColumns: "1fr 80px 130px 130px", gap: "10px",
                   padding: "11px 12px", borderRadius: "9px", fontSize: "13.5px",
-                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+                  background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-06, rgba(255,255,255,0.06))",
                 }}
               >
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.nome}</span>
@@ -231,7 +261,8 @@ export function Comissoes({ session }) {
           </p>
         </>
       )}
-    </div>
+      </div>
+    </CascaDeRelatorio>
   );
 }
 

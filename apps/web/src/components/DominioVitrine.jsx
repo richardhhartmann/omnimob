@@ -322,7 +322,7 @@ export function DominioVitrine({ tenantSlug, compacto = false, aoResolverEnderec
 
 const CSS = `
 .dv { display: flex; flex-direction: column; gap: 14px; text-align: left; }
-.dv-carregando { color: rgba(255,255,255,0.5); font-size: 13px; padding: 8px 0; }
+.dv-carregando { color: var(--tinta-50, rgba(255,255,255,0.5)); font-size: 13px; padding: 8px 0; }
 
 .dv-opcoes { display: grid; gap: 10px; }
 .dv--compacto .dv-opcoes { gap: 8px; }
@@ -332,38 +332,38 @@ const CSS = `
 .dv-opcao {
   display: flex; flex-direction: column; gap: 4px;
   padding: 14px 16px; text-align: left; cursor: pointer;
-  background: rgba(255,255,255,0.04); color: inherit;
-  border: 1px solid rgba(255,255,255,0.12); border-radius: 14px;
+  background: var(--sup-04, rgba(255,255,255,0.04)); color: inherit;
+  border: 1px solid var(--linha-12, rgba(255,255,255,0.12)); border-radius: 14px;
   transition: border-color .18s ease, background .18s ease;
 }
-.dv-opcao:hover { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.06); }
+.dv-opcao:hover { border-color: var(--linha-28, rgba(255,255,255,0.28)); background: var(--sup-06, rgba(255,255,255,0.06)); }
 .dv-opcao.is-ativa { border-color: #d4af37; background: rgba(212,175,55,0.10); }
 .dv-opcao.is-bloqueada { opacity: .55; cursor: not-allowed; }
 .dv-opcao__titulo { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
 .dv-opcao__end { font-family: ui-monospace, monospace; font-size: 12px; color: #d4af37; }
-.dv-opcao__nota { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.45; }
+.dv-opcao__nota { font-size: 12px; color: var(--tinta-60, rgba(255,255,255,0.6)); line-height: 1.45; }
 .dv-tag {
   font-style: normal; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
   padding: 2px 7px; border-radius: 999px; background: rgba(212,175,55,0.18); color: #e8c96a;
 }
 
 .dv-form { display: flex; flex-direction: column; gap: 8px; }
-.dv-rotulo { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.72); }
+.dv-rotulo { font-size: 12px; font-weight: 600; color: var(--tinta-72, rgba(255,255,255,0.72)); }
 .dv-linha { display: flex; gap: 8px; flex-wrap: wrap; }
 .dv-campo {
   flex: 1 1 220px; min-width: 0;
   padding: 11px 14px; border-radius: 10px; font-size: 14px;
-  border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05);
+  border: 1px solid var(--linha-14, rgba(255,255,255,0.14)); background: var(--sup-05, rgba(255,255,255,0.05));
   color: inherit; outline: none;
 }
 .dv-campo:focus { border-color: #d4af37; }
 
 .dv-btn {
   padding: 11px 16px; border-radius: 10px; font-size: 13px; font-weight: 600;
-  border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05);
+  border: 1px solid var(--linha-16, rgba(255,255,255,0.16)); background: var(--sup-05, rgba(255,255,255,0.05));
   color: inherit; cursor: pointer; text-decoration: none; display: inline-block;
 }
-.dv-btn:hover { background: rgba(255,255,255,0.09); }
+.dv-btn:hover { background: var(--sup-09, rgba(255,255,255,0.09)); }
 .dv-btn:disabled { opacity: .5; cursor: default; }
 .dv-btn--principal { background: #d4af37; border-color: #d4af37; color: #10100f; }
 .dv-btn--principal:hover { background: #e0bd4d; }
@@ -371,7 +371,7 @@ const CSS = `
 .dv-painel {
   display: flex; flex-direction: column; gap: 12px;
   padding: 16px; border-radius: 14px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+  background: var(--sup-04, rgba(255,255,255,0.04)); border: 1px solid var(--linha-10, rgba(255,255,255,0.10));
 }
 .dv-status { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; }
 .dv-status--ativo { color: #4ade80; }
@@ -382,8 +382,8 @@ const CSS = `
 }
 @keyframes dv-pulso { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
 
-.dv-texto { margin: 0; font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.78); }
-.dv-ajuda { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.55); }
+.dv-texto { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tinta-78, rgba(255,255,255,0.78)); }
+.dv-ajuda { margin: 0; font-size: 12px; line-height: 1.5; color: var(--tinta-55, rgba(255,255,255,0.55)); }
 .dv-ajuda code, .dv-texto code { font-size: 11.5px; }
 .dv-erro { margin: 0; font-size: 12.5px; line-height: 1.5; color: #fca5a5; }
 /* Aviso, não erro: o cadastro deu certo — o que está em jogo é o site que já
@@ -405,15 +405,15 @@ const CSS = `
 .dv-tr--cab {
   background: none; padding-bottom: 2px;
   font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
-  color: rgba(255,255,255,0.42);
+  color: var(--tinta-42, rgba(255,255,255,0.42));
 }
 .dv-valor { overflow-x: auto; white-space: nowrap; }
 .dv-copiar {
   padding: 5px 8px; border-radius: 7px; font-size: 11px;
-  border: 1px solid rgba(255,255,255,0.16); background: transparent;
-  color: rgba(255,255,255,0.75); cursor: pointer;
+  border: 1px solid var(--linha-16, rgba(255,255,255,0.16)); background: transparent;
+  color: var(--tinta-75, rgba(255,255,255,0.75)); cursor: pointer;
 }
-.dv-copiar:hover { background: rgba(255,255,255,0.08); }
+.dv-copiar:hover { background: var(--sup-08, rgba(255,255,255,0.08)); }
 
 .dv-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 

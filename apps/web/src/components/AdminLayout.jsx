@@ -1,26 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { BotaoGoogle } from "./BotaoGoogle.jsx";
 import { TrialAviso } from "./TrialAviso";
 import { BoasVindasModal } from "./BoasVindasModal";
 import { PulsoTrialModal } from "./PulsoTrialModal";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
+import { relatoriosVisiveis, PARAMETRO_DE } from "../utils/relatorios";
 import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
 import { TourDeTela } from "./TourDeTela";
 import { AjudaModal } from "./AjudaModal";
 import { corDeTextoPara } from "./adminUi";
 import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
 import { IconeRelatorios, ICONES_RELATORIOS } from "../utils/iconesRelatorios";
-import { ABAS_CONFIG } from "../utils/abasConfiguracoes";
+import { abasVisiveis } from "../utils/abasConfiguracoes";
 import { podeImportar } from "./ImportadorDados.jsx";
 import { SeloBeta } from "./SeloBeta.jsx";
+import { MenuDoPerfil } from "./MenuDoPerfil.jsx";
+import { ModalPreferencias, ModalMeusDados } from "./ModaisDoPerfil.jsx";
 import { TEMAS, observarSistema, temaEfetivo, temaEscolhido } from "../utils/temaDoPainel";
 import { lerDoTenant, CHAVES } from "../utils/chaveDoTenant";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
+import { useAtalhos } from "./useAtalhos";
+import { ProvedorDeAtalhos } from "./ContextoDeAtalhos.jsx";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   House,
+  ChartPieSlice,
   Buildings,
   SquaresFour,
   Users,
@@ -30,19 +37,12 @@ import {
   GearSix,
   PencilSimple,
   ArrowSquareOut,
-  SignOut,
-  CaretLeft,
-  CaretRight,
   CheckCircle,
   XCircle,
   WarningCircle,
-  Question,
   PlusCircle,
   Tag,
   ClockCounterClockwise,
-  Sun,
-  Moon,
-  CircleHalf,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -122,13 +122,18 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
     <>
       <span className="ds-item__icon">
         <Icon size={16} weight={active ? "fill" : "regular"} />
-        {collapsed && badge > 0 ? <span className="ds-item__pip" /> : null}
+        {/* O pip é o contador na forma recolhida: ponto vermelho no canto do
+            ícone, porque o número não cabe em 28px. Os dois no DOM, um visível
+            de cada vez. */}
+        {badge > 0 ? <span className="ds-item__pip" /> : null}
       </span>
-      {!collapsed ? <span className="ds-item__label">{label}</span> : null}
-      {/* Só com a barra expandida. Recolhida sobram 28px, onde nem o nome cabe
-          — e a dica lateral já diz de que item se trata. */}
-      {!collapsed && beta ? <SeloBeta /> : null}
-      {!collapsed && badge > 0 ? (
+      {/* Rótulo, selo e contador existem SEMPRE no DOM; quem os mostra é o CSS,
+          conforme a barra esteja recolhida ou aberta pelo hover. O React não
+          fica sabendo da entrada do ponteiro, e um estado só para isso traria
+          de volta o re-render que a expansão por CSS evita. */}
+      <span className="ds-item__label">{label}</span>
+      {beta ? <SeloBeta /> : null}
+      {badge > 0 ? (
         <span className="ds-item__badge">{badge > 99 ? "99+" : badge}</span>
       ) : null}
     </>
@@ -156,44 +161,6 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
   return <SideTooltip label={label} collapsed={collapsed}>{el}</SideTooltip>;
 }
 
-/* ── O botão de tema, ao lado do nome ────────────────────────────────────────
-   Cicla entre as três opções em vez de abrir menu: são três estados e o ícone
-   mostra em qual você está, então um clique basta. O `title` diz o próximo
-   destino — é o que evita a pessoa clicar duas vezes para descobrir a ordem. */
-const ICONE_DO_TEMA = { claro: Sun, escuro: Moon, auto: CircleHalf };
-
-function SeletorDeTema({ escolhido, aoTrocar }) {
-  /* Só claro e escuro no atalho do perfil. "Automático" existe, mas é uma
-     escolha de configuração, não de alternância rápida: quem clica aqui quer
-     TROCAR a tela agora, e um terceiro estado que "depende do sistema" faz o
-     clique não ter efeito visível quando o sistema já está naquele modo.
-
-     Ele continua disponível em Configurações › Aparência e no primeiro acesso,
-     onde a pessoa está decidindo com calma. E quem escolheu automático por lá
-     vê o ícone dele aqui — o botão mostra o estado real, só não oferece o
-     terceiro destino. */
-  const ordem = ["claro", "escuro"];
-  /* Vindo de "automático", o índice é -1 e o próximo seria "claro" por
-     acidente. Partimos do que está NA TELA: quem vê escuro espera que o clique
-     leve ao claro, independente de como chegou nele. */
-  const atualNaTela = escolhido === "claro" ? "claro" : "escuro";
-  const proximo = ordem[(ordem.indexOf(atualNaTela) + 1) % ordem.length];
-  const Icone = ICONE_DO_TEMA[escolhido] || Moon;
-  const rotulo = TEMAS.find((t) => t.id === proximo)?.rotulo || proximo;
-
-  return (
-    <button
-      type="button"
-      className="ds-tema"
-      onClick={() => aoTrocar(proximo)}
-      title={`Tema: ${TEMAS.find((t) => t.id === escolhido)?.rotulo}. Clique para ${rotulo.toLowerCase()}.`}
-      aria-label={`Trocar o tema do painel para ${rotulo}`}
-    >
-      <Icone size={15} weight="fill" />
-    </button>
-  );
-}
-
 // ── Toast ─────────────────────────────────────────────────────────────────────
 const TOAST_META = {
   success: { Icon: CheckCircle,   cor: "#10b981" },
@@ -211,8 +178,20 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      `utils/chaveDoTenant.js` para o estrago que isso causava. */
   const tenantId   = session?.tenant?.id    || "";
   const tenantName = session?.tenant?.name  || "Omnimob";
-  const userInitial = session?.usuario?.nome?.charAt(0)?.toUpperCase() || "U";
-  const userName    = session?.usuario?.nome || "";
+  /* ── O retrato que a PESSOA vê de si ─────────────────────────────────────
+     Com a conta Google vinculada, a moldura do painel passa a mostrar a foto e
+     o nome de lá. Não é vaidade: o cadastro costuma trazer o nome funcional
+     ("Administrador", "Recepção"), e o painel é o único lugar do produto onde
+     quem está olhando é a própria pessoa.
+
+     A precedência para AQUI, e só aqui. O cadastro segue intocado e continua
+     sendo o que aparece na vitrine, nas listas e no widget de Equipe — vincular
+     a conta pessoal de um corretor não pode trocar o nome dele na página
+     pública da imobiliária. */
+  const google      = session?.usuario?.google || null;
+  const userFoto    = google?.foto || session?.usuario?.foto || "";
+  const userName    = google?.nome || session?.usuario?.nome || "";
+  const userInitial = userName.charAt(0)?.toUpperCase() || "U";
   const userRole    = session?.usuario?.cargo?.descricao || "Operador";
   const cargo       = session?.usuario?.cargo;
 
@@ -305,21 +284,25 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const shellRef = useRef(null);
   useBrilhoDeBorda(shellRef);
 
-  // ── Colapso ──────────────────────────────────────────────────────────────────
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
-  });
-  function toggleCollapsed() {
-    setCollapsed((c) => {
-      const next = !c;
-      try { localStorage.setItem("sidebar-collapsed", String(next)); } catch {}
-      return next;
-    });
-  }
+  /* ── A barra não tem mais estado de colapso ────────────────────────────────
+     Ela vive recolhida e abre no hover, por CSS. Havia um botão para alternar e
+     uma preferência guardada, e os dois foram embora pelo mesmo motivo: eram
+     uma pergunta que o produto fazia à pessoa e que ela não tinha como
+     responder bem. Quem recolhe ganha espaço e perde os rótulos; quem deixa
+     aberta perde 240px em toda tela. O hover dá os dois — espaço o tempo todo,
+     rótulo quando o olho vai lá.
+
+     Sem estado em JavaScript de propósito: `:hover` no CSS não re-renderiza
+     nada, e uma barra que remonta a cada entrada e saída do ponteiro seria cara
+     numa tela que já tem submenu animado.
+     ────────────────────────────────────────────────────────────────────────── */
 
   // ── Fila de modais de entrada ─────────────────────────────────────────────────
-  // O tour só entra depois que o aviso de conta se resolve (ver o JSX abaixo).
-  const [contaResolvida, setContaResolvida] = useState(false);
+  /* O tour só entra depois que o aviso de conta se resolve (ver o JSX abaixo).
+     Para quem NÃO administra a conta ele já nasce resolvido: o assistente da
+     conta nem é montado para essa pessoa, então ninguém chamaria `aoResolver`
+     e o tour esperaria para sempre um sinal que não vem. */
+  const [contaResolvida, setContaResolvida] = useState(() => !cargo?.verConfiguracoes);
   const marcarContaResolvida = useCallback(() => setContaResolvida(true), []);
   // Enquanto o tour global ocupa a tela, os tours de tela esperam a vez.
   const [tourGlobalAtivo, setTourGlobalAtivo] = useState(false);
@@ -329,6 +312,17 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      tour da tela atual mesmo que ela já tenha sido concluída. Contador e não
      flag porque pedir "rever" duas vezes seguidas tem que funcionar as duas. */
   const [ajudaAberta, setAjudaAberta] = useState(false);
+  /* O menu do perfil e o que ele abre. `ajudaEm` diz em que passo o modal de
+     ajuda deve nascer: "menu" é a central, "chamado" pula direto para o
+     formulário — o menu oferece as duas coisas como itens distintos, e cair na
+     central depois de clicar em "abrir chamado" seria um passo a mais para uma
+     escolha que a pessoa já fez. */
+  const [menuPerfil, setMenuPerfil] = useState(false);
+  const [ajudaEm, setAjudaEm] = useState("menu");
+  const [preferenciasAbertas, setPreferenciasAbertas] = useState(false);
+  const [meusDadosAbertos, setMeusDadosAbertos] = useState(false);
+  const perfilRef = useRef(null);
+
   const [pedidoTour, setPedidoTour] = useState(0);
 
   // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -338,6 +332,52 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);
+
+  /* Vincular a conta do Google.
+
+     O token do Google vai para o servidor, que confere a assinatura antes de
+     gravar qualquer coisa — nada aqui decide nada. Ver `services/google.js`.
+
+     Ao dar certo, a sessão é atualizada na hora: sem isso o menu continuaria
+     oferecendo "vincular" para quem acabou de vincular, até o próximo
+     recarregamento. */
+  /* Abre o modal com o botão do Google.
+
+     Não dá para vincular direto do item do menu: o botão é DESENHADO pelo
+     Google dentro de um elemento, não é uma chamada que abre uma janela. A
+     primeira versão tentava `prompt()` (o One Tap) para evitar o modal — e o
+     navegador suprimiu em toda tentativa. O modal é o preço de usar o caminho
+     que funciona. */
+  const [vinculandoGoogle, setVinculandoGoogle] = useState(null);
+  const vincularGoogle = useCallback(async () => {
+    try {
+      const { clientId, disponivel } = await api.googleDisponivel();
+      if (!disponivel) {
+        showToast("Entrar com Google não está configurado neste ambiente.", "error");
+        return;
+      }
+      setVinculandoGoogle(clientId);
+    } catch (erro) {
+      showToast(erro.message || "Não consegui falar com o Google.", "error");
+    }
+  }, [showToast]);
+
+  const concluirVinculo = useCallback(async (credencial) => {
+    try {
+      const r = await api.vincularGoogle(tenantSlug, credencial);
+      setVinculandoGoogle(null);
+      onSessionUpdate?.({
+        ...session,
+        usuario: {
+          ...session.usuario,
+          google: { email: r.googleEmail, foto: r.googleFoto, nome: r.googleNome },
+        },
+      });
+      showToast("Conta do Google vinculada. Da próxima vez você pode entrar por ela.");
+    } catch (erro) {
+      showToast(erro.message || "Não consegui vincular a conta do Google.", "error");
+    }
+  }, [tenantSlug, session, onSessionUpdate, showToast]);
 
   /* ── Links ────────────────────────────────────────────────────────────────
      "Ver página" leva ao endereço PÚBLICO da vitrine — o domínio da
@@ -363,6 +403,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      caminho que já dizia "novo" mais um `?ver=novo` atrás diziam a mesma coisa
      duas vezes. */
   const ver = new URLSearchParams(location.search).get("ver");
+  const isInicio        = p === "/inicio";
   const isDashboard     = p === "/";
   /* "Gerenciar Imóveis" é o índice (`/imoveis`) e acende também quando a pessoa
      está numa das telas que ele leva a — o formulário e as categorias. */
@@ -415,10 +456,31 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
   // ── Grupos de navegação ───────────────────────────────────────────────────────
   // Um grupo só aparece se sobrar algum item depois do filtro de permissões.
+  const podeVerPainel = Boolean(cargo?.verPainelGestor);
+
+  /* ── O teclado ────────────────────────────────────────────────────────────
+     Mora aqui porque o layout envolve TODAS as telas do painel: um hook por
+     página significaria lembrar de ligá-lo em cada página nova, e o esquecimento
+     seria silencioso — a tecla simplesmente não faria nada naquela tela.
+
+     `inicial` é para onde o Esc leva quando não há de onde voltar, e depende do
+     cargo pela mesma razão que o destino após o login depende. */
+  useAtalhos({
+    cargo,
+    doTenant: session?.tenant?.atalhos || undefined,
+    doUsuario: session?.usuario?.atalhos || undefined,
+    inicial: cargo?.verPainelGestor ? "/inicio" : "/",
+    ativos: session?.tenant?.atalhosAtivos !== false,
+  });
+
   const grupos = useMemo(() => {
     const g = [
       {
-        itens: [{ key: "inicio", Icon: House, label: "Início", active: isDashboard, onClick: () => navigate("/") }],
+        /* O Painel do Gestor NÃO tem item aqui: chega-se a ele pelo cabeçalho
+           da barra, logo acima. Dois caminhos para a mesma tela — um item de
+           menu e o logotipo — fariam a pessoa se perguntar se são telas
+           diferentes. */
+        itens: [{ key: "dashboard", Icon: House, label: "Dashboard", active: isDashboard, onClick: () => navigate("/") }],
       },
       {
         label: "IMÓVEIS",
@@ -445,10 +507,17 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             key: "leads", Icon: IconeRelatorios, label: "Relatórios",
             active: isLeads, onClick: () => navigate("/relatorios"), badge: leadsBadge,
             subitens: [
-              { key: "rel-leads", Icon: ICONES_RELATORIOS.LEADS, label: "Leads", active: ver === "leads", onClick: () => navigate("/relatorios?ver=leads") },
-              { key: "rel-mensal", Icon: ICONES_RELATORIOS.MENSAL, label: "Relatório mensal", active: ver === "mensal", onClick: () => navigate("/relatorios?ver=mensal") },
-              { key: "rel-funil", Icon: ICONES_RELATORIOS.FUNIL, label: "Funil de vendas", active: ver === "funil", onClick: () => navigate("/relatorios?ver=funil") },
-              { key: "rel-comissoes", Icon: ICONES_RELATORIOS.COMISSOES, label: "Comissões", active: ver === "comissoes", onClick: () => navigate("/relatorios?ver=comissoes") },
+              /* Os subitens saem da MESMA lista que desenha os cartões do
+                 índice (`utils/relatorios.js`), inclusive a regra de plano.
+                 Uma cópia aqui já deu um menu que oferecia o relatório mensal
+                 no Básico enquanto a tela mostrava convite de upgrade. */
+              ...relatoriosVisiveis(session?.tenant?.plano).map((r) => ({
+                key: `rel-${PARAMETRO_DE[r.chave]}`,
+                Icon: ICONES_RELATORIOS[r.chave],
+                label: r.title,
+                active: ver === PARAMETRO_DE[r.chave],
+                onClick: () => navigate(`/relatorios?ver=${PARAMETRO_DE[r.chave]}`),
+              })),
             ],
           },
           cargo?.gerenciarClientes && { key: "clientes", Icon: UserCircle, label: "Clientes", active: isClientes, onClick: () => navigate("/clientes") },
@@ -480,8 +549,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                (`utils/abasConfiguracoes.js`), inclusive a regra de permissão da
                seção de Dados. Uma cópia aqui daria um menu que promete uma
                seção que a tela não abre. */
-            subitens: ABAS_CONFIG
-              .filter((a) => a.key !== "dados" || podeImportar(cargo))
+            subitens: abasVisiveis(cargo, session?.tenant?.plano, { podeImportar })
               .map((a) => ({
                 key: `config-${a.key}`, Icon: a.Icon, label: a.label,
                 active: isConfiguracoes && ver === a.key,
@@ -505,15 +573,36 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     p, ver,
   ]);
 
-  const c = collapsed;
+  /* Os rótulos são SEMPRE desenhados agora, e quem os esconde é o CSS.
+     Antes o JSX os removia do DOM quando recolhida — com a expansão por hover
+     isso não funciona: o React não sabe que o ponteiro entrou, e um estado só
+     para isso traria de volta o re-render que o CSS evita. */
+  const c = false;
+  /* `c` fica como constante porque `SideTooltip` e `NavItem` recebem `collapsed`
+     e sabem o que fazer com ele. Com `false`, a dica lateral não aparece — e é
+     o certo: ela existia para dizer o nome do item quando o rótulo não cabia, e
+     agora o próprio rótulo aparece ao passar o mouse. Duas coisas dizendo a
+     mesma palavra no mesmo gesto é ruído. */
 
   return (
     <Tooltip.Provider>
       <style>{CSS}</style>
 
-      {/* Fila de dois: primeiro o aviso da CONTA (assinou / está em teste),
-          depois o convite ao tour, que é da PESSOA. O segundo espera o
-          primeiro se resolver — inclusive quando ele decide não aparecer. */}
+      {/* ── Fila de dois, e cada um é de um DONO diferente ─────────────────
+          O primeiro é da CONTA: assinatura, ficha da imobiliária, endereço da
+          vitrine, importação da base. O segundo é da PESSOA: o convite ao tour.
+          O segundo espera o primeiro se resolver — inclusive quando ele decide
+          não aparecer.
+
+          Por isso o primeiro só vale para quem ADMINISTRA a conta. Um corretor
+          recebia um assistente pedindo que escolhesse o domínio da imobiliária
+          e importasse a base — decisões que não são dele, em telas que o cargo
+          dele nem abre. `verConfiguracoes` é a marca de quem administra neste
+          schema: é ela que abre plano, cobrança e domínio.
+
+          Quem não administra segue direto para o convite do tour, que é o que
+          faz sentido no primeiro acesso de qualquer pessoa. */}
+      {cargo?.verConfiguracoes ? (
       <BoasVindasModal
         tenantSlug={tenantSlug}
         tenantId={tenantId}
@@ -524,6 +613,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         aoAtualizarTenant={(campos) =>
           onSessionUpdate?.({ ...session, tenant: { ...session.tenant, ...campos } })}
       />
+      ) : null}
 
       {/* Vale para todo mundo: dono, corretor, tenant pagante e tenant em
           teste. O tour é sobre onde ficam as telas — pergunta que independe
@@ -555,8 +645,44 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         pronto={contaResolvida && !tourGlobalAtivo}
       />
 
+      {preferenciasAbertas ? (
+        <ModalPreferencias
+          onClose={() => setPreferenciasAbertas(false)}
+          tema={escolhido}
+          aoTrocarTema={trocarTema}
+          session={session}
+          onSessionUpdate={onSessionUpdate}
+        />
+      ) : null}
+
+      {vinculandoGoogle ? (
+        <>
+          <div className="mp-veu" onMouseDown={() => setVinculandoGoogle(null)} />
+          <div className="mp-modal mp-modal--curto" role="dialog" aria-modal="true" aria-label="Vincular conta Google">
+            <header className="mp-modal__cab">
+              <div>
+                <h2>Vincular conta Google</h2>
+                <p>Escolha a conta que você quer usar para entrar na Omnimob.</p>
+              </div>
+              <button type="button" className="mp-modal__fechar" onClick={() => setVinculandoGoogle(null)} aria-label="Fechar">×</button>
+            </header>
+            <div className="mp-modal__corpo">
+              <BotaoGoogle clientId={vinculandoGoogle} aoReceber={concluirVinculo} largura={320} />
+              <p className="mp-nota" style={{ textAlign: "center" }}>
+                Seu login e senha continuam funcionando. Vincular só acrescenta um caminho.
+              </p>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {meusDadosAbertos ? (
+        <ModalMeusDados onClose={() => setMeusDadosAbertos(false)} session={session} onSessionUpdate={onSessionUpdate} />
+      ) : null}
+
       <AjudaModal
         open={ajudaAberta}
+        passoInicial={ajudaEm}
         onClose={() => setAjudaAberta(false)}
         tourDaTela={tourDaTela}
         aoReverTour={() => setPedidoTour((n) => n + 1)}
@@ -579,10 +705,28 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         style={{ "--tenant-primary": corPrimaria, "--tenant-primary-ink": tintaPrimaria }}
       >
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-        <aside className={`ds-side${c ? " is-collapsed" : ""}`} data-tour="sidebar">
+        {/* `ds-side` reserva os 64px no fluxo; `ds-side__interno` é quem cresce,
+            por cima do conteúdo. Fosse a própria `aside` a crescer, cada passada
+            de mouse empurraria a página inteira para o lado. */}
+        <aside className="ds-side" data-tour="sidebar">
+          <div className="ds-side__interno">
 
-          {/* Header */}
-          <div className="ds-head">
+          {/* ── Header: a porta do Painel do Gestor ────────────────────────
+              Ele é a marca da imobiliária, e é por isso que serve: "clicar no
+              logotipo para ver como a casa está" é o gesto que a pessoa já tem.
+
+              Vira BOTÃO só para quem tem `verPainelGestor`. Para os outros
+              continua sendo uma `<div>` — e não um botão desabilitado: um
+              cursor de mão que não leva a lugar nenhum promete uma tela que
+              aquela pessoa não vai ver nunca. */}
+          {podeVerPainel ? (
+          <button
+            type="button"
+            className={`ds-head ds-head--link${isInicio ? " is-ativo" : ""}`}
+            onClick={() => navigate("/inicio")}
+            title="Painel do Gestor"
+            aria-current={isInicio ? "page" : undefined}
+          >
             <div className={`ds-mark${session?.tenant?.logoUrl ? " has-logo" : ""}`}>
               {session?.tenant?.logoUrl
                 ? <img src={session.tenant.logoUrl} alt={tenantName} onError={(e) => { e.currentTarget.style.display = "none"; }} />
@@ -605,16 +749,37 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 <SeloPlano plano={session?.tenant?.plano} />
               </>
             ) : null}
+          </button>
+          ) : (
+          <div className="ds-head">
+            <div className={`ds-mark${session?.tenant?.logoUrl ? " has-logo" : ""}`}>
+              {session?.tenant?.logoUrl
+                ? <img src={session.tenant.logoUrl} alt={tenantName} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                : tenantName.charAt(0).toUpperCase()}
+            </div>
+            {!c ? (
+              <>
+                <div className="ds-head__text">
+                  <span className="ds-head__name">{tenantName}</span>
+                </div>
+                <SeloPlano plano={session?.tenant?.plano} />
+              </>
+            ) : null}
           </div>
+          )}
 
           {/* Navegação */}
           <nav className="ds-nav">
             {grupos.map((grupo, gi) => (
               <div className="ds-group" key={grupo.label || `g-${gi}`}>
+                {/* Recolhida, o nome do grupo vira um fio: ele separa sem
+                    precisar de largura. Os dois no DOM pelo mesmo motivo do
+                    rótulo acima. */}
                 {grupo.label ? (
-                  c
-                    ? <span className="ds-group__rule" aria-hidden="true" />
-                    : <span className="ds-group__label">{grupo.label}</span>
+                  <>
+                    <span className="ds-group__rule" aria-hidden="true" />
+                    <span className="ds-group__label">{grupo.label}</span>
+                  </>
                 ) : null}
                 {grupo.itens.map((item) => (
                   <div key={item.key}>
@@ -638,7 +803,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                         `aria-hidden` e `tabIndex: -1` quando fechado: o bloco
                         continua no DOM para poder animar, e sem isso o Tab
                         entraria em itens invisíveis. */}
-                    {item.subitens?.length && !c ? (
+                    {item.subitens?.length ? (
                       <div className={`ds-sub${item.active ? " is-open" : ""}`} aria-hidden={!item.active}>
                         <div className="ds-sub__inner">
                           <span className="ds-sub__rail" aria-hidden="true" />
@@ -689,27 +854,50 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
               </div>
             </SideTooltip>
 
-            {/* Ajuda mora no rodapé, junto das ações que são sobre o sistema e
-                não sobre o trabalho — recolher menu, sair, perfil. E fica acima
-                delas porque é a única que alguém procura com pressa. */}
-            <SideTooltip label="Ajuda" collapsed={c}>
-              <button type="button" className="ds-item ds-item--ajuda" data-tour="ajuda" onClick={() => setAjudaAberta(true)}>
-                <span className="ds-item__icon"><Question size={16} /></span>
-                {!c ? <span className="ds-item__label">Ajuda</span> : null}
-              </button>
-            </SideTooltip>
+            {/* Ajuda e Encerrar Sessão saíram daqui para o menu do perfil.
 
-            <SideTooltip label="Expandir menu" collapsed={c}>
-              <button type="button" className="ds-item" onClick={toggleCollapsed}>
-                <span className="ds-item__icon">{c ? <CaretRight size={16} /> : <CaretLeft size={16} />}</span>
-                {!c ? <span className="ds-item__label">Recolher menu</span> : null}
-              </button>
-            </SideTooltip>
+                Elas não eram navegação: são coisas sobre VOCÊ e sobre o
+                SISTEMA, não sobre o trabalho da imobiliária. No meio de Início,
+                Imóveis e Relatórios, competiam pelo olho com os itens que a
+                pessoa usa o dia inteiro — e "Sair" ao alcance de um clique
+                distraído, logo abaixo de "Recolher menu", era um convite ao
+                acidente. Ver `MenuDoPerfil`. */}
+            {/* O perfil vira BOTÃO, e o menu sobe daqui.
 
-            <NavItem Icon={SignOut} label="Encerrar Sessão" onClick={onLogout} collapsed={c} />
-
-            <div className="ds-profile" data-tour="perfil">
-              <div className="ds-avatar">{userInitial}</div>
+                `is-menu-aberto` mantém o realce enquanto o balão está no ar: sem
+                isso o item que originou o menu se apaga assim que o ponteiro
+                entra nele, e o balão parece vir de lugar nenhum. */}
+            <div className="ds-profile-caixa" ref={perfilRef}>
+              <MenuDoPerfil
+                aberto={menuPerfil}
+                aoFechar={() => setMenuPerfil(false)}
+                usuario={session?.usuario}
+                tenant={session?.tenant}
+                ancoraRef={perfilRef}
+                aoAbrirAjuda={() => { setAjudaEm("menu"); setAjudaAberta(true); }}
+                aoAbrirChamado={() => { setAjudaEm("chamado"); setAjudaAberta(true); }}
+                aoAbrirPreferencias={() => setPreferenciasAbertas(true)}
+                aoAbrirPerfil={() => setMeusDadosAbertos(true)}
+                aoVincularGoogle={vincularGoogle}
+                aoSair={onLogout}
+              />
+              <button
+                type="button"
+                className={`ds-profile${menuPerfil ? " is-menu-aberto" : ""}`}
+                data-tour="perfil"
+                onClick={() => setMenuPerfil((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={menuPerfil}
+                title="Sua conta"
+              >
+              {/* A inicial some quando há foto; a foto some se falhar ao
+                  carregar (URL do Google expira) — e aí a inicial volta, em vez
+                  de sobrar um quadrado quebrado. */}
+              <div className={`ds-avatar${userFoto ? " tem-foto" : ""}`}>
+                {userFoto
+                  ? <img src={userFoto} alt="" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.remove(); }} />
+                  : userInitial}
+              </div>
               {!c ? (
                 <>
                   <div className="ds-profile__text">
@@ -724,10 +912,17 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                       Cicla claro → escuro → automático, e o ícone diz onde
                       está. Um menu para três opções custaria dois cliques onde
                       um resolve. */}
-                  <SeletorDeTema escolhido={escolhido} aoTrocar={trocarTema} />
                 </>
               ) : null}
+              </button>
+              {/* O atalho de tema saiu daqui e foi para o modal de
+                  preferências. Dois motivos: dentro do botão do perfil ele
+                  abriria o menu a cada clique, e um botão dentro de outro é
+                  HTML inválido; fora, competia com o próprio perfil por um
+                  canto de 240px. E o lugar dele é junto das outras escolhas da
+                  pessoa — tema, barra, tours —, não solto na moldura. */}
             </div>
+          </div>
           </div>
         </aside>
 
@@ -744,7 +939,13 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
           style={{ flex: 1, minWidth: 0 }}
         >
           <div key={location.pathname} style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}>
-            <Outlet context={{ showToast }} />
+            {/* O provedor envolve só o CONTEÚDO, e não a barra: os selos de
+                tecla vivem nos botões das telas, e a barra tem os próprios
+                rótulos. Envolver tudo obrigaria a barra a re-renderizar a cada
+                troca de rota só por causa do contexto. */}
+            <ProvedorDeAtalhos session={session}>
+              <Outlet context={{ showToast }} />
+            </ProvedorDeAtalhos>
           </div>
         </main>
 
@@ -821,16 +1022,67 @@ const CSS = `
 /* Acima da iluminação. A sidebar já tinha z-index próprio; o conteúdo não. */
 .ds-shell > main { position: relative; z-index: 1; }
 
+/* ── A barra vive RECOLHIDA e abre no hover ──────────────────────────────────
+   A aside guarda 64px no fluxo e nunca muda de tamanho. Quem cresce e a
+   sobrepõe é o filho, em position fixed — assim o conteúdo ao lado não é
+   empurrado a cada passada de mouse. Empurrar refazia o layout da tela inteira
+   por um gesto que costuma durar meio segundo.
+   (Sem crases nestes comentarios: eles vivem dentro de um template literal.) */
 .ds-side {
-  width: 240px; min-width: 240px;
-  height: 100vh; position: sticky; top: 0; z-index: 10; flex-shrink: 0;
+  width: 64px; min-width: 64px; flex-shrink: 0;
+  height: 100vh; position: sticky; top: 0; z-index: 10;
+}
+.ds-side__interno {
+  position: fixed; left: 0; top: 0; bottom: 0; z-index: 40;
+  width: 64px;
   display: flex; flex-direction: column;
   background: var(--s-bg);
   border-right: 1px solid var(--s-border);
   overflow-x: hidden; overflow-y: auto;
-  transition: width 0.25s cubic-bezier(0.4,0,0.2,1), min-width 0.25s cubic-bezier(0.4,0,0.2,1);
+  transition: width 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease;
 }
-.ds-side.is-collapsed { width: 64px; min-width: 64px; }
+.ds-side:hover .ds-side__interno,
+/* focus-within porque quem navega por teclado nunca passa o mouse: sem isto a
+   barra ficaria de 64px com o foco dentro, e o item focado seria invisivel.
+   (Sem crases: template literal.) */
+.ds-side:focus-within .ds-side__interno {
+  width: 240px;
+  box-shadow: 24px 0 60px -24px rgba(0,0,0,0.75);
+}
+
+/* ── O que some ao recolher ──────────────────────────────────────────────────
+   display: none, e NAO opacity. Elemento invisivel por opacidade continua
+   ocupando a caixa dele e continua contando como item de flex — o resultado
+   era uma barra de 64px cheia de vaos, com o gap de 10px separando icones de
+   rotulos que ninguem via. Fora do fluxo, o item recolhido fica do tamanho do
+   icone, que e o comportamento que a versao com botao tinha.
+
+   O preco e a transicao: nao da para animar display. Some seco, como antes.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-side:not(:hover):not(:focus-within) .ds-item__label,
+.ds-side:not(:hover):not(:focus-within) .ds-head__text,
+.ds-side:not(:hover):not(:focus-within) .ds-plano,
+.ds-side:not(:hover):not(:focus-within) .ds-profile__text,
+.ds-side:not(:hover):not(:focus-within) .ds-group__label,
+.ds-side:not(:hover):not(:focus-within) .ds-item__badge,
+.ds-side:not(:hover):not(:focus-within) .selo-beta,
+.ds-side:not(:hover):not(:focus-within) .ds-sub { display: none; }
+
+/* E o que some ao ABRIR: as formas recolhidas dos mesmos elementos. */
+.ds-side:hover .ds-group__rule,
+.ds-side:focus-within .ds-group__rule,
+.ds-side:hover .ds-item__pip,
+.ds-side:focus-within .ds-item__pip { display: none; }
+.ds-side:not(:hover):not(:focus-within) .ds-group__rule { display: block; }
+
+/* Geometria da barra recolhida — os mesmos valores que a classe is-collapsed
+   tinha. O gap zerado importa: com ele, o icone centralizado ficava deslocado
+   pela metade da folga que sobrava do rotulo ausente. */
+.ds-side:not(:hover):not(:focus-within) .ds-shell .ds-item,
+.ds-side:not(:hover):not(:focus-within) .ds-item { justify-content: center; padding: 8px; gap: 0; }
+.ds-side:not(:hover):not(:focus-within) .ds-head { justify-content: center; padding: 0; gap: 0; }
+.ds-side:not(:hover):not(:focus-within) .ds-shell button.ds-profile,
+.ds-side:not(:hover):not(:focus-within) button.ds-profile { justify-content: center; padding: 10px 8px; gap: 0; }
 
 /* ── Header ── */
 .ds-head {
@@ -838,7 +1090,22 @@ const CSS = `
   height: 56px; padding: 0 14px; flex-shrink: 0;
   border-bottom: 1px solid var(--s-border);
 }
-.ds-side.is-collapsed .ds-head { justify-content: center; padding: 0; gap: 0; }
+/* O cabecalho vira a porta do Painel do Gestor para quem tem a permissao.
+   Como <button>, ele herda o reset de botao do painel — dai zerar largura,
+   fundo e alinhamento aqui, senao ele nasce com o padding global de 14px/20px
+   e a barra ganha uma altura que nao e a dela.
+   (Sem crases nestes comentarios: eles vivem dentro de um template literal.) */
+.ds-head--link {
+  width: 100%; margin: 0; border: 0; border-bottom: 1px solid var(--s-border);
+  border-radius: 0; background: transparent; color: inherit;
+  text-align: left; cursor: pointer; font: inherit;
+  transition: background 0.15s ease;
+}
+.ds-head--link:hover { background: var(--s-hover); }
+.ds-head--link.is-ativo { background: var(--s-hover); }
+/* A marca ganha o realce quando a tela esta aberta: a barra recolhida mostra so
+   ela, e sem isto nao haveria como saber que o Painel do Gestor e o atual. */
+.ds-head--link.is-ativo .ds-mark { box-shadow: 0 0 0 2px var(--tenant-primary, #6366f1); }
 .ds-mark {
   width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
@@ -880,7 +1147,7 @@ const CSS = `
   text-transform: uppercase; color: #475569; font-weight: 500;
   padding: 4px 10px 5px;
 }
-.ds-group__rule { height: 1px; background: var(--s-sep); margin: 4px 6px 5px; }
+.ds-group__rule { display: none; height: 1px; background: var(--s-sep); margin: 4px 6px 5px; }
 
 .ds-shell .ds-item {
   display: flex; align-items: center; gap: 10px;
@@ -899,7 +1166,6 @@ const CSS = `
   background: var(--s-active); color: var(--s-strong);
   border-color: rgba(129,140,248,0.26);
 }
-.ds-side.is-collapsed .ds-item { justify-content: center; padding: 8px; gap: 0; }
 
 /* O dourado da marca só neste item: é o que faz o olho achá-lo no rodapé sem
    precisar de um botão flutuante por cima do conteúdo. */
@@ -1035,12 +1301,14 @@ const CSS = `
   padding: 10px; margin-top: 4px;
   border-top: 1px solid var(--s-sep);
 }
-.ds-side.is-collapsed .ds-profile { justify-content: center; padding: 10px 8px; }
 .ds-avatar {
-  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   background: var(--s-avatar); color: var(--s-avatar-ink); font-size: 11px; font-weight: 700;
 }
+/* Com foto, o disco colorido vira moldura e some por baixo da imagem. */
+.ds-avatar.tem-foto { background: transparent; }
+.ds-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ds-profile__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 
 /* Botão de tema, à direita do nome. Discreto em repouso e legível no hover: ele

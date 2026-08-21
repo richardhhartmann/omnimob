@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { CartaoDeMenu } from "../components/CartaoDeMenu.jsx";
 import { Trilha } from "../components/Trilha.jsx";
-import { ABAS_CONFIG, ICONES_CONFIG, ehAbaDeConfig, rotuloDaAba } from "../utils/abasConfiguracoes";
+import { abasVisiveis, ICONES_CONFIG, ehAbaDeConfig, rotuloDaAba } from "../utils/abasConfiguracoes";
 import { GearSix } from "@phosphor-icons/react";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
@@ -17,6 +17,9 @@ import { CentralDeCanais } from "../components/CentralDeCanais.jsx";
 import { MarcaDaguaConfig } from "../components/MarcaDaguaConfig.jsx";
 import { OPACIDADE_PADRAO } from "../utils/marcaDagua";
 import { TEMAS } from "../utils/temaDoPainel";
+import { EditorDeAtalhos } from "../components/EditorDeAtalhos.jsx";
+import { apenasMudancas } from "../utils/atalhos";
+import { Keyboard } from "@phosphor-icons/react";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -106,16 +109,16 @@ function EsqueletoConfiguracoes() {
 const ESQUELETO_CSS = `
 .cfg-esq { display: flex; flex-direction: column; gap: 16px; }
 .cfg-esq__secao {
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--linha-08, rgba(255,255,255,0.08));
   border-radius: 18px; overflow: hidden;
 }
 .cfg-esq__cab {
   display: flex; align-items: center; gap: 12px;
-  padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 18px 24px; border-bottom: 1px solid var(--linha-06, rgba(255,255,255,0.06));
 }
 .cfg-esq__icone {
   width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
-  background: rgba(255,255,255,0.06);
+  background: var(--sup-06, rgba(255,255,255,0.06));
 }
 .cfg-esq__corpo { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
 .cfg-esq__corpo > div { display: flex; flex-direction: column; gap: 6px; }
@@ -129,9 +132,9 @@ const ESQUELETO_CSS = `
 .cfg-esq__linha {
   background: linear-gradient(
     90deg,
-    rgba(255,255,255,0.05) 0%,
-    rgba(255,255,255,0.09) 40%,
-    rgba(255,255,255,0.05) 80%
+    var(--sup-05, rgba(255,255,255,0.05)) 0%,
+    var(--sup-09, rgba(255,255,255,0.09)) 40%,
+    var(--sup-05, rgba(255,255,255,0.05)) 80%
   );
   background-size: 300% 100%;
   animation: cfg-esq-brilho 1.4s ease-in-out infinite;
@@ -202,7 +205,7 @@ function ColorPicker({ label, value, onChange, hint }) {
             onChange={(e) => { onChange(e.target.value); setHexInput(e.target.value); }}
             style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
           />
-          <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: value || "#6366f1", border: "2px solid rgba(255,255,255,0.15)", boxShadow: `0 0 0 4px ${value || "#6366f1"}22` }} />
+          <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: value || "#6366f1", border: "2px solid var(--linha-15, rgba(255,255,255,0.15))", boxShadow: `0 0 0 4px ${value || "#6366f1"}22` }} />
         </div>
         <input
           type="text"
@@ -230,12 +233,12 @@ function BrandPreview({ form }) {
       </span>
 
       {/* Card de vitrine */}
-      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "18px", overflow: "hidden" }}>
+      <div style={{ background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))", borderRadius: "18px", overflow: "hidden" }}>
         {/* Cabeçalho simulado da vitrine */}
-        <div style={{ padding: "20px", background: `linear-gradient(135deg, ${form.primaryColor || "#6366f1"}18 0%, transparent 100%)`, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ padding: "20px", background: `linear-gradient(135deg, ${form.primaryColor || "#6366f1"}18 0%, transparent 100%)`, borderBottom: "1px solid var(--linha-06, rgba(255,255,255,0.06))" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
             {hasLogo ? (
-              <img src={form.logoUrl} alt="logo" style={{ width: "40px", height: "40px", borderRadius: "10px", objectFit: "contain", background: "rgba(255,255,255,0.05)" }} onError={(e) => { e.target.style.display = "none"; }} />
+              <img src={form.logoUrl} alt="logo" style={{ width: "40px", height: "40px", borderRadius: "10px", objectFit: "contain", background: "var(--sup-05, rgba(255,255,255,0.05))" }} onError={(e) => { e.target.style.display = "none"; }} />
             ) : (
               <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: form.primaryColor || "#6366f1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: "700", color: "#fff", flexShrink: 0 }}>
                 {initial}
@@ -261,7 +264,7 @@ function BrandPreview({ form }) {
             { label: "Cor secundária", value: form.secondaryColor || "#d4af37" },
           ].map(({ label, value }) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div style={{ width: "24px", height: "24px", borderRadius: "6px", background: value, border: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }} />
+              <div style={{ width: "24px", height: "24px", borderRadius: "6px", background: value, border: "1px solid var(--linha-10, rgba(255,255,255,0.1))", flexShrink: 0 }} />
               <div>
                 <span style={{ fontSize: "12px", fontWeight: "500" }}>{label}</span>
                 <span style={{ display: "block", fontSize: "10px", color: "var(--text-muted)", fontFamily: "monospace" }}>{value}</span>
@@ -273,7 +276,7 @@ function BrandPreview({ form }) {
 
       {/* Contatos resumidos */}
       {(form.email || form.whatsapp || form.telefone) && (
-        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))", borderRadius: "14px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
           <span style={{ fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: "2px" }}>Contato</span>
           {form.email && <span style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}><IconeEnvelope size={12} /> {form.email}</span>}
           {form.whatsapp && <span style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}><IconeCelular size={12} /> {form.whatsapp}</span>}
@@ -282,7 +285,7 @@ function BrandPreview({ form }) {
       )}
 
       {(form.endereco || form.cidade) && (
-        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "4px" }}>
+        <div style={{ background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))", borderRadius: "14px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "4px" }}>
           <span style={{ fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: "2px" }}>Endereço</span>
           {form.endereco && <span style={{ fontSize: "12px" }}>{form.endereco}</span>}
           {(form.cidade || form.estado) && <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{[form.cidade, form.estado].filter(Boolean).join(" / ")}</span>}
@@ -382,11 +385,50 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
      digitado à mão por quem não pode importar cai no índice em vez de abrir uma
      tela cujo único conteúdo seria dizer que ela não tem permissão. */
   const [searchParams, setSearchParams] = useSearchParams();
-  const abasVisiveis = ABAS_CONFIG.filter(
-    (a) => a.key !== "dados" || podeImportar(session?.usuario?.cargo)
-  );
+  /* Os atalhos da casa. Começam do que já está gravado no tenant; o editor
+     mostra o padrão de fábrica por baixo do que não foi mexido. */
+  const [atalhosDoTenant, setAtalhosDoTenant] = useState(() => session?.tenant?.atalhos || {});
+  const [salvandoAtalhos, setSalvandoAtalhos] = useState(false);
+  const [avisoAtalhos, setAvisoAtalhos] = useState("");
+  const [atalhosLigados, setAtalhosLigados] = useState(() => session?.tenant?.atalhosAtivos !== false);
+
+  /* O interruptor mestre. Desligado, nenhuma tecla dispara e nenhum selo é
+     desenhado ao lado dos botões — a imobiliária que não quer atalhos não quer
+     nem o ruído visual deles. Grava na hora, como o resto desta seção. */
+  async function alternarAtalhos(ligado) {
+    setAtalhosLigados(ligado);
+    setAvisoAtalhos("");
+    try {
+      await api.salvarAtalhosDoTenant(session?.tenant?.slug, { ativos: ligado });
+      onSessionUpdate?.({ ...session, tenant: { ...session.tenant, atalhosAtivos: ligado } });
+      setAvisoAtalhos(ligado ? "Atalhos ligados." : "Atalhos desligados.");
+    } catch (e) {
+      setAtalhosLigados(!ligado); // reverte: a caixa não pode mentir sobre o que está gravado
+      setAvisoAtalhos(e.message || "Não consegui salvar.");
+    }
+  }
+
+  /* Sem botão: o editor chama isto com um respiro depois de cada tecla. */
+  async function salvarAtalhosDoTenant(config) {
+    setSalvandoAtalhos(true);
+    setAvisoAtalhos("");
+    try {
+      const enxuto = apenasMudancas(config);
+      await api.salvarAtalhosDoTenant(session?.tenant?.slug, { atalhos: enxuto });
+      /* A sessão acompanha na hora: o ouvinte do teclado lê dela, e sem isto a
+         tecla nova só valeria depois de recarregar. */
+      onSessionUpdate?.({ ...session, tenant: { ...session.tenant, atalhos: enxuto } });
+      setAvisoAtalhos("Salvo para a imobiliária.");
+    } catch (e) {
+      setAvisoAtalhos(e.message || "Não consegui salvar.");
+    } finally {
+      setSalvandoAtalhos(false);
+    }
+  }
+
+  const abas = abasVisiveis(session?.usuario?.cargo, session?.tenant?.plano, { podeImportar });
   const pedida = searchParams.get("ver");
-  const tab = abasVisiveis.some((a) => a.key === pedida) ? pedida : "MENU";
+  const tab = abas.some((a) => a.key === pedida) ? pedida : "MENU";
   const setTab = (proxima) => setSearchParams(proxima === "MENU" ? {} : { ver: proxima });
   const [form, setForm] = useState(EMPTY);
   const [plano, setPlano] = useState(session?.tenant?.plano || "BASICO");
@@ -753,7 +795,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
 
   const inputStyle = {
     width: "100%", boxSizing: "border-box",
-    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+    background: "var(--sup-04, rgba(255,255,255,0.04))", border: "1px solid var(--linha-10, rgba(255,255,255,0.1))",
     borderRadius: "10px", color: "inherit", padding: "11px 14px", fontSize: "14px",
     outline: "none",
   };
@@ -805,11 +847,11 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               gap: "32px", maxWidth: "820px", margin: "0 auto",
             }}
           >
-            {abasVisiveis.map((a, i) => {
+            {abas.map((a, i) => {
               /* Número ímpar de cartões: o último ocupa a linha inteira em vez
                  de deixar um buraco do lado. Acontece de verdade — a seção de
                  Dados some para quem não pode importar. */
-              const sozinho = abasVisiveis.length % 2 === 1 && i === abasVisiveis.length - 1;
+              const sozinho = abas.length % 2 === 1 && i === abas.length - 1;
               const cartao = (
                 <CartaoDeMenu
                   icon={<a.Icon size={40} weight="duotone" />}
@@ -1070,7 +1112,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                   <input type="file" accept="image/*" disabled={logoUploading} onChange={(e) => { handleLogoUpload(e.target.files?.[0]); e.target.value = ""; }} style={{ display: "none" }} />
                 </label>
                 {form.logoUrl && (
-                  <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "var(--sup-06, rgba(255,255,255,0.06))", border: "1px solid var(--linha-10, rgba(255,255,255,0.1))", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <img src={form.logoUrl} alt="logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
                   </div>
                 )}
@@ -1132,7 +1174,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             </p>
 
             {/* Pré-visualização de botões */}
-            <div style={{ marginTop: "4px", padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ marginTop: "4px", padding: "16px", background: "var(--sup-02, rgba(255,255,255,0.02))", borderRadius: "12px", border: "1px solid var(--linha-06, rgba(255,255,255,0.06))", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ fontSize: "11px", color: "var(--text-muted)", marginRight: "4px" }}>Preview:</span>
               <span style={{ padding: "6px 16px", borderRadius: "8px", background: form.primaryColor || "#6366f1", color: "#fff", fontSize: "12px", fontWeight: "600" }}>
                 Ver detalhes
@@ -1170,6 +1212,40 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               <BrandPreview form={form} />
             </div>
           </div>
+          )}
+
+          {tab === "atalhos" && (
+            <Secao cor="#94a3b8" titulo="Atalhos de teclado" icone={<Keyboard size={16} />}>
+              <label className="pt-opcao" style={{ marginBottom: "14px" }}>
+                <input
+                  type="checkbox"
+                  className="sw"
+                  checked={atalhosLigados}
+                  onChange={(e) => alternarAtalhos(e.target.checked)}
+                />
+                <span className="pt-opcao__rotulo">
+                  Usar atalhos de teclado
+                  <small>
+                    Desligado, nenhuma tecla funciona e as teclas somem de perto dos botões.
+                    Vale para a imobiliária inteira.
+                  </small>
+                </span>
+              </label>
+
+              <p className="api-ajuda" style={{ margin: "0 0 14px" }}>
+                Estas são as teclas da imobiliária inteira — o ponto de partida de todo mundo.
+                Cada pessoa ainda pode trocar as dela em <strong>Sua conta › Preferências</strong>,
+                e a escolha dela vence esta.
+              </p>
+              <EditorDeAtalhos
+                cargo={session?.usuario?.cargo}
+                valor={atalhosDoTenant}
+                aoMudar={setAtalhosDoTenant}
+                aoSalvar={salvarAtalhosDoTenant}
+                estado={salvandoAtalhos ? "Salvando…" : avisoAtalhos}
+                disabled={!atalhosLigados}
+              />
+            </Secao>
           )}
 
           {tab === "redes" && (<>
@@ -1223,7 +1299,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             {/* Status das plataformas */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {/* Facebook */}
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                 <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
                 </div>
@@ -1236,7 +1312,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               </div>
 
               {/* Instagram */}
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                 <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
                 </div>
@@ -1358,7 +1434,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                       "disponível no Premium" já é dada pelos cartões de plano
                       logo abaixo, onde ela pode fazer algo a respeito. */}
                   {atual.ia && (
-                    <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", opacity: 1 }}>
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))", cursor: "pointer", opacity: 1 }}>
                       <input
                         type="checkbox"
                         className="sw"
@@ -1379,7 +1455,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                   {/* Upgrade / downgrade: só para quem já é cliente. Em teste a
                       troca de plano não existe — o que existe é assinar. */}
                   {cobranca && !emTrial && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "4px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "4px", paddingTop: "18px", borderTop: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                       <div>
                         <div style={{ fontSize: "13px", fontWeight: 600 }}>Mudar de plano</div>
                         <p style={{ margin: "5px 0 0", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
@@ -1415,14 +1491,14 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                               style={{
                                 display: "flex", flexDirection: "column", gap: "7px",
                                 padding: "14px 16px", borderRadius: "12px",
-                                background: ehAtual ? `${p.cor}14` : "rgba(255,255,255,0.02)",
-                                border: `1px solid ${ehAtual ? `${p.cor}66` : "rgba(255,255,255,0.08)"}`,
+                                background: ehAtual ? `${p.cor}14` : "var(--sup-02, rgba(255,255,255,0.02))",
+                                border: `1px solid ${ehAtual ? `${p.cor}66` : "var(--linha-08, rgba(255,255,255,0.08))"}`,
                               }}
                             >
                               <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                                 <span style={{ fontSize: "13.5px", fontWeight: 700, color: p.cor }}>{p.nome}</span>
                                 {ehAtual && (
-                                  <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: "999px" }}>
+                                  <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", background: "var(--sup-06, rgba(255,255,255,0.06))", padding: "2px 8px", borderRadius: "999px" }}>
                                     Atual
                                   </span>
                                 )}
@@ -1439,7 +1515,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                                   onClick={() => trocarPlano(p.key)}
                                   style={{
                                     width: "100%", marginTop: "4px", padding: "8px 12px", borderRadius: "9px",
-                                    border: subindo ? "none" : "1px solid rgba(255,255,255,0.14)",
+                                    border: subindo ? "none" : "1px solid var(--linha-14, rgba(255,255,255,0.14))",
                                     background: subindo ? p.cor : "transparent",
                                     color: subindo ? "#0c0f1a" : "var(--text-muted)",
                                     fontSize: "12.5px", fontWeight: 600,
@@ -1469,7 +1545,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                       e a rota recusa com essa explicação — mas nem chegamos lá:
                       sem botão, ninguém tropeça na dúvida. */}
                   {cobranca && !emTrial && podeTrocarPlano && (
-                    <div style={{ marginTop: "6px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div style={{ marginTop: "6px", paddingTop: "18px", borderTop: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                       <div style={{ fontSize: "13px", fontWeight: 600, color: "#fca5a5" }}>Cancelar assinatura</div>
                       <p style={{ margin: "5px 0 12px", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
                         Você continua com acesso normal até o fim do período já pago — nada é

@@ -511,12 +511,12 @@ const CSS = `
 .bv-espera {
   display: flex; align-items: center; gap: 12px;
   padding: 16px 22px; border-radius: 14px;
-  background: rgba(18,18,20,0.92); border: 1px solid rgba(255,255,255,0.10);
-  color: rgba(255,255,255,0.78); font-size: 14px; font-weight: 500;
+  background: rgba(18,18,20,0.92); border: 1px solid var(--linha-10, rgba(255,255,255,0.10));
+  color: var(--tinta-78, rgba(255,255,255,0.78)); font-size: 14px; font-weight: 500;
 }
 .bv-espera__giro {
   width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.18); border-top-color: #d4af37;
+  border: 2px solid var(--linha-18, rgba(255,255,255,0.18)); border-top-color: #d4af37;
   animation: bv-giro 0.7s linear infinite;
 }
 @keyframes bv-giro { to { transform: rotate(360deg); } }
@@ -536,7 +536,7 @@ const CSS = `
 .bv-caixa {
   width: min(500px, 100%); max-height: calc(100vh - 48px); overflow-y: auto;
   transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-  background: #141821; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px;
+  background: #141821; border: 1px solid var(--linha-10, rgba(255,255,255,0.10)); border-radius: 18px;
   padding: 30px 30px 26px; text-align: center;
   display: grid; justify-items: center;
   box-shadow: 0 30px 70px -24px rgba(0,0,0,0.9);
@@ -681,12 +681,12 @@ const CSS = `
 .ds-shell .bv-secundario, .bv-secundario {
   width: auto; margin-top: 10px; padding: 9px 18px; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 12.5px; font-weight: 600;
-  background: transparent; border: 1px solid rgba(255,255,255,0.14); color: #94a3b8;
+  background: transparent; border: 1px solid var(--linha-14, rgba(255,255,255,0.14)); color: #94a3b8;
   box-shadow: none; transform: none;
   transition: color 0.18s ease, border-color 0.18s ease;
 }
 .bv-secundario:hover {
-  color: #e2e8f0; border-color: rgba(255,255,255,0.28);
+  color: #e2e8f0; border-color: var(--linha-28, rgba(255,255,255,0.28));
   background: transparent; box-shadow: none; transform: none;
 }
 .bv-secundario:active { scale: 1; }

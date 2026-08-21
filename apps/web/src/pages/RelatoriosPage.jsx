@@ -5,6 +5,7 @@ import { FunilDeVendas, Comissoes } from "../components/FunilVendas";
 import { ICONES_RELATORIOS, IconeRelatorios } from "../utils/iconesRelatorios";
 import { CartaoDeMenu } from "../components/CartaoDeMenu.jsx";
 import { Trilha } from "../components/Trilha.jsx";
+import { relatoriosVisiveis, relatorioLiberado, TITULO_RELATORIO, PARAMETRO_DE, POR_PARAMETRO } from "../utils/relatorios";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Relatórios — a página que reúne tudo que é LEITURA do que aconteceu.
@@ -26,44 +27,8 @@ import { Trilha } from "../components/Trilha.jsx";
    o menu e não ver o conteúdo.
    ──────────────────────────────────────────────────────────────────────────── */
 
-const CARDS = [
-  {
-    chave: "LEADS",
-    title: "Leads",
-    desc: "Quem entrou em contato pela vitrine, com o imóvel de origem e o histórico.",
-    accent: "#94a3b8",
-  },
-  {
-    chave: "MENSAL",
-    title: "Relatório mensal",
-    desc: "Visitas, leads, vendas e conversão do mês — na tela ou por e-mail.",
-    accent: "#94a3b8",
-  },
-  {
-    chave: "FUNIL",
-    title: "Funil de vendas",
-    desc: "De visita a lead, de lead a fechamento — e onde o caminho aperta.",
-    accent: "#94a3b8",
-  },
-  {
-    chave: "COMISSOES",
-    title: "Comissões",
-    desc: "Quanto cada corretor fechou no período e quanto tem a receber.",
-    accent: "#94a3b8",
-  },
-];
 
-const TITULO = {
-  LEADS: "Leads",
-  MENSAL: "Relatório mensal",
-  FUNIL: "Funil de vendas",
-  COMISSOES: "Comissões",
-};
 
-/* Chave da view no endereço. Curta e em minúsculas porque aparece na barra do
-   navegador — `?ver=funil` é legível, `?view=FUNIL` é código vazando. */
-const POR_PARAMETRO = { leads: "LEADS", mensal: "MENSAL", funil: "FUNIL", comissoes: "COMISSOES" };
-export const PARAMETRO_DE = { LEADS: "leads", MENSAL: "mensal", FUNIL: "funil", COMISSOES: "comissoes" };
 
 export function RelatoriosPage({ session }) {
   /* ── A view mora na URL ────────────────────────────────────────────────────
@@ -72,7 +37,14 @@ export function RelatoriosPage({ session }) {
      sabia levar ao índice. O botão Voltar do navegador passa a funcionar entre
      os cartões, que é o que qualquer pessoa espera de algo que trocou a tela. */
   const [parametros, setParametros] = useSearchParams();
-  const view = POR_PARAMETRO[parametros.get("ver")] || "MENU";
+  const plano = session?.tenant?.plano;
+  const visiveis = relatoriosVisiveis(plano);
+
+  /* Relatório que o plano não abre não entra nem pelo endereço. Sem isto,
+     `/relatorios?ver=mensal` continuava chegando na parede de upgrade — e um
+     link antigo, um favorito ou o botão Voltar bastavam para cair lá. */
+  const pedida = POR_PARAMETRO[parametros.get("ver")];
+  const view = pedida && relatorioLiberado(pedida, plano) ? pedida : "MENU";
   const setView = (proxima) =>
     setParametros(proxima === "MENU" ? {} : { ver: PARAMETRO_DE[proxima] });
 
@@ -100,7 +72,7 @@ export function RelatoriosPage({ session }) {
             Tudo que conta o que aconteceu na sua imobiliária, num lugar só.
           </p>
           <div className="grid grid-2" style={{ gap: "32px", maxWidth: "800px", margin: "0 auto" }}>
-            {CARDS.map((c) => {
+            {visiveis.map((c) => {
               const Icone = ICONES_RELATORIOS[c.chave];
               return (
                 <CartaoDeMenu
@@ -109,6 +81,7 @@ export function RelatoriosPage({ session }) {
                   title={c.title}
                   desc={c.desc}
                   accent={c.accent}
+                  acao={c.acao}
                   onClick={() => setView(c.chave)}
                 />
               );
@@ -123,7 +96,7 @@ export function RelatoriosPage({ session }) {
           <Trilha
             itens={[
               { chave: "indice", rotulo: "Relatórios", Icone: IconeRelatorios, aoIr: () => setView("MENU") },
-              { chave: view, rotulo: TITULO[view], Icone: ICONES_RELATORIOS[view], aoIr: () => setView(view) },
+              { chave: view, rotulo: TITULO_RELATORIO[view], Icone: ICONES_RELATORIOS[view], aoIr: () => setView(view) },
             ]}
           />
           {conteudo}

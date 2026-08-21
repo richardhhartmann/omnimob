@@ -119,7 +119,7 @@ function PhotoCarousel({ images }) {
 
   const arrow = (side) => ({
     position: "absolute", top: "50%", [side]: "10px", transform: "translateY(-50%)",
-    width: "34px", height: "34px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.25)",
+    width: "34px", height: "34px", borderRadius: "50%", border: "1px solid var(--linha-25, rgba(255,255,255,0.25))",
     background: "rgba(0,0,0,0.5)", color: "#fff", cursor: "pointer", padding: 0, fontSize: "20px", lineHeight: 1,
     display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(3px)",
   });
@@ -132,7 +132,7 @@ function PhotoCarousel({ images }) {
         ) : current ? (
           <img key={idx} src={current.url} alt={`foto ${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", animation: "fadeIn 0.3s ease" }} />
         ) : (
-          <div style={{ width: "100%", height: "100%", minHeight: "300px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)" }}>
+          <div style={{ width: "100%", height: "100%", minHeight: "300px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center", justifyContent: "center", color: "var(--tinta-15, rgba(255,255,255,0.15))" }}>
             <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
             </svg>
@@ -153,7 +153,7 @@ function PhotoCarousel({ images }) {
 
       {/* Miniaturas (navegação) — fundo é a imagem atual bem borrada */}
       {total > 1 && (
-        <div style={{ position: "relative", borderTop: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+        <div style={{ position: "relative", borderTop: "1px solid var(--linha-06, rgba(255,255,255,0.06))", overflow: "hidden" }}>
           {current && (
             <div
               aria-hidden
@@ -171,7 +171,7 @@ function PhotoCarousel({ images }) {
               key={img.id || i}
               type="button"
               onClick={() => setIdx(i)}
-              style={{ position: "relative", width: "52px", height: "52px", flexShrink: 0, borderRadius: "8px", overflow: "hidden", padding: 0, cursor: "pointer", border: i === idx ? "2px solid #6366f1" : "2px solid rgba(255,255,255,0.12)", background: "none" }}
+              style={{ position: "relative", width: "52px", height: "52px", flexShrink: 0, borderRadius: "8px", overflow: "hidden", padding: 0, cursor: "pointer", border: i === idx ? "2px solid #6366f1" : "2px solid var(--linha-12, rgba(255,255,255,0.12))", background: "none" }}
             >
               <img src={img.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               {img.is360 && (
@@ -191,7 +191,7 @@ function PhotoCarousel({ images }) {
 function MetricCard({ icon, label, value, color, subtitle }) {
   return (
     <div style={{
-      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+      background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))",
       borderRadius: "16px", padding: "20px", display: "flex", flexDirection: "column", gap: "12px",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -221,7 +221,7 @@ function MetricCard({ icon, label, value, color, subtitle }) {
 function StatChip({ icon, label }) {
   if (!label) return null;
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "5px 10px", borderRadius: "6px" }}>
+    <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "var(--sup-05, rgba(255,255,255,0.05))", padding: "5px 10px", borderRadius: "6px" }}>
       {icon} {label}
     </span>
   );
@@ -231,7 +231,7 @@ function StatChip({ icon, label }) {
 
 function Section({ title, children }) {
   return (
-    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "24px" }}>
+    <div style={{ background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))", borderRadius: "16px", padding: "24px" }}>
       <h3 style={{ margin: "0 0 16px 0", fontSize: "15px", fontWeight: "600" }}>{title}</h3>
       {children}
     </div>
@@ -333,7 +333,7 @@ export function PropertyInsightsPage({ session }) {
 
       {/* ── Card do imóvel: carrossel + resumo ───────────────────────────────── */}
       <div style={{
-        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+        background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))",
         borderRadius: "20px", overflow: "hidden", display: "flex", flexWrap: "wrap",
       }}>
         {/* Carrossel */}
@@ -364,7 +364,7 @@ export function PropertyInsightsPage({ session }) {
                 </span>
               )}
               {property?.andamento && (
-                <span style={{ fontSize: "10px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", background: "rgba(255,255,255,0.07)", padding: "3px 10px", borderRadius: "999px" }}>
+                <span style={{ fontSize: "10px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", background: "var(--sup-07, rgba(255,255,255,0.07))", padding: "3px 10px", borderRadius: "999px" }}>
                   {ANDAMENTO_LABEL[property.andamento]}
                 </span>
               )}
@@ -399,7 +399,7 @@ export function PropertyInsightsPage({ session }) {
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {property?.propertyType && (
-              <span style={{ fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-muted)", background: "var(--sup-05, rgba(255,255,255,0.05))", padding: "4px 10px", borderRadius: "6px" }}>
                 {property.propertyType}
               </span>
             )}
@@ -418,7 +418,7 @@ export function PropertyInsightsPage({ session }) {
       </div>
 
       {/* ── Filtro de período ──────────────────────────────────────────────── */}
-      <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: "14px", padding: "16px 20px" }}>
+      <div style={{ background: "var(--sup-02, rgba(255,255,255,0.015))", border: "1px solid var(--linha-04, rgba(255,255,255,0.04))", borderRadius: "14px", padding: "16px 20px" }}>
         <form onSubmit={(e) => { e.preventDefault(); loadAll(dateFrom, dateTo); }} style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
           <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", alignSelf: "center", marginRight: "4px" }}>
             Período
@@ -465,7 +465,7 @@ export function PropertyInsightsPage({ session }) {
       <Section title="Detalhes do Ativo">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 32px" }}>
           {detalhes.map(([label, val]) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", paddingBottom: "10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", paddingBottom: "10px", borderBottom: "1px solid var(--linha-05, rgba(255,255,255,0.05))" }}>
               <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "500", flexShrink: 0 }}>{label}</span>
               <span style={{ fontSize: "13px", textAlign: "right", fontWeight: "500" }}>{val}</span>
             </div>
@@ -491,7 +491,7 @@ export function PropertyInsightsPage({ session }) {
         <Section title="Comodidades da região">
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {comodidades.map((c) => (
-              <span key={c.key} style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "13px", color: "var(--text)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", padding: "6px 12px", borderRadius: "10px" }}>
+              <span key={c.key} style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "13px", color: "var(--text)", background: "var(--sup-04, rgba(255,255,255,0.04))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))", padding: "6px 12px", borderRadius: "10px" }}>
                 <c.Icone size={15} /> {c.label}
               </span>
             ))}

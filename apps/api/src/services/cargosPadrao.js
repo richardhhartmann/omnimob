@@ -25,8 +25,15 @@ export const CARGO_ADMIN = "Administrador";
    A COLUNA continua no schema, e de propósito: ela guarda o que cada cargo
    tinha antes, e derrubá-la é migração destrutiva sem volta. Ela simplesmente
    não é mais lida nem escrita. */
+/* `acessarPainel` NÃO está aqui, e é o mesmo motivo de `verConfiguracoes`:
+   ela não é uma escolha. Criar um cargo é dizer que aquelas pessoas entram no
+   painel — a pergunta que sobra é O QUE elas alcançam lá dentro.
+
+   Como opção, ela só produzia um estado sem sentido: um cargo com quatro
+   permissões marcadas e a porta fechada, cujo sintoma era ser redirecionado
+   para a vitrine no login sem nenhuma explicação. O servidor a força em toda
+   gravação (ver `cargoRoutes`). */
 export const PERMISSOES = [
-  "acessarPainel",
   "editarPagina",
   "gerenciarImoveis",
   "gerenciarUsuarios",
@@ -36,10 +43,11 @@ export const PERMISSOES = [
   "verRelatorios",
   "verAuditoria",
   "publicarRedes",
+  "verPainelGestor",
 ];
 
-/* `verConfiguracoes`, `gerenciarCargos` e `verAuditoria` aparecem SÓ no Administrador, e é
-   deliberado: são as chaves da casa. Configurações guarda plano, cobrança,
+/* `verConfiguracoes`, `gerenciarCargos`, `verAuditoria` e `verPainelGestor`
+   aparecem SÓ no Administrador, e é deliberado: são as chaves da casa. Configurações guarda plano, cobrança,
    domínio e o cancelamento da assinatura; Gerenciar Cargos permite reescrever
    as permissões de todo mundo — inclusive conceder a si mesmo o que faltava. */
 export const CARGOS_PADRAO = [

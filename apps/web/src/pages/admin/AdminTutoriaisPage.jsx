@@ -272,7 +272,7 @@ export const TUTORIAIS_CSS = `
 
 .tt-barra {
   flex: 1 1 120px; min-width: 90px; max-width: 260px; height: 5px;
-  border-radius: 999px; background: rgba(255,255,255,0.07); overflow: hidden; display: block;
+  border-radius: 999px; background: var(--sup-07, rgba(255,255,255,0.07)); overflow: hidden; display: block;
 }
 .tt-barra__cheio { display: block; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
 

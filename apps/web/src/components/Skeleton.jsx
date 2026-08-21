@@ -125,7 +125,7 @@ export function SkeletonFunil() {
           </div>
         ))}
       </div>
-      <div style={{ paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+      <div style={{ paddingTop: "16px", borderTop: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
         <SkeletonNumeros count={3} />
       </div>
     </div>
@@ -144,7 +144,7 @@ export function SkeletonComissoes({ linhas = 4 }) {
             style={{
               display: "grid", gridTemplateColumns: "1fr 80px 130px 130px", gap: "10px",
               alignItems: "center", padding: "12px", borderRadius: "9px",
-              background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+              background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-06, rgba(255,255,255,0.06))",
             }}
           >
             <Skeleton width={`${46 + (i % 3) * 14}%`} height={12} />

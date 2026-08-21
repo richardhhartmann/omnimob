@@ -30,11 +30,11 @@ export const MODAL_CSS = `
 .pm-fechar {
   position: absolute; top: 16px; right: 16px; width: 30px; height: 30px;
   display: grid; place-items: center; padding: 0;
-  border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line); border-radius: 9px; background: var(--sup-04, rgba(255,255,255,0.04));
   color: var(--subtle); font-size: 12px; cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease;
 }
-.pm-fechar:hover { color: var(--strong); background: rgba(255,255,255,0.09); }
+.pm-fechar:hover { color: var(--strong); background: var(--sup-09, rgba(255,255,255,0.09)); }
 
 .pm-eyebrow { display: block; color: var(--gold); margin-bottom: 14px; }
 .pm-titulo {
@@ -58,12 +58,12 @@ export const MODAL_CSS = `
    cheia). Aqui o modal é escuro, então a aparência é redefinida por completo. */
 .dl-root .pm-entrada {
   width: 100%; padding: 11px 13px; border-radius: 11px;
-  border: 1px solid var(--line); background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line); background: var(--sup-04, rgba(255,255,255,0.04));
   color: var(--strong); font-size: 13.5px; font-family: inherit;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 .dl-root .pm-entrada:focus {
-  outline: none; border-color: var(--accent-soft); background: rgba(255,255,255,0.07);
+  outline: none; border-color: var(--accent-soft); background: var(--sup-07, rgba(255,255,255,0.07));
 }
 .dl-root .pm-entrada.is-erro { border-color: #f87171; }
 .dl-root .pm-entrada::placeholder { color: var(--placeholder); }
@@ -105,7 +105,7 @@ export const MODAL_CSS = `
 .dl-root .pm-toggle:active { scale: 1; }
 .pm-toggle__trilho {
   width: 40px; height: 22px; border-radius: 999px; flex: 0 0 auto;
-  background: rgba(255,255,255,0.10); border: 1px solid var(--line);
+  background: var(--sup-10, rgba(255,255,255,0.10)); border: 1px solid var(--line);
   display: flex; align-items: center; padding: 2px;
   transition: background 0.28s var(--ease-out), border-color 0.28s var(--ease-out);
 }
@@ -131,7 +131,7 @@ export const MODAL_CSS = `
   font-size: 13px; font-weight: 600; cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
-.dl-root .pm-botao:hover { background: rgba(255,255,255,0.07); color: var(--strong); transform: none; box-shadow: none; }
+.dl-root .pm-botao:hover { background: var(--sup-07, rgba(255,255,255,0.07)); color: var(--strong); transform: none; box-shadow: none; }
 .dl-root .pm-botao--primario { background: var(--strong); color: #0a0a0b; border-color: var(--strong); }
 .dl-root .pm-botao--primario:hover { background: #e6e6ee; color: #0a0a0b; }
 .dl-root .pm-botao:disabled { opacity: 0.55; cursor: default; }

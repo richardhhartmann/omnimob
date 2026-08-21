@@ -17,6 +17,7 @@ import { useConfirm } from "../components/ConfirmModal";
 import { SENSORES_EDITOR } from "../components/builder/dndEditor";
 import { OnboardingOverlay } from "../components/builder/OnboardingOverlay";
 import { BuilderCanvas } from "../components/builder/canvas/BuilderCanvas";
+import { EditorEsqueleto } from "../components/builder/EditorEsqueleto.jsx";
 import { BarraDeFormatacao } from "../components/builder/canvas/BarraDeFormatacao";
 import { BuilderLeftRail } from "../components/builder/panels/BuilderLeftRail";
 import { BuilderInspector } from "../components/builder/panels/BuilderInspector";
@@ -1030,7 +1031,14 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
     >
       {confirmModal}
 
-      <div className="editor-shell showcase-editor-full">
+      {/* `inert` enquanto carrega: bloqueia ponteiro, teclado e leitor de tela de
+          uma vez. Antes dava para arrastar peça, aplicar template ou apertar
+          Ctrl+Z sobre um documento que ainda não tinha chegado — e a carga
+          passava por cima logo depois. */}
+      <div
+        className={`editor-shell showcase-editor-full${carregando ? " is-carregando" : ""}`}
+        inert={carregando ? "" : undefined}
+      >
         <BuilderTopbar
           estadoSalvamento={estadoSalvamento}
           mode={mode}
@@ -1064,6 +1072,7 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
             para arrastar e redimensionar, use um monitor maior.
         </p>
 
+        {carregando ? <EditorEsqueleto /> : (
         <div className="editor-workspace">
           <BuilderLeftRail
             aba={abaRail}
@@ -1170,6 +1179,7 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
             acoes={acoesInspetor}
           />
         </div>
+        )}
       </div>
 
       <BarraDeFormatacao aoSincronizar={aoEditarTexto} />

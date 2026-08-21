@@ -35,6 +35,9 @@ export const createPropertySchema = z.object({
   aceitaPermuta: z.boolean().optional().default(false),
   // Entra no XML dos portais. Padrão ligado — ver `services/feedPortais.js`.
   publicarPortais: z.boolean().optional().default(true),
+  /* QUAIS portais. Lista vazia com `publicarPortais` ligado significa TODOS —
+     é o estado do acervo anterior à separação. Ver `services/portais.js`. */
+  portais: z.array(z.string()).optional(),
   /* Rua e número na página pública. `false` por padrão aqui também, e não só no
      banco: um cadastro feito pela API sem o campo não deve publicar o endereço
      por omissão — a escolha tem de ser dita. */

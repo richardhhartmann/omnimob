@@ -5,9 +5,10 @@ import { LeadAtendimento, ESTAGIOS, corDoEstagio, rotuloDoEstagio } from "../com
 import { Avatar } from "../components/adminUi";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
-import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
+import { SkeletonListRows } from "../components/Skeleton";
 import { planoLiberaIA } from "../utils/planos";
 import { gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
+import { CascaDeRelatorio } from "../components/CascaDeRelatorio.jsx";
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -53,19 +54,6 @@ const IconTrash = () => (
 
 // ─── Card de métrica ──────────────────────────────────────────────────────────
 
-function StatCard({ label, value, accent, icon }) {
-  return (
-    <div className="glass-panel" style={{ padding: "18px 20px", display: "flex", alignItems: "center", gap: "14px" }}>
-      <div style={{ width: "42px", height: "42px", borderRadius: "12px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `${accent}22`, color: accent }}>
-        {icon}
-      </div>
-      <div>
-        <div style={{ fontSize: "24px", fontWeight: "700", lineHeight: 1 }}>{value}</div>
-        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>{label}</div>
-      </div>
-    </div>
-  );
-}
 
 export function LeadsPage({ session }) {
   const tenantSlug = session?.tenant?.slug || "";
@@ -256,39 +244,36 @@ export function LeadsPage({ session }) {
   const hasFilters = search || propertyFilter || contactFilter !== "all";
 
   const inputStyle = {
-    width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", color: "inherit",
+    width: "100%", boxSizing: "border-box", background: "var(--sup-04, rgba(255,255,255,0.04))",
+    border: "1px solid var(--linha-10, rgba(255,255,255,0.1))", borderRadius: "10px", color: "inherit",
     padding: "10px 12px", fontSize: "14px", outline: "none",
   };
 
+  /* Esta tela é a REFERÊNCIA visual dos relatórios — foi a partir dela que a
+     casca nasceu. Ela passa pela casca também, e não "por ser igual": duas
+     molduras parecidas divergem, e aí o modelo deixa de ser modelo. */
+  const metricas = [
+    { label: "Total de leads", value: stats.total, accent: "#6366f1", icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+    ) },
+    { label: "Com WhatsApp", value: stats.whats, accent: "#25d366", icon: <IconWhats /> },
+    { label: "Com e-mail", value: stats.email, accent: "#0ea5e9", icon: <IconMail /> },
+    { label: "Últimos 7 dias", value: stats.recent, accent: "#f59e0b", icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+    ) },
+  ];
+
   return (
-    <div className="main-content" style={{ maxWidth: "1100px" }}>
-      {confirmModal}
-      <header data-tour="leads-cabecalho" style={{ marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "28px", marginBottom: "6px" }}>Gestão de Leads</h1>
-        <p style={{ color: "var(--text-muted)", margin: 0 }}>
-          Contatos captados pela sua vitrine pública. Responda rápido para aumentar a conversão.
-        </p>
-      </header>
-
-      {error ? <div className="error" style={{ marginBottom: "16px" }}>{error}</div> : null}
-
-      {/* Métricas */}
-      {loading ? <SkeletonStats count={4} /> : (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "16px", marginBottom: "24px" }}>
-        <StatCard label="Total de leads" value={stats.total} accent="#6366f1" icon={
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-        } />
-        <StatCard label="Com WhatsApp" value={stats.whats} accent="#25d366" icon={<IconWhats />} />
-        <StatCard label="Com e-mail" value={stats.email} accent="#0ea5e9" icon={<IconMail />} />
-        <StatCard label="Últimos 7 dias" value={stats.recent} accent="#f59e0b" icon={
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
-        } />
-      </div>
-      )}
-
-      {/* Barra de filtros */}
-      <div data-tour="leads-lista" className="glass-panel" style={{ padding: "16px", marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+    <CascaDeRelatorio
+      titulo="Gestão de Leads"
+      subtitulo="Contatos captados pela sua vitrine pública. Responda rápido para aumentar a conversão."
+      metricas={metricas}
+      carregando={loading}
+      erro={error}
+      tourCabecalho="leads-cabecalho"
+      tourConteudo="leads-lista"
+      filtros={
+        <>
         {/*
         {allLeads.length > 0 && (
           <button
@@ -296,8 +281,8 @@ export function LeadsPage({ session }) {
             onClick={exportCSV}
             style={{
               display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px",
-              borderRadius: "8px", border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.05)", color: "#94a3b8",
+              borderRadius: "8px", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))",
+              background: "var(--sup-05, rgba(255,255,255,0.05))", color: "#94a3b8",
               fontSize: "13px", fontWeight: 500, cursor: "pointer", width: "auto",
               boxShadow: "none", transform: "none", transition: "background 0.15s, color 0.15s", flexShrink: 0,
             }}
@@ -314,7 +299,7 @@ export function LeadsPage({ session }) {
         <div style={{ position: "relative", flex: 1, minWidth: "220px" }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <input
-            placeholder="Buscar por nome, e-mail, telefone, imóvel..."
+            placeholder="Buscar..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ ...inputStyle, paddingLeft: "36px" }}
@@ -358,7 +343,7 @@ export function LeadsPage({ session }) {
           onChange={setSortOrder}
         />
         {/* Filtro de contato */}
-        <div style={{ display: "flex", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "3px", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div style={{ display: "flex", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "3px", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))" }}>
           {[
             { key: "all", label: "Todos" },
             { key: "whatsapp", label: "WhatsApp" },
@@ -379,7 +364,10 @@ export function LeadsPage({ session }) {
             </button>
           ))}
         </div>
-      </div>
+        </>
+      }
+    >
+      {confirmModal}
 
       {loading ? <SkeletonListRows count={5} /> : null}
 
@@ -472,7 +460,7 @@ export function LeadsPage({ session }) {
                   </div>
 
                   {lead.message ? (
-                    <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.5", background: "rgba(255,255,255,0.03)", padding: "10px 12px", borderRadius: "8px", borderLeft: "2px solid rgba(99,102,241,0.4)" }}>
+                    <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.5", background: "var(--sup-03, rgba(255,255,255,0.03))", padding: "10px 12px", borderRadius: "8px", borderLeft: "2px solid rgba(99,102,241,0.4)" }}>
                       {lead.message}
                     </p>
                   ) : null}
@@ -546,7 +534,7 @@ export function LeadsPage({ session }) {
           </button>
         </div>
       ) : null}
-    </div>
+    </CascaDeRelatorio>
   );
 }
 
@@ -620,7 +608,7 @@ function AnaliseIA({ lead, analise, carregando, erro, onAnalisar, onCopiar, copi
           <button
             type="button"
             onClick={() => onCopiar(analise.resposta)}
-            style={{ width: "auto", padding: "3px 9px", borderRadius: "999px", fontSize: "11px", cursor: "pointer", background: copiado ? "rgba(16,185,129,0.16)" : "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: copiado ? "#6ee7b7" : "var(--text-muted)" }}
+            style={{ width: "auto", padding: "3px 9px", borderRadius: "999px", fontSize: "11px", cursor: "pointer", background: copiado ? "rgba(16,185,129,0.16)" : "var(--sup-06, rgba(255,255,255,0.06))", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: copiado ? "#6ee7b7" : "var(--text-muted)" }}
           >
             {copiado ? "Copiado" : "Copiar"}
           </button>

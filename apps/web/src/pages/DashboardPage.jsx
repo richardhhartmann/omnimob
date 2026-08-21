@@ -21,12 +21,13 @@ import { comMarcaDagua } from "../utils/marcaDagua";
 import { spawnRipple } from "../utils/rippleDrop";
 import { ReescritaEmMassa } from "../components/ReescritaEmMassa";
 import { IconeRelatorios } from "../utils/iconesRelatorios";
+import { TeclaDeAtalho } from "../components/ContextoDeAtalhos.jsx";
 
 // ─── Landing page ─────────────────────────────────────────────────────────────
 
 function KpiCard({ label, value, accent, icon, loading }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "18px 20px", borderRadius: "14px", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))", background: "var(--sup-03, rgba(255,255,255,0.03))" }}>
       <div style={{ width: "40px", height: "40px", borderRadius: "10px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `${accent}22`, color: accent }}>
         {icon}
       </div>
@@ -73,6 +74,7 @@ function HomePage({ session }) {
     cargo?.gerenciarImoveis && {
       icon: <Buildings size={32} weight="duotone" />,
       title: "Gerenciar Imóveis",
+      acao: "dashboard.imoveis",
       description: "Adicione um novo ativo ao portfólio da imobiliária.",
       onClick: () => navigate("/imoveis"),
       accent: "#6366f1",
@@ -80,6 +82,7 @@ function HomePage({ session }) {
     cargo?.gerenciarImoveis && {
       icon: <SquaresFour size={32} weight="duotone" />,
       title: "Portfólio Ativo",
+      acao: "dashboard.portfolio",
       description: "Visualize e gerencie os imóveis cadastrados.",
       onClick: () => navigate("/imoveis/portfolio"),
       accent: "#6366f1",
@@ -90,6 +93,7 @@ function HomePage({ session }) {
     cargo?.verRelatorios && {
       icon: <IconeRelatorios size={32} weight="duotone" />,
       title: "Relatórios",
+      acao: "dashboard.relatorios",
       description: "Leads, relatório mensal, funil de vendas e comissões.",
       onClick: () => navigate("/relatorios"),
       accent: "#10b981",
@@ -97,6 +101,7 @@ function HomePage({ session }) {
     cargo?.gerenciarClientes && {
       icon: <UserCircle size={32} weight="duotone" />,
       title: "Clientes",
+      acao: "dashboard.clientes",
       description: "Gerencie os clientes cadastrados na imobiliária.",
       onClick: () => navigate("/clientes"),
       accent: "#06b6d4",
@@ -104,6 +109,7 @@ function HomePage({ session }) {
     cargo?.gerenciarUsuarios && {
       icon: <UserSquare size={32} weight="duotone" />,
       title: "Usuários",
+      acao: "dashboard.usuarios",
       description: "Gerencie os membros e acessos da equipe.",
       onClick: () => navigate("/usuarios"),
       accent: "#f59e0b",
@@ -111,6 +117,7 @@ function HomePage({ session }) {
     cargo?.gerenciarCargos && {
       icon: <Shield size={32} weight="duotone" />,
       title: "Cargos",
+      acao: "dashboard.cargos",
       description: "Gerencie os cargos e permissões da equipe.",
       onClick: () => navigate("/cargos"),
       accent: "#e04212",
@@ -118,6 +125,7 @@ function HomePage({ session }) {
     cargo?.verAuditoria && {
       icon: <ClockCounterClockwise size={32} weight="duotone" />,
       title: "Registro de atividade",
+      acao: "dashboard.auditoria",
       description: "Quem criou, alterou ou excluiu o quê, e quando.",
       onClick: () => navigate("/auditoria"),
       accent: "#a78bfa",
@@ -125,6 +133,7 @@ function HomePage({ session }) {
     cargo?.verConfiguracoes && {
       icon: <GearSix size={32} weight="duotone" />,
       title: "Configurações",
+      acao: "dashboard.config",
       description: "Dados legais, contato, endereço e identidade visual.",
       onClick: () => navigate("/configuracoes"),
       accent: "#64748b",
@@ -150,10 +159,10 @@ function HomePage({ session }) {
     <div style={{ animation: "fadeIn 0.4s ease-out" }}>
       <div data-tour="inicio-saudacao" style={{ marginBottom: "24px", padding: "32px 0px" }}>
         <h2 style={{ margin: "0 0 6px 0", fontSize: "26px", fontWeight: "700" }}>
-          Olá, {primeiroNome}!
+          Dashboard
         </h2>
         <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "15px" }}>
-          {session?.tenant?.name} · {cargo?.descricao || "Operador"}
+          Acesse as opções liberadas para o seu cargo, {primeiroNome}.
         </p>
       </div>
 
@@ -194,6 +203,10 @@ function HomePage({ session }) {
               e.currentTarget.style.transform = "translateY(-4px)";
             }}
           >
+            {/* A tecla, no canto. Some sozinha quando a imobiliária desligou os
+                atalhos ou quando a pessoa desligou este — `TeclaDeAtalho`
+                devolve `null` e o cartão fica igual, sem buraco. */}
+            {card.acao ? <TeclaDeAtalho acao={card.acao} className="tecla-atalho--canto" /> : null}
             <div style={{
               padding: "12px",
               borderRadius: "12px",
@@ -259,13 +272,22 @@ export function ImovelListPage({ session }) {
 
   useEffect(() => { loadProperties(); }, [tenantSlug]);
 
-  async function handleDelete(propertyId) {
+  async function handleDelete(propertyId, canais = []) {
     setLoading(true);
     setError("");
     try {
-      await api.deleteProperty(tenantSlug, propertyId);
+      const r = await api.deleteProperty(tenantSlug, propertyId, canais);
       await loadProperties();
-      showToast?.("Imóvel excluído com sucesso.");
+
+      /* O imóvel foi apagado mesmo que algum canal tenha falhado — a mensagem
+         precisa dizer as duas coisas. Um "excluído com sucesso" seco esconderia
+         que ficou anúncio no ar em algum lugar. */
+      const falhou = (r?.canais || []).filter((c) => !c.ok);
+      if (falhou.length) {
+        showToast?.(`Imóvel excluído, mas não consegui remover em: ${falhou.map((c) => c.canal).join(", ")}. ${falhou[0].erro || ""}`, "error");
+      } else {
+        showToast?.("Imóvel excluído com sucesso.");
+      }
     } catch (err) {
       setError(err.message);
       showToast?.(err.message, "error");
@@ -347,7 +369,10 @@ export function ImovelFormPage({ session }) {
     }
   }, [pathname, editingProperty, navigate]);
 
-  async function handleSubmit(payload) {
+  /* `relatar` é o repórter de progresso da tela cheia de publicação. As etapas
+     aqui são as de VERDADE — nada de temporizador fingindo avanço. Ele chega
+     opcional para esta função continuar servindo a quem não desenha nada. */
+  async function handleSubmit(payload, relatar = () => {}) {
     if (!tenantSlug) return null;
     setLoading(true);
     setError("");
@@ -355,6 +380,7 @@ export function ImovelFormPage({ session }) {
       const { imageFiles = [], imageIs360 = [], ...propertyPayload } = payload;
       let targetPropertyId = null;
 
+      relatar({ etapa: "salvando" });
       if (editingProperty?.id) {
         const updated = await api.updateProperty(tenantSlug, editingProperty.id, propertyPayload);
         targetPropertyId = updated.id;
@@ -383,6 +409,7 @@ export function ImovelFormPage({ session }) {
         // Preferências da imobiliária, definidas em Configurações › Aparência.
         const marcaAtiva = session?.tenant?.marcaDaguaAtiva !== false;
         const marcaOpacidade = session?.tenant?.marcaDaguaOpacidade;
+        relatar({ etapa: "fotos", feito: 0, total: imageFiles.length });
         for (let i = 0; i < imageFiles.length; i++) {
           const arquivo = await comMarcaDagua(imageFiles[i], logoUrl, {
             ehPanoramica: Boolean(imageIs360[i]),
@@ -391,7 +418,23 @@ export function ImovelFormPage({ session }) {
           });
           const uploaded = await uploadToCloudinary(arquivo);
           await api.addPropertyImage(tenantSlug, targetPropertyId, { ...uploaded, is360: Boolean(imageIs360[i]) });
+          /* Contado DEPOIS de registrar a imagem, não depois de subir: é o
+             registro que a torna visível no imóvel. */
+          relatar({ etapa: "fotos", feito: i + 1, total: imageFiles.length });
         }
+      }
+
+      /* ── O cadastro terminou: o que for automático sai agora ────────────
+         Depois das fotos, e não na criação. O servidor disparava no
+         `create` e o imóvel ainda não tinha imagem nenhuma — o Facebook
+         publicava só texto e o Instagram recusava.
+
+         Falha em silêncio: o imóvel está salvo e as fotos subiram. Publicação
+         que não saiu vira registro para a tela de divulgação mostrar; não
+         pode virar erro de cadastro. */
+      if (targetPropertyId) {
+        relatar({ etapa: "divulgando" });
+        await api.publicarAutomatico(tenantSlug, targetPropertyId).catch(() => {});
       }
 
       return targetPropertyId ? { id: targetPropertyId } : null;

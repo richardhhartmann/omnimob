@@ -14,6 +14,7 @@ import { interesseSchema, trialSchema } from "../validators/interesseValidators.
 import { precosDosPlanos } from "../services/pagamentoService.js";
 import { tenantPorDominio, enderecoDaVitrine } from "../services/dominioService.js";
 import { montarFeedVRSync } from "../services/feedPortais.js";
+import { portalPorCaminho, portaisDoImovel } from "../services/portais.js";
 import { proximoResponsavel } from "../services/distribuicaoLeads.js";
 import { dadosDaVitrine } from "../services/dadosDaVitrine.js";
 import { emitir } from "../services/webhooks.js";
@@ -764,8 +765,17 @@ publicRouter.get("/vitrines", async (req, res) => {
    falha e, dependendo do provedor, DESATIVA os anúncios já publicados. Um feed
    vazio diz "nada mudou" e é infinitamente menos destrutivo do que isso.
    ────────────────────────────────────────────────────────────────────────── */
-publicRouter.get("/:slug/feed.xml", async (req, res) => {
+async function servirFeed(req, res) {
   const slug = String(req.params.slug || "");
+
+  /* Qual portal está pedindo. Sem `:portal` na URL é o endereço ANTIGO, que
+     leva tudo — ver a exceção documentada em `services/portais.js`. */
+  const portal = req.params.portal ? portalPorCaminho(req.params.portal) : null;
+  if (req.params.portal && !portal) {
+    res.type("application/xml");
+    return res.send(montarFeedVRSync({ name: "Omnimob" }, [], null));
+  }
+
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
@@ -800,7 +810,12 @@ publicRouter.get("/:slug/feed.xml", async (req, res) => {
 
     /* Sem foto, fora. O portal recusa o anúncio na importação e conta como
        erro no relatório de carga da imobiliária — ficar de fora é mais limpo. */
-    const publicaveis = imoveis.filter((i) => i.images.length > 0);
+    const publicaveis = imoveis
+      .filter((i) => i.images.length > 0)
+      /* Endereço de um portal leva só quem marcou aquele portal. `portaisDoImovel`
+         trata o acervo antigo (lista vazia = os três), senão a separação
+         esvaziaria os feeds de quem cadastrou imóvel antes dela existir. */
+      .filter((i) => !portal || portaisDoImovel(i).includes(portal.id));
 
     const base = (baseDoApp(req) || "https://omnimob.app").replace(/\/+$/, "");
     const vitrine = enderecoDaVitrine(tenant, base).replace(/\/+$/, "");
@@ -813,11 +828,20 @@ publicRouter.get("/:slug/feed.xml", async (req, res) => {
     res.set("Cache-Control", "public, max-age=1800, s-maxage=1800");
     return res.send(corpo);
   } catch (erro) {
-    console.error(`[feed.xml] ${slug}:`, erro.message);
+    console.error(`[feed.xml] ${slug}${portal ? `/${portal.caminho}` : ""}:`, erro.message);
     res.type("application/xml");
     return res.send(montarFeedVRSync({ name: "Omnimob" }, [], null));
   }
-});
+}
+
+/* Um endereço por portal — é assim que a separação por portal existe de fato,
+   porque quem decide o que cada portal lê é a URL cadastrada no painel DELE. */
+publicRouter.get("/:slug/feed/:portal.xml", servirFeed);
+
+/* O endereço antigo continua de pé, e leva TUDO que tem portal marcado.
+   Imobiliárias já o cadastraram nos três painéis; trocar o comportamento dele
+   por baixo derrubaria a carga delas sem aviso. */
+publicRouter.get("/:slug/feed.xml", servirFeed);
 
 publicRouter.get("/sitemap.xml", async (req, res) => {
   try {

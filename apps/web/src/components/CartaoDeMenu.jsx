@@ -1,4 +1,5 @@
 import { spawnRipple } from "../utils/rippleDrop";
+import { TeclaDeAtalho } from "./ContextoDeAtalhos.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O cartão dos índices do painel.
@@ -15,7 +16,7 @@ import { spawnRipple } from "../utils/rippleDrop";
    listener global) e o clique solta a onda na cor do cartão.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function CartaoDeMenu({ icon, title, desc, accent, onClick, tourId }) {
+export function CartaoDeMenu({ icon, title, desc, accent, onClick, tourId, acao }) {
   return (
     <button
       type="button"
@@ -34,6 +35,9 @@ export function CartaoDeMenu({ icon, title, desc, accent, onClick, tourId }) {
       }}
       onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(-6px)"; }}
     >
+      {/* A tecla no canto. `acao` é opcional: cartão sem atalho não desenha
+          nada, e cartão com atalho desligado também não. */}
+      {acao ? <TeclaDeAtalho acao={acao} className="tecla-atalho--canto" /> : null}
       <div className="menu-cartao__disco">
         {icon}
       </div>

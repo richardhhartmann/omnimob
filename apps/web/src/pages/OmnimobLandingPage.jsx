@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+// A marca do WhatsApp — a cópia local virou `utils/marcasDeRede`.
+import { WhatsappMarca } from "../utils/marcasDeRede.jsx";
 import { Link } from "react-router-dom";
 import { useSeo } from "../utils/seo";
 import { EfeitosProvider, SeletorDeEfeitos, useEfeitos } from "../components/Efeitos.jsx";
@@ -17,6 +19,8 @@ import {
   Sparkle,
   Globe,
   ChatCircleText,
+  Storefront,
+  Tag,
   CreditCard,
   EnvelopeSimple,
   FileArrowUp,
@@ -380,24 +384,6 @@ const TENANTS = [
   { slug: "vista-mar", cor: ROSE },
 ];
 
-/* Marca do WhatsApp, o glifo oficial — o mesmo caminho já usado nos previews de
-   publicação do cadastro (WA_ICON em PropertyForm). O do Phosphor é desenho
-   próprio da família: um telefone em traço grosso dentro de um balão. Ao lado
-   do "f" do Facebook e da câmera do Instagram, que são as marcas de verdade,
-   só ele destoa.
-
-   A assinatura imita a dos ícones do Phosphor (`size`) para o componente entrar
-   nas mesmas listas sem caso especial. `weight` é aceito e descartado: quem
-   chama passa "fill" para os outros ícones, e aqui o preenchimento já é o
-   próprio desenho. A cor sai de currentColor, então o glifo acompanha o
-   contexto — branco sobre a cor da marca, escuro sobre fundo claro. */
-function WhatsappMarca({ size = 24, weight, ...rest }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" {...rest}>
-      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z" />
-    </svg>
-  );
-}
 
 /* Os três previews da tela de publicações. Cores e degradês são os mesmos do
    passo "Divulgar" do cadastro (PropertyForm), para a landing e o produto
@@ -621,10 +607,22 @@ const INTEGRACOES = [
   },
   { type: "MENSAGENS", name: "WhatsApp", Icon: WhatsappMarca, cor: "#25d366" },
   { type: "IA", name: "Google Gemini", curto: "Gemini", Icon: Sparkle, cor: "linear-gradient(135deg,#4285f4,#9b72cb,#d96570)" },
-  { type: "VITRINE", name: "Página pública", curto: "Vitrine", Icon: Globe, cor: ACCENT },
-  { type: "LEADS", name: "Formulário de contato", curto: "Contato", Icon: ChatCircleText, cor: MINT },
-  { type: "MÉTRICAS", name: "Painel de desempenho", curto: "Painel", Icon: ChartLineUp, cor: GOLD, texto: "#0a0a0b" },
-  { type: "MIGRAÇÃO", name: "Importação de planilha", curto: "Planilhas", Icon: FileArrowUp, cor: "#0f766e" },
+  { type: "VITRINE", name: "Página online", curto: "Página Online", Icon: Globe, cor: ACCENT },
+  /* ── Os portais ────────────────────────────────────────────────────────────
+     Substituíram Contato, Painel e Planilhas: os três eram recursos INTERNOS
+     numa faixa que se chama "Canais e integrações". Portal é integração de
+     verdade — e é o que a imobiliária procura ao decidir se troca de sistema.
+
+     As cores são as das marcas. O DESENHO não: usar o logotipo real exigiria
+     baixá-lo de algum lugar, e logotipo de terceiro numa página de vendas é
+     pedido de licença de uso, não detalhe técnico. Um ícone nosso na cor deles
+     identifica sem se apropriar.
+
+     `texto` inverte a tinta nos fundos claros: o amarelo do Mercado Livre e o
+     laranja do ZAP não sustentam texto branco. */
+  { type: "PORTAL", name: "Mercado Livre", curto: "Mercado Livre", Icon: Storefront, cor: "#ffe600", texto: "#2d3277" },
+  { type: "PORTAL", name: "OLX Imóveis", curto: "OLX", Icon: Tag, cor: "#6e0ad6" },
+  { type: "PORTAL", name: "ZAP Imóveis", curto: "ZAP Imóveis", Icon: Buildings, cor: "#ff6600", texto: "#0a0a0b" },
   { type: "DOMÍNIO", name: "Domínio próprio", curto: "Domínio", Icon: LinkSimple, cor: "#111827" },
 ];
 

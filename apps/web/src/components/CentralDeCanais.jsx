@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { Skeleton } from "./Skeleton.jsx";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useConfirm } from "./ConfirmModal";
 import { IconeCheck } from "./Icones.jsx";
-import { RssSimple, Storefront, WhatsappLogo } from "@phosphor-icons/react";
+import { RssSimple, Storefront } from "@phosphor-icons/react";
+// O glifo OFICIAL, e não o desenho da família Phosphor — ver `marcasDeRede`.
+import { WhatsappMarca } from "../utils/marcasDeRede.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Onde meus imóveis aparecem.
@@ -72,12 +75,12 @@ const ROSTO = {
   // Amarelo do Mercado Livre com o azul deles no símbolo: branco sobre esse
   // amarelo não tem contraste nenhum.
   mercadolivre: { fundo: "#ffe600", glifo: <Storefront size={16} weight="fill" color="#2d3277" /> },
-  "whatsapp-status": { fundo: "#25d366", glifo: <WhatsappLogo size={16} weight="fill" color="#fff" /> },
+  "whatsapp-status": { fundo: "#25d366", glifo: <WhatsappMarca size={15} style={{ color: "#fff" }} /> },
 };
 
 const bloco = {
-  background: "rgba(255,255,255,0.02)",
-  border: "1px solid rgba(255,255,255,0.07)",
+  background: "var(--sup-02, rgba(255,255,255,0.02))",
+  border: "1px solid var(--linha-07, rgba(255,255,255,0.07))",
   borderRadius: "14px",
   padding: "16px 18px",
 };
@@ -108,6 +111,37 @@ function quando(valor) {
   return d.toLocaleDateString("pt-BR");
 }
 
+/* ── A seção enquanto os canais não chegam ───────────────────────────────────
+   Espelha o cartão real: ícone quadrado, nome, selo de situação e a linha de
+   instrução. Quatro deles, que é quantos canais a central sempre mostra
+   (portais, Mercado Livre, Facebook/Instagram, WhatsApp). */
+function CanaisEsqueleto() {
+  return (
+    <div
+      style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+      aria-busy="true"
+      aria-label="Carregando os canais"
+    >
+      {/* `bloco` é o MESMO objeto de estilo do cartão de verdade — caixa, borda
+          e recuo idênticos, então a silhueta bate com o que vai chegar. */}
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} style={bloco} className="canal" aria-hidden="true">
+          <div className="canal__topo">
+            <div className="canal__identidade">
+              <Skeleton width={34} height={34} radius={10} />
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <Skeleton width={128} height={13} />
+                <Skeleton width={92} height={11} />
+              </div>
+            </div>
+          </div>
+          <Skeleton width="72%" height={11} style={{ marginTop: 12 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CentralDeCanais({ session }) {
   const tenantSlug = session?.tenant?.slug || "";
   const showToast = useOutletContext()?.showToast;
@@ -121,14 +155,40 @@ export function CentralDeCanais({ session }) {
 
   // A ponte não oficial, atrás do aviso.
   const [mostrarPonte, setMostrarPonte] = useState(false);
+  const [automacao, setAutomacao] = useState(null);
+  const [salvandoAuto, setSalvandoAuto] = useState(false);
+
+  /* Grava e recarrega do SERVIDOR em vez de confiar no estado local: a resposta
+     já traz a lista refiltrada por plano e por conexão, então desconectar o
+     Mercado Livre noutra aba aparece aqui na próxima gravação. */
+  async function trocarAutomacao(canal, valor) {
+    setSalvandoAuto(true);
+    try {
+      const atuais = Object.fromEntries((automacao?.canais || []).map((c) => [c.id, c.ligado]));
+      const nova = await api.salvarAutomacao(tenantSlug, { ...atuais, [canal]: valor });
+      setAutomacao(nova);
+      showToast?.(valor ? "Publicação automática ligada." : "Publicação automática desligada.");
+    } catch (e) {
+      showToast?.(e.message, "error");
+    } finally {
+      setSalvandoAuto(false);
+    }
+  }
   const [ponteUrl, setPonteUrl] = useState("");
   const [ponteToken, setPonteToken] = useState("");
+  const [pontePublico, setPontePublico] = useState("");
   const [salvandoPonte, setSalvandoPonte] = useState(false);
 
   async function carregar() {
     try {
-      const r = await api.listarCanais(tenantSlug);
+      /* As duas juntas: a lista de canais e o que sai sozinho. Em série
+         seriam duas esperas encadeadas numa tela que já é lenta. */
+      const [r, auto] = await Promise.all([
+        api.listarCanais(tenantSlug),
+        api.getAutomacao(tenantSlug).catch(() => null),
+      ]);
       setCanais(r.canais || []);
+      if (auto) setAutomacao(auto);
     } catch (err) {
       setErro(err.message);
     } finally {
@@ -202,7 +262,11 @@ export function CentralDeCanais({ session }) {
     setSalvandoPonte(true);
     setErro("");
     try {
-      await api.salvarPonteWhatsapp(tenantSlug, { url: ponteUrl.trim(), token: ponteToken.trim() });
+      await api.salvarPonteWhatsapp(tenantSlug, {
+        url: ponteUrl.trim(),
+        token: ponteToken.trim(),
+        contatos: pontePublico,
+      });
       showToast?.("Ponte conectada.");
       setPonteToken("");
       setMostrarPonte(false);
@@ -224,7 +288,61 @@ export function CentralDeCanais({ session }) {
     }
   }
 
-  if (carregando) return <p className="api-ajuda">Carregando canais…</p>;
+  /* A silhueta dos cartões, não a frase "Carregando canais…". São quatro blocos
+     de altura conhecida; um texto de uma linha no lugar deles fazia a seção
+     inteira pular quando os dados chegavam, empurrando as seções de baixo. */
+  if (carregando) return <CanaisEsqueleto />;
+
+  /* ── Publicação automática ────────────────────────────────────────────────
+     Fica ANTES da lista de canais porque é uma decisão sobre TODOS eles: quem
+     liga aqui está dizendo "não me pergunte mais a cada imóvel". Depois da
+     lista, leria como um detalhe do último canal. */
+  const blocoAutomacao = (
+    <div style={bloco}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+        <div>
+          <strong style={{ fontSize: "14px" }}>Publicação automática</strong>
+          <p className="api-ajuda" style={{ margin: "4px 0 0" }}>
+            Todo imóvel novo sai por estes canais sem ninguém apertar nada.
+          </p>
+        </div>
+        {!automacao?.liberado ? (
+          <span className="canal__selo is-off">A partir do {automacao?.planoMinimo || "Profissional"}</span>
+        ) : null}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
+        {(automacao?.canais || []).map((c) => (
+          <label
+            key={c.id}
+            className="canal__auto"
+            style={{ opacity: automacao.liberado && c.disponivel ? 1 : 0.5 }}
+            title={!automacao.liberado ? `Disponível a partir do plano ${automacao.planoMinimo}.` : c.nota}
+          >
+            <input
+              type="checkbox"
+              className="sw"
+              checked={Boolean(c.ligado)}
+              disabled={!automacao.liberado || !c.disponivel || salvandoAuto}
+              onChange={(e) => trocarAutomacao(c.id, e.target.checked)}
+            />
+            <span>
+              <strong>{c.nome}</strong>
+              <small>{c.nota}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {/* O aviso que evita a reclamação mais provável desta tela. */}
+      {automacao?.liberado ? (
+        <p className="api-ajuda" style={{ margin: "10px 0 0" }}>
+          Com um canal automático ligado, a tela de divulgação do imóvel deixa de oferecer o
+          botão dele — não há o que decidir depois de a publicação já ter saído.
+        </p>
+      ) : null}
+    </div>
+  );
 
   const status = canais.find((c) => c.id === "whatsapp-status");
 
@@ -232,6 +350,8 @@ export function CentralDeCanais({ session }) {
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       {confirmModal}
       {erro ? <div className="error">{erro}</div> : null}
+
+      {blocoAutomacao}
 
       {canais.map((c) => {
         const rosto = ROSTO[c.id] || ROSTO.portais;
@@ -330,9 +450,30 @@ export function CentralDeCanais({ session }) {
           </p>
 
           {status.ponte ? (
-            <div className="api-hook__acoes">
-              <button type="button" className="is-perigo" onClick={desligarPonte}>Desligar ponte</button>
-            </div>
+            <>
+              {/* Com a ponte ligada e sem público escolhido, o aviso fica à
+                  vista o tempo todo. É a única tela onde ele cabe antes do
+                  estrago — depois de publicado não há como apagar: o Whapi não
+                  suporta remover status pela API, e ele só expira em 24h. */}
+              {!status.pontePublico ? (
+                <div className="canal__risco" style={{ marginTop: "10px" }}>
+                  <strong>O status vai para TODOS os seus contatos</strong>
+                  <p>
+                    Nenhum público foi escolhido. A privacidade configurada no celular não vale
+                    para a ponte — ela publica com a lista dela. E não dá para apagar depois: o
+                    status só some sozinho, 24 horas após a publicação.
+                  </p>
+                </div>
+              ) : (
+                <p className="api-ajuda" style={{ margin: "8px 0 0" }}>
+                  O status vai para <strong>{status.pontePublico}</strong>{" "}
+                  {status.pontePublico === 1 ? "contato escolhido" : "contatos escolhidos"}.
+                </p>
+              )}
+              <div className="api-hook__acoes">
+                <button type="button" className="is-perigo" onClick={desligarPonte}>Desligar ponte</button>
+              </div>
+            </>
           ) : !mostrarPonte ? (
             <div className="api-hook__acoes">
               <button type="button" onClick={() => setMostrarPonte(true)}>Configurar ponte…</button>
@@ -361,6 +502,29 @@ export function CentralDeCanais({ session }) {
               <label>
                 <span>Token</span>
                 <input value={ponteToken} onChange={(e) => setPonteToken(e.target.value)} placeholder="Token do serviço" type="password" />
+              </label>
+              {/* ── Quem vê o status ──────────────────────────────────────
+                  Este campo nasceu de um estrago real: um anúncio de teste foi
+                  para a agenda inteira de quem estava só experimentando, mesmo
+                  com o aparelho configurado para mostrar status a uma pessoa só.
+
+                  A causa está na documentação do Whapi, e não é ambígua: sem o
+                  campo `contacts`, ele busca a lista de contatos completa e
+                  manda para todos. A privacidade do APARELHO não alcança isso —
+                  a ponte é outra sessão, e publica com a lista dela. */}
+              <label>
+                <span>Quem vê o status</span>
+                <textarea
+                  value={pontePublico}
+                  onChange={(e) => setPontePublico(e.target.value)}
+                  placeholder="5511999999999, 5511888888888"
+                  rows={2}
+                />
+                <small>
+                  Números com DDI, separados por vírgula ou por linha.{" "}
+                  <strong>Deixando em branco, o status vai para TODOS os seus contatos</strong> — a
+                  privacidade configurada no celular não vale aqui, porque quem publica é a ponte.
+                </small>
               </label>
               <div className="actions">
                 <button type="submit" disabled={salvandoPonte} style={{ width: "auto", padding: "10px 20px" }}>

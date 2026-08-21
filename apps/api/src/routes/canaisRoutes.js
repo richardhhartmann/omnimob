@@ -9,6 +9,7 @@ import {
   mercadoLivreConfigurado, publicar, urlDeAutorizacao,
 } from "../services/mercadoLivre.js";
 import { ErroDaPonte, ponteConfigurada, publicarSequenciaDeStatus } from "../services/pontewhatsapp.js";
+import { ofertaDeAutomacao, automacaoLiberada, normalizarAutomacao } from "../services/publicacaoAutomatica.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    A central de canais.
@@ -135,6 +136,9 @@ canaisRouter.get("/", requirePermissao("editarPagina", "verConfiguracoes", "gere
           tipo: "manual",
           conectado: true,
           ponte: ponteConfigurada(t),
+          /* Quantos, e não quais: a tela só precisa saber se o público está
+             restrito para decidir se mostra o aviso de "vai para todo mundo". */
+          pontePublico: t.whatsappPonteContatos?.length || 0,
           instrucao:
             "Não existe API oficial para status. Geramos a arte vertical pronta e você publica com um toque, na tela de divulgação do imóvel.",
         },
@@ -227,15 +231,57 @@ canaisRouter.delete("/mercadolivre/publicar/:propertyId", requirePermissao("publ
 /* Guardar o endereço de uma ponte é assumir um risco que é da imobiliária, e
    por isso pede a permissão de quem responde pela conta — não a de quem
    publica imóvel. */
+/* ─── Publicação automática ──────────────────────────────────────────────────
+   O que a imobiliária escolheu que sai sozinho. Ver `publicacaoAutomatica.js`.
+   ────────────────────────────────────────────────────────────────────────── */
+canaisRouter.get("/automacao", requirePermissao("verConfiguracoes"), async (req, res) => {
+  return res.json(ofertaDeAutomacao(req.tenant));
+});
+
+canaisRouter.put("/automacao", requirePermissao("verConfiguracoes"), async (req, res) => {
+  try {
+    /* A trava de plano é AQUI, e não só na tela. Uma tela que esconde o botão
+       protege contra o clique; ela não protege contra a requisição. */
+    if (!automacaoLiberada(req.tenant)) {
+      return res.status(403).json({
+        error: "Publicação automática está disponível a partir do plano Profissional.",
+        code: "PLANO_INSUFICIENTE",
+      });
+    }
+    const config = normalizarAutomacao(req.body?.canais);
+    const t = await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: { publicacaoAutomatica: config },
+    });
+    return res.json(ofertaDeAutomacao(t));
+  } catch (erro) {
+    console.error("[canais] automacao:", erro);
+    return res.status(500).json({ error: "Erro ao salvar a publicação automática." });
+  }
+});
+
 canaisRouter.put("/whatsapp-ponte", requirePermissao("verConfiguracoes"), async (req, res) => {
   try {
     const url = String(req.body?.url || "").trim();
     const token = String(req.body?.token || "").trim();
 
+    /* Quem vê o status. Aceita qualquer separador porque a pessoa vai colar de
+       algum lugar — vírgula, quebra de linha, ponto e vírgula —, e recusar por
+       causa da pontuação transformaria um campo simples num quebra-cabeça.
+       Guardamos só dígitos; o sufixo que a API exige é montado no envio. */
+    const contatos = [
+      ...new Set(
+        String(req.body?.contatos ?? "")
+          .split(/[\s,;]+/)
+          .map((n) => n.replace(/\D/g, ""))
+          .filter((n) => n.length >= 10 && n.length <= 15),
+      ),
+    ];
+
     if (!url) {
       await prisma.tenant.update({
         where: { id: req.tenant.id },
-        data: { whatsappPonteUrl: null, whatsappPonteToken: null },
+        data: { whatsappPonteUrl: null, whatsappPonteToken: null, whatsappPonteContatos: [] },
       });
       return res.json({ ponte: false });
     }
@@ -249,9 +295,9 @@ canaisRouter.put("/whatsapp-ponte", requirePermissao("verConfiguracoes"), async 
     await prisma.tenant.update({
       where: { id: req.tenant.id },
       // Cifrado em repouso, como o token da página do Facebook.
-      data: { whatsappPonteUrl: url, whatsappPonteToken: cifrar(token) },
+      data: { whatsappPonteUrl: url, whatsappPonteToken: cifrar(token), whatsappPonteContatos: contatos },
     });
-    return res.json({ ponte: true });
+    return res.json({ ponte: true, contatos: contatos.length });
   } catch (erro) {
     console.error("[ponte] salvar:", erro);
     return res.status(500).json({ error: "Erro ao salvar a ponte." });
@@ -299,6 +345,34 @@ canaisRouter.post("/whatsapp-ponte/publicar/:propertyId", requirePermissao("publ
       imagens: lista.slice(0, LIMITE_DE_STATUS),
       legenda: req.body?.legenda,
     });
+
+    /* ── O QUE FOI PARA O AR, REGISTRADO ──────────────────────────────────
+       O status era a única publicação do produto que não deixava rastro: as
+       redes sociais gravam `PropertyPublication` desde sempre, e o status saía
+       e sumia da nossa vista. Quando foi preciso saber o que estava publicado,
+       a resposta exigiu consultar a ponte por fora, com script.
+
+       Aproveita a mesma tabela das redes — canal `WHATSAPP`, `externalRef` com
+       o id devolvido pela ponte. Modelo novo daria uma segunda lista de
+       publicações para manter em sincronia com a primeira.
+
+       Falha em silêncio de propósito: o status JÁ ESTÁ no ar quando chegamos
+       aqui. Derrubar a resposta por causa do registro faria a tela dizer que
+       não publicou algo que os contatos já viram. */
+    if (r.publicacoes?.length) {
+      await prisma.propertyPublication.createMany({
+        data: r.publicacoes.map((p) => ({
+          tenantId: req.tenant.id,
+          propertyId: imovel.id,
+          channel: "WHATSAPP",
+          status: "PUBLISHED",
+          externalRef: p.id,
+          caption: p.primeira ? String(req.body?.legenda || "").slice(0, 2000) : null,
+          lastAttemptAt: new Date(),
+        })),
+      }).catch((e) => console.error("[ponte] não registrei a publicação:", e.message));
+    }
+
     return res.json(r);
   } catch (erro) {
     if (erro instanceof ErroDaPonte) return res.status(400).json({ error: erro.message });

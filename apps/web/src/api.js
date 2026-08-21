@@ -72,6 +72,25 @@ export const api = {
   definirSenha: (payload) =>
     request("/api/auth/definir-senha", { method: "POST", body: JSON.stringify(payload) }),
 
+  /* ── Conta Google ──────────────────────────────────────────────────────────
+     `entrarComGoogle` é PÚBLICA (não manda sessão); as outras duas exigem
+     estar logado, porque vincular é uma afirmação sobre quem você já provou
+     ser. Ver `authRoutes`. */
+  googleDisponivel: () => request("/api/auth/google/disponivel"),
+
+  entrarComGoogle: (credential) =>
+    request("/api/auth/google/entrar", { method: "POST", body: JSON.stringify({ credential }) }),
+
+  vincularGoogle: (tenantSlug, credential) =>
+    request("/api/auth/google/vincular", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify({ credential }),
+    }),
+
+  desvincularGoogle: (tenantSlug) =>
+    request("/api/auth/google/vincular", {
+      method: "DELETE", headers: { "x-tenant-slug": tenantSlug },
+    }),
+
   getMe: (tenantSlug) =>
     request("/api/auth/me", { headers: { "x-tenant-slug": tenantSlug } }),
 
@@ -160,9 +179,34 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  deleteProperty: (tenantSlug, propertyId) =>
-    request(`/api/properties/${propertyId}`, {
+  /* `canais` é a lista de onde o anúncio também deve sair (FACEBOOK,
+     MERCADO_LIVRE). Vazia = apaga só aqui. */
+  deleteProperty: (tenantSlug, propertyId, canais = []) =>
+    request(`/api/properties/${propertyId}${canais.length ? `?canais=${canais.join(",")}` : ""}`, {
       method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  /* Atalhos: os da PESSOA não passam por tenant (é preferência dela); os da
+     imobiliária sim, e exigem `verConfiguracoes`. */
+  salvarMeusAtalhos: (atalhos) =>
+    request("/api/auth/meus-atalhos", { method: "PUT", body: JSON.stringify({ atalhos }) }),
+
+  /* `corpo` traz `{ atalhos }`, `{ ativos }`, ou os dois. Cada um é opcional
+     porque as duas telas gravam coisas diferentes — um PUT que exigisse ambos
+     faria uma apagar o que a outra acabou de salvar. */
+  salvarAtalhosDoTenant: (tenantSlug, corpo) =>
+    request("/api/tenants/me/atalhos", {
+      method: "PUT",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(corpo),
+    }),
+
+  painelGestor: (tenantSlug) =>
+    request("/api/tenants/me/painel-gestor", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  canaisParaRemover: (tenantSlug, propertyId) =>
+    request(`/api/properties/${propertyId}/canais-para-remover`, {
       headers: { "x-tenant-slug": tenantSlug },
     }),
 
@@ -526,6 +570,23 @@ export const api = {
 
   /* A ponte não oficial de WhatsApp. Corpo vazio DESLIGA — é o caminho de saída,
      e ele precisa ser tão fácil quanto o de entrada. */
+  /* O que a imobiliária escolheu que sai sozinho, e o que ela PODE escolher —
+     a lista já vem filtrada por plano e pelo que está conectado. */
+  /* Chamado quando o cadastro termina DE VERDADE — depois das fotos. Ver a
+     rota homônima em propertyRoutes para o porquê de não ser na criação. */
+  publicarAutomatico: (tenantSlug, propertyId) =>
+    request(`/api/properties/${propertyId}/publicar-automatico`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  getAutomacao: (tenantSlug) =>
+    request("/api/canais/automacao", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  salvarAutomacao: (tenantSlug, canais) =>
+    request("/api/canais/automacao", {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify({ canais }),
+    }),
+
   salvarPonteWhatsapp: (tenantSlug, payload) =>
     request("/api/canais/whatsapp-ponte", {
       method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
@@ -765,6 +826,13 @@ export const api = {
 
   // Converte o teste em assinatura. `tokenPagamento` vem do provedor, gerado
   // no navegador — o número do cartão nunca passa pela nossa API.
+  /* Pix devolve um segredo em vez de um desfecho: quem termina é a tela, com o
+     cliente no app do banco. Ver `criarAssinaturaPix`. */
+  assinarPlanoAssincrono: (tenantSlug, payload = {}) =>
+    request("/api/tenants/me/assinar-assincrono", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
   assinarPlano: (tenantSlug, payload = {}) =>
     request("/api/tenants/me/assinar", {
       method: "POST",

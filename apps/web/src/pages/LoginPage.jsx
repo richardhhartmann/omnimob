@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { BotaoGoogle } from "../components/BotaoGoogle.jsx";
 import GradientWaves from "../components/GradientWaves";
 import { Alert, Button, OmnimobStyles, Eyebrow, Field, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/omnimobKit";
 
@@ -72,6 +73,30 @@ export function LoginPage({ onLogin }) {
       return false;
     }
     return true;
+  }
+
+  /* O botão do Google só existe se o servidor souber falar com ele. */
+  const [google, setGoogle] = useState({ disponivel: false, clientId: null });
+  const [comGoogle, setComGoogle] = useState(false);
+  useEffect(() => {
+    api.googleDisponivel().then(setGoogle).catch(() => {});
+  }, []);
+
+  async function entrarComGoogle(credencial) {
+    setComGoogle(true);
+    setError("");
+    try {
+      const session = await api.entrarComGoogle(credencial);
+      if (!validarTenant(session)) return;
+      sair(() => onLogin(session));
+    } catch (err) {
+      /* A mensagem do servidor já explica o caso mais comum — conta sem vínculo
+         — e diz o que fazer. Substituí-la por um genérico apagaria a única
+         instrução que a pessoa tem. */
+      setError(err.message || "Não consegui entrar com o Google.");
+    } finally {
+      setComGoogle(false);
+    }
   }
 
   async function handleSubmit(event) {
@@ -178,6 +203,28 @@ export function LoginPage({ onLogin }) {
       <Button as="button" type="submit" variant="accent" className="dl-btn--block" disabled={loading}>
         {loading ? "Entrando…" : "Acessar painel"}
       </Button>
+
+      {/* ── Entrar com Google ────────────────────────────────────────────────
+          Só aparece se o servidor tiver client id configurado. Um botão de
+          login que falha no clique é pior que um a menos: ele quebra a
+          confiança no passo em que ela mais importa.
+
+          E ele NÃO cria conta. Quem nunca vinculou recebe uma recusa que diz o
+          caminho — entrar uma vez com login e senha e vincular pelo menu do
+          perfil. Se criasse, qualquer pessoa com uma conta Google entraria no
+          painel de qualquer imobiliária. */}
+      {google.disponivel ? (
+        <>
+          <div className="lg-ou"><span>ou</span></div>
+          {/* O botão é desenhado pelo Google. A primeira versão era nosso, com
+              `prompt()` por trás — e o One Tap foi suprimido pelo navegador em
+              toda tentativa (FedCM desativado, 403 no status). Ver
+              `utils/google.js`. */}
+          {comGoogle
+            ? <p className="lg-ou"><span>Entrando…</span></p>
+            : <BotaoGoogle clientId={google.clientId} aoReceber={entrarComGoogle} largura={320} />}
+        </>
+      ) : null}
     </AuthShell>
   );
 }

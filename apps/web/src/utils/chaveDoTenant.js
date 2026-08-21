@@ -67,3 +67,30 @@ export const CHAVES = {
      `PrimeiroAcessoTour`. */
   tourResolvido: "domus_tour_resolvido",
 };
+
+/* ── Chave da PESSOA, e não da imobiliária ───────────────────────────────────
+
+   Nem tudo que se guarda no navegador é da imobiliária. O progresso do tour é
+   da PESSOA: o servidor já o grava assim (`UsuarioTutorial` tem
+   `@@unique([usuarioId, etapa])`), e só o atalho local estava chaveado por
+   tenant.
+
+   O estrago era exatamente o que a divisão por slug causava, um nível abaixo:
+   o administrador concluía o tour, a marca ficava gravada para o TENANT, e a
+   próxima pessoa que entrasse NAQUELE MESMO NAVEGADOR nunca via o convite — o
+   atalho a silenciava antes de o servidor ser consultado. Ela não tinha como
+   descobrir que existia um tour, nem como pedi-lo de volta.
+
+   O `id` do usuário entra junto do id do tenant, e não no lugar dele: assim a
+   gaveta continua separada por imobiliária mesmo que dois tenants tivessem, um
+   dia, ids de usuário coincidentes.
+   ────────────────────────────────────────────────────────────────────────── */
+export function lerDoUsuario(prefixo, tenantId, usuarioId) {
+  if (!usuarioId) return null;
+  return lerDoTenant(`${prefixo}_u${usuarioId}`, tenantId);
+}
+
+export function gravarNoUsuario(prefixo, tenantId, usuarioId, valor) {
+  if (!usuarioId) return;
+  gravarNoTenant(`${prefixo}_u${usuarioId}`, tenantId, valor);
+}

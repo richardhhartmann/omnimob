@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { planoLiberaRelatorioMensal } from "../utils/planos";
 import { SkeletonRelatorioMensal } from "./Skeleton";
+import { CascaDeRelatorio } from "./CascaDeRelatorio.jsx";
+import { Eye, ChatCircleText, Handshake, Buildings } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Relatório mensal — Profissional e Premium.
@@ -47,7 +49,12 @@ export function RelatorioMensal({ session }) {
   // telas leem. Escrito errado, o bloco caía no `return null` lá embaixo sem
   // erro nenhum — a permissão nunca chegava.
   const cargo = session?.usuario?.cargo;
-  const liberado = planoLiberaRelatorioMensal(session?.tenant?.plano);
+  /* Não é "pode ver o relatório" — é "pode MANDAR por e-mail". A tela inteira
+     é do Básico ("Relatórios e métricas de desempenho"); o que a tabela de
+     planos vende no Profissional é a linha "Relatório mensal de desempenho POR
+     E-MAIL". Antes esta variável escondia o painel todo, e o Básico clicava no
+     cartão para chegar numa parede de venda. */
+  const podeEnviarEmail = planoLiberaRelatorioMensal(session?.tenant?.plano);
 
   const opcoes = mesesDisponiveis();
   const [indice, setIndice] = useState(0);
@@ -60,7 +67,7 @@ export function RelatorioMensal({ session }) {
   const periodo = opcoes[indice];
 
   useEffect(() => {
-    if (!liberado || !tenantSlug || !cargo?.verRelatorios) return;
+    if (!tenantSlug || !cargo?.verRelatorios) return;
     let vivo = true;
     setCarregando(true);
     setErro("");
@@ -71,29 +78,10 @@ export function RelatorioMensal({ session }) {
       .catch((e) => vivo && setErro(e.message))
       .finally(() => vivo && setCarregando(false));
     return () => { vivo = false; };
-  }, [tenantSlug, liberado, cargo?.verRelatorios, periodo.ano, periodo.mes]);
+  }, [tenantSlug, cargo?.verRelatorios, periodo.ano, periodo.mes]);
 
-  /* Sem permissão ou sem slug o bloco não existe.
-
-     SEM PLANO é diferente, e mudou junto com a mudança de lugar: quando este
-     bloco morava na tela Início, devolver `null` era o certo — ele era um
-     pedaço a mais numa tela que já tinha conteúdo. Agora ele é o DESTINO de um
-     cartão, e sumir deixaria a pessoa olhando para uma tela vazia depois de
-     clicar. Aqui ela precisa saber por que não há nada. */
+  // Sem permissão ou sem slug o bloco não existe.
   if (!cargo?.verRelatorios || !tenantSlug) return null;
-  if (!liberado) {
-    return (
-      <div className="glass-panel" style={{ padding: "28px", textAlign: "center" }}>
-        <p style={{ margin: "0 0 6px", fontSize: "15px", fontWeight: 600 }}>
-          Disponível no plano Profissional
-        </p>
-        <p style={{ margin: 0, fontSize: "13.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-          Um resumo do mês com visitas, leads, vendas e conversão — na tela e no e-mail
-          da imobiliária, no começo de cada mês.
-        </p>
-      </div>
-    );
-  }
 
   async function enviarPorEmail() {
     setEnviando(true);
@@ -110,28 +98,44 @@ export function RelatorioMensal({ session }) {
 
   const vazio = dados?.vazio;
 
+  /* Os quatro números de topo, no mesmo formato dos de Gestão de Leads. Mês
+     sem movimento entrega `vazio`, e aí a faixa não aparece: quatro caixas
+     zeradas dizem "não houve nada" com muito menos clareza que uma frase. */
+  const metricas = !dados || vazio ? [] : [
+    { label: "Visitas à vitrine", value: dados.visitas, accent: "#6366f1", icon: <Eye size={20} /> },
+    { label: "Leads recebidos", value: dados.leads, accent: "#0ea5e9", icon: <ChatCircleText size={20} /> },
+    { label: "Vendas no mês", value: dados.vendas, accent: "#10b981", icon: <Handshake size={20} /> },
+    { label: "Imóveis ativos", value: dados.imoveisAtivos, accent: "#f59e0b", icon: <Buildings size={20} /> },
+  ];
+
   return (
-    <div className="glass-panel" style={{ padding: "22px 24px", marginBottom: "24px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", marginBottom: dados ? "18px" : 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.13em", color: "#a5b4fc" }}>
-            RELATÓRIO MENSAL
-          </span>
+    <CascaDeRelatorio
+      titulo="Relatório mensal"
+      subtitulo="Visitas, leads, vendas e conversão do mês fechado — o mesmo resumo que sai por e-mail."
+      metricas={metricas}
+      carregando={carregando}
+      erro={erro}
+      filtros={
+        <>
           <select
             value={indice}
             onChange={(e) => setIndice(Number(e.target.value))}
             style={{
               width: "auto", padding: "5px 10px", borderRadius: "8px", fontSize: "13px",
-              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "inherit",
+              background: "var(--sup-05, rgba(255,255,255,0.05))", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: "inherit",
             }}
           >
             {opcoes.map((o, i) => (
               <option key={`${o.ano}-${o.mes}`} value={i}>{MESES[o.mes - 1]} de {o.ano}</option>
             ))}
           </select>
-        </div>
 
-        <button
+          {/* Mandar por e-mail é do Profissional em diante. Escondido e não
+              desabilitado: um botão cinzento no meio do relatório é anúncio no
+              lugar errado — quem vende plano é a tela de planos. O relatório em
+              si continua inteiro para o Básico. */}
+          {podeEnviarEmail ? (
+          <button
           type="button"
           onClick={enviarPorEmail}
           disabled={enviando || carregando || vazio}
@@ -144,28 +148,25 @@ export function RelatorioMensal({ session }) {
           }}
         >
           {enviando ? "Enviando…" : "Enviar por e-mail"}
-        </button>
-      </div>
-
+          </button>
+          ) : null}
+        </>
+      }
+    >
+      <div className="glass-panel" style={{ padding: "22px 24px" }}>
       {carregando ? (
         <SkeletonRelatorioMensal />
-      ) : erro ? (
-        <p style={{ margin: 0, fontSize: "13px", color: "#fca5a5" }}>{erro}</p>
-      ) : !dados ? null : vazio ? (
+      ) : erro ? null : !dados ? null : vazio ? (
         <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
           Nenhuma visita, lead ou venda registrada em {MESES[periodo.mes - 1].toLowerCase()}.
         </p>
       ) : (
         <>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "26px", marginBottom: "14px" }}>
-            <Numero rotulo="Visitas à vitrine" valor={dados.visitas} />
-            <Numero rotulo="Leads recebidos" valor={dados.leads} destaque="#a5b4fc" />
-            <Numero rotulo="Vendas no mês" valor={dados.vendas} />
-            <Numero rotulo="Imóveis ativos" valor={dados.imoveisAtivos} />
-            {dados.conversao !== null ? (
+          {dados.conversao !== null ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "26px", marginBottom: "14px" }}>
               <Numero rotulo="Visitas que viraram lead" valor={dados.conversao} sufixo="%" destaque="#6ee7b7" />
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {dados.variacaoVisitas !== null ? (
             <p style={{ margin: "0 0 14px", fontSize: "12.5px", color: "var(--text-muted)" }}>
@@ -201,6 +202,7 @@ export function RelatorioMensal({ session }) {
       {enviado ? (
         <p style={{ margin: "12px 0 0", fontSize: "12.5px", color: "#6ee7b7" }}>{enviado}</p>
       ) : null}
-    </div>
+      </div>
+    </CascaDeRelatorio>
   );
 }

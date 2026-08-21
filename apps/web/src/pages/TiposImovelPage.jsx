@@ -46,8 +46,8 @@ function AreaFieldsEditor({ value, onChange }) {
             <label key={opt.key} style={{
               display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px",
               borderRadius: "10px", cursor: "pointer",
-              border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.08)",
-              background: checked ? "rgba(99,102,241,0.10)" : "rgba(255,255,255,0.02)",
+              border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+              background: checked ? "rgba(99,102,241,0.10)" : "var(--sup-02, rgba(255,255,255,0.02))",
               transition: "all 0.15s", userSelect: "none",
             }}>
               <input
@@ -119,7 +119,7 @@ function TiposContratoCard({ tenantSlug }) {
   return (
     <div style={{
       marginBottom: "24px", padding: "18px 20px", borderRadius: "12px",
-      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+      background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))",
     }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
         <div>
@@ -146,8 +146,8 @@ function TiposContratoCard({ tenantSlug }) {
             <label key={t.key} style={{
               display: "flex", alignItems: "flex-start", gap: "10px", padding: "10px 12px",
               borderRadius: "10px", cursor: ativos ? "pointer" : "wait", userSelect: "none",
-              border: checked ? `1px solid ${t.cor}66` : "1px solid rgba(255,255,255,0.08)",
-              background: checked ? `${t.cor}1f` : "rgba(255,255,255,0.02)",
+              border: checked ? `1px solid ${t.cor}66` : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+              background: checked ? `${t.cor}1f` : "var(--sup-02, rgba(255,255,255,0.02))",
               transition: "all 0.15s ease", opacity: ativos ? 1 : 0.5,
             }}>
               <input
@@ -336,7 +336,7 @@ export function TiposImovelPage({ session }) {
             />
           </div>
 
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
+          <div style={{ background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))", borderRadius: "12px", padding: "16px" }}>
             <AreaFieldsEditor
               value={tipoForm.areaFields}
               onChange={(v) => setTipoForm((p) => ({ ...p, areaFields: v }))}
@@ -437,7 +437,7 @@ export function TiposImovelPage({ session }) {
                       <div key={a.id} style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         padding: "10px 16px", borderRadius: "10px",
-                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                        background: "var(--sup-04, rgba(255,255,255,0.04))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))",
                       }}>
                         <span style={{ fontSize: "14px", fontWeight: "500" }}>{a.descricao}</span>
                         <div style={{ display: "flex", gap: "6px" }}>
@@ -477,7 +477,7 @@ export function TiposImovelPage({ session }) {
             return (
               <div key={t.id} style={{
                 padding: "16px 20px", borderRadius: "12px",
-                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--sup-04, rgba(255,255,255,0.04))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))",
               }}>
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -497,7 +497,7 @@ export function TiposImovelPage({ session }) {
                       ) : fields.map((k, i) => (
                         <span key={k} style={{
                           fontSize: "11px", fontWeight: "600", padding: "2px 9px", borderRadius: "20px",
-                          background: i === 0 ? "rgba(99,102,241,0.18)" : "rgba(255,255,255,0.07)",
+                          background: i === 0 ? "rgba(99,102,241,0.18)" : "var(--sup-07, rgba(255,255,255,0.07))",
                           color: i === 0 ? "#a5b4fc" : "var(--text-muted)",
                           border: i === 0 ? "1px solid rgba(99,102,241,0.3)" : "1px solid transparent",
                         }}>

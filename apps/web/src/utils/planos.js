@@ -26,7 +26,16 @@ export const PLANOS = [
     dominio: false,
     suportePrioritario: false,
     relatorioMensal: false,
-    funilVendas: false,
+    /* Funil e comissões ficam no BÁSICO. Eles são "Relatórios e métricas de
+       desempenho", que a tabela de recursos já vende neste plano — a linha do
+       Profissional é "Relatório mensal de desempenho POR E-MAIL", que é outra
+       coisa. A tabela dizia `false` aqui e contradizia a própria lista que a
+       landing mostra ao cliente. */
+    funilVendas: true,
+    /* Portais imobiliários (ZAP, VivaReal, OLX). Fora do Básico: alimentar
+       portal é distribuição, que é o que o Profissional vende. O Básico entrega
+       a vitrine própria — que continua inteira. */
+    portais: false,
     descricao: "Para corretores autônomos e imobiliárias que estão começando a marcar presença digital.",
     cor: "#94a3b8",
   },
@@ -42,6 +51,7 @@ export const PLANOS = [
        (o Premium sobe dois) no momento em que são abertos, e a fila do
        super-admin passou a ordenar por ela. Quem aplica é o SERVIDOR:
        `prioridadeComPlano` em api/src/routes/chamadoRoutes.js. */
+    portais: true,
     suportePrioritario: true,
     /* PRONTO. `relatorioService` soma o mês a partir de PropertyMetricEvent,
        `emailRelatorioMensal` monta a mensagem e o envio sai pelo script
@@ -76,6 +86,7 @@ export const PLANOS = [
     suportePrioritario: true,
     relatorioMensal: true,
     funilVendas: true,
+    portais: true,
     descricao: "Voltado para imobiliárias de alto padrão que buscam produtividade máxima com inteligência artificial.",
     cor: "#d4af37",
   },
@@ -93,6 +104,7 @@ export const RECURSOS_PLANOS = [
   { label: "Relatórios e métricas de desempenho", plans: "BASICO" },
   { label: "Tudo do Plano Básico", plans: ["PROFISSIONAL"] },
   { label: "Divulgação automática em redes sociais", plans: ["PROFISSIONAL"] },
+  { label: "Envio aos portais: ZAP, VivaReal e OLX Imóveis", plans: ["PROFISSIONAL"] },
   { label: "Tour virtual 360°", plans: ["PROFISSIONAL"] },
   { label: "Domínio próprio da imobiliária na vitrine", plans: ["PROFISSIONAL"] },
   { label: "Suporte prioritário no atendimento", plans: ["PROFISSIONAL"] },
@@ -147,6 +159,13 @@ export function planoLiberaSuportePrioritario(plano) {
 // Resumo mensal por e-mail?
 export function planoLiberaRelatorioMensal(plano) {
   return planoInfo(plano).relatorioMensal;
+}
+
+/* Envio aos portais imobiliários?
+   Vale para as TRÊS integrações de uma vez — ZAP, VivaReal e OLX. Escolher
+   quais é decisão da imobiliária; PODER escolher é o que o plano libera. */
+export function planoLiberaPortais(plano) {
+  return planoInfo(plano).portais;
 }
 
 // Funil de vendas e comissões? (a construir)

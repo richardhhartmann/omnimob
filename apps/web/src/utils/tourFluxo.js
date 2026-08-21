@@ -34,19 +34,58 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
   const podeVitrine  = Boolean(cargo?.editarPagina);
   const podeConfig   = Boolean(cargo?.verConfiguracoes);
   const podeAuditoria = Boolean(cargo?.verAuditoria);
+  const podeGestor   = Boolean(cargo?.verPainelGestor);
 
   const etapas = [
+    /* ── O Painel do Gestor ────────────────────────────────────────────────
+       Só para quem tem `verPainelGestor` — e é a PRIMEIRA etapa porque é onde
+       essa pessoa aterrissa ao entrar. Começar apresentando a tela do acervo a
+       quem foi levado para outra seria começar no lugar errado. */
+    podeGestor && {
+      chave: "gestor",
+      titulo: "Início",
+      rota: "/inicio",
+      passos: [
+        {
+          alvo: '[data-tour="gestor-saudacao"]',
+          titulo: "Como a casa está hoje",
+          texto:
+            "Esta é a sua primeira tela ao entrar. Ela responde o que mudou desde ontem: " +
+            "quem procurou a imobiliária, o que está sendo visto e quanto entrou no mês.",
+          lado: "bottom",
+        },
+        {
+          alvo: '[data-tour="gestor-indicadores"]',
+          titulo: "Sempre comparado",
+          texto:
+            "Cada número vem com a comparação — <strong>12 interessados hoje</strong> não diz nada, " +
+            "<strong>12 contra 4 ontem</strong> diz. Onde não há com que comparar, aparece um traço.",
+          lado: ["bottom", "top"],
+        },
+        {
+          alvo: '[data-tour="gestor-equipe"]',
+          titulo: "Quem está fechando",
+          texto:
+            "O resultado de cada corretor no mês, por valor fechado. As vendas entram " +
+            "pelo <strong>Funil de vendas</strong>, em Relatórios.",
+          lado: ["top", "bottom"],
+        },
+      ],
+    },
+
     {
       chave: "inicio",
-      titulo: "Início",
+      titulo: "Dashboard",
       rota: "/",
       passos: [
         {
           alvo: '[data-tour="inicio-saudacao"]',
-          titulo: "Este é o seu painel",
-          texto:
-            "Tudo da sua imobiliária mora aqui dentro: imóveis, vitrine, leads e equipe. " +
-            "Vamos passar rápido por cada parte — leva menos de um minuto.",
+          titulo: podeGestor ? "E este é o painel de trabalho" : "Este é o seu painel",
+          texto: podeGestor
+            ? "Enquanto o Início conta como a imobiliária está, o Dashboard é por onde se " +
+              "trabalha: imóveis, vitrine, leads e equipe. Vamos passar rápido por cada parte."
+            : "Tudo da sua imobiliária mora aqui dentro: imóveis, vitrine, leads e equipe. " +
+              "Vamos passar rápido por cada parte — leva menos de um minuto.",
           lado: "bottom",
         },
         {
@@ -54,9 +93,21 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
           titulo: "O menu lateral",
           texto:
             "É por aqui que você anda pelo sistema. Os itens são agrupados por assunto, " +
-            "e o menu pode ser recolhido quando você quiser mais espaço na tela.",
+            "e o menu abre sozinho quando o mouse passa por cima.",
           lado: ["right", "bottom"],
           respiro: 8,
+        },
+        {
+          /* Só faz sentido para quem tem a permissão: sem ela o cabeçalho não é
+             clicável, e o passo mandaria a pessoa clicar numa `<div>`. */
+          exige: podeGestor,
+          alvo: '[data-tour="sidebar"] .ds-head',
+          titulo: "O logotipo leva ao Início",
+          texto:
+            "Clique na marca da imobiliária, no topo do menu, para voltar ao painel de gestão " +
+            "de qualquer tela do sistema.",
+          lado: ["right", "bottom"],
+          respiro: 6,
         },
         {
           alvo: '[data-tour="inicio-atalhos"]',
@@ -291,6 +342,31 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
       ],
     },
   ].filter(Boolean);
+
+  /* ── O filtro por PASSO ────────────────────────────────────────────────────
+
+     A etapa inteira já era filtrada por permissão, e isso resolve o caso óbvio:
+     quem não gerencia imóveis não vê a etapa de imóveis.
+
+     O que faltava era o passo SOLTO dentro de uma etapa que a pessoa VÊ, mas
+     cujo alvo depende de outra coisa — outra permissão, o plano, um recurso que
+     aquele cargo não tem. O tour não quebrava: ele ficava 3,5 segundos parado
+     procurando um elemento que nunca ia aparecer, e só então pulava. Com dois
+     ou três passos assim, ele passa quase meio minuto apontando para o nada e
+     chega ao fim com cara de perdido.
+
+     `exige: false` no passo o descarta AQUI, na montagem, e o tour nem sabe que
+     ele existiu. Passo sem `exige` continua valendo sempre — não é preciso
+     declarar nada nos que não dependem de contexto. */
+  for (const etapa of etapas) {
+    etapa.passos = etapa.passos.filter((passo) => passo.exige === undefined || passo.exige);
+  }
+
+  /* Etapa que ficou sem passo nenhum sai fora: um título de seção sem conteúdo
+     conta como uma parada do tour e não diz nada. */
+  const comPassos = etapas.filter((e) => e.passos.length);
+  etapas.length = 0;
+  etapas.push(...comPassos);
 
   /* Dois passos finais, sempre na última etapa que sobrou depois do filtro de
      permissões — assim eles fecham o tour seja qual for o cargo.

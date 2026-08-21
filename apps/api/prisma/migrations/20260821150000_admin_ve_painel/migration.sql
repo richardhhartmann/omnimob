@@ -1,0 +1,13 @@
+-- O Administrador nasce com o Painel do Gestor.
+--
+-- A migração anterior criou a coluna com DEFAULT false, e isso estava certo:
+-- dado sensível não pode aparecer para ninguém por efeito colateral. Mas o
+-- Administrador é justamente quem a tela existe para atender, e deixá-lo de
+-- fora obrigava cada imobiliária da base a ir em Cargos ligar a permissão para
+-- si mesma antes de conseguir abrir a própria tela inicial.
+--
+-- `ver_configuracoes` é a marca do Administrador neste schema — ela não é
+-- escolha de ninguém, o servidor a recalcula do nome do cargo a cada gravação
+-- (ver `cargoRoutes.ehAdministrador`). Usá-la aqui é usar a mesma definição, e
+-- não uma segunda regra sobre quem é admin.
+UPDATE "tb_cargo" SET "ver_painel_gestor" = true WHERE "ver_configuracoes" = true;

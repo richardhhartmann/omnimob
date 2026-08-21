@@ -186,6 +186,7 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN` | — | do app Meta | idem |
 | `MERCADOLIVRE_APP_ID` / `_APP_SECRET` | — | do app no ML (opcional) | idem — sem elas o canal aparece indisponível |
 | `MERCADOLIVRE_CALLBACK_URL` | **API** | `http://localhost:4000/api/canais/mercadolivre/callback` | `https://api.omnimob.app/api/canais/mercadolivre/callback` |
+| `GOOGLE_CLIENT_ID` | — | id OAuth do Google Cloud (opcional) | idem — **sem ela o botão "entrar com Google" some da tela** |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | — | Google AI Studio / `gemini-2.5-flash` | idem |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | `sk_test_…` | **`sk_live_…`** |
 | `STRIPE_PRICE_BASIC` / `_PRO` / `_PREMIUM` | — | preços de teste | preços live |
@@ -651,6 +652,18 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
   a Meta nunca expôs. O produto gera a arte 1080×1920 e a pessoa publica com um
   toque (`utils/arteParaStatus.js`); quem quiser automação liga uma ponte não
   oficial por conta e risco (ver `pontewhatsapp.js`)
+- **Ponte de WhatsApp por USUÁRIO, e não por tenant** (a fazer). Hoje a
+  imobiliária contrata uma ponte e o status sai de um número só. O desejado é um
+  canal por corretor: a Omnimob cria o canal pela Partner API do Whapi, mostra o
+  QR na tela, o corretor lê no celular dele, e o token fica no `Usuario` em vez
+  do `Tenant`. Três coisas a decidir antes de codar: **custo** (o Whapi cobra por
+  canal, então dez corretores são dez canais recorrentes), **sessão que morre**
+  (o Whapi exige abrir o WhatsApp no aparelho a cada 14 dias, então precisa de
+  detecção e reconexão que o corretor resolva sozinho) e, principalmente, **de
+  quem passa a ser o risco** — hoje quem contrata a ponte é a imobiliária, e
+  hospedar o canal faria a Omnimob operar a violação dos termos da Meta em nome
+  dos clientes, que é exatamente o que o cabeçalho do `pontewhatsapp.js` diz ter
+  evitado de propósito
 - Envio automático de mensagem por WhatsApp (a publicação em Facebook/Instagram **já é real** — ver `socialRoutes.js`, que chama a Graph API; falta só o app Meta sair do modo de desenvolvimento)
 - UI de IA no frontend (backend `/api/ai/*` pronto)
 - Notification Service com provedores reais (interface pronta, envio é stub)

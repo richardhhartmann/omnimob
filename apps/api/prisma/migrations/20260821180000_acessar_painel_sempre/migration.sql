@@ -1,0 +1,12 @@
+-- `acessar_painel` deixou de ser uma escolha.
+--
+-- Criar um cargo é dizer que aquelas pessoas entram no painel; a pergunta que
+-- sobra é O QUE elas alcançam lá dentro. Como caixa marcável, ela só produzia
+-- um estado sem sentido — um cargo com quatro permissões e a porta fechada —
+-- e o sintoma não explicava nada: a pessoa era mandada para a vitrine ao
+-- entrar, sem uma palavra sobre o porquê.
+--
+-- O UPDATE conserta quem já está assim. Sem ele, todo cargo criado antes desta
+-- mudança com a caixa desmarcada continuaria trancado, e agora sem nem existir
+-- uma caixa na tela para destrancá-lo.
+UPDATE "tb_cargo" SET "acessar_painel" = true WHERE "acessar_painel" = false;

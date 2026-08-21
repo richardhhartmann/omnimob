@@ -15,6 +15,25 @@
 const SRC = "https://js.stripe.com/v3/";
 let promessa = null;
 
+/* As duas chaves são da MESMA conta?
+
+   A publicável vive aqui no navegador e a secreta no servidor; nada as obriga a
+   combinar, e quando não combinam o sintoma aparece só no último passo — o
+   servidor cria a cobrança na conta dele, o navegador tenta confirmar na conta
+   da chave daqui, e o Stripe devolve 404 de dentro do próprio Stripe.js.
+   Aconteceu, e custou uma investigação inteira para virar "as chaves são de
+   contas diferentes".
+
+   `marca` é o pedaço da conta que a API devolve (`acct_1XXXX` → `XXXX`), e ele
+   está embutido na chave publicável também. Sem marca (provedor desligado, rede
+   fora) devolvemos `true`: a checagem existe para apontar um erro conhecido,
+   não para virar mais um motivo de a tela não abrir. */
+export function chavesDaMesmaConta(marca) {
+  const chave = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+  if (!chave || !marca) return true;
+  return chave.includes(marca);
+}
+
 export function stripeConfigurado() {
   return Boolean(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 }

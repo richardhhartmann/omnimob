@@ -478,16 +478,16 @@ export const PERFIL_INICIAL_CSS = `
 }
 .bv-caixa .pi-horario__remover, .pi-horario__remover {
   width: 26px; height: 26px; padding: 0; border-radius: 7px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.12); background: transparent; box-shadow: none;
+  border: 1px solid var(--linha-12, rgba(255,255,255,0.12)); background: transparent; box-shadow: none;
   color: #94a3b8; font-size: 15px; line-height: 1;
 }
 .pi-horario__remover:hover { color: #fca5a5; border-color: rgba(248,113,113,0.35); background: transparent; }
 .bv-caixa .pi-horario__mais, .pi-horario__mais {
   width: auto; align-self: flex-start; padding: 7px 13px; border-radius: 9px; cursor: pointer;
-  border: 1px dashed rgba(255,255,255,0.18); background: transparent; box-shadow: none;
+  border: 1px dashed var(--linha-18, rgba(255,255,255,0.18)); background: transparent; box-shadow: none;
   color: #94a3b8; font-family: inherit; font-size: 12px; font-weight: 600;
 }
-.pi-horario__mais:hover { color: #e2e8f0; border-color: rgba(255,255,255,0.3); background: transparent; }
+.pi-horario__mais:hover { color: #e2e8f0; border-color: var(--linha-30, rgba(255,255,255,0.3)); background: transparent; }
 
 @media (max-width: 620px) {
   .pi-horario { grid-template-columns: 1fr; }
@@ -497,15 +497,15 @@ export const PERFIL_INICIAL_CSS = `
 .pi-tema {
   display: inline-flex; align-items: center; gap: 8px; width: auto;
   padding: 8px 13px; border-radius: 10px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03);
+  border: 1px solid var(--linha-12, rgba(255,255,255,0.12)); background: var(--sup-03, rgba(255,255,255,0.03));
   box-shadow: none; transform: none;
   color: #cbd5e1; font-family: inherit; font-size: 12.5px; font-weight: 600;
 }
-.pi-tema:hover { background: rgba(255,255,255,0.06); color: #f1f5f9; box-shadow: none; transform: none; }
+.pi-tema:hover { background: var(--sup-06, rgba(255,255,255,0.06)); color: #f1f5f9; box-shadow: none; transform: none; }
 .pi-tema.is-ativo { border-color: rgba(129,140,248,0.55); background: rgba(129,140,248,0.12); color: #f1f5f9; }
 .pi-tema__amostra {
   width: 15px; height: 15px; border-radius: 5px; flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.22);
+  border: 1px solid var(--linha-22, rgba(255,255,255,0.22));
 }
 .pi-tema__amostra.is-claro { background: #f6f7f9; }
 .pi-tema__amostra.is-escuro { background: #0d0d12; }
@@ -525,7 +525,7 @@ export const PERFIL_INICIAL_CSS = `
    e a aparência precisa ser redefinida por inteiro. */
 .bv-caixa .pi-entrada {
   width: 100%; padding: 9px 11px; border-radius: 9px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(167,139,250,0.18);
+  background: var(--sup-04, rgba(255,255,255,0.04)); border: 1px solid rgba(167,139,250,0.18);
   color: #f1edf9; font-family: inherit; font-size: 12.8px; line-height: 1.4;
   box-shadow: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -540,7 +540,7 @@ export const PERFIL_INICIAL_CSS = `
 .pi-logo__previa {
   width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0; overflow: hidden;
   display: grid; place-items: center;
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(167,139,250,0.18);
+  background: var(--sup-05, rgba(255,255,255,0.05)); border: 1px solid rgba(167,139,250,0.18);
 }
 .pi-logo__previa img { width: 100%; height: 100%; object-fit: contain; }
 .pi-logo__vazio { font-size: 15px; font-weight: 700; color: #a9a3ba; }
@@ -549,7 +549,7 @@ export const PERFIL_INICIAL_CSS = `
 .pi-cor { display: flex; align-items: center; gap: 8px; }
 .pi-cor__amostra {
   position: relative; width: 38px; height: 34px; border-radius: 9px; flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.16);
+  border: 1px solid var(--linha-16, rgba(255,255,255,0.16));
 }
 .pi-cor__amostra input {
   position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: none; padding: 0;

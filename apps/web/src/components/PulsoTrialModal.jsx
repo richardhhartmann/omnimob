@@ -650,7 +650,7 @@ const CSS = `
 .pt-caixa {
   position: relative; width: min(500px, 100%); max-height: calc(100vh - 48px); overflow-y: auto;
   background: linear-gradient(180deg, #171b25 0%, #12151d 100%);
-  border: 1px solid rgba(255,255,255,0.10); border-radius: 20px;
+  border: 1px solid var(--linha-10, rgba(255,255,255,0.10)); border-radius: 20px;
   padding: 26px 26px 20px;
   box-shadow: 0 32px 80px -28px rgba(0,0,0,0.92), 0 0 0 1px rgba(129,140,248,0.07);
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
@@ -679,17 +679,17 @@ const CSS = `
   position: absolute; top: 14px; right: 14px; z-index: 2;
   width: 28px; height: 28px; padding: 0; border-radius: 999px; cursor: pointer;
   display: grid; place-items: center;
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09);
+  background: var(--sup-05, rgba(255,255,255,0.05)); border: 1px solid var(--linha-09, rgba(255,255,255,0.09));
   color: #94a3b8; box-shadow: none; transform: none;
   transition: background 0.16s ease, color 0.16s ease;
 }
-.pt-fechar:hover { background: rgba(255,255,255,0.10); color: #f1f5f9; box-shadow: none; transform: none; }
+.pt-fechar:hover { background: var(--sup-10, rgba(255,255,255,0.10)); color: #f1f5f9; box-shadow: none; transform: none; }
 .pt-fechar:active { scale: 1; }
 
 /* Régua do teste */
 .pt-regua { position: relative; display: grid; gap: 6px; margin-bottom: 18px; }
 .pt-regua__trilho {
-  height: 3px; border-radius: 999px; background: rgba(255,255,255,0.09); overflow: hidden;
+  height: 3px; border-radius: 999px; background: var(--sup-09, rgba(255,255,255,0.09)); overflow: hidden;
 }
 .pt-regua__cheio {
   display: block; height: 100%; border-radius: 999px;
@@ -722,12 +722,12 @@ const CSS = `
 .ds-shell .pt-opcao, .pt-opcao {
   position: relative; display: grid; gap: 3px; justify-items: center; text-align: center;
   width: 100%; padding: 16px 10px 14px; border-radius: 14px; cursor: pointer;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09);
+  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--linha-09, rgba(255,255,255,0.09));
   font-family: inherit; box-shadow: none; transform: none;
   transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 .pt-opcao:hover {
-  background: rgba(255,255,255,0.06);
+  background: var(--sup-06, rgba(255,255,255,0.06));
   border-color: color-mix(in srgb, var(--pt-cor) 55%, transparent);
   transform: translateY(-2px); box-shadow: none;
 }
@@ -751,7 +751,7 @@ const CSS = `
 }
 .ds-shell .pt-campo__area, .pt-campo__area {
   width: 100%; padding: 11px 13px; border-radius: 12px; resize: vertical;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.10);
+  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--linha-10, rgba(255,255,255,0.10));
   color: #e2e8f0; font-family: inherit; font-size: 13px; line-height: 1.6;
   transition: border-color 0.18s ease, background 0.18s ease;
 }
@@ -774,11 +774,11 @@ const CSS = `
   width: auto; padding: 10px 18px; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 13px; font-weight: 600; text-decoration: none;
   display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid rgba(255,255,255,0.14); color: #cbd5e1;
+  background: transparent; border: 1px solid var(--linha-14, rgba(255,255,255,0.14)); color: #cbd5e1;
   box-shadow: none; transform: none;
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
-.pt-btn:hover { background: rgba(255,255,255,0.07); color: #f1f5f9; box-shadow: none; transform: none; }
+.pt-btn:hover { background: var(--sup-07, rgba(255,255,255,0.07)); color: #f1f5f9; box-shadow: none; transform: none; }
 .pt-btn:active { scale: 1; }
 .pt-btn--primario { background: #f1f5f9; border-color: #f1f5f9; color: #0c0f1a; }
 .pt-btn--primario:hover { background: #ffffff; color: #0c0f1a; }
@@ -787,7 +787,7 @@ const CSS = `
 .pt-rodape {
   position: relative; display: flex; justify-content: space-between; align-items: center;
   gap: 12px; margin-top: 14px; padding-top: 12px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--linha-06, rgba(255,255,255,0.06));
 }
 .pt-rodape--centro { justify-content: center; border-top: 0; padding-top: 6px; margin-top: 6px; }
 

@@ -34,8 +34,8 @@ import { IconeCheck, IconeX } from "./Icones.jsx";
    ──────────────────────────────────────────────────────────────────────────── */
 
 const bloco = {
-  background: "rgba(255,255,255,0.02)",
-  border: "1px solid rgba(255,255,255,0.07)",
+  background: "var(--sup-02, rgba(255,255,255,0.02))",
+  border: "1px solid var(--linha-07, rgba(255,255,255,0.07))",
   borderRadius: "14px",
   padding: "16px 18px",
 };
@@ -482,7 +482,7 @@ export function ApiDoTenant({ session }) {
       {eventos.length ? (
         <div style={bloco}>
           <div className="api-cab-linha">
-            <h4 className="api-titulo" style={{ margin: 0 }}>Avisar quando acontecer</h4>
+            <h4 className="api-titulo" style={{ margin: 0 }}>Chaves de Webhook</h4>
             {!criandoHook ? (
               <button type="button" className="button-secondary" style={{ width: "auto" }} onClick={() => setCriandoHook(true)}>
                 + Novo webhook

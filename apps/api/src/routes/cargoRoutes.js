@@ -72,8 +72,11 @@ cargoRouter.post("/", async (req, res) => {
 
     const data = { descricao, tenantId: req.tenant.id };
     for (const p of PERMISSOES) data[p] = Boolean(perms[p]);
-    // Derivada, nunca recebida. Ver o comentário do `ehAdministrador`.
+    /* As duas derivadas, nunca recebidas. `verConfiguracoes` vem do nome (ver
+       `ehAdministrador`); `acessarPainel` é sempre true — existir como cargo já
+       significa entrar no painel. */
     data.verConfiguracoes = ehAdministrador({ descricao });
+    data.acessarPainel = true;
 
     const cargo = await prisma.cargo.create({ data });
     return res.status(201).json({ ...cargo, ehAdministrador: ehAdministrador(cargo) });
@@ -118,6 +121,9 @@ cargoRouter.put("/:id", async (req, res) => {
        DEFININDO (renomear um cargo para "Administrador" o promove; renomear o
        Administrador para outra coisa o rebaixa), e não o nome antigo. */
     data.verConfiguracoes = ehAdministrador({ descricao: data.descricao ?? cargo.descricao });
+    /* Sempre true: um PUT feito à mão não pode trancar um cargo para fora do
+       painel, e a tela não oferece essa caixa. */
+    data.acessarPainel = true;
 
     const updated = await prisma.cargo.update({ where: { id: cargoId }, data });
     return res.json({ ...updated, ehAdministrador: ehAdministrador(updated) });

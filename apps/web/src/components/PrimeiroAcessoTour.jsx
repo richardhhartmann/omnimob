@@ -5,7 +5,7 @@ import { PrimeiroAcessoModal } from "./PrimeiroAcessoModal";
 import { TourGuiado } from "./TourGuiado";
 import { ETAPA_BOAS_VINDAS, chavesDoFluxo, montarFluxoTour } from "../utils/tourFluxo";
 import { chavesDasTelas } from "../utils/tourTelas";
-import { lerDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
+import { lerDoUsuario, gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
 import { IconeChapeuFormatura } from "./Icones.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -29,6 +29,7 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   const tenantId = session?.tenant?.id || "";
   const tenantName = session?.tenant?.name || "";
   const cargo = session?.usuario?.cargo;
+  const usuarioId = session?.usuario?.id;
   const nome = session?.usuario?.nome || "";
   const navegar = useNavigate();
 
@@ -76,8 +77,13 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
      servidor — um véu esperando por uma resposta que só podia ser "não tem
      nada para mostrar". O atalho nunca faz aparecer o que não deveria: ele só
      silencia, e só depois de o servidor ter dito para silenciar. */
+  /* Por USUÁRIO, e não por imobiliária. O servidor já guarda o progresso do
+     tour por pessoa; era só este atalho que era da casa — e com ele, o
+     administrador concluir o tour silenciava o convite para todo mundo que
+     entrasse depois NAQUELE navegador. A pessoa não via o tour global e não
+     tinha como descobrir que ele existia. */
   const [decidido, setDecidido] = useState(
-    () => (tenantId && lerDoTenant(CHAVES.tourResolvido, tenantId) === "1" ? "oculto" : null),
+    () => (usuarioId && lerDoUsuario(CHAVES.tourResolvido, tenantId, usuarioId) === "1" ? "oculto" : null),
   ); // null = ainda perguntando
 
   useEffect(() => {
@@ -97,13 +103,13 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
         );
         const resolvido = resolvidas.has(ETAPA_BOAS_VINDAS);
         // Grava o atalho para o próximo recarregamento não esperar por isto.
-        if (resolvido && tenantId) gravarNoTenant(CHAVES.tourResolvido, tenantId, "1");
+        if (resolvido && usuarioId) gravarNoUsuario(CHAVES.tourResolvido, tenantId, usuarioId, "1");
         setDecidido(resolvido ? "oculto" : "convite");
       })
       .catch(() => { if (vivo) setDecidido("oculto"); });
 
     return () => { vivo = false; };
-  }, [tenantSlug, tenantId, fluxo.length]);
+  }, [tenantSlug, tenantId, usuarioId, fluxo.length]);
 
   /* A decisão só vira estado visível quando a fila libera. Separado do efeito
      acima de propósito: um é sobre SABER, o outro sobre MOSTRAR. */
@@ -140,8 +146,8 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
      silenciaria o tour naquele navegador para sempre, e a pessoa nunca mais
      veria o primeiro acesso ao abrir no desktop. */
   const marcarResolvido = useCallback(() => {
-    if (tenantId) gravarNoTenant(CHAVES.tourResolvido, tenantId, "1");
-  }, [tenantId]);
+    gravarNoUsuario(CHAVES.tourResolvido, tenantId, usuarioId, "1");
+  }, [tenantId, usuarioId]);
 
   const pularTudo = useCallback((chaves, passoParou) => {
     if (!tenantSlug || !chaves.length) return Promise.resolve();
@@ -256,7 +262,7 @@ const CSS_ESPERA = `
 }
 .pat-espera__giro {
   width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.18);
+  border: 2px solid var(--linha-18, rgba(255,255,255,0.18));
   border-top-color: #818cf8;
   animation: pat-gira 0.7s linear infinite;
 }
@@ -304,7 +310,7 @@ const CSS_CONCLUIDO = `
 .tc-caixa {
   width: min(430px, 100%); padding: 30px 30px 26px; border-radius: 20px; text-align: center;
   display: grid; justify-items: center;
-  background: #141821; border: 1px solid rgba(255,255,255,0.10);
+  background: #141821; border: 1px solid var(--linha-10, rgba(255,255,255,0.10));
   box-shadow: 0 34px 80px -26px rgba(0,0,0,0.92);
   animation: tcCaixa 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

@@ -9,6 +9,7 @@ import { tipoContratoInfo } from "../utils/tiposContrato.js";
 import { SelectCustom } from "./SelectCustom.jsx";
 import { SkeletonCards } from "./Skeleton";
 import { EmptyState } from "./adminUi.jsx";
+import { ExcluirImovel } from "./ExcluirImovel.jsx";
 
 // ─── Selo do tipo de contrato ────────────────────────────────────────────────
 
@@ -64,9 +65,9 @@ function SocialBadges({ publications }) {
               position: "relative",
               display: "inline-flex", alignItems: "center", justifyContent: "center",
               width: "28px", height: "28px", borderRadius: "9px",
-              background: ok ? brand : "rgba(255,255,255,0.04)",
-              border: ok ? "none" : "1px solid rgba(255,255,255,0.08)",
-              color: ok ? "#fff" : "rgba(255,255,255,0.28)",
+              background: ok ? brand : "var(--sup-04, rgba(255,255,255,0.04))",
+              border: ok ? "none" : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+              color: ok ? "#fff" : "var(--tinta-28, rgba(255,255,255,0.28))",
               filter: fail ? "grayscale(1)" : "none",
               boxShadow: ok ? "0 2px 8px rgba(0,0,0,0.25)" : "none",
               transition: "all 0.2s",
@@ -100,7 +101,7 @@ function PropertyCarousel({ images = [] }) {
 
   if (urls.length === 0) {
     return (
-      <div style={{ height: "190px", background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.18)" }}>
+      <div style={{ height: "190px", background: "var(--sup-04, rgba(255,255,255,0.04))", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--tinta-18, rgba(255,255,255,0.18))" }}>
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
         </svg>
@@ -114,7 +115,7 @@ function PropertyCarousel({ images = [] }) {
   const chevron = {
     position: "absolute", top: "50%", transform: "translateY(-50%)",
     width: "30px", height: "30px", padding: 0, borderRadius: "50%",
-    background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.3)",
+    background: "rgba(0,0,0,0.5)", border: "1px solid var(--linha-30, rgba(255,255,255,0.3))",
     color: "#fff", fontSize: "18px", lineHeight: 1, cursor: "pointer",
     display: "flex", alignItems: "center", justifyContent: "center",
   };
@@ -138,7 +139,7 @@ function PropertyCarousel({ images = [] }) {
 // ─── Lista de imóveis ─────────────────────────────────────────────────────────
 
 export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit, onPublishSuccess, disabled, loading = false }) {
-  const { confirm, modal: confirmModal } = useConfirm();
+  const { modal: confirmModal } = useConfirm();
   const navigate = useNavigate();
   const session = loadSession();
   const tenantSlug = session?.tenant?.slug;
@@ -156,10 +157,9 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
 
   const openInsights = (id) => { if (canViewReports) navigate(`/imoveis/${id}`); };
 
-  async function handleDelete(id) {
-    if (!await confirm("Excluir este imóvel permanentemente?", "Excluir")) return;
-    onDelete(id);
-  }
+  /* Abre o modal em vez de perguntar e apagar direto. Quem apaga continua sendo
+     o `onDelete` da página — só passou a receber também os canais escolhidos. */
+  const [excluindo, setExcluindo] = useState(null);
 
   const [viewMode, setViewMode] = useState("grid");
   const [searchTerm, setSearchTerm] = useState("");
@@ -238,7 +238,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
 
   const btnShare = {
     padding: "10px", borderRadius: "8px", background: "transparent",
-    border: "1px solid rgba(255,255,255,0.2)", color: "#fff",
+    border: "1px solid var(--linha-20, rgba(255,255,255,0.2))", color: "#fff",
     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
     transition: "all 0.2s",
   };
@@ -246,6 +246,17 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
   return (
     <section className="main-content" style={{ animation: "fadeIn 0.4s ease-out", display: "flex", flexDirection: "column", gap: "24px" }}>
       {confirmModal}
+      {excluindo ? (
+        <ExcluirImovel
+          imovel={excluindo}
+          tenantSlug={tenantSlug}
+          aoFechar={() => setExcluindo(null)}
+          aoConfirmar={async (canais) => {
+            await onDelete(excluindo.id, canais);
+            setExcluindo(null);
+          }}
+        />
+      ) : null}
       <div className="glass-panel" style={{ padding: "24px" }}>
         <div data-tour="portfolio-cabecalho" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
           <div>
@@ -260,7 +271,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
               onClick={() => setViewMode("grid")}
               style={{
                 padding: "8px 12px", borderRadius: "6px", border: "none",
-                background: viewMode === "grid" ? "rgba(255,255,255,0.15)" : "transparent",
+                background: viewMode === "grid" ? "var(--sup-15, rgba(255,255,255,0.15))" : "transparent",
                 color: viewMode === "grid" ? "#fff" : "var(--text-muted)",
                 cursor: "pointer", transition: "all 0.2s", display: "flex", alignItems: "center", gap: "8px",
               }}
@@ -274,7 +285,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
               onClick={() => setViewMode("list")}
               style={{
                 padding: "8px 12px", borderRadius: "6px", border: "none",
-                background: viewMode === "list" ? "rgba(255,255,255,0.15)" : "transparent",
+                background: viewMode === "list" ? "var(--sup-15, rgba(255,255,255,0.15))" : "transparent",
                 color: viewMode === "list" ? "#fff" : "var(--text-muted)",
                 cursor: "pointer", transition: "all 0.2s", display: "flex", alignItems: "center", gap: "8px",
               }}
@@ -288,7 +299,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
           </div>
         </div>
 
-        <div data-tour="portfolio-filtros" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", padding: "16px", background: "rgba(255,255,255,0.03)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)" }}>
+        <div data-tour="portfolio-filtros" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", padding: "16px", background: "var(--sup-03, rgba(255,255,255,0.03))", borderRadius: "12px", border: "1px solid var(--linha-05, rgba(255,255,255,0.05))" }}>
           <input
             placeholder="Buscar por termo ou descrição..."
             value={searchTerm}
@@ -356,7 +367,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 key={property.id}
                 onClick={() => openInsights(property.id)}
                 className="glass-panel"
-                style={{ padding: "0", display: "flex", flexDirection: "column", overflow: "hidden", cursor: canViewReports ? "pointer" : "default", transition: "transform 0.3s ease, box-shadow 0.3s ease", border: "1px solid rgba(255, 255, 255, 0.15)", background: "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}
+                style={{ padding: "0", display: "flex", flexDirection: "column", overflow: "hidden", cursor: canViewReports ? "pointer" : "default", transition: "transform 0.3s ease, box-shadow 0.3s ease", border: "1px solid var(--linha-15, rgba(255,255,255,0.15))", background: "linear-gradient(145deg, var(--sup-04, rgba(255,255,255,0.04)) 0%, var(--sup-01, rgba(255,255,255,0.01)) 100%)" }}
                 onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 24px rgba(0,0,0,0.2)"; e.currentTarget.style.border = "1px solid rgba(255,255,255,0.25)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.border = "1px solid rgba(255, 255, 255, 0.15)"; }}
               >
@@ -393,7 +404,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     </span>
                   </div>
 
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 16px", padding: "16px 0", borderTop: "1px solid rgba(255,255,255,0.1)", borderBottom: "1px solid rgba(255,255,255,0.1)", marginBottom: "20px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 16px", padding: "16px 0", borderTop: "1px solid var(--linha-10, rgba(255,255,255,0.1))", borderBottom: "1px solid var(--linha-10, rgba(255,255,255,0.1))", marginBottom: "20px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#e2e8f0" }} title="Quartos">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22v-8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" /><path d="M7 22v-2" /><path d="M17 22v-2" /><path d="M5 12V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5" /></svg>
                       <strong>{property.bedrooms ?? 0}</strong>
@@ -416,7 +427,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 {/* Footer com badges sociais + ações.
                     Sem os selos sobra um filho só, e `space-between` jogaria as
                     ações para a esquerda — daí o alinhamento mudar junto. */}
-                <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: mostraRedes ? "space-between" : "flex-end", alignItems: "center", flexWrap: "wrap", gap: "10px 8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: mostraRedes ? "space-between" : "flex-end", alignItems: "center", flexWrap: "wrap", gap: "10px 8px", borderTop: "1px solid var(--linha-05, rgba(255,255,255,0.05))" }}>
                   {mostraRedes && <SocialBadges publications={property.publications} />}
                   <div style={{ display: "flex", gap: "8px" }}>
                     {canPublish && (
@@ -430,7 +441,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     <button className={property.status === "ACTIVE" ? "btn-danger" : undefined} onClick={(e) => { e.stopPropagation(); onToggleStatus(property.id, property.status === "ACTIVE" ? "INACTIVE" : "ACTIVE"); }} disabled={disabled} style={{ ...btnShare }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title={property.status === "ACTIVE" ? "Desativar" : "Ativar"}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                     </button>
-                    <button className="btn-danger" onClick={(e) => { e.stopPropagation(); handleDelete(property.id); }} disabled={disabled} style={{ padding: "10px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
+                    <button className="btn-danger" onClick={(e) => { e.stopPropagation(); setExcluindo(property); }} disabled={disabled} style={{ padding: "10px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                     </button>
                   </div>
@@ -444,7 +455,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
       {/* ── Lista ─── */}
       {!loading && viewMode === "list" && filteredProperties.length > 0 && (
         <div className="glass-panel" style={{ padding: "0", overflow: "hidden" }}>
-          <div style={{ display: "grid", gap: "1px", background: "rgba(255,255,255,0.05)" }}>
+          <div style={{ display: "grid", gap: "1px", background: "var(--sup-05, rgba(255,255,255,0.05))" }}>
             {filteredProperties.map((property, index) => {
               const statusStyle = getStatusColor(property.status);
               // Efeito zebrado: linhas alternam o tom de fundo para facilitar a leitura.
@@ -486,14 +497,14 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
 
                   <div style={{ display: "flex", gap: "8px" }}>
                     {canPublish && (
-                      <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar">
+                      <button onClick={(e) => { e.stopPropagation(); setPublishingProperty(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid var(--linha-20, rgba(255,255,255,0.2))", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(99,102,241,0.1)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Divulgar">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                       </button>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); onEdit(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Editar">
+                    <button onClick={(e) => { e.stopPropagation(); onEdit(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "transparent", border: "1px solid var(--linha-20, rgba(255,255,255,0.2))", color: "#fff", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "transparent")} title="Editar">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
-                    <button className="btn-danger" onClick={(e) => { e.stopPropagation(); handleDelete(property.id); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
+                    <button className="btn-danger" onClick={(e) => { e.stopPropagation(); setExcluindo(property); }} disabled={disabled} style={{ padding: "8px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#fca5a5", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }} onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")} onMouseLeave={(e) => !disabled && (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")} title="Excluir">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                     </button>
                   </div>

@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { CanaisDoImovel } from "./CanaisDoImovel.jsx";
 import { linkDoImovel } from "../utils/enderecoVitrine";
 import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
 import { COMODIDADES, EMPTY_COMODIDADES } from "../utils/comodidades.js";
-import { planoLiberaIA, planoLiberaRedes, planoLiberaTour360 } from "../utils/planos.js";
+import { planoLiberaIA, planoLiberaPortais, planoLiberaRedes, planoLiberaTour360 } from "../utils/planos.js";
 import { tipoContratoInfo, tiposContratoAtivos } from "../utils/tiposContrato.js";
 import { Panorama360 } from "./Panorama360.jsx";
 import { SelectCustom } from "./SelectCustom.jsx";
@@ -16,6 +17,8 @@ import { shareWhatsapp } from "../utils/shareWhatsapp.js";
 import { gerarArteDeStatus } from "../utils/arteParaStatus.js";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { IconeCheck, IconeX } from "./Icones.jsx";
+import { PublicandoImovel } from "./PublicandoImovel.jsx";
+import { PORTAIS, IDS_PORTAIS, portaisDoImovel } from "../utils/portais.js";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -90,6 +93,9 @@ const EMPTY = {
   andamento: "PRONTO_PARA_MORAR",
   aceitaPermuta: false,
   publicarPortais: true,
+  /* Quais portais. Vazio com `publicarPortais` ligado é o acervo antigo, e
+     significa TODOS — ver `utils/portais.js`. */
+  portais: [],
   /* Rua e número na página pública. Desmarcado por padrão de propósito: o
      endereço exato é o que transforma um anúncio em convite para bater na porta
      de quem ainda mora lá — e o que permite fechar negócio por fora da
@@ -340,8 +346,8 @@ function AtributosSection({ atributos, selecionados, onChange, disabled }) {
                   <label key={atr.id} style={{
                     display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
                     borderRadius: "8px", cursor: disabled ? "not-allowed" : "pointer",
-                    border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.08)",
-                    background: checked ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.02)",
+                    border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+                    background: checked ? "rgba(99,102,241,0.12)" : "var(--sup-02, rgba(255,255,255,0.02))",
                     transition: "all 0.15s ease", fontSize: "13px", userSelect: "none",
                     opacity: disabled ? 0.55 : 1,
                   }}>
@@ -414,7 +420,7 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
               style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.3s ease-in-out" }}
             />
           ) : (
-            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", color: "var(--previa-apagado, rgba(255,255,255,0.15))" }}>
+            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", color: "var(--previa-apagado, var(--tinta-15, rgba(255,255,255,0.15)))" }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
@@ -425,8 +431,8 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
 
           {previewUrls.length > 1 && (
             <>
-              <button type="button" onClick={prev} style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", width: "28px", height: "28px", borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>‹</button>
-              <button type="button" onClick={next} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", width: "28px", height: "28px", borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>›</button>
+              <button type="button" onClick={prev} style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", width: "28px", height: "28px", borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid var(--linha-30, rgba(255,255,255,0.3))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>‹</button>
+              <button type="button" onClick={next} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", width: "28px", height: "28px", borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "1px solid var(--linha-30, rgba(255,255,255,0.3))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>›</button>
               <span style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: "10px", padding: "2px 8px", borderRadius: "999px" }}>
                 {idx + 1}/{previewUrls.length}
               </span>
@@ -471,13 +477,13 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
           {hasStats && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "2px" }}>
               {areaExibicao && (
-                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "var(--sup-05, rgba(255,255,255,0.05))", padding: "4px 10px", borderRadius: "6px" }}>
                   <IconArea /> {areaExibicao} m²
                 </span>
               )}
               {form.finalidade === "COMERCIAL" ? (
                 (form.salas || form.banheiros) && (
-                  <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "var(--sup-05, rgba(255,255,255,0.05))", padding: "4px 10px", borderRadius: "6px" }}>
                     <IconBed />
                     {form.salas ? `${form.salas} sala${form.salas !== "1" ? "s" : ""}` : ""}
                     {form.salas && form.banheiros ? " · " : ""}
@@ -486,21 +492,21 @@ function PropertyPreviewCard({ form, previewItems, cardRef }) {
                 )
               ) : (
                 form.bedrooms && (
-                  <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "var(--sup-05, rgba(255,255,255,0.05))", padding: "4px 10px", borderRadius: "6px" }}>
                     <IconBed /> {form.bedrooms} qto{form.bedrooms !== "1" ? "s" : ""}
                     {form.suites ? ` · ${form.suites} suíte${form.suites !== "1" ? "s" : ""}` : ""}
                   </span>
                 )
               )}
               {form.parkingSpots && (
-                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: "6px" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--text-muted)", background: "var(--sup-05, rgba(255,255,255,0.05))", padding: "4px 10px", borderRadius: "6px" }}>
                   <IconCar /> {form.parkingSpots} vaga{form.parkingSpots !== "1" ? "s" : ""}
                 </span>
               )}
             </div>
           )}
 
-          <div style={{ marginTop: "4px", paddingTop: "12px", borderTop: "1px solid var(--previa-risco, rgba(255,255,255,0.06))" }}>
+          <div style={{ marginTop: "4px", paddingTop: "12px", borderTop: "1px solid var(--previa-risco, var(--linha-06, rgba(255,255,255,0.06)))" }}>
             <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "600" }}>Valor</span>
             <p style={{ fontSize: "22px", fontWeight: "700", color: hasPrice ? "var(--previa-forte, #fff)" : "var(--previa-apagado, rgba(255,255,255,0.15))", margin: "2px 0 0 0", letterSpacing: "-0.5px" }}>
               {hasPrice ? `R$ ${price.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "R$ —"}
@@ -533,7 +539,7 @@ function Field({ label, children, hint, required, error, tourId }) {
 function SugestaoCard({ rotulo, texto, onAplicar }) {
   const [aplicado, setAplicado] = useState(false);
   return (
-    <div style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", background: "rgba(255,255,255,0.03)", padding: "14px 16px" }}>
+    <div style={{ border: "1px solid var(--linha-10, rgba(255,255,255,0.1))", borderRadius: "12px", background: "var(--sup-03, rgba(255,255,255,0.03))", padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "8px" }}>
         <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)" }}>
           {rotulo}
@@ -678,7 +684,7 @@ function MediaCarousel({ urls, aspectRatio, maxHeight }) {
           <div style={{ position: "absolute", top: "8px", right: "10px", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "11px", fontWeight: 600, padding: "2px 8px", borderRadius: "999px" }}>{idx + 1}/{total}</div>
           <div style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", display: "flex", gap: "5px" }}>
             {urls.map((_, i) => (
-              <span key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: i === idx ? "#fff" : "rgba(255,255,255,0.5)" }} />
+              <span key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: i === idx ? "#fff" : "var(--sup-50, rgba(255,255,255,0.5))" }} />
             ))}
           </div>
         </>
@@ -784,7 +790,20 @@ function PostFooter({ children }) {
 
 export const FB_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>;
 export const IG_ICON = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>;
-export const WA_ICON = <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>;
+/* O glifo mora em `utils/marcasDeRede` — ele é usado pela landing, pela
+   central de canais e por Configurações, e nenhum desses deve importar este
+   arquivo (2.600 linhas) só para desenhar um ícone. Reexportado aqui porque
+   `DivulgarModal` já importava daqui. */
+/* IMPORTA e reexporta, e as duas coisas são necessárias.
+
+   Aqui havia só o reexport (`export { X } from "…"`), e ele deixa o nome
+   disponível para quem IMPORTA este arquivo — mas não para o próprio arquivo.
+   Como o WA_ICON é usado duas vezes aqui dentro, a tela de divulgação quebrava
+   com "WA_ICON is not defined" no instante em que era montada.
+
+   O reexport continua porque `DivulgarModal` já importava daqui. */
+import { WA_ICON } from "../utils/marcasDeRede.jsx";
+export { WA_ICON };
 
 function Ic({ d, size = 16, fill = "none" }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}>{d}</svg>;
@@ -927,7 +946,7 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
           onDragEnd={() => { dragFrom.current = null; setDragOver(null); }}
           style={{
             position: "relative", borderRadius: "10px", overflow: "hidden",
-            border: dragOver === i ? "2px solid rgba(99,102,241,0.8)" : "2px solid rgba(255,255,255,0.08)",
+            border: dragOver === i ? "2px solid rgba(99,102,241,0.8)" : "2px solid var(--linha-08, rgba(255,255,255,0.08))",
             cursor: "grab", transition: "border-color 0.15s, opacity 0.15s",
             opacity: dragOver === i ? 0.7 : 1,
             aspectRatio: "1",
@@ -972,7 +991,7 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
             </span>
           )}
 
-          <span style={{ position: "absolute", top: "6px", left: "6px", fontSize: "9px", fontWeight: "700", background: "rgba(0,0,0,0.5)", color: "rgba(255,255,255,0.8)", padding: "1px 5px", borderRadius: "999px", pointerEvents: "none" }}>
+          <span style={{ position: "absolute", top: "6px", left: "6px", fontSize: "9px", fontWeight: "700", background: "rgba(0,0,0,0.5)", color: "var(--tinta-80, rgba(255,255,255,0.8))", padding: "1px 5px", borderRadius: "999px", pointerEvents: "none" }}>
             {i + 1}
           </span>
 
@@ -987,7 +1006,7 @@ function PhotoGrid({ images, onRemove, onReorder, addInputId, showAddCard, disab
                 borderRadius: "999px", cursor: "pointer", border: "none",
                 fontSize: "9px", fontWeight: 700, letterSpacing: "0.03em",
                 background: img.is360 ? "rgba(99,102,241,0.95)" : "rgba(0,0,0,0.6)",
-                color: img.is360 ? "#fff" : "rgba(255,255,255,0.85)",
+                color: img.is360 ? "#fff" : "var(--tinta-85, rgba(255,255,255,0.85))",
                 boxShadow: img.is360 ? "0 2px 8px rgba(99,102,241,0.5)" : "none",
               }}
             >
@@ -1164,7 +1183,7 @@ export function RepublishModal({ platform, onKeep, onReplace, onCancel }) {
       <div style={{ position: "fixed", inset: 0, zIndex: 9001, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
         <div style={{
           width: "100%", maxWidth: "460px", background: "rgba(18,22,36,0.98)",
-          border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px", padding: "26px 26px 22px",
+          border: "1px solid var(--linha-10, rgba(255,255,255,0.1))", borderRadius: "16px", padding: "26px 26px 22px",
           boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
         }}>
           <div style={{ fontSize: "16px", fontWeight: 700, marginBottom: "8px" }}>Republicar no {nome}</div>
@@ -1186,8 +1205,8 @@ export function RepublishModal({ platform, onKeep, onReplace, onCancel }) {
               <small style={{ fontSize: "12px", fontWeight: 400, opacity: 0.8 }}>Remove o post atual e publica o novo no lugar.</small>
             </button>
             <button type="button" onClick={onCancel} style={{
-              padding: "9px 16px", borderRadius: "9px", border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.05)", color: "#94a3b8", fontSize: "13px", fontWeight: 500,
+              padding: "9px 16px", borderRadius: "9px", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))",
+              background: "var(--sup-05, rgba(255,255,255,0.05))", color: "#94a3b8", fontSize: "13px", fontWeight: 500,
               cursor: "pointer", width: "auto", alignSelf: "flex-end", marginTop: "2px",
             }}>
               Cancelar
@@ -1300,7 +1319,7 @@ function IaSkeleton({ active, radius = "10px" }) {
            ficava com um retângulo escuro no meio do formulário branco.
            Os valores abaixo são os do tema escuro, que continua sendo o
            padrão; quem redefine é o CSS, em `main[data-tema="claro"]`. */
-        border: "1px solid var(--ia-esq-borda, rgba(255,255,255,0.05))",
+        border: "1px solid var(--ia-esq-borda, var(--linha-05, rgba(255,255,255,0.05)))",
         backgroundColor: "var(--ia-esq-base, #20293c)",
         backgroundImage:
           "linear-gradient(90deg, var(--ia-esq-base, #20293c) 25%, var(--ia-esq-brilho, #2c3851) 50%, var(--ia-esq-base, #20293c) 75%)",
@@ -1366,6 +1385,9 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
      verdade ou entrega a arte para a pessoa publicar. `null` = ainda não
      sabemos, e nesse caso o botão faz o caminho manual — que é o seguro. */
   const [pontePronta, setPontePronta] = useState(null);
+  /* Quantos contatos verão o status. Zero com a ponte ligada significa TODOS —
+     e é isso que o aviso ao lado do botão precisa dizer. */
+  const [pontePublico, setPontePublico] = useState(0);
   const [captions, setCaptions] = useState({ facebook: "", instagram: "", whatsapp: "" });
   const [descHover, setDescHover] = useState(null);
   const [redeIaLoading, setRedeIaLoading] = useState({});
@@ -1380,7 +1402,16 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   const [expandedPostId, setExpandedPostId] = useState(null); // publicação expandida (dropdown)
   const [postInsights, setPostInsights] = useState({});       // { [pubId]: { loading, likes, comments, shares, available } }
   const [removeNote, setRemoveNote] = useState({});
-  const [gerandoCampo, setGerandoCampo] = useState(null);
+  /* Os campos que a IA está escrevendo AGORA — um conjunto, e não um só.
+     Era `useState(null)`: clicar na varinha do título e, em seguida, na da
+     descrição, substituía o valor e o esqueleto do primeiro campo sumia antes
+     de a resposta dele chegar. As duas chamadas continuavam correndo em
+     paralelo; só a TELA fingia que não. */
+  /* O progresso da publicação, ou `null` quando não há publicação em curso.
+     É ele que decide se a tela cheia aparece. */
+  const [progressoPublicacao, setProgressoPublicacao] = useState(null);
+  const [gerandoCampos, setGerandoCampos] = useState(() => new Set());
+  const gerando = (campo) => gerandoCampos.has(campo) || gerandoCampos.has("auto");
   const [campoIaErro, setCampoIaErro] = useState("");
   const [semIA, setSemIA] = useState(false); // usuário optou por seguir sem o preenchimento automático
   const [aviso360, setAviso360] = useState(""); // aviso quando uma foto marcada como 360° não é 2:1
@@ -1394,6 +1425,10 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   const plano = session?.tenant?.plano;
   // Divulgar exige permissão do cargo E plano (Profissional+). IA exige plano Premium.
   const canPublish = Boolean(cargo?.publicarRedes) && planoLiberaRedes(plano);
+  /* Portais são distribuição, e distribuição começa no Profissional. Esconder e
+     não desabilitar: caixa cinzenta com cadeado no meio do cadastro é anúncio
+     no lugar errado — quem vende o plano é a tela de planos. */
+  const mostrarPortais = planoLiberaPortais(plano);
   const canUseIA = planoLiberaIA(plano);
   const canUse360 = planoLiberaTour360(plano); // marcar fotos panorâmicas (Profissional+)
   const autoIA = canUseIA && (session?.tenant?.autoGerarIA ?? true); // auto-preencher ao lançar foto
@@ -1441,7 +1476,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
        quem está no Básico não tem ponte nenhuma — o botão simplesmente segue
        manual, sem erro na tela. */
     api.listarCanais(tenantSlug)
-      .then((r) => setPontePronta(Boolean(r.canais?.find((c) => c.id === "whatsapp-status")?.ponte)))
+      .then((r) => {
+        const canal = r.canais?.find((c) => c.id === "whatsapp-status");
+        setPontePronta(Boolean(canal?.ponte));
+        setPontePublico(canal?.pontePublico || 0);
+      })
       .catch(() => setPontePronta(false));
     api.listPublications(tenantSlug, savedPropertyId)
       .then((list) => setPublications((Array.isArray(list) ? list : []).filter((p) => p.status === "PUBLISHED")))
@@ -1688,6 +1727,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       aceitaPermuta: Boolean(initialData.aceitaPermuta),
       // Ausente nos imóveis anteriores ao campo: o padrão é publicar.
       publicarPortais: initialData.publicarPortais !== false,
+      portais: Array.isArray(initialData.portais) ? initialData.portais : [],
       // `=== true` e não `!== false`: o padrão aqui é NÃO exibir, então a
       // ausência do campo (imóvel salvo antes desta opção existir) conta como
       // desmarcado, e não como marcado.
@@ -1748,6 +1788,24 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
     clearFieldError(field);
+  }
+
+  /* ── Os portais escolhidos ─────────────────────────────────────────────────
+     Derivado, e não mais um estado: o formulário guarda a lista e o mestre, e a
+     tela pergunta "quais". `portaisDoImovel` é quem trata o acervo antigo
+     (lista vazia com o mestre ligado = os três), então o imóvel já publicado
+     abre com as três caixas marcadas, e não vazio. */
+  const portaisEscolhidos = portaisDoImovel(form);
+
+  /* Marcar o primeiro portal religa o mestre; desmarcar o último o desliga. Sem
+     isto, tirar as três caixas deixaria `publicarPortais` ligado apontando para
+     lista nenhuma — e a leitura tolerante entenderia isso como "todos", que é
+     exatamente o oposto do que a pessoa acabou de pedir. */
+  function trocarPortal(id, marcado) {
+    const proximo = marcado
+      ? IDS_PORTAIS.filter((x) => portaisEscolhidos.includes(x) || x === id)
+      : portaisEscolhidos.filter((x) => x !== id);
+    setForm((prev) => ({ ...prev, portais: proximo, publicarPortais: proximo.length > 0 }));
   }
 
   function clearFieldError(field) {
@@ -1857,6 +1915,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       tipoContrato: form.tipoContrato,
       aceitaPermuta: form.aceitaPermuta,
       publicarPortais: form.publicarPortais,
+      portais: form.portais,
       exibirEnderecoCompleto: form.exibirEnderecoCompleto,
       atributos,
     };
@@ -1897,7 +1956,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
 
   async function handleGerarCampoIA(campo) {
     setCampoIaErro("");
-    setGerandoCampo(campo);
+    setGerandoCampos((atuais) => new Set(atuais).add(campo));
     try {
       const imovel = dadosImovelParaIA();
       let imagens = [];
@@ -1962,7 +2021,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
     } catch (err) {
       setCampoIaErro(err.message || "Não foi possível gerar com IA.");
     } finally {
-      setGerandoCampo(null);
+      setGerandoCampos((atuais) => {
+        const proximo = new Set(atuais);
+        proximo.delete(campo);
+        return proximo;
+      });
     }
   }
 
@@ -1974,7 +2037,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   // Depende de images.length para não disparar quando só o flag 360° de uma foto muda.
   useEffect(() => {
     if (!autoIA || semIA) return; // toggle/plano sem IA, ou usuário optou por seguir sem IA
-    if (images.length === 0 || autoIaLockRef.current || gerandoCampo) return;
+    if (images.length === 0 || autoIaLockRef.current || gerandoCampos.size) return;
     const vazio = !form.title.trim() && !form.description.trim();
     const conteudoDaIA = aiFields.title || aiFields.description || aiFields.tipoImovelId || aiFields.finalidade || aiFields.atributos;
     if (!vazio && !conteudoDaIA) return; // usuário editou tudo → não reescreve
@@ -2168,35 +2231,48 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
     const areaPayload = Object.fromEntries(
       TODAS_AREAS.map((f) => [f, areaFields.includes(f) && form[f] !== "" ? parseFloat(form[f]) : null])
     );
-    const saved = await onSubmit({
-      tipoImovelId: form.tipoImovelId ? Number(form.tipoImovelId) : undefined,
-      atributosIds: form.atributosIds,
-      title: form.title,
-      description: form.description,
-      price: normalizedPrice,
-      cep: form.cep.replace(/\D/g, ""),
-      address: form.address,
-      neighborhood: form.neighborhood,
-      city: form.city,
-      state: form.state,
-      bedrooms: form.finalidade === "COMERCIAL" ? 0 : Number(form.bedrooms),
-      suites: form.finalidade === "COMERCIAL" ? 0 : Number(form.suites),
-      salas: form.finalidade === "COMERCIAL" ? Number(form.salas) : 0,
-      banheiros: form.finalidade === "COMERCIAL" ? Number(form.banheiros) : 0,
-      parkingSpots: Number(form.parkingSpots),
-      squareFootage,
-      finalidade: form.finalidade || null,
-      ...areaPayload,
-      andamento: form.andamento || null,
-      tipoContrato: form.tipoContrato || null,
-      aceitaPermuta: Boolean(form.aceitaPermuta),
-      publicarPortais: Boolean(form.publicarPortais),
-      exibirEnderecoCompleto: Boolean(form.exibirEnderecoCompleto),
-      status: form.status,
-      comodidades: form.comodidades,
-      imageFiles: images.map((img) => img.file),
-      imageIs360: images.map((img) => Boolean(img.is360)),
-    });
+    /* A tela cheia sobe ANTES da primeira chamada e só cai no `finally`: se ela
+       dependesse do `disabled` que vem do pai, haveria um quadro sem cobertura
+       entre o clique e o `setLoading(true)` de lá. */
+    setProgressoPublicacao({ etapa: "salvando" });
+    let saved = null;
+    try {
+      saved = await onSubmit({
+        tipoImovelId: form.tipoImovelId ? Number(form.tipoImovelId) : undefined,
+        atributosIds: form.atributosIds,
+        title: form.title,
+        description: form.description,
+        price: normalizedPrice,
+        cep: form.cep.replace(/\D/g, ""),
+        address: form.address,
+        neighborhood: form.neighborhood,
+        city: form.city,
+        state: form.state,
+        bedrooms: form.finalidade === "COMERCIAL" ? 0 : Number(form.bedrooms),
+        suites: form.finalidade === "COMERCIAL" ? 0 : Number(form.suites),
+        salas: form.finalidade === "COMERCIAL" ? Number(form.salas) : 0,
+        banheiros: form.finalidade === "COMERCIAL" ? Number(form.banheiros) : 0,
+        parkingSpots: Number(form.parkingSpots),
+        squareFootage,
+        finalidade: form.finalidade || null,
+        ...areaPayload,
+        andamento: form.andamento || null,
+        tipoContrato: form.tipoContrato || null,
+        aceitaPermuta: Boolean(form.aceitaPermuta),
+        /* O mestre é DERIVADO da escolha: nenhum portal marcado é o mesmo que
+           "não mandar aos portais", e manter os dois independentes criaria o
+           estado sem sentido de "ligado, mas para lugar nenhum". */
+        publicarPortais: portaisEscolhidos.length > 0,
+        portais: portaisEscolhidos,
+        exibirEnderecoCompleto: Boolean(form.exibirEnderecoCompleto),
+        status: form.status,
+        comodidades: form.comodidades,
+        imageFiles: images.map((img) => img.file),
+        imageIs360: images.map((img) => Boolean(img.is360)),
+      }, setProgressoPublicacao);
+    } finally {
+      setProgressoPublicacao(null);
+    }
 
     if (!isEditing && saved?.id) {
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
@@ -2427,6 +2503,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
               : `${quantos} status publicados no seu WhatsApp.` +
                 (r?.falhas?.length ? ` ${r.falhas.length} foto(s) não foram aceitas.` : ""),
           );
+          /* Relê o que está no ar. Sem isto, o bloco de "N no ar · sai às HH:MM"
+             só apareceria no próximo carregamento da tela — e a hora de saída é
+             justamente o que a pessoa quer conferir logo depois de publicar. */
+          api.listPublications(tenantSlug, savedPropertyId)
+            .then((list) => setPublications((Array.isArray(list) ? list : []).filter((x) => x.status === "PUBLISHED")))
+            .catch(() => {});
         } catch (falha) {
           /* A mensagem traz a resposta CRUA da ponte (ver `pontewhatsapp.js`).
              É feia e é útil: cada serviço tem o próprio contrato, e ler o que
@@ -2477,8 +2559,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
      do tema escuro, então quem lê `inputStyle` sem tema definido vê o de antes. */
   const inputStyle = {
     width: "100%", boxSizing: "border-box",
-    background: "var(--campo-fundo, rgba(255,255,255,0.04))",
-    border: "1px solid var(--campo-borda, rgba(255,255,255,0.1))",
+    background: "var(--campo-fundo, var(--sup-04, rgba(255,255,255,0.04)))",
+    border: "1px solid var(--campo-borda, var(--linha-10, rgba(255,255,255,0.1)))",
     borderRadius: "10px", color: "inherit", padding: "12px 14px", fontSize: "14px",
     outline: "none", transition: "border-color 0.2s",
   };
@@ -2494,8 +2576,15 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   // Posts ativos por rede (podem ser vários).
   const fbPosts = publications.filter((p) => p.channel === "FACEBOOK");
   const igPosts = publications.filter((p) => p.channel === "INSTAGRAM");
+  /* O status era a única publicação do produto que não deixava rastro. Agora a
+     ponte devolve o id e ele é gravado na MESMA tabela das redes. */
+  const statusPosts = publications.filter((p) => p.channel === "WHATSAPP");
 
   return (
+    <>
+    {/* Sai por portal, então fica FORA desta `<section>` — e por isso cobre a
+        janela inteira, e não só o painel do formulário. */}
+    <PublicandoImovel progresso={progressoPublicacao} editando={isEditing} temCanais={mostrarPortais || canPublish} />
     <section
       className="glass-panel"
       style={{ animation: "fadeIn 0.3s ease-in-out", position: "relative" }}
@@ -2542,7 +2631,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
           </div>
           <div>
             <div style={{ fontSize: "19px", fontWeight: 700, color: "#fff" }}>Solte as fotos aqui</div>
-            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.65)", marginTop: "5px" }}>
+            <div style={{ fontSize: "13px", color: "var(--tinta-65, rgba(255,255,255,0.65))", marginTop: "5px" }}>
               Elas serão adicionadas ao cadastro do imóvel
             </div>
           </div>
@@ -2597,11 +2686,11 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
 
               {isEditing && existingImages.length > 0 && images.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
+                  <div style={{ flex: 1, height: "1px", background: "var(--sup-07, rgba(255,255,255,0.07))" }} />
                   <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
                     Adicionar novas fotos
                   </span>
-                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
+                  <div style={{ flex: 1, height: "1px", background: "var(--sup-07, rgba(255,255,255,0.07))" }} />
                 </div>
               )}
 
@@ -2617,8 +2706,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                   salva, nem nova). Havendo qualquer foto, o card "+" no fim da
                   grade passa a ser o ponto de adição. */}
               {images.length === 0 && existingImages.length === 0 && (
-                <div data-tour="imovel-fotos" style={{ background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.1)", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
-                  <div style={{ color: "rgba(255,255,255,0.2)", marginBottom: "14px" }}>
+                <div data-tour="imovel-fotos" style={{ background: "var(--sup-02, rgba(255,255,255,0.02))", border: "2px dashed var(--linha-10, rgba(255,255,255,0.1))", borderRadius: "16px", padding: "32px 24px", textAlign: "center" }}>
+                  <div style={{ color: "var(--tinta-20, rgba(255,255,255,0.2))", marginBottom: "14px" }}>
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
                       <polyline points="21 15 16 10 5 21" />
@@ -2759,7 +2848,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                   animation: (autoIA && !isEditing) ? "omnimob-reveal 0.55s cubic-bezier(.22,1,.36,1) both" : undefined,
                 }}
               >
-              <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "32px 0 16px 0" }} />
+              <div style={{ height: "1px", background: "var(--sup-07, rgba(255,255,255,0.07))", margin: "32px 0 16px 0" }} />
 
               <Field tourId="imovel-titulo" label="Título do imóvel" required error={fieldErrors.title}>
                 <div style={{ position: "relative", zIndex: 1 }}>
@@ -2786,24 +2875,24 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleGerarCampoIA("title")}
-                    disabled={(gerandoCampo === "title" || gerandoCampo === "auto") || disabled}
+                    disabled={gerando("title") || disabled}
                     title="Gerar título com IA"
                     style={{
                       position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)",
                       background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)",
                       border: "none", borderRadius: "8px", width: "28px", height: "28px",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: (gerandoCampo === "title" || gerandoCampo === "auto") || disabled ? "wait" : "pointer",
+                      cursor: gerando("title") || disabled ? "wait" : "pointer",
                       padding: 0, opacity: focusedField === "title" && temFotos ? 1 : 0,
                       pointerEvents: focusedField === "title" && temFotos ? "auto" : "none",
                       transition: "opacity 0.3s ease", zIndex: 3,
                       boxShadow: "0 2px 6px rgba(220, 39, 67, 0.4)"
                     }}
                   >
-                    <span style={{ display: "flex", animation: (gerandoCampo === "title" || gerandoCampo === "auto") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
+                    <span style={{ display: "flex", animation: gerando("title") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
                   </button>
                   )}
-                  <IaSkeleton active={(gerandoCampo === "auto" && regeraCampo("title", !form.title.trim())) || gerandoCampo === "title"} radius="10px" />
+                  <IaSkeleton active={gerando("title") && (!gerandoCampos.has("auto") || regeraCampo("title", !form.title.trim()))} radius="10px" />
                 </div>
               </Field>
 
@@ -2835,24 +2924,24 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleGerarCampoIA("description")}
-                    disabled={(gerandoCampo === "description" || gerandoCampo === "auto") || disabled}
+                    disabled={gerando("description") || disabled}
                     title="Gerar descrição com IA"
                     style={{
                       position: "absolute", right: "8px", top: "12px",
                       background: "linear-gradient(135deg, #f09433, #dc2743, #bc1888)",
                       border: "none", borderRadius: "8px", width: "28px", height: "28px",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: (gerandoCampo === "description" || gerandoCampo === "auto") || disabled ? "wait" : "pointer",
+                      cursor: gerando("description") || disabled ? "wait" : "pointer",
                       padding: 0, opacity: focusedField === "description" && temFotos ? 1 : 0,
                       pointerEvents: focusedField === "description" && temFotos ? "auto" : "none",
                       transition: "opacity 0.3s ease", zIndex: 3,
                       boxShadow: "0 2px 6px rgba(220, 39, 67, 0.4)"
                     }}
                   >
-                    <span style={{ display: "flex", animation: (gerandoCampo === "description" || gerandoCampo === "auto") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
+                    <span style={{ display: "flex", animation: gerando("description") ? "wand-pulse 0.9s ease-in-out infinite" : "none" }}><WandIcon /></span>
                   </button>
                   )}
-                  <IaSkeleton active={(gerandoCampo === "auto" && regeraCampo("description", !form.description.trim())) || gerandoCampo === "description"} radius="10px" />
+                  <IaSkeleton active={gerando("description") && (!gerandoCampos.has("auto") || regeraCampo("description", !form.description.trim()))} radius="10px" />
                 </div>
               </Field>
 
@@ -2876,7 +2965,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                       setAiFields((p) => ({ ...p, tipoImovelId: false, atributos: false }));
                     }}
                   />
-                  <IaSkeleton active={gerandoCampo === "auto" && regeraCampo("tipoImovelId", !form.tipoImovelId)} radius="10px" />
+                  <IaSkeleton active={gerandoCampos.has("auto") && regeraCampo("tipoImovelId", !form.tipoImovelId)} radius="10px" />
                 </AiFlare>
               </Field>
 
@@ -2897,12 +2986,12 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
 
               {tipoSelecionado && tipoSelecionado.atributos?.length > 0 ? (
                 <AiFlare active={aiFields.atributos} radius="13px">
-                  <div data-tour="imovel-atributos" style={{ position: "relative", zIndex: 2, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px" }}>
+                  <div data-tour="imovel-atributos" style={{ position: "relative", zIndex: 2, background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))", borderRadius: "12px", padding: "16px" }}>
                     <AtributosSection atributos={tipoSelecionado.atributos} selecionados={form.atributosIds} onChange={(ids) => { set("atributosIds", ids); setAiFields((p) => ({ ...p, atributos: false })); }} disabled={disabled} />
-                    <IaSkeleton active={gerandoCampo === "auto" && regeraCampo("atributos", form.atributosIds.length === 0)} radius="12px" />
+                    <IaSkeleton active={gerandoCampos.has("auto") && regeraCampo("atributos", form.atributosIds.length === 0)} radius="12px" />
                   </div>
                 </AiFlare>
-              ) : (gerandoCampo === "auto" && regeraCampo("tipoImovelId", !form.tipoImovelId)) ? (
+              ) : (gerandoCampos.has("auto") && regeraCampo("tipoImovelId", !form.tipoImovelId)) ? (
                 <div style={{ position: "relative", minHeight: "92px" }}>
                   <IaSkeleton active radius="12px" />
                 </div>
@@ -2944,7 +3033,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
               </Field>
 
               <AiFlare active={aiFields.comodidades} radius="12px">
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "16px", position: "relative", zIndex: 1 }}>
+              <div style={{ background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))", borderRadius: "12px", padding: "16px", position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "4px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-muted)" }}>
                     Comodidades da região
@@ -2967,8 +3056,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                       <label key={c.key} style={{
                         display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
                         borderRadius: "8px", cursor: disabled ? "not-allowed" : "pointer",
-                        border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.08)",
-                        background: checked ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.02)",
+                        border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+                        background: checked ? "rgba(99,102,241,0.12)" : "var(--sup-02, rgba(255,255,255,0.02))",
                         transition: "all 0.15s ease", fontSize: "13px", userSelect: "none",
                         opacity: disabled ? 0.55 : 1,
                       }}>
@@ -3065,8 +3154,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
               <label style={{
                 display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", borderRadius: "12px",
                 cursor: disabled ? "not-allowed" : "pointer",
-                border: form.aceitaPermuta ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.08)",
-                background: form.aceitaPermuta ? "rgba(99,102,241,0.1)" : "rgba(255,255,255,0.02)",
+                border: form.aceitaPermuta ? "1px solid rgba(99,102,241,0.5)" : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+                background: form.aceitaPermuta ? "rgba(99,102,241,0.1)" : "var(--sup-02, rgba(255,255,255,0.02))",
                 transition: "all 0.2s ease", userSelect: "none", opacity: disabled ? 0.55 : 1,
               }}>
                 <input type="checkbox" checked={form.aceitaPermuta} onChange={(e) => set("aceitaPermuta", e.target.checked)} disabled={disabled} style={{ accentColor: "var(--primary, #6366f1)", width: "16px", height: "16px", flexShrink: 0 }} />
@@ -3076,27 +3165,48 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                 </div>
               </label>
 
-              {/* Portais imobiliários.
+              {/* ── Portais, um a um ───────────────────────────────────────
+                  ZAP, VivaReal e OLX leem o mesmo formato, e por isso o produto
+                  os tratava como um interruptor só. A imobiliária, porém, tem
+                  contrato com um e não com outro — e o proprietário pode não
+                  autorizar um portal específico. Marcar "portais" e ver o
+                  imóvel sair nos três era o sistema decidindo por ela.
+
                   Separado de "ativo na vitrine" de propósito: imóvel de
-                  exclusividade em negociação, ou de carteira, fica na vitrine
-                  da imobiliária e fora do ZAP. Sem este campo, "publicar tudo"
-                  seria a única política possível. */}
-              <label style={{
-                display: "flex", alignItems: "flex-start", gap: "14px", padding: "16px 18px", borderRadius: "14px",
-                cursor: disabled ? "not-allowed" : "pointer",
-                border: form.publicarPortais ? "1px solid rgba(14,165,233,0.45)" : "1px solid rgba(255,255,255,0.08)",
-                background: form.publicarPortais ? "rgba(14,165,233,0.09)" : "rgba(255,255,255,0.02)",
-                transition: "all 0.2s ease", userSelect: "none", opacity: disabled ? 0.55 : 1,
-              }}>
-                <input type="checkbox" checked={form.publicarPortais} onChange={(e) => set("publicarPortais", e.target.checked)} disabled={disabled} style={{ accentColor: "#0ea5e9", width: "16px", height: "16px", flexShrink: 0, marginTop: "2px" }} />
-                <div>
-                  <span style={{ fontSize: "14px", fontWeight: "500" }}>Enviar aos portais</span>
-                  <span style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.5 }}>
-                    Inclui o imóvel no arquivo que o ZAP, o VivaReal e o OLX Imóveis buscam.
-                    Desmarque para mantê-lo só na sua vitrine.
-                  </span>
+                  exclusividade em negociação fica na vitrine e fora dos
+                  portais. */}
+              {mostrarPortais ? (
+                <div className="pt-portais">
+                  <div className="pt-portais__topo">
+                    <span className="pt-portais__titulo">Enviar aos portais</span>
+                    <span className="pt-portais__ajuda">
+                      Escolha em quais o imóvel deve aparecer. Sem nenhum marcado, ele fica só na sua vitrine.
+                    </span>
+                  </div>
+
+                  <div className="pt-portais__lista">
+                    {PORTAIS.map((portal) => {
+                      const marcado = portaisEscolhidos.includes(portal.id);
+                      return (
+                        <label
+                          key={portal.id}
+                          className={`pt-portal${marcado ? " is-on" : ""}`}
+                          style={marcado ? { "--pt-cor": portal.cor } : undefined}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={marcado}
+                            disabled={disabled}
+                            onChange={(e) => trocarPortal(portal.id, e.target.checked)}
+                          />
+                          <span className="pt-portal__ponto" style={{ background: portal.cor }} aria-hidden="true" />
+                          <span>{portal.nome}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-              </label>
+              ) : null}
 
               {/* Endereço completo na página pública.
                   Desmarcado por padrão, e isso é a decisão — não um detalhe de
@@ -3110,8 +3220,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
               <label style={{
                 display: "flex", alignItems: "flex-start", gap: "14px", padding: "16px 18px", borderRadius: "14px",
                 cursor: disabled ? "not-allowed" : "pointer",
-                border: form.exibirEnderecoCompleto ? "1px solid rgba(139,92,246,0.45)" : "1px solid rgba(255,255,255,0.08)",
-                background: form.exibirEnderecoCompleto ? "rgba(139,92,246,0.09)" : "rgba(255,255,255,0.02)",
+                border: form.exibirEnderecoCompleto ? "1px solid rgba(139,92,246,0.45)" : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+                background: form.exibirEnderecoCompleto ? "rgba(139,92,246,0.09)" : "var(--sup-02, rgba(255,255,255,0.02))",
                 transition: "all 0.2s ease", userSelect: "none", opacity: disabled ? 0.55 : 1,
               }}>
                 <input
@@ -3258,10 +3368,67 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                           ? (pontePronta ? "Publicando…" : "Montando a arte…")
                           : (pontePronta ? "Publicar no status" : "Gerar arte para o status")}
                       </button>
+
+                      {/* ── O aviso mora AQUI, colado no botão ──────────────
+                          Ele existe porque um anúncio de teste foi para a agenda
+                          inteira de quem estava só experimentando, com o celular
+                          configurado para mostrar status a uma pessoa só.
+
+                          A ponte é outra sessão do WhatsApp e publica com a
+                          lista dela, então a privacidade do aparelho não vale.
+                          E o Whapi não suporta apagar status pela API — ele só
+                          expira em 24h. Ou seja: não existe segunda chance, e
+                          por isso o aviso não pode estar na documentação nem na
+                          tela de configuração. Tem que estar onde o dedo está,
+                          no instante anterior ao clique. */}
+                      {pontePronta && !pontePublico ? (
+                        <p style={{
+                          margin: 0, fontSize: "11.5px", lineHeight: 1.5, color: "#fbbf24",
+                          padding: "8px 10px", borderRadius: "8px",
+                          background: "rgba(245,158,11,0.1)",
+                          border: "1px solid rgba(245,158,11,0.3)",
+                        }}>
+                          <strong>Vai para TODOS os seus contatos.</strong> A privacidade do
+                          celular não vale para a ponte, e não dá para apagar depois — o status
+                          some sozinho em 24h. Escolha quem vê em Configurações › Canais.
+                        </p>
+                      ) : null}
+                      {pontePronta && pontePublico ? (
+                        <p style={{ margin: 0, fontSize: "11.5px", lineHeight: 1.5, color: "var(--text-muted)" }}>
+                          Vai para {pontePublico} {pontePublico === 1 ? "contato escolhido" : "contatos escolhidos"}.
+                          Some sozinho em 24h.
+                        </p>
+                      ) : null}
+
+                      {/* O que já está no ar, e até quando. Não há botão de
+                          remover porque não existe remoção: o que o produto pode
+                          honestamente oferecer é dizer o que publicou e quando
+                          isso sai do ar. */}
+                      {statusPosts.length ? (
+                        <div style={{ fontSize: "11.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                          {statusPosts.length} no ar · sai às{" "}
+                          {new Date(new Date(statusPosts[0].createdAt).getTime() + 24 * 3600000)
+                            .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      ) : null}
                     </div>
                   }
                 />
               </div>
+
+              {/* ── Portais e Mercado Livre ────────────────────────────────
+                  Separados da grade acima de propósito: Facebook, Instagram e
+                  WhatsApp publicam AGORA; estes dois não. Um portal lê um
+                  arquivo uma vez por dia, e o Mercado Livre exige conta
+                  conectada e pacote contratado. Misturados na mesma fileira, os
+                  cinco pareceriam ter o mesmo botão e o mesmo efeito. */}
+              <CanaisDoImovel
+                tenantSlug={tenantSlug}
+                propertyId={savedPropertyId}
+                portais={portaisEscolhidos}
+                aoTrocarPortais={trocarPortal}
+                disabled={disabled}
+              />
 
               {(publishResults.facebook?.error || publishResults.instagram?.error) && (
                 <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: "13px", color: "#f87171", display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -3297,8 +3464,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                       const captionReal = pub.caption ?? captions[pub.channel.toLowerCase()] ?? "";
                       return (
                         <div key={pub.id} style={{
-                          borderRadius: "10px", border: `1px solid ${isOpen ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)"}`,
-                          background: "rgba(255,255,255,0.03)", overflow: "hidden",
+                          borderRadius: "10px", border: `1px solid ${isOpen ? "var(--linha-16, rgba(255,255,255,0.16))" : "var(--linha-08, rgba(255,255,255,0.08))"}`,
+                          background: "var(--sup-03, rgba(255,255,255,0.03))", overflow: "hidden",
                           transition: "border-color 0.15s",
                           animation: removing ? "divulgar-post-out 0.4s ease forwards" : undefined,
                         }}>
@@ -3362,7 +3529,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid var(--linha-06, rgba(255,255,255,0.06))" }}>
                 <button
                   type="button"
                   onClick={() => { setSavedPropertyId(null); setForm(EMPTY); setStep(0); setPublishResults({}); setPublications([]); setSemIA(false); }}
@@ -3417,5 +3584,6 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
         )}
       </div>
     </section>
+    </>
   );
 }

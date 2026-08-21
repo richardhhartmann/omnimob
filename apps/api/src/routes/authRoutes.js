@@ -6,10 +6,12 @@ import { prisma } from "../db.js";
 import { sendEmail } from "../services/notificationService.js";
 import { emailRecuperarSenha } from "../services/emailTemplates.js";
 import { requireAuth, ESCOPO_REATIVACAO } from "../middlewares/authMiddleware.js";
+import { googleConfigurado, verificarTokenDoGoogle } from "../services/google.js";
 import { situacaoDeGraca } from "../services/trialService.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { loginSchema } from "../validators/authValidators.js";
 import { PERMISSOES } from "../services/cargosPadrao.js";
+import { normalizarAtalhos } from "../services/atalhos.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
@@ -27,8 +29,18 @@ export const authRouter = Router();
 
    `PERMISSOES` é a mesma lista do catálogo de cargos: uma permissão nova entra
    na sessão sem ninguém precisar lembrar deste arquivo. */
+/* ── O cargo como a TELA precisa dele ────────────────────────────────────────
+   `PERMISSOES` é a lista do que se ESCOLHE, e `acessarPainel` saiu dela quando
+   deixou de ser uma escolha. Só que a tela ainda lê essa chave para decidir se
+   manda a pessoa ao painel ou à vitrine — e sem ela na sessão, todo cargo que
+   não tivesse `editarPagina` era despejado na vitrine ao entrar.
+
+   Foi exatamente o sintoma: o Administrador não notou (tem `editarPagina`), e
+   um cargo restrito a Relatórios e Auditoria não conseguia entrar.
+
+   Ela vai explícita porque é sempre verdadeira — o cargo existe, logo entra. */
 function cargoDaSessao(cargo) {
-  const saida = { id: cargo.id, descricao: cargo.descricao };
+  const saida = { id: cargo.id, descricao: cargo.descricao, acessarPainel: true };
   for (const p of PERMISSOES) saida[p] = Boolean(cargo[p]);
   return saida;
 }
@@ -65,6 +77,18 @@ function montarSessao(usuario, { escopo = null } = {}) {
          aqui apagaria essa distinção e o administrador nunca mais alcançaria
          esta pessoa ao definir o padrão da casa. */
       temaPainel: usuario.temaPainel ?? null,
+      atalhos: usuario.atalhos ?? null,
+      /* O que o menu do perfil precisa saber sobre o vínculo. O `googleId` NÃO
+         vai: ele é identificador de outra plataforma e não tem uso nenhum na
+         tela — mandar seria expor sem motivo. */
+      google: usuario.googleId
+        ? {
+            email: usuario.googleEmail,
+            foto: usuario.googleFoto,
+            nome: usuario.googleNome,
+            vinculadoEm: usuario.googleVinculadoEm,
+          }
+        : null,
     },
     tenant: {
       id: usuario.tenant.id,
@@ -79,6 +103,11 @@ function montarSessao(usuario, { escopo = null } = {}) {
       primaryColor: usuario.tenant.primaryColor,
       secondaryColor: usuario.tenant.secondaryColor,
       temaImobiliaria: usuario.tenant.temaImobiliaria || "escuro",
+      /* Os atalhos da casa e o interruptor mestre: o ouvinte do teclado e os
+         selos ao lado dos botões leem da sessão, então eles precisam chegar
+         junto — não numa segunda chamada depois da tela já ter desenhado. */
+      atalhos: usuario.tenant.atalhos ?? null,
+      atalhosAtivos: usuario.tenant.atalhosAtivos !== false,
       showcaseHeadline: usuario.tenant.showcaseHeadline,
       showcaseSubheadline: usuario.tenant.showcaseSubheadline,
       showcaseConfig: usuario.tenant.showcaseConfig,
@@ -186,6 +215,169 @@ authRouter.post("/login", async (req, res) => {
   }
 });
 
+/* ─── Conta Google ───────────────────────────────────────────────────────────
+
+   Duas rotas, e a ORDEM entre elas é a regra de segurança inteira.
+
+   VINCULAR exige estar logado. O vínculo nasce de quem JÁ PROVOU ser aquele
+   usuário, com login e senha. É isso que impede alguém de apontar a própria
+   conta Google para o usuário de outra pessoa.
+
+   ENTRAR só PROCURA. Achou o `googleId`, devolve a sessão daquele usuário; não
+   achou, recusa. Ela nunca cria usuário — se criasse, qualquer pessoa com uma
+   conta Google entraria no painel de qualquer imobiliária.
+
+   E a busca é por `googleId`, nunca por e-mail. E-mail corporativo é
+   reatribuído: quem herdasse `vendas@imobiliaria.com` de um corretor que saiu
+   entraria no sistema como ele. O `sub` do Google não é reatribuído nunca.
+   ────────────────────────────────────────────────────────────────────────── */
+
+authRouter.get("/google/disponivel", (req, res) => {
+  /* A tela de login precisa saber se desenha o botão. Sem isto ela ou some com
+     ele sempre, ou mostra um botão que falha no clique. */
+  return res.json({ disponivel: googleConfigurado(), clientId: process.env.GOOGLE_CLIENT_ID || null });
+});
+
+authRouter.post("/google/vincular", requireAuth, requireTenant, async (req, res) => {
+  try {
+    const identidade = await verificarTokenDoGoogle(req.body?.credential);
+
+    /* A conta já pertence a outra pessoa? Recusa, e diz o que aconteceu sem
+       revelar QUEM — o nome do outro usuário não é assunto de quem tentou. */
+    const jaUsada = await prisma.usuario.findUnique({
+      where: { googleId: identidade.googleId },
+      select: { id: true },
+    });
+    if (jaUsada && jaUsada.id !== req.authUserId) {
+      return res.status(409).json({
+        error: "Esta conta do Google já está vinculada a outro usuário.",
+        code: "GOOGLE_JA_VINCULADO",
+      });
+    }
+
+    const usuario = await prisma.usuario.update({
+      where: { id: req.authUserId },
+      data: {
+        googleId: identidade.googleId,
+        googleEmail: identidade.email,
+        googleFoto: identidade.foto,
+        googleNome: identidade.nome,
+        googleVinculadoEm: new Date(),
+        /* Foto e nome ficam em campos PRÓPRIOS e não tocam em `nome`/`foto` do
+           cadastro. A distinção importa: o cadastro é o que a imobiliária
+           publica — aparece na vitrine, nas listas, no widget de Equipe. Estes
+           servem à MOLDURA DO PAINEL, que é o retrato que a pessoa vê de si
+           mesma enquanto trabalha.
+
+           Fossem a mesma coisa, vincular a conta pessoal de um corretor
+           trocaria o nome dele na página pública da imobiliária. */
+      },
+      include: { tenant: true, cargo: true },
+    });
+
+    return res.json({
+      vinculado: true,
+      googleEmail: usuario.googleEmail,
+      googleFoto: usuario.googleFoto,
+      googleNome: usuario.googleNome,
+    });
+  } catch (err) {
+    if (err.code === "GOOGLE_NAO_CONFIGURADO") return res.status(503).json({ error: err.message, code: err.code });
+    if (err.code === "TOKEN_AUSENTE" || err.code === "TOKEN_INVALIDO" || err.code === "EMAIL_NAO_VERIFICADO") {
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
+    console.error("[POST /auth/google/vincular]", err);
+    return res.status(500).json({ error: "Erro ao vincular a conta do Google." });
+  }
+});
+
+authRouter.delete("/google/vincular", requireAuth, requireTenant, async (req, res) => {
+  try {
+    await prisma.usuario.update({
+      where: { id: req.authUserId },
+      data: { googleId: null, googleEmail: null, googleFoto: null, googleVinculadoEm: null },
+    });
+    return res.json({ vinculado: false });
+  } catch (err) {
+    console.error("[DELETE /auth/google/vincular]", err);
+    return res.status(500).json({ error: "Erro ao desvincular." });
+  }
+});
+
+authRouter.post("/google/entrar", async (req, res) => {
+  try {
+    const identidade = await verificarTokenDoGoogle(req.body?.credential);
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { googleId: identidade.googleId },
+      include: { tenant: true, cargo: true },
+    });
+
+    /* A mensagem diz o CAMINHO, e não só o obstáculo. "Usuário não encontrado"
+       manda a pessoa procurar um erro que não existe; a frase abaixo diz
+       exatamente o que fazer — entrar uma vez com login e senha e vincular. */
+    if (!usuario) {
+      return res.status(404).json({
+        error:
+          "Nenhum usuário da Omnimob está vinculado a esta conta do Google. " +
+          "Entre com seu login e senha uma vez e vincule a conta pelo menu do seu perfil.",
+        code: "GOOGLE_SEM_VINCULO",
+      });
+    }
+    if (!usuario.ativo) {
+      return res.status(401).json({
+        error: "Seu acesso foi encerrado. Fale com o administrador da sua imobiliária.",
+        sessaoEncerrada: true,
+      });
+    }
+
+    /* As MESMAS travas do login por senha. Entrar por Google não pode ser uma
+       porta que ignora conta suspensa ou cancelada — seria o caminho mais curto
+       para o vencimento não significar nada. */
+    if (!usuario.tenant?.ativo) {
+      if (usuario.cargo?.verConfiguracoes) {
+        return res.json(montarSessao(usuario, { escopo: ESCOPO_REATIVACAO }));
+      }
+      return res.status(403).json({
+        error:
+          "O acesso desta imobiliária está suspenso porque o plano venceu. " +
+          "Fale com quem responde pela conta.",
+        code: "TENANT_SUSPENSO",
+      });
+    }
+    if (usuario.tenant.statusPagamento === "CANCELADO") {
+      return res.status(403).json({
+        error: "A assinatura desta imobiliária foi cancelada. Fale com o administrador da conta.",
+        code: "TENANT_CANCELADO",
+      });
+    }
+
+    /* A foto do Google acompanha: ela muda quando a pessoa troca no Google, e
+       guardar a de ontem daria um retrato desatualizado sem motivo. O CADASTRO
+       continua intocado. */
+    const mudou =
+      (identidade.foto && identidade.foto !== usuario.googleFoto) ||
+      (identidade.nome && identidade.nome !== usuario.googleNome);
+    if (mudou) {
+      await prisma.usuario.update({
+        where: { id: usuario.id },
+        data: { googleFoto: identidade.foto, googleNome: identidade.nome },
+      }).catch(() => {});
+      usuario.googleFoto = identidade.foto;
+      usuario.googleNome = identidade.nome;
+    }
+
+    return res.json(montarSessao(usuario));
+  } catch (err) {
+    if (err.code === "GOOGLE_NAO_CONFIGURADO") return res.status(503).json({ error: err.message, code: err.code });
+    if (err.code === "TOKEN_AUSENTE" || err.code === "TOKEN_INVALIDO" || err.code === "EMAIL_NAO_VERIFICADO") {
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
+    console.error("[POST /auth/google/entrar]", err);
+    return res.status(500).json({ error: "Erro ao entrar com o Google." });
+  }
+});
+
 // Define uma nova senha (primeiro acesso ou troca obrigatória) e já autentica.
 // Se o usuário já tiver senha, exige a senha atual; se não tiver (ativação), não.
 authRouter.post("/definir-senha", async (req, res) => {
@@ -237,6 +429,26 @@ authRouter.post("/definir-senha", async (req, res) => {
 
    Sem `requireTenant`: a preferência é do usuário e não depende do cabeçalho de
    imobiliária. */
+/* ── Os atalhos DESTA pessoa ─────────────────────────────────────────────────
+   Sem `requireTenant`, pelo mesmo motivo do tema: a preferência é do usuário e
+   não depende do cabeçalho de imobiliária.
+
+   Grava só o que difere do padrão — a tela já manda assim (`apenasMudancas`), e
+   aqui a validação é do FORMATO: chave de ação conhecida e tecla de uma letra
+   ou dígito. String vazia passa de propósito: ela é a escolha "não quero atalho
+   para isto", e recusá-la tiraria da pessoa a única forma de desligar um. */
+authRouter.put("/meus-atalhos", requireAuth, async (req, res) => {
+  try {
+    const atalhos = normalizarAtalhos(req.body?.atalhos);
+    if (atalhos === null) return res.status(400).json({ error: "Atalhos inválidos." });
+    await prisma.usuario.update({ where: { id: req.authUserId }, data: { atalhos } });
+    return res.json({ atalhos });
+  } catch (erro) {
+    console.error("[auth] atalhos:", erro);
+    return res.status(500).json({ error: "Erro ao salvar os atalhos." });
+  }
+});
+
 authRouter.put("/meu-tema", requireAuth, async (req, res) => {
   try {
     const bruto = req.body?.tema;
@@ -268,6 +480,18 @@ authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {
       cargo: cargoDaSessao(usuario.cargo),
       // Mesma regra do login: nulo significa "nunca escolhi tema".
       temaPainel: usuario.temaPainel ?? null,
+      atalhos: usuario.atalhos ?? null,
+      /* O vínculo com o Google vem por aqui também: o painel relê `/auth/me` na
+         montagem e no foco, e é essa releitura que faz o menu do perfil mudar
+         de "vincular" para "vinculado" logo depois de a pessoa vincular. */
+      google: usuario.googleId
+        ? {
+            email: usuario.googleEmail,
+            foto: usuario.googleFoto,
+            nome: usuario.googleNome,
+            vinculadoEm: usuario.googleVinculadoEm,
+          }
+        : null,
     });
   } catch (err) {
     console.error("[GET /auth/me]", err);

@@ -6,11 +6,8 @@ import { Avatar, EmptyState, SearchInput, StatCard, StatGrid } from "../componen
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { useConfirm } from "../components/ConfirmModal";
 import { ModalCiencia } from "../components/ModalCiencia";
-import { planoLiberaRedes } from "../utils/planos";
-import { IconeRelatorios } from "../utils/iconesRelatorios";
-import {
-  House, PencilSimple, Buildings, UserSquare, UserCircle, Shield, ShareNetwork, ClockCounterClockwise,
-} from "@phosphor-icons/react";
+import { PERMISSOES, PERMISSOES_DE_RISCO, permissoesDoPlano, cargoVazio } from "../utils/permissoesCargo.jsx";
+import { GradeDePermissoes } from "../components/GradeDePermissoes.jsx";
 
 /* Cada permissão carrega o ÍCONE do lugar que ela abre — o mesmo da barra
    lateral e do painel inicial. Marcar "Ver Relatórios" e reconhecer ali o
@@ -19,67 +16,20 @@ import {
 
    `verConfiguracoes` não está na lista, e é de propósito — ver o comentário
    logo abaixo. */
-const PERMISSOES = [
-  { key: "acessarPainel",     label: "Acessar Painel",     Icon: House },
-  { key: "gerenciarCargos",   label: "Gerenciar Cargos",   Icon: Shield },
-  { key: "gerenciarImoveis",  label: "Gerenciar Imóveis",  Icon: Buildings },
-  { key: "verRelatorios",     label: "Ver Relatórios",     Icon: IconeRelatorios },
-  { key: "gerenciarClientes", label: "Gerenciar Clientes", Icon: UserCircle },
-  { key: "gerenciarUsuarios", label: "Gerenciar Usuários", Icon: UserSquare },
-  { key: "verAuditoria",      label: "Registro de Atividade", Icon: ClockCounterClockwise },
-  { key: "editarPagina",      label: "Editar Página",     Icon: PencilSimple },
-  /* "Ver Relatórios" absorveu o antigo "Gerenciar Leads": ela abre a página
-     Relatórios inteira — leads, relatório mensal, funil e comissões. */
-  { key: "publicarRedes",     label: "Publicar em Redes",  Icon: ShareNetwork },
-];
+// A lista de permissões mora em utils/permissoesCargo — o cadastro de usuário
+// também a usa, para criar cargo em linha. Ver o cabeçalho de lá.
 
-/* `verConfiguracoes` NÃO está na lista acima, e é de propósito: ela não é uma
-   escolha, é uma consequência de ser o Administrador. O servidor a recalcula a
-   cada gravação a partir do nome do cargo (ver `cargoRoutes`), então não há o
-   que marcar, desmarcar ou exibir aqui — nem para o Administrador. */
+/* Estas duas NÃO foram para `utils/permissoesCargo`, e é de propósito: as duas
+   falam de EDITAR um cargo que já existe, e o cadastro de usuário só cria. */
 
-// Permissões que o usuário NÃO pode remover do próprio cargo (senão se tranca
-// para fora do painel / da gestão de cargos).
-const LOCKED_NO_PROPRIO_CARGO = ["acessarPainel", "gerenciarCargos"];
+/* Permissões que o usuário NÃO pode remover do PRÓPRIO cargo — senão se tranca
+   para fora da gestão de cargos e não consegue mais se desfazer disso.
 
-/* Conceder isto é entregar a chave de todas as outras portas: quem gerencia
-   cargos pode editar o próprio cargo e se dar qualquer permissão que falte —
-   inclusive as que o Administrador não deu. Daí o modal de ciência. */
-const PERMISSAO_DE_RISCO = "gerenciarCargos";
+   `acessarPainel` saiu daqui porque saiu da tela: ela deixou de ser uma caixa
+   marcável e passou a ser sempre verdadeira (ver `utils/permissoesCargo.jsx`).
+   Travar o que não existe mais só confundiria quem lesse esta lista. */
+const LOCKED_NO_PROPRIO_CARGO = ["gerenciarCargos"];
 
-/* ─── Permissões que o plano precisa liberar antes ───────────────────────────
-   Marcar uma permissão de recurso que o plano não tem produz a pior forma de
-   erro: a que não avisa. A pessoa marca "Publicar em Redes", a tela confirma
-   com um selo azul, e só na hora de publicar é que nada acontece — sem nenhuma
-   pista de que o problema é o plano, e não a permissão.
-
-   Por isso a permissão some da tela inteira (formulário E selos) enquanto o
-   plano não a libera. Não é ocultar um recurso para vender: é não oferecer um
-   botão que não liga em nada.
-
-   O valor guardado no banco NÃO é apagado — quem já tinha a permissão marcada e
-   caiu de plano volta a vê-la marcada ao subir de novo. Fica invisível, não
-   perdida.
-
-   Contas em teste rodam como PREMIUM, então veem tudo — que é o certo: o teste
-   existe para experimentar o produto inteiro. */
-const DEPENDE_DO_PLANO = {
-  publicarRedes: planoLiberaRedes,
-};
-
-/** As permissões que fazem sentido oferecer neste plano. */
-function permissoesDoPlano(plano) {
-  return PERMISSOES.filter((p) => {
-    const exige = DEPENDE_DO_PLANO[p.key];
-    return exige ? exige(plano) : true;
-  });
-}
-
-function emptyForm() {
-  const f = { descricao: "" };
-  for (const p of PERMISSOES) f[p.key] = false;
-  return f;
-}
 
 export function CargosPage({ session, onSessionUpdate }) {
   /* Aviso de sucesso no mesmo canal do resto do painel (o toast do
@@ -98,7 +48,7 @@ export function CargosPage({ session, onSessionUpdate }) {
   const [cargos, setCargos] = useState([]);
   const [view, setView] = useState("list");
   const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState(cargoVazio());
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -139,7 +89,7 @@ export function CargosPage({ session, onSessionUpdate }) {
 
   function abrirCriar() {
     setEditando(null);
-    setForm(emptyForm());
+    setForm(cargoVazio());
     setError("");
     setView("form");
   }
@@ -199,7 +149,7 @@ export function CargosPage({ session, onSessionUpdate }) {
        Tirar não para: desfazer uma concessão de risco tem de ser tão fácil
        quanto possível. E o próprio cargo também não — quem está editando já
        tem a permissão, então não há nada sendo concedido ali. */
-    if (key === PERMISSAO_DE_RISCO && value === true && !ehProprioCargoDoUsuario) {
+    if (PERMISSOES_DE_RISCO[key] && value === true && !ehProprioCargoDoUsuario) {
       setConcessaoPendente({ key, value, modo: "salvar" });
       return;
     }
@@ -260,21 +210,23 @@ export function CargosPage({ session, onSessionUpdate }) {
 
   if (view === "form") {
     const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
-    const nomeDoCargo = (editando?.descricao || form.descricao || "este cargo").trim();
+    /* O nome do cargo, para o aviso falar dele e não de "este cargo". Sai do
+       cargo em edição ou do que já foi digitado no formulário. */
+    const nomeDoCargo = (editando?.descricao || form.descricao || "").trim();
+    /* Sem nome ainda — dá para marcar a permissão antes de digitar — o aviso
+       cai numa forma que continua correta em português, em vez de mostrar um
+       `"este cargo"` entre aspas como se fosse o nome. */
+    const alvoDoAviso = nomeDoCargo ? `ao cargo "${nomeDoCargo}"` : "a este cargo";
+    const risco = concessaoPendente ? PERMISSOES_DE_RISCO[concessaoPendente.key] : null;
 
     return (
       <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
         <ModalCiencia
-          aberto={Boolean(concessaoPendente)}
-          titulo="Conceder Gerenciar Cargos?"
-          descricao={`Você está prestes a dar a "${nomeDoCargo}" o poder de editar cargos e permissões desta imobiliária.`}
-          riscos={[
-            "Quem tem esta permissão pode editar o PRÓPRIO cargo e se conceder qualquer outra permissão — inclusive as que você não deu.",
-            "Pode alterar as permissões de todos os outros cargos, e remover acessos de quem trabalha aqui.",
-            "Pode conceder este mesmo poder a mais cargos, sem passar por você.",
-            "Na prática, é um segundo administrador: você deixa de ser o único a decidir quem pode o quê.",
-          ]}
-          textoCiencia="Estou ciente de que este cargo poderá alterar permissões — inclusive as dele mesmo — e quero conceder assim mesmo."
+          aberto={Boolean(risco)}
+          titulo={risco?.titulo}
+          descricao={`Você está prestes a dar ${alvoDoAviso} ${risco?.verbo}.`}
+          riscos={risco?.riscos || []}
+          textoCiencia={risco?.textoCiencia}
           confirmarLabel="Conceder mesmo assim"
           aoConfirmar={confirmarConcessao}
           aoCancelar={() => setConcessaoPendente(null)}
@@ -308,55 +260,28 @@ export function CargosPage({ session, onSessionUpdate }) {
                 </span>
               )}
             </div>
-            <div data-tour="cargo-permissoes" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px" }}>
-              {permissoesVisiveis.map(({ key, label, Icon }) => {
-                const locked = LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario;
-                const checked = locked ? true : Boolean(form[key]);
-                const isAutoSaving = editando !== null;
+            {/* O DESENHO das caixas mora em `GradeDePermissoes`, junto com o do
+                `+` do cadastro de usuário. O que fica aqui é só o que é DESTA
+                tela: auto-save ao editar e o modal da permissão de risco. */}
+            <GradeDePermissoes
+              plano={session?.tenant?.plano}
+              valores={form}
+              desabilitado={loading || saving}
+              travadas={ehProprioCargoDoUsuario ? LOCKED_NO_PROPRIO_CARGO : []}
+              motivoTravada="Você não pode remover esta permissão do seu próprio cargo"
+              dataTour="cargo-permissoes"
+              aoAlternar={(key, marcado) => {
+                // Editando, cada clique já grava. Criando, só junta no form.
+                if (editando !== null) return handlePermissaoChange(key, marcado);
                 /* Criando um cargo, conceder a permissão de risco também passa
                    pelo modal — senão bastava criar já com ela marcada para
                    contornar o aviso inteiro. */
-                const aoMarcar = (marcado) => {
-                  if (isAutoSaving) return handlePermissaoChange(key, marcado);
-                  if (key === PERMISSAO_DE_RISCO && marcado) {
-                    return setConcessaoPendente({ key, value: true, modo: "form" });
-                  }
-                  return setForm((p) => ({ ...p, [key]: marcado }));
-                };
-
-                return (
-                  <label
-                    key={key}
-                    title={locked ? "Você não pode remover esta permissão do seu próprio cargo" : undefined}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "10px",
-                      padding: "10px 14px", borderRadius: "10px",
-                      cursor: locked || saving ? "not-allowed" : "pointer",
-                      border: checked ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.1)",
-                      background: checked ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.03)",
-                      transition: "all 0.15s ease", fontSize: "13px", userSelect: "none",
-                      opacity: locked ? 0.55 : 1,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => aoMarcar(e.target.checked)}
-                      disabled={loading || locked || saving}
-                      style={{ accentColor: "#6366f1", width: "14px", height: "14px", flexShrink: 0 }}
-                    />
-                    {Icon ? (
-                      <Icon
-                        size={16}
-                        weight={checked ? "fill" : "regular"}
-                        style={{ flexShrink: 0, color: checked ? "#a5b4fc" : "var(--text-muted)" }}
-                      />
-                    ) : null}
-                    {label}
-                  </label>
-                );
-              })}
-            </div>
+                if (PERMISSOES_DE_RISCO[key] && marcado) {
+                  return setConcessaoPendente({ key, value: true, modo: "form" });
+                }
+                return setForm((p) => ({ ...p, [key]: marcado }));
+              }}
+            />
           </div>
         </form>
       </section>

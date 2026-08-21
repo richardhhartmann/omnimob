@@ -1,5 +1,4 @@
 import {
-  WhatsappLogo,
   InstagramLogo,
   FacebookLogo,
   LinkedinLogo,
@@ -8,6 +7,8 @@ import {
   XLogo,
   Globe,
 } from "@phosphor-icons/react";
+// O glifo OFICIAL do WhatsApp — ver `utils/marcasDeRede`.
+import { WhatsappMarca } from "../../../utils/marcasDeRede.jsx";
 import { ShowcaseLinkExterno, ShowcaseTexto, usaFonteReal, useDadosDaVitrine } from "../contexto.jsx";
 
 /* Redes sociais.
@@ -33,7 +34,7 @@ import { ShowcaseLinkExterno, ShowcaseTexto, usaFonteReal, useDadosDaVitrine } f
    Um lugar só — antes o rótulo, a inicial e o fundo estavam em três ternários
    encadeados, e acrescentar uma rede exigia mexer nos três sem esquecer nenhum. */
 const REDES = [
-  { casa: /wa\.me|whatsapp/i, rotulo: "WhatsApp", Icone: WhatsappLogo, fundo: "#25D366" },
+  { casa: /wa\.me|whatsapp/i, rotulo: "WhatsApp", Icone: WhatsappMarca, fundo: "#25D366" },
   {
     casa: /instagram/i,
     rotulo: "Instagram",

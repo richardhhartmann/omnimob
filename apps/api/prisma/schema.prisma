@@ -181,6 +181,22 @@ model Tenant {
   whatsappPonteUrl   String? @map("wa_ponte_url")
   whatsappPonteToken String? @map("wa_ponte_token")
   /**
+   * Quem recebe o status publicado pela ponte.
+   *
+   * Vazio significa TODOS OS CONTATOS, e não é escolha nossa: a documentação do
+   * Whapi diz que sem o campo `contacts` ele busca a agenda inteira e manda para
+   * todo mundo. Foi assim que um anúncio de teste apareceu para a lista de
+   * contatos completa de quem estava só experimentando.
+   *
+   * A privacidade configurada NO APARELHO não vale aqui. A ponte é uma sessão
+   * vinculada e publica com a lista dela — então a única forma de restringir o
+   * público é esta, e ela precisa estar na tela, não enterrada na configuração.
+   *
+   * Guardado como número puro (só dígitos, com DDI); o sufixo que a API exige
+   * é montado na hora do envio.
+   */
+  whatsappPonteContatos String[] @default([]) @map("wa_ponte_contatos")
+  /**
    * Quando um portal veio buscar o feed pela última vez.
    * É a única evidência que a imobiliária tem de que a integração com o ZAP
    * está viva — nós não recebemos confirmação de carga, e "cadastrei a URL, e
@@ -208,6 +224,40 @@ model Tenant {
   suspensoEm          DateTime?       @map("tnt_suspenso_em")
   plano               String? // BASICO | PROFISSIONAL | PREMIUM (null = BASICO)
   autoGerarIA         Boolean         @default(true) // auto-preenche imóvel por IA ao lançar foto
+
+  /**
+   * ─── Publicação automática por canal ───────────────────────────────────────
+   *
+   * `{ portais: bool, mercadoLivre: bool, facebook: bool, instagram: bool }`.
+   *
+   * Ligado um canal, todo imóvel novo sai por ele sem ninguém apertar nada — e
+   * a tela de divulgação deixa de oferecer o botão, porque não há o que
+   * decidir. É a diferença entre uma ferramenta e uma esteira: quem liga isto
+   * está dizendo "não me pergunte mais".
+   *
+   * JSON e não uma coluna por canal: canal novo entra sem migração, e a lista
+   * de canais já muda sozinha conforme o que a imobiliária conectou. O preço é
+   * não ter integridade no banco — aceitável para uma preferência de interface,
+   * inaceitável para qualquer coisa que decida cobrança.
+   *
+   * Recurso de plano PROFISSIONAL para cima. No Básico o campo até existe, mas
+   * a tela não o oferece e o servidor o ignora.
+   */
+  publicacaoAutomatica Json?     @map("tnt_publicacao_automatica")
+
+  /* Os atalhos padrão da imobiliária, definidos pelo administrador. A pessoa
+   * ainda pode discordar em `Usuario.atalhos` — a casa estabelece a convenção,
+   * quem trabalha o dia inteiro na ferramenta pode ter outra. */
+  atalhos              Json?     @map("tnt_atalhos")
+
+  /* O interruptor mestre. Desligado, nenhuma tecla funciona e nenhum selo é
+   * desenhado ao lado dos botões — a imobiliária que não quer atalhos não quer
+   * nem o ruído visual deles.
+   *
+   * Nasce LIGADO: o recurso existe para ser usado, e quem não gostar desliga
+   * numa caixa. Nascer desligado esconderia o recurso de quem nunca vai
+   * procurá-lo em Configurações. */
+  atalhosAtivos        Boolean   @default(true) @map("tnt_atalhos_ativos")
   /**
    * Marca d'água nas fotos de imóvel.
    * Ligada por padrão porque só tem efeito para quem TEM logo: sem logo
@@ -386,6 +436,15 @@ model Cargo {
   verAuditoria      Boolean @default(false) @map("ver_auditoria")
   publicarRedes     Boolean @default(false) @map("publicar_redes")
 
+  /* O painel do gestor (a tela "/"). Separada de `acessarPainel` porque o que
+   * ela mostra é outro nível de informação: faturamento, comissão por corretor
+   * e desempenho individual da equipe. Um corretor com acesso ao painel precisa
+   * ver os imóveis dele; não precisa ver quanto o colega ganhou.
+   *
+   * Nasce `false` inclusive para cargos que já existem — dado sensível não pode
+   * aparecer para ninguém por efeito colateral de uma migração. */
+  verPainelGestor   Boolean @default(false) @map("ver_painel_gestor")
+
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   usuarios Usuario[]
 
@@ -412,6 +471,29 @@ model Usuario {
    * `login`, que continua único no sistema inteiro.
    */
   email             String?  @map("usu_email")
+
+  /**
+   * ─── Conta Google vinculada ────────────────────────────────────────────────
+   *
+   * `googleId` é o `sub` do token do Google: imutável e único por conta. É por
+   * ELE que o login casa, nunca pelo e-mail.
+   *
+   * A diferença não é estilística. E-mail corporativo é reatribuível — quem
+   * herda `vendas@imobiliaria.com` de um corretor que saiu entraria no sistema
+   * como ele. O `sub` não é reatribuído nunca.
+   *
+   * `@unique` para que duas pessoas não apontem para a mesma conta Google e
+   * acabem dividindo sessão.
+   *
+   * Nome e foto do Google ficam em campos PRÓPRIOS e não sobrescrevem o
+   * cadastro: o que aparece na vitrine é decisão da imobiliária, não do perfil
+   * pessoal do corretor. Servem de padrão quando o cadastro está vazio.
+   */
+  googleId          String?  @unique @map("usu_google_id")
+  googleEmail       String?  @map("usu_google_email")
+  googleFoto        String?  @map("usu_google_foto")
+  googleNome        String?  @map("usu_google_nome")
+  googleVinculadoEm DateTime? @map("usu_google_vinculado_em")
   senha             String   @map("usu_senha")
   forcaAlterarSenha Boolean  @default(false) @map("usu_forca_alterar_senha")
   ativo             Boolean  @default(true) @map("usu_ativo")
@@ -439,6 +521,12 @@ model Usuario {
    * erradas de maneiras diferentes.
    */
   temaPainel      String?  @map("usu_tema_painel")
+
+  /* Atalhos de teclado DESTA pessoa. Só o que ela mudou em relação ao padrão da
+   * imobiliária — gravar a tabela inteira congelaria a escolha dela num
+   * instantâneo do catálogo, e um atalho novo nunca chegaria a quem já mexeu.
+   * Formato: `{ "dashboard.imoveis": "j" }`. Ver `utils/atalhos.js`. */
+  atalhos         Json?    @map("usu_atalhos")
   foto            String?  @map("usu_foto")
   creci           String?  @map("usu_creci")
   whatsapp        String   @default("") @map("usu_whatsapp")
@@ -839,6 +927,16 @@ model Property {
    * anúncio. Sem este campo, "publicar tudo" seria a única política possível.
    */
   publicarPortais Boolean          @default(true) @map("prp_publicar_portais")
+
+  /* QUAIS portais, agora que eles deixaram de ser um interruptor só.
+   *
+   * `publicarPortais` continua sendo o mestre — vai para portal, sim ou não —
+   * e este campo diz para quais. Vazio com o mestre ligado significa TODOS, e
+   * não nenhum: é o estado de todo imóvel cadastrado antes desta separação, e
+   * lê-lo como "nenhum" tiraria o acervo inteiro do ar em silêncio.
+   *
+   * Ver `services/portais.js`. */
+  portais         String[]         @map("prp_portais")
   /**
    * Mostrar a RUA E O NÚMERO na página pública do imóvel.
    * Desligado por padrão, e o padrão é a parte que importa: bairro e cidade

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { api, setApiToken, setAdminToken } from "./api";
 import { initPointerGradient } from "./utils/pointerGradient";
 import { DashboardPage, ImovelListPage, ImovelFormPage } from "./pages/DashboardPage";
+import { InicioPage } from "./pages/InicioPage";
 import { LeadsPage } from "./pages/LeadsPage";
 import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -283,7 +284,14 @@ export default function App() {
 
   const cargo = session?.usuario?.cargo;
   const canAccessTenantPanel = Boolean(cargo?.acessarPainel || cargo?.editarPagina);
+
   const defaultPublicPath = session?.tenant?.slug ? `/vitrine/${session.tenant.slug}` : DEFAULT_PUBLIC_SHOWCASE;
+  /* Para onde a pessoa vai ao entrar. Quem dirige a imobiliária começa no
+     Painel do Gestor — é a tela que responde "o que aconteceu desde ontem". Sem
+     essa permissão, o painel de imóveis, que é o trabalho dela. */
+  const destinoAposLogin = !canAccessTenantPanel
+    ? defaultPublicPath
+    : cargo?.verPainelGestor ? "/inicio" : "/";
 
   /* ── Conta suspensa: a parede antes de qualquer rota ──────────────────────
      A sessão de uma conta vencida vem marcada com `suspenso`. Ela alcança duas
@@ -341,7 +349,7 @@ export default function App() {
       <Route
         path="/login"
         element={
-          session ? <Navigate to={canAccessTenantPanel ? "/" : defaultPublicPath} replace /> : <LoginPage onLogin={handleLogin} />
+          session ? <Navigate to={destinoAposLogin} replace /> : <LoginPage onLogin={handleLogin} />
         }
       />
       {/* Destino do link mágico do teste grátis: público e sem sessão. */}
@@ -404,6 +412,18 @@ export default function App() {
         }
       >
         <Route path="/" element={<DashboardPage session={session} />} />
+        {/* ── O Painel do Gestor tem endereço próprio ─────────────────────
+            São dois trabalhos diferentes: dirigir a imobiliária (faturamento,
+            equipe, o que pede ação) e cuidar do acervo. Chega-se a ele pelo
+            cabeçalho da barra lateral, e não por um item de menu.
+
+            Sem a permissão, cai no painel de imóveis — que é onde a pessoa
+            trabalha, e não numa parede de "sem acesso". */}
+        <Route path="/inicio" element={
+          cargo?.verPainelGestor
+            ? <InicioPage session={session} />
+            : <Navigate to="/" replace />
+        } />
         {/* ── Imóveis ───────────────────────────────────────────────────────
             Cada endereço diz o que a tela é, e é isso que mudou aqui.
 

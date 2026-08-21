@@ -27,7 +27,7 @@ function brl(n) {
 
 const campo = {
   width: "100%", padding: "9px 11px", borderRadius: "9px", fontSize: "13.5px",
-  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "inherit",
+  background: "var(--sup-05, rgba(255,255,255,0.05))", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: "inherit",
 };
 const rotulo = { fontSize: "11.5px", color: "var(--text-muted)", display: "block", marginBottom: "5px" };
 
@@ -118,10 +118,10 @@ export function RegistrarVenda({ session, aoRegistrar }) {
   }
 
   return (
-    <form onSubmit={salvar} style={{ padding: "18px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)", marginBottom: "18px" }}>
+    <form onSubmit={salvar} style={{ padding: "18px", borderRadius: "12px", background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-09, rgba(255,255,255,0.09))", marginBottom: "18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
         <strong style={{ fontSize: "14.5px" }}>Registrar venda ou locação</strong>
-        <button type="button" onClick={() => setAberto(false)} style={{ width: "auto", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", cursor: "pointer" }}>
+        <button type="button" onClick={() => setAberto(false)} style={{ width: "auto", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", background: "none", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: "var(--text-muted)", cursor: "pointer" }}>
           Fechar
         </button>
       </div>
@@ -182,7 +182,7 @@ export function RegistrarVenda({ session, aoRegistrar }) {
                 <button
                   type="button"
                   onClick={() => setModoComissao((m) => (m === "reais" ? "percentual" : "reais"))}
-                  style={{ width: "auto", marginLeft: "7px", padding: "1px 8px", borderRadius: "999px", fontSize: "10.5px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "inherit", cursor: "pointer" }}
+                  style={{ width: "auto", marginLeft: "7px", padding: "1px 8px", borderRadius: "999px", fontSize: "10.5px", background: "var(--sup-07, rgba(255,255,255,0.07))", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: "inherit", cursor: "pointer" }}
                 >
                   {modoComissao === "reais" ? "R$" : "%"}
                 </button>

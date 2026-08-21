@@ -125,8 +125,8 @@ export function ModalCiencia({
           <label style={{
             display: "flex", alignItems: "flex-start", gap: "10px",
             padding: "12px 14px", borderRadius: "10px", cursor: "pointer",
-            border: ciente ? "1px solid rgba(245,158,11,0.5)" : "1px solid rgba(255,255,255,0.12)",
-            background: ciente ? "rgba(245,158,11,0.10)" : "rgba(255,255,255,0.03)",
+            border: ciente ? "1px solid rgba(245,158,11,0.5)" : "1px solid var(--linha-12, rgba(255,255,255,0.12))",
+            background: ciente ? "rgba(245,158,11,0.10)" : "var(--sup-03, rgba(255,255,255,0.03))",
             transition: "border-color .15s ease, background .15s ease",
             marginBottom: "18px", userSelect: "none",
           }}>
@@ -145,8 +145,8 @@ export function ModalCiencia({
               onClick={aoCancelar}
               style={{
                 padding: "8px 18px", borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.05)", color: "#94a3b8",
+                border: "1px solid var(--linha-12, rgba(255,255,255,0.12))",
+                background: "var(--sup-05, rgba(255,255,255,0.05))", color: "#94a3b8",
                 fontSize: "13px", fontWeight: 500, cursor: "pointer",
                 width: "auto", boxShadow: "none", transform: "none",
               }}
@@ -159,8 +159,8 @@ export function ModalCiencia({
               onClick={() => ciente && aoConfirmar?.()}
               style={{
                 padding: "8px 18px", borderRadius: "8px",
-                border: `1px solid ${ciente ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.10)"}`,
-                background: ciente ? "rgba(245,158,11,0.22)" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${ciente ? "rgba(245,158,11,0.5)" : "var(--linha-10, rgba(255,255,255,0.10))"}`,
+                background: ciente ? "rgba(245,158,11,0.22)" : "var(--sup-04, rgba(255,255,255,0.04))",
                 color: ciente ? "#fde68a" : "#64748b",
                 fontSize: "13px", fontWeight: 600,
                 cursor: ciente ? "pointer" : "not-allowed",

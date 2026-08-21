@@ -82,8 +82,8 @@ export function MarcaDaguaConfig({ logoUrl, ativa, opacidade, onAtiva, onOpacida
         <label
           style={{
             display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px",
-            borderRadius: "12px", background: "rgba(255,255,255,0.02)",
-            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "12px", background: "var(--sup-02, rgba(255,255,255,0.02))",
+            border: "1px solid var(--linha-08, rgba(255,255,255,0.08))",
             cursor: temLogo ? "pointer" : "default", opacity: temLogo ? 1 : 0.55,
           }}
         >
@@ -109,7 +109,7 @@ export function MarcaDaguaConfig({ logoUrl, ativa, opacidade, onAtiva, onOpacida
             vez de ficar esmaecido: um deslizador inerte convida ao clique e
             devolve nada. */}
         {temLogo && ativa ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "14px 16px", borderRadius: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "14px 16px", borderRadius: "12px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px" }}>
               <span style={{ fontSize: "13px", fontWeight: 600 }}>Intensidade da marca</span>
               <span style={{ fontSize: "13px", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--accent, #818cf8)" }}>
@@ -135,8 +135,7 @@ export function MarcaDaguaConfig({ logoUrl, ativa, opacidade, onAtiva, onOpacida
 
         {!temLogo ? (
           <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.6, color: "var(--text-muted)", padding: "12px 14px", borderRadius: "10px", background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.2)" }}>
-            Envie o logotipo acima para liberar a marca d'água. Sem logo não há o que aplicar, e o
-            cadastro de imóveis segue enviando as fotos como estão.
+            Envie o logotipo acima para liberar a marca d'água.
           </p>
         ) : null}
       </div>
@@ -147,10 +146,10 @@ export function MarcaDaguaConfig({ logoUrl, ativa, opacidade, onAtiva, onOpacida
           Como fica no post
         </span>
 
-        <div style={{ borderRadius: "16px", overflow: "hidden", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+        <div style={{ borderRadius: "16px", overflow: "hidden", background: "var(--sup-03, rgba(255,255,255,0.03))", border: "1px solid var(--linha-09, rgba(255,255,255,0.09))" }}>
           {/* Cabeçalho do post */}
           <div style={{ display: "flex", alignItems: "center", gap: "9px", padding: "10px 12px" }}>
-            <div style={{ width: "28px", height: "28px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: "28px", height: "28px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "var(--sup-08, rgba(255,255,255,0.08))", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {temLogo
                 ? <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                 : <span style={{ fontSize: "12px", fontWeight: 700 }}>{(tenantNome || "I").charAt(0).toUpperCase()}</span>}
@@ -178,9 +177,9 @@ export function MarcaDaguaConfig({ logoUrl, ativa, opacidade, onAtiva, onOpacida
               /* Sem foto ainda: um ambiente sugerido por formas, o suficiente
                  para julgar a marca contra claro e escuro ao mesmo tempo. */
               <div aria-hidden style={{ position: "absolute", inset: 0 }}>
-                <div style={{ position: "absolute", inset: "58% 0 0 0", background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02))" }} />
-                <div style={{ position: "absolute", left: "12%", top: "22%", width: "24%", height: "34%", borderRadius: "4px", background: "rgba(255,255,255,0.13)" }} />
-                <div style={{ position: "absolute", right: "14%", top: "30%", width: "18%", height: "26%", borderRadius: "4px", background: "rgba(255,255,255,0.09)" }} />
+                <div style={{ position: "absolute", inset: "58% 0 0 0", background: "linear-gradient(180deg, var(--sup-10, rgba(255,255,255,0.10)), var(--sup-02, rgba(255,255,255,0.02)))" }} />
+                <div style={{ position: "absolute", left: "12%", top: "22%", width: "24%", height: "34%", borderRadius: "4px", background: "var(--sup-13, rgba(255,255,255,0.13))" }} />
+                <div style={{ position: "absolute", right: "14%", top: "30%", width: "18%", height: "26%", borderRadius: "4px", background: "var(--sup-09, rgba(255,255,255,0.09))" }} />
               </div>
             )}
 

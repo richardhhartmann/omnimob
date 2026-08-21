@@ -152,7 +152,16 @@ test("IA sobre o lead: só no Premium, e nunca o lead de outra imobiliária", as
   assert.equal(rVizinho.status, 404, "lead de outra imobiliária tem de responder 404");
 });
 
-test("relatório mensal: fechado no Básico, aberto do Profissional para cima", async (t) => {
+/* O relatório mensal mudou de degrau, e o teste mudou junto.
+ *
+ * VER é do Básico — a tabela de recursos vende "Relatórios e métricas de
+ * desempenho" nele. MANDAR POR E-MAIL é que começa no Profissional, e é a linha
+ * "Relatório mensal de desempenho POR E-MAIL".
+ *
+ * As duas rotas exigiam Profissional, e o Básico batia num 403 que a tela
+ * traduzia como "Recurso disponível a partir do plano Profissional" no lugar do
+ * relatório inteiro — contradizendo a lista que o cliente lê antes de pagar. */
+test("relatório mensal: a TELA é do Básico, o E-MAIL é do Profissional", async (t) => {
   await limparRestos();
 
   const basico = await criarImobiliariaDeTeste({ plano: "BASICO" });
@@ -165,7 +174,10 @@ test("relatório mensal: fechado no Básico, aberto do Profissional para cima", 
   });
 
   const rBasico = await app.comoTenant(basico).get("/api/tenants/me/relatorio-mensal");
-  assert.equal(rBasico.status, 403, "Básico não tem relatório mensal");
+  assert.equal(rBasico.status, 200, "ver o relatório na tela é do Básico");
+
+  const envioBasico = await app.comoTenant(basico).post("/api/tenants/me/relatorio-mensal/enviar", {});
+  assert.equal(envioBasico.status, 403, "mandar por e-mail é que sobe de plano");
 
   const rProf = await app.comoTenant(profissional).get("/api/tenants/me/relatorio-mensal");
   assert.equal(rProf.status, 200, "Profissional tem");

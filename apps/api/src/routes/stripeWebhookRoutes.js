@@ -124,6 +124,10 @@ stripeWebhookRouter.post("/", async (req, res) => {
           data: {
             statusPagamento: "EM_DIA",
             ativo: true,
+            /* A conta volta a ser viva: o relógio da remoção some junto com a
+               suspensão. Sem isto, uma conta reativada e vencida de novo
+               herdaria o prazo antigo. Ver `situacaoDeGraca`. */
+            suspensoEm: null,
             ...(fim ? { proximoVencimento: new Date(fim * 1000) } : {}),
           },
         });
@@ -135,6 +139,22 @@ stripeWebhookRouter.post("/", async (req, res) => {
       // aqui só marcamos ATRASADO — não desativamos o ambiente.
       case "invoice.payment_failed": {
         if (!tenantId) break;
+        /* ── ATRASADO é para quem ESTAVA em dia ───────────────────────────
+           Marcar todo mundo virou problema com o boleto. Ali a primeira fatura
+           nasce em aberto e falha se ninguém pagar — e quem está em TESTE nunca
+           esteve em dia coisa nenhuma. Rebaixar por isso levaria a conta para
+           a fila da faxina, que desativa quem está `ATRASADO` e vencido.
+
+           A pessoa apenas não concluiu uma assinatura. O teste dela segue o
+           curso normal, e a assinatura incompleta o provedor expira sozinho. */
+        const atual = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { statusPagamento: true },
+        });
+        if (atual?.statusPagamento !== "EM_DIA") {
+          console.warn(`[stripe] cobrança falhou para ${tenantId}, que não estava EM_DIA — nada a rebaixar.`);
+          break;
+        }
         await prisma.tenant.update({
           where: { id: tenantId },
           data: { statusPagamento: "ATRASADO" },

@@ -67,7 +67,7 @@ const CSS = `
   width: min(470px, 100%); max-height: calc(100vh - 48px); overflow-y: auto;
   padding: 30px 30px 24px; border-radius: 20px; text-align: center;
   display: grid; justify-items: center;
-  background: #141821; border: 1px solid rgba(255,255,255,0.10);
+  background: #141821; border: 1px solid var(--linha-10, rgba(255,255,255,0.10));
   box-shadow: 0 34px 80px -26px rgba(0,0,0,0.92);
   animation: paCaixa 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -127,7 +127,7 @@ const CSS = `
 .pa-caixa .pa-botao--fraco {
   margin-top: 9px; background: transparent; border: 1px solid transparent; color: #64748b;
 }
-.pa-caixa .pa-botao--fraco:hover { color: #cbd5e1; background: rgba(255,255,255,0.05); box-shadow: none; transform: none; }
+.pa-caixa .pa-botao--fraco:hover { color: #cbd5e1; background: var(--sup-05, rgba(255,255,255,0.05)); box-shadow: none; transform: none; }
 .pa-caixa .pa-botao:active { scale: 0.99; }
 
 @media (prefers-reduced-motion: reduce) {
