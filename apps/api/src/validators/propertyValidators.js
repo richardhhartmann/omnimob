@@ -93,6 +93,20 @@ export const updateTenantConfiguracaoSchema = z.object({
      vira um adesivo por cima do imóvel. O controle da tela já se move dentro
      desses limites — isto é a trava de quem chama a API direto. */
   marcaDaguaOpacidade: z.number().int().min(20).max(80).optional(),
+  /* ── Omnimob Flow ─────────────────────────────────────────────────────────
+     O token vem em CLARO do navegador e é cifrado antes de gravar (a rota
+     chama `cofre.cifrar`). Ele é opcional em toda gravação e nunca é limpo por
+     ausência: quem só veio ajustar a comissão não pode apagar a credencial de
+     assinatura por não ter mandado o campo. */
+  assinaturaProvedor: z.enum(["clicksign", "docusign"]).nullish(),
+  assinaturaToken: z.string().trim().min(8).max(4000).optional(),
+  assinaturaConta: z.string().trim().max(200).nullish(),
+  assinaturaSandbox: z.boolean().optional(),
+  /* Percentuais em faixa fechada. Comissão acima de 30% não existe no mercado
+     brasileiro e quase sempre é dedo escorregando numa casa decimal — e o
+     estrago aparece no fechamento seguinte, já congelado no negócio. */
+  comissaoPercentual: z.number().min(0).max(30).optional(),
+  comissaoCorretorPerc: z.number().min(0).max(100).optional(),
   /* Horário de atendimento, como a vitrine mostra.
 
      `dias` é texto livre porque a realidade é: "Segunda a sexta", "Sábado",

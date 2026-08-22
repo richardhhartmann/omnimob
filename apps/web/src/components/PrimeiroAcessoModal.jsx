@@ -15,12 +15,45 @@
 
 import { IconeBussola } from "./Icones.jsx";
 
+/* ── A promessa da primeira linha ────────────────────────────────────────────
+
+   `totalPassos` já vem contado a partir do fluxo FILTRADO pelo cargo (ver
+   `montarFluxoTour`): um cargo que só abre duas telas tem um tour de oito
+   paradas, e é oito que a pessoa lê aqui. O mesmo número aparece no contador do
+   tour (`tg-contador`), porque os dois somam o mesmo fluxo.
+
+   O que faltava era o resto da frase acompanhar. "Menos de dois minutos" era
+   fixo, e a mesma promessa cobria um tour de cinco paradas e um de vinte e
+   quatro — uma delas está errada, e é sempre a de quem tem menos telas: ela
+   ouve que vai levar o dobro do que leva. Prometer POR BAIXO é o único erro
+   aceitável dos dois. */
+function duracao(passos) {
+  if (!passos || passos <= 8) return "menos de um minuto";
+  if (passos <= 16) return "menos de dois minutos";
+  return "menos de três minutos";
+}
+
 export function PrimeiroAcessoModal({ nome, tenantName, totalPassos, aoComecar, aoPular }) {
   const primeiroNome = (nome || "").split(" ")[0];
 
+  /* O singular existe por higiene, não por um caso que se veja hoje: o menor
+     tour possível tem cinco paradas (o Dashboard, que todo cargo abre, mais o
+     fecho). Uma etapa nova mais enxuta muda isso sem avisar, e "1 paradas
+     curtas" é o tipo de erro que só aparece em produção.
+
+     Uma string só, e não texto solto no JSX com a vírgula numa linha à parte:
+     ali o JSX junta as linhas com um espaço e o resultado sai "8 paradas
+     curtas , menos de um minuto". */
+  const paradas =
+    totalPassos === 1
+      ? "1 parada curta"
+      : totalPassos
+        ? `${totalPassos} paradas curtas`
+        : "Algumas paradas curtas";
+
   return (
     <div className="pa-veu">
-      <style>{CSS}</style>
+      <style>{PRIMEIRO_ACESSO_CSS}</style>
       <div className="pa-caixa" role="dialog" aria-modal="true" aria-labelledby="pa-titulo">
         <span className="pa-icone" aria-hidden="true"><IconeBussola size={27} /></span>
 
@@ -36,7 +69,7 @@ export function PrimeiroAcessoModal({ nome, tenantName, totalPassos, aoComecar, 
         </p>
 
         <ul className="pa-lista">
-          <li>{totalPassos ? `${totalPassos} paradas curtas` : "Algumas paradas curtas"}, menos de dois minutos</li>
+          <li>{`${paradas}, ${duracao(totalPassos)}`}</li>
           <li>Dá para voltar, pular ou sair a qualquer momento</li>
           <li>Você pode rever tudo depois, em Configurações</li>
         </ul>
@@ -52,7 +85,17 @@ export function PrimeiroAcessoModal({ nome, tenantName, totalPassos, aoComecar, 
   );
 }
 
-const CSS = `
+/* ── EXPORTADO, e não privado ─────────────────────────────────────────────────
+   O convite do Omnimob Flow ([PrimeiroAcessoFlow]) usa a mesma caixa, o mesmo
+   véu e os mesmos botões — é o mesmo tipo de momento, e o desenho já está
+   certo. Ele importa esta folha e acrescenta só os desvios de cor do módulo.
+
+   Exportar em vez de copiar porque uma segunda cópia desta folha divergiria no
+   primeiro ajuste — que é exatamente o defeito que o editor de vitrine teve
+   duas vezes. Os dois modais nunca são montados ao mesmo tempo (um é do
+   primeiro acesso ao painel, o outro do primeiro acesso ao módulo), então não
+   há risco de a mesma regra entrar duas vezes no documento. */
+export const PRIMEIRO_ACESSO_CSS = `
 .pa-veu {
   position: fixed; inset: 0; z-index: 99980;
   display: grid; place-items: center; padding: 24px;

@@ -73,6 +73,23 @@ function tenantIdDoEvento(objeto) {
 
 /* Fim do período coberto pela fatura, para gravar o próximo vencimento. Mesma
    história da metadata: o período migrou para dentro de `parent` na API nova. */
+/* O id da assinatura dentro de uma fatura.
+
+   Mudou de lugar entre versões da API: era `invoice.subscription`, e nas novas
+   virou `invoice.parent.subscription_details.subscription`. Os dois são lidos
+   pelo mesmo motivo que `tenantId` é lido de três lugares logo acima — a conta
+   pode estar em qualquer versão, e quebrar por causa disso seria perder o
+   pagamento em silêncio. */
+function idDaAssinatura(fatura) {
+  const bruto =
+    fatura?.subscription ||
+    fatura?.parent?.subscription_details?.subscription ||
+    fatura?.subscription_details?.subscription ||
+    null;
+  // Com `expand` ele vem como objeto; sem, como string.
+  return typeof bruto === "string" ? bruto : bruto?.id || null;
+}
+
 function fimDoPeriodo(objeto) {
   const linha = objeto?.lines?.data?.[0];
   return linha?.period?.end || objeto?.period_end || null;
@@ -129,6 +146,19 @@ stripeWebhookRouter.post("/", async (req, res) => {
                herdaria o prazo antigo. Ver `situacaoDeGraca`. */
             suspensoEm: null,
             ...(fim ? { proximoVencimento: new Date(fim * 1000) } : {}),
+            /* ── O id da assinatura, guardado aqui também ──────────────────
+               O caminho do CARTÃO grava na rota de assinar, que tem a resposta
+               do provedor na mão. Pix e boleto não passam por lá: eles criam a
+               assinatura, devolvem a guia, e quem confirma o pagamento — horas
+               ou dias depois — é este webhook.
+
+               Sem esta linha, quem paga por Pix ficaria sem o id e todo ajuste
+               de cobrança dele dependeria da busca por metadata. Funciona, mas
+               é uma chamada de rede a mais em cada operação, para sempre.
+
+               `?? undefined` e não `|| null`: fatura sem assinatura (cobrança
+               avulsa) não pode APAGAR o id que já está lá. */
+            ...(idDaAssinatura(objeto) ? { assinaturaId: idDaAssinatura(objeto) } : {}),
           },
         });
         console.log(`[stripe] fatura paga — tenant ${tenantId} em dia.`);

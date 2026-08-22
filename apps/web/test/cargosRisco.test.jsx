@@ -25,11 +25,21 @@ const fonte = bruto
   .replace(/\/\*[\s\S]*?\*\//g, " ")
   .replace(/\/\/[^\n]*/g, " ");
 
-/* Três, e cada uma por um motivo diferente:
-     · gerenciarCargos   — a chave de todas as outras portas
-     · gerenciarUsuarios — desativa, exclui e troca a senha de qualquer conta
-     · verPainelGestor   — faturamento da casa e o resultado de cada corretor */
-const DE_RISCO = ["gerenciarCargos", "gerenciarUsuarios", "verPainelGestor"];
+/* Cinco, e cada uma por um motivo diferente:
+     · gerenciarCargos    — a chave de todas as outras portas
+     · gerenciarUsuarios  — desativa, exclui e troca a senha de qualquer conta
+     · verPainelGestor    — faturamento da casa e o resultado de cada corretor
+     · validarJuridico    — destrava o fechamento de um negócio
+     · validarFinanceiro  — idem, e é no fechamento que a comissão é congelada
+
+   As duas últimas entraram com o Omnimob Flow e são as mais silenciosas do
+   produto: quem as tem não ganha tela nenhuma, só um botão. É justamente por
+   isso que elas pedem aviso — a permissão que não muda nada na interface é a
+   mais fácil de conceder por engano ao montar um cargo às pressas. */
+const DE_RISCO = [
+  "gerenciarCargos", "gerenciarUsuarios", "verPainelGestor",
+  "validarJuridico", "validarFinanceiro",
+];
 
 test("as permissões de alto risco pedem ciência", () => {
   assert.ok(fonte.includes("PERMISSOES_DE_RISCO = {"));
@@ -63,6 +73,17 @@ test("cada permissão tem o próprio texto, e não um aviso genérico", () => {
   const deUsuarios = bloco.slice(bloco.indexOf("gerenciarUsuarios: {"));
   for (const palavra of ["DESATIVAR", "EXCLUIR", "senha"]) {
     assert.ok(deUsuarios.includes(palavra), `o aviso deveria mencionar "${palavra}"`);
+  }
+
+  /* As duas do Flow precisam dizer que travam o FECHAMENTO. É a consequência
+     que a pessoa não deduz sozinha: nada na tela de Cargos indica que estas
+     caixas param um negócio de virar Ganho. */
+  for (const chave of ["validarJuridico", "validarFinanceiro"]) {
+    const trecho = bloco.slice(bloco.indexOf(`${chave}: {`));
+    assert.ok(
+      trecho.includes("GANHO") || trecho.includes("fechamento"),
+      `o aviso de ${chave} deveria dizer que ela destrava o fechamento`,
+    );
   }
 });
 

@@ -6707,7 +6707,7 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
    cores aqui são escritas duas vezes, não herdadas dos tokens do conteúdo.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.ds-profile-caixa { position: relative; margin-top: 4px; border-top: 1px solid var(--s-sep); }
+.ds-profile-caixa { position: relative; }
 
 /* O perfil virou botão. Estes valores repetem os de `.ds-profile` porque o
    seletor global de button reescreveria largura, padding e fundo — é mais curto
@@ -7135,6 +7135,31 @@ html[data-tema-painel="claro"] .pt-btn--primario:hover { background: #1e293b; co
 
 
 .cel-erro { margin: 0; font-size: 12.5px; color: #f87171; }
+
+/* ── Prévia do cargo escolhido, no cadastro de usuário ───────────────────────
+   Encostada no combo e visivelmente subordinada a ele: recuo à esquerda com um
+   filete, do jeito que uma citação se liga ao parágrafo. Sem isso ela parecia
+   um segundo formulário, e a pessoa procurava onde salvar. */
+.cel-previa {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 0 2px 14px;
+  border-left: 2px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+}
+.cel-previa__topo { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cel-previa__titulo { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.cel-previa__titulo strong { color: var(--text-main); }
+.cel-previa__conta {
+  margin-left: auto; flex: none;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 3px 9px; border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+}
+.cel-previa__nota {
+  margin: 0; font-size: 12px; line-height: 1.55; color: var(--text-muted);
+}
+.cel-previa__nota strong { color: var(--text-main); font-weight: 600; }
 .cel-acoes { display: flex; gap: 10px; flex-wrap: wrap; }
 .ds-shell .cel-btn, .cel-btn {
   width: auto; padding: 10px 18px; border-radius: 10px; cursor: pointer;
@@ -7250,6 +7275,51 @@ main[data-tema="claro"] .exi-aviso, html[data-tema-painel="claro"] .exi-aviso { 
 .perm-item.is-on svg { color: #a5b4fc; }
 main[data-tema="claro"] .perm-item.is-on svg,
 html[data-tema-painel="claro"] .perm-item.is-on svg { color: #4f46e5; }
+
+/* ── Os dois grupos: Hub e Flow ──────────────────────────────────────────────
+   O segundo só existe quando a imobiliária contratou o Omnimob Flow. O título
+   é um micro-label, e não um <h4>: ele separa sem competir com o rótulo do
+   campo que está acima ("O que este cargo pode fazer"). */
+.perm-secao + .perm-secao { margin-top: 16px; }
+.perm-secao__titulo {
+  display: block; margin-bottom: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-muted); font-weight: 500;
+}
+.perm-secao + .perm-secao .perm-secao__titulo {
+  padding-top: 14px;
+  border-top: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+
+/* ── A mesma grade, em modo prévia ───────────────────────────────────────────
+   Usada no cadastro de usuário para mostrar o que o cargo escolhido alcança.
+   Nada aqui clica: sem caixa, sem cursor de mão e sem realce ao passar o mouse
+   — três afordâncias que prometeriam edição onde não há nenhuma.
+
+   O item desligado aparece apagado E com ✕. Só a opacidade não bastava: no
+   modo claro a diferença entre 0.55 e 1 some, e "sem acesso" é justamente a
+   metade da informação que esta prévia existe para dar. */
+.perm-grade.is-previa .perm-item { cursor: default; }
+.perm-grade.is-previa .perm-item:hover { background: var(--sup-03, rgba(255, 255, 255, 0.03)); }
+.perm-grade.is-previa .perm-item.is-on:hover { background: rgba(99, 102, 241, 0.12); }
+.perm-item.is-off { opacity: 0.62; }
+.perm-marca {
+  flex: none; width: 14px; text-align: center;
+  font-size: 12px; font-weight: 700; line-height: 1;
+  color: var(--text-muted);
+}
+.perm-item.is-on .perm-marca { color: #a5b4fc; }
+main[data-tema="claro"] .perm-item.is-on .perm-marca,
+html[data-tema-painel="claro"] .perm-item.is-on .perm-marca { color: #4f46e5; }
+
+/* Texto que só o leitor de tela recebe. O ✓/✕ acima é decorativo e a cor não
+   chega a quem ouve a página — sem isto, os dois estados soam idênticos. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+}
 
 /* ── Editor da vitrine carregando ────────────────────────────────────────────
    A silhueta das três colunas enquanto o `showcaseConfig` não chega. O shimmer
@@ -7906,3 +7976,856 @@ main[data-tema="claro"] .ea-tecla.is-conflito { color: #b91c1c; }
 
 .ea-rodape { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ea-estado { font-size: 12.5px; color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OMNIMOB FLOW
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Todo o CSS do segundo módulo, escopado em `flow-*` e `funil-*`.
+
+   Mora aqui e não num template literal por dentro dos componentes: é a regra
+   que o editor de vitrine estabeleceu — classe no styles.css para tudo que se
+   repete, inline só para o que é genuinamente dinâmico (a cor de um estágio, a
+   largura de uma barra). O que quebrou o CSS deste projeto duas vezes foi
+   backtick e `*­/` soltos dentro de string de componente.
+
+   ── CORES POR TOKEN ──
+
+   Nada de `#0f172a` cravado. O painel tem modo claro e escuro, e os tokens
+   (`--sup-04`, `--linha-10`, `--text-muted`) já resolvem os dois. O acento do
+   módulo entra por `--modulo-acento`, publicado pelo `.ds-shell`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Botões e elementos compartilhados ─────────────────────────────────────── */
+
+.ds-shell .flow-btn-fantasma {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 13px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 600; font-family: inherit;
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: var(--text-muted); cursor: pointer;
+  box-shadow: none; transform: none; width: auto;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ds-shell .flow-btn-fantasma:hover:not(:disabled) {
+  background: var(--sup-09, rgba(255, 255, 255, 0.09));
+  color: var(--text-main); box-shadow: none; transform: none;
+}
+.ds-shell .flow-btn-fantasma:disabled { opacity: 0.5; cursor: not-allowed; }
+.ds-shell .flow-btn-fantasma.is-perigo { color: #f87171; }
+.ds-shell .flow-btn-fantasma.is-perigo:hover:not(:disabled) { background: rgba(239, 68, 68, 0.12); }
+
+.ds-shell .flow-voltar {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 0; box-shadow: none; transform: none;
+  padding: 0; margin-bottom: 14px; width: auto;
+  font-size: 12.5px; font-weight: 600; color: var(--text-muted);
+  cursor: pointer; font-family: inherit;
+}
+.ds-shell .flow-voltar:hover { color: var(--text-main); background: transparent; box-shadow: none; transform: none; }
+
+.ds-shell .flow-link {
+  background: transparent; border: 0; padding: 0; width: auto;
+  box-shadow: none; transform: none; cursor: pointer; font-family: inherit;
+  font-size: 12.5px; font-weight: 600; color: var(--modulo-acento, #14b8a6);
+}
+.ds-shell .flow-link:hover { background: transparent; box-shadow: none; transform: none; text-decoration: underline; }
+
+/* ── O aviso de plano ──────────────────────────────────────────────────────── */
+
+.flow-aviso {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 13px 16px; margin-bottom: 18px; border-radius: 12px;
+  font-size: 13px; line-height: 1.55; color: var(--text-muted);
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.24);
+}
+.flow-aviso.is-compacto { padding: 10px 13px; font-size: 12.5px; }
+.flow-aviso.is-config { background: rgba(20, 184, 166, 0.08); border-color: rgba(20, 184, 166, 0.24); }
+.flow-aviso__icone { flex: none; color: #d4af37; margin-top: 2px; }
+.flow-aviso.is-config .flow-aviso__icone { color: #14b8a6; }
+.flow-aviso strong { color: var(--text-main); }
+.flow-aviso a { color: var(--modulo-acento, #14b8a6); font-weight: 600; }
+
+/* ── O alerta de negócios parados ──────────────────────────────────────────── */
+
+.ds-shell .flow-alerta {
+  display: flex; align-items: center; gap: 13px; width: 100%; text-align: left;
+  padding: 15px 18px; margin-bottom: 18px; border-radius: 14px;
+  cursor: pointer; font-family: inherit; transform: none;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  transition: background 0.15s ease;
+}
+.ds-shell .flow-alerta:hover { background: rgba(245, 158, 11, 0.14); transform: none; box-shadow: none; }
+.flow-alerta__icone { flex: none; color: #f59e0b; }
+.flow-alerta__texto { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.flow-alerta__texto strong { font-size: 14px; color: var(--text-main); }
+.flow-alerta__texto span { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.flow-alerta__seta { flex: none; color: #f59e0b; font-size: 17px; }
+
+/* ── O funil em barras (tela inicial) ──────────────────────────────────────── */
+
+.ds-shell .flow-barra {
+  display: grid; grid-template-columns: 92px 1fr 34px 82px;
+  align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 6px 8px; border-radius: 8px; border: 0; background: transparent;
+  box-shadow: none; transform: none; cursor: pointer; font-family: inherit;
+  transition: background 0.15s ease;
+}
+.ds-shell .flow-barra:hover { background: var(--sup-04, rgba(255, 255, 255, 0.04)); box-shadow: none; transform: none; }
+.flow-barra__rotulo { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.flow-barra__trilho {
+  height: 9px; border-radius: 999px; overflow: hidden;
+  background: var(--sup-06, rgba(255, 255, 255, 0.06));
+}
+.flow-barra__preenchida { display: block; height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.flow-barra__num { font-size: 13px; font-weight: 700; text-align: right; }
+.flow-barra__valor { font-size: 11.5px; color: var(--text-muted); text-align: right; }
+
+@media (max-width: 640px) {
+  /* O valor sai primeiro: em tela estreita, saber QUANTOS em cada etapa é o que
+     sobrevive ao corte. O total em reais tem a tela de comissões inteira. */
+  .ds-shell .flow-barra { grid-template-columns: 78px 1fr 30px; }
+  .flow-barra__valor { display: none; }
+}
+
+/* ── Atalhos da tela inicial ───────────────────────────────────────────────── */
+
+.flow-atalhos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 13px;
+}
+.ds-shell .flow-atalho {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+  padding: 16px 18px; cursor: pointer; font-family: inherit; transform: none;
+  transition: border-color 0.15s ease;
+}
+.ds-shell .flow-atalho:hover {
+  border-color: color-mix(in srgb, var(--cor) 40%, transparent);
+  transform: none; box-shadow: none;
+}
+.ds-shell .flow-atalho.is-destaque { border-color: color-mix(in srgb, var(--cor) 34%, transparent); }
+.flow-atalho__icone {
+  flex: none; width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--cor) 15%, transparent); color: var(--cor);
+}
+.flow-atalho__texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.flow-atalho__texto strong { font-size: 13.5px; }
+.flow-atalho__texto span { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   O FUNIL (kanban)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Rolagem HORIZONTAL, e não quebra de linha. Sete colunas empilhadas em duas
+   fileiras perdem a leitura da esquerda para a direita — que é a única coisa
+   que um funil precisa comunicar. Em tela estreita a rolagem lateral é o
+   comportamento certo: ela preserva a ordem. */
+
+.funil {
+  display: flex; gap: 12px; align-items: flex-start;
+  overflow-x: auto; overflow-y: visible;
+  padding-bottom: 14px; margin: 0 -4px; padding-left: 4px; padding-right: 4px;
+  scrollbar-width: thin;
+}
+.funil-col {
+  flex: 0 0 246px; min-width: 246px;
+  border-radius: 13px; padding: 12px 10px;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+/* A coluna sob o cartão arrastado. Sem este realce, soltar é adivinhação —
+   especialmente perto da borda entre duas colunas. */
+.funil-col.is-alvo {
+  background: color-mix(in srgb, var(--cor) 10%, transparent);
+  border-color: color-mix(in srgb, var(--cor) 45%, transparent);
+}
+.funil-col__topo { display: flex; align-items: center; gap: 7px; }
+.funil-col__ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--cor); flex: none; }
+.funil-col__nome { font-size: 12.5px; font-weight: 700; flex: 1; }
+.funil-col__contagem {
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08)); color: var(--text-muted);
+}
+.funil-col__valor {
+  font-size: 11px; color: var(--text-muted); margin: 3px 0 10px; padding-left: 14px;
+  font-family: var(--s-mono, ui-monospace, monospace);
+}
+.funil-col__lista { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+.funil-col__vazia { font-size: 11.5px; color: var(--text-muted); margin: 4px 2px; line-height: 1.5; opacity: 0.75; }
+
+.funil-cartao {
+  border-radius: 11px; overflow: hidden; cursor: grab;
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+.funil-cartao:hover { border-color: var(--linha-18, rgba(255, 255, 255, 0.18)); }
+/* Meia opacidade no original enquanto ele é arrastado: é o que diz que aquele
+   cartão está "na mão" e não duplicado. */
+.funil-cartao.is-arrastando { opacity: 0.4; cursor: grabbing; }
+.funil-cartao.is-parado { border-left: 2px solid #f59e0b; }
+
+.ds-shell .funil-cartao__corpo {
+  display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left;
+  padding: 10px 11px 8px; border: 0; background: transparent;
+  box-shadow: none; transform: none; cursor: inherit; font-family: inherit;
+}
+.ds-shell .funil-cartao__corpo:hover { background: transparent; box-shadow: none; transform: none; }
+.funil-cartao__codigo {
+  font-family: var(--s-mono, ui-monospace, monospace);
+  font-size: 9.5px; letter-spacing: 0.06em; color: var(--text-muted);
+}
+.funil-cartao__titulo {
+  font-size: 12.5px; font-weight: 600; line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.funil-cartao__imovel {
+  font-size: 11px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.funil-cartao__rodape { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 3px; }
+.funil-cartao__rodape strong { font-size: 12.5px; }
+.funil-cartao__semvalor { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.funil-cartao__canal { font-size: 10px; color: var(--text-muted); }
+.funil-cartao__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--text-muted); }
+.funil-cartao__dono { display: inline-flex; align-items: center; gap: 3px; }
+.funil-cartao__alerta { display: inline-flex; align-items: center; gap: 3px; color: #f59e0b; font-weight: 600; }
+
+.funil-cartao__mover {
+  width: 100%; border: 0; border-top: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  color: var(--text-muted); font-family: inherit; font-size: 11px;
+  padding: 6px 10px; cursor: pointer; outline: none;
+}
+.funil-cartao__mover:focus-visible { outline: 2px solid var(--modulo-acento, #14b8a6); outline-offset: -2px; }
+
+.funil-perdidos { margin-top: 16px; }
+.ds-shell .funil-perdidos__topo {
+  display: inline-flex; align-items: center; gap: 7px; width: auto;
+  background: transparent; border: 0; box-shadow: none; transform: none; padding: 6px 2px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+}
+.ds-shell .funil-perdidos__topo:hover { color: var(--text-main); background: transparent; box-shadow: none; transform: none; }
+.funil-perdidos__lista { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.ds-shell .funil-perdidos__item {
+  display: flex; justify-content: space-between; gap: 14px; width: 100%; text-align: left;
+  padding: 9px 12px; border-radius: 9px; cursor: pointer; font-family: inherit; font-size: 12px;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  color: var(--text-muted); box-shadow: none; transform: none;
+}
+.ds-shell .funil-perdidos__item:hover { background: var(--sup-06, rgba(255, 255, 255, 0.06)); box-shadow: none; transform: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   A FICHA DO NEGÓCIO
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.flow-neg-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 18px; }
+.flow-neg-codigo { font-family: var(--s-mono, ui-monospace, monospace); font-size: 10.5px; letter-spacing: 0.08em; color: var(--text-muted); }
+.flow-neg-titulo { margin: 3px 0 4px; font-size: 21px; font-weight: 700; letter-spacing: -0.3px; }
+.flow-neg-sub { margin: 0; font-size: 12.5px; color: var(--text-muted); }
+.flow-neg-valor { text-align: right; }
+.flow-neg-valor span { display: block; font-size: 11px; color: var(--text-muted); }
+.flow-neg-valor strong { font-size: 22px; font-weight: 700; }
+
+/* ── A régua de estágios ───────────────────────────────────────────────────── */
+
+.flow-regua {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  padding: 12px 14px; margin-bottom: 18px; border-radius: 13px;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+}
+.ds-shell .flow-regua__passo {
+  display: flex; align-items: center; gap: 6px; width: auto;
+  padding: 6px 11px; border-radius: 8px; border: 0; background: transparent;
+  box-shadow: none; transform: none; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ds-shell .flow-regua__passo:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cor) 12%, transparent); color: var(--text-main);
+  box-shadow: none; transform: none;
+}
+.ds-shell .flow-regua__passo:disabled { cursor: default; }
+.ds-shell .flow-regua__passo.is-atual {
+  background: color-mix(in srgb, var(--cor) 16%, transparent);
+  color: var(--text-main);
+}
+.flow-regua__bola {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--sup-14, rgba(255, 255, 255, 0.14));
+  transition: background 0.15s ease;
+}
+/* Passado e atual pintam; o futuro fica cinza. É o que faz a régua ser lida
+   como progresso e não como uma fileira de abas. */
+.flow-regua__passo.is-passado .flow-regua__bola,
+.flow-regua__passo.is-atual .flow-regua__bola { background: var(--cor); }
+.ds-shell .flow-regua__perder {
+  display: inline-flex; align-items: center; gap: 5px; width: auto; margin-left: auto;
+  padding: 6px 11px; border-radius: 8px; border: 0; background: transparent;
+  box-shadow: none; transform: none; cursor: pointer; font-family: inherit;
+  font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+}
+.ds-shell .flow-regua__perder:hover:not(:disabled) { background: rgba(239, 68, 68, 0.1); color: #f87171; box-shadow: none; transform: none; }
+.flow-regua__perdido { margin-left: auto; font-size: 12px; color: #94a3b8; font-style: italic; }
+
+/* ── O que falta para fechar ───────────────────────────────────────────────── */
+
+.flow-pendencias {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 15px 18px; margin-bottom: 18px;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  background: rgba(245, 158, 11, 0.06) !important;
+}
+.flow-pendencias__selo { flex: none; color: #f59e0b; margin-top: 2px; }
+.flow-pendencias strong { font-size: 13px; }
+.flow-pendencias ul { margin: 7px 0 0; padding-left: 18px; }
+.flow-pendencias li { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; }
+
+/* ── Blocos e grade ────────────────────────────────────────────────────────── */
+
+.flow-neg-grade { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+@media (max-width: 1080px) { .flow-neg-grade { grid-template-columns: 1fr; } }
+.flow-neg-principal, .flow-neg-lado { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+.flow-bloco { padding: 18px 20px; }
+.flow-bloco h3 {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 0 12px; font-size: 14.5px; font-weight: 700;
+}
+.flow-bloco__contagem {
+  font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08)); color: var(--text-muted);
+}
+.flow-bloco__nota { margin: 0 0 12px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+.flow-vazio { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin: 6px 0; }
+
+/* ── Partes ────────────────────────────────────────────────────────────────── */
+
+.flow-partes { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.flow-parte { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.flow-parte__rotulo {
+  font-family: var(--s-mono, ui-monospace, monospace);
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.flow-parte strong { font-size: 13px; }
+.flow-parte span { font-size: 11.5px; color: var(--text-muted); }
+.flow-parte__vazio { font-style: italic; }
+/* Âmbar e não vermelho: é uma pendência de cadastro, não um erro. Vermelho aqui
+   faria a ficha de um negócio saudável parecer quebrada. */
+.flow-parte__falta { color: #f59e0b !important; font-weight: 600; }
+
+/* ── Documentos ────────────────────────────────────────────────────────────── */
+
+.flow-docs { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.flow-docs li {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  align-items: center; gap: 9px;
+  padding: 9px 11px; border-radius: 9px;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  font-size: 12.5px;
+}
+.flow-docs li.is-ok { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.06); }
+.flow-docs__icone { color: var(--text-muted); }
+.flow-docs li.is-ok .flow-docs__icone { color: #10b981; }
+.flow-docs__nome { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-docs__nome:hover { text-decoration: underline; }
+.flow-docs__tipo { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+.flow-docs__obs { grid-column: 2 / -1; font-size: 11px; color: #f59e0b; }
+.flow-docs__acoes { display: flex; gap: 5px; }
+.ds-shell .flow-docs__acoes button {
+  width: auto; padding: 4px 9px; border-radius: 7px; font-size: 11px; font-family: inherit;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08)); border: 0; color: var(--text-muted);
+  cursor: pointer; box-shadow: none; transform: none;
+}
+.ds-shell .flow-docs__acoes button:hover { background: var(--sup-14, rgba(255, 255, 255, 0.14)); box-shadow: none; transform: none; }
+.ds-shell .flow-docs__acoes button.is-perigo:hover { background: rgba(239, 68, 68, 0.16); color: #f87171; }
+
+.flow-envio { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.flow-envio select {
+  padding: 8px 10px; border-radius: 9px; font-size: 12px; font-family: inherit;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1)); color: inherit;
+}
+.flow-envio__botao {
+  display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: color-mix(in srgb, var(--modulo-acento, #14b8a6) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--modulo-acento, #14b8a6) 32%, transparent);
+  color: var(--text-main);
+}
+.flow-envio__botao.is-enviando { opacity: 0.6; cursor: wait; }
+.flow-envio__botao input { display: none; }
+
+/* ── Validações ────────────────────────────────────────────────────────────── */
+
+.flow-valid, .flow-setor {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 13px; border-radius: 10px; margin-bottom: 8px;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+.flow-valid.is-ok, .flow-setor.is-ok { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.07); }
+.flow-valid__icone, .flow-setor__icone { flex: none; color: var(--text-muted); }
+.flow-valid.is-ok .flow-valid__icone, .flow-setor.is-ok .flow-setor__icone { color: #10b981; }
+.flow-valid__corpo, .flow-setor__corpo { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.flow-valid__corpo strong, .flow-setor__corpo strong { font-size: 12.5px; }
+.flow-valid__corpo span, .flow-setor__corpo span { font-size: 11px; color: var(--text-muted); }
+.flow-valid__corpo em, .flow-setor__corpo em { font-size: 11px; color: #f59e0b; font-style: normal; }
+.ds-shell .flow-valid__botao, .ds-shell .flow-setor__botao {
+  width: auto; flex: none; padding: 6px 12px; border-radius: 8px;
+  font-size: 11.5px; font-weight: 600; font-family: inherit; cursor: pointer;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: var(--text-main); box-shadow: none; transform: none;
+}
+.ds-shell .flow-valid__botao:hover:not(:disabled), .ds-shell .flow-setor__botao:hover:not(:disabled) {
+  background: var(--sup-14, rgba(255, 255, 255, 0.14)); box-shadow: none; transform: none;
+}
+.ds-shell .flow-setor__botao:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Comissão ──────────────────────────────────────────────────────────────── */
+
+.flow-comissao__linha {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 0; font-size: 12.5px; color: var(--text-muted);
+  border-bottom: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
+}
+.flow-comissao__linha:last-of-type { border-bottom: 0; }
+.flow-comissao__linha.is-forte { font-size: 14px; color: var(--text-main); }
+.flow-comissao__linha.is-forte strong { font-size: 17px; }
+/* A prévia é visualmente mais leve que o valor congelado: são coisas diferentes
+   e confundi-las faria alguém prometer um número que ainda pode mudar. */
+.flow-comissao__linha.is-previa strong { opacity: 0.75; }
+.flow-comissao__perc { margin: 9px 0 0; font-size: 11px; color: var(--text-muted); }
+
+/* ── Histórico e notas ─────────────────────────────────────────────────────── */
+
+.flow-nota { display: flex; gap: 9px; align-items: flex-start; margin-bottom: 14px; }
+.flow-nota textarea {
+  flex: 1; resize: vertical; min-height: 44px;
+  padding: 10px 12px; border-radius: 10px; font-family: inherit; font-size: 13px;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1)); color: inherit; outline: none;
+}
+.flow-nota textarea:focus { border-color: color-mix(in srgb, var(--modulo-acento, #14b8a6) 45%, transparent); }
+
+.flow-historico { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.flow-historico li {
+  display: grid; grid-template-columns: 58px 1fr; gap: 11px;
+  padding: 8px 0; border-bottom: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
+}
+.flow-historico li:last-child { border-bottom: 0; }
+.flow-historico__quando { font-size: 10.5px; color: var(--text-muted); font-family: var(--s-mono, ui-monospace, monospace); padding-top: 2px; }
+.flow-historico__texto { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.flow-historico__texto strong { color: var(--modulo-acento, #14b8a6); font-size: 12px; }
+.flow-historico__texto em { font-size: 10.5px; color: var(--text-muted); font-style: normal; }
+
+/* ── Contratos ─────────────────────────────────────────────────────────────── */
+
+.flow-gerar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.flow-gerar select {
+  flex: 1; min-width: 180px; padding: 9px 11px; border-radius: 9px;
+  font-family: inherit; font-size: 13px; color: inherit;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+}
+.flow-previa {
+  max-height: 380px; overflow: auto; margin: 12px 0 0;
+  padding: 16px 18px; border-radius: 11px;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 11.5px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word;
+  color: var(--text-muted);
+}
+.flow-pend-minuta {
+  padding: 13px 16px; margin: 12px 0; border-radius: 11px;
+  background: rgba(245, 158, 11, 0.07); border: 1px solid rgba(245, 158, 11, 0.26);
+}
+.flow-pend-minuta strong { font-size: 12.5px; }
+.flow-pend-minuta ul { margin: 8px 0; padding-left: 18px; }
+.flow-pend-minuta li { font-size: 12px; color: var(--text-muted); line-height: 1.65; }
+.flow-pend-minuta li span { opacity: 0.75; }
+.flow-pend-minuta p { margin: 8px 0 10px; font-size: 11.5px; color: var(--text-muted); line-height: 1.6; }
+.flow-pend-minuta code, .flow-marcadores code {
+  font-family: ui-monospace, monospace; font-size: 11px;
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08));
+}
+
+.flow-contrato__topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.flow-contrato__topo strong { display: block; font-size: 13.5px; }
+.flow-contrato__status { font-size: 11.5px; font-weight: 600; color: var(--cor); }
+.flow-contrato__acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.flow-contrato__erro { margin: 0 0 10px; font-size: 12px; color: #f87171; line-height: 1.55; }
+.flow-contrato__rodape { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+.flow-signatarios { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.flow-signatarios li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) 130px 32px; gap: 7px; align-items: center; }
+.flow-signatarios.is-leitura li { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; font-size: 12px; padding: 7px 0; border-bottom: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06)); }
+.flow-signatarios.is-leitura span:nth-child(2) { color: var(--text-muted); }
+.flow-signatarios.is-leitura .is-ok { color: #10b981; font-weight: 600; }
+.flow-signatarios input, .flow-signatarios select {
+  width: 100%; padding: 8px 10px; border-radius: 8px; font-family: inherit; font-size: 12px; color: inherit;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1)); outline: none;
+}
+.ds-shell .flow-signatarios li > button {
+  width: 32px; padding: 7px; border-radius: 8px; border: 0; cursor: pointer;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08)); color: var(--text-muted);
+  box-shadow: none; transform: none;
+}
+.ds-shell .flow-signatarios li > button:hover { background: rgba(239, 68, 68, 0.16); color: #f87171; box-shadow: none; transform: none; }
+@media (max-width: 700px) { .flow-signatarios li { grid-template-columns: 1fr; } }
+
+.flow-baixar {
+  display: inline-block; margin-top: 12px; font-size: 12.5px; font-weight: 600;
+  color: var(--modulo-acento, #14b8a6);
+}
+.flow-contratos-velhos { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06)); }
+.flow-contratos-velhos li { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-muted); padding: 4px 0; }
+
+/* ── Editor de minuta ──────────────────────────────────────────────────────── */
+
+.flow-editor-minuta { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+@media (max-width: 1080px) { .flow-editor-minuta { grid-template-columns: 1fr; } }
+.flow-minuta {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  font-family: ui-monospace, "SFMono-Regular", monospace; font-size: 12.5px; line-height: 1.75;
+  padding: 14px 16px; border-radius: 11px; color: inherit; outline: none;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+}
+.flow-marcadores { position: sticky; top: 18px; max-height: calc(100vh - 60px); overflow-y: auto; }
+.flow-marcadores__grupo { margin-bottom: 14px; }
+.flow-marcadores__grupo h4 {
+  margin: 0 0 6px; font-family: var(--s-mono, ui-monospace, monospace);
+  font-size: 9.5px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--text-muted);
+}
+.ds-shell .flow-marcadores__grupo button {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  padding: 6px 9px; margin-bottom: 3px; border-radius: 7px; border: 0;
+  background: transparent; cursor: pointer; font-family: inherit;
+  box-shadow: none; transform: none;
+}
+.ds-shell .flow-marcadores__grupo button:hover { background: var(--sup-06, rgba(255, 255, 255, 0.06)); box-shadow: none; transform: none; }
+.flow-marcadores__grupo button span { font-size: 10.5px; color: var(--text-muted); }
+
+.flow-modelos { display: flex; flex-direction: column; gap: 10px; }
+.flow-modelo { display: flex; align-items: center; gap: 13px; padding: 15px 18px; }
+.flow-modelo.is-inativo { opacity: 0.55; }
+.flow-modelo__icone {
+  flex: none; width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--modulo-acento, #14b8a6) 14%, transparent);
+  color: var(--modulo-acento, #14b8a6);
+}
+.flow-modelo__corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.flow-modelo__corpo strong { font-size: 13.5px; }
+.flow-modelo__corpo span { font-size: 11.5px; color: var(--text-muted); }
+.flow-modelo__acoes { display: flex; align-items: center; gap: 7px; }
+.ds-shell .flow-modelo__acoes button {
+  width: auto; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-family: inherit;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08)); border: 0; color: var(--text-muted);
+  cursor: pointer; box-shadow: none; transform: none;
+}
+.ds-shell .flow-modelo__acoes button:hover { background: var(--sup-14, rgba(255, 255, 255, 0.14)); color: var(--text-main); box-shadow: none; transform: none; }
+.ds-shell .flow-modelo__acoes button.is-perigo:hover { background: rgba(239, 68, 68, 0.16); color: #f87171; }
+
+/* ── Formulários do Flow ───────────────────────────────────────────────────── */
+
+.flow-form { padding: 20px 22px; display: flex; flex-direction: column; gap: 15px; }
+.flow-form__dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .flow-form__dupla { grid-template-columns: 1fr; } }
+.flow-campo { display: flex; flex-direction: column; gap: 6px; }
+.flow-campo > span { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.flow-campo input, .flow-campo select, .flow-campo textarea {
+  width: 100%; box-sizing: border-box;
+  padding: 10px 12px; border-radius: 10px; font-family: inherit; font-size: 13.5px; color: inherit;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1)); outline: none;
+}
+.flow-campo input:focus, .flow-campo select:focus, .flow-campo textarea:focus {
+  border-color: color-mix(in srgb, var(--modulo-acento, #14b8a6) 45%, transparent);
+}
+.flow-form__acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.flow-check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.flow-check > span { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.flow-check small { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+
+/* ── Filtros ───────────────────────────────────────────────────────────────── */
+
+.flow-filtro-estagios { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 16px; }
+.ds-shell .flow-chip-estagio, .ds-shell .flow-chip-filtro {
+  display: inline-flex; align-items: center; gap: 5px; width: auto;
+  padding: 6px 13px; border-radius: 999px; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  box-shadow: none; transform: none;
+}
+.ds-shell .flow-chip-estagio:hover, .ds-shell .flow-chip-filtro:hover {
+  background: var(--sup-09, rgba(255, 255, 255, 0.09)); box-shadow: none; transform: none;
+}
+.ds-shell .flow-chip-estagio.is-on {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--cor, var(--modulo-acento, #14b8a6)) 16%, transparent);
+  border-color: color-mix(in srgb, var(--cor, var(--modulo-acento, #14b8a6)) 38%, transparent);
+}
+.ds-shell .flow-chip-filtro.is-on { color: #f59e0b; background: rgba(245, 158, 11, 0.13); border-color: rgba(245, 158, 11, 0.3); }
+
+/* ── Tabela ────────────────────────────────────────────────────────────────── */
+
+.flow-tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
+.flow-tabela thead th {
+  text-align: left; padding: 11px 16px;
+  font-family: var(--s-mono, ui-monospace, monospace);
+  font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); font-weight: 500;
+  border-bottom: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+.flow-tabela tbody tr { border-bottom: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06)); cursor: pointer; transition: background 0.12s ease; }
+.flow-tabela tbody tr:last-child { border-bottom: 0; }
+.flow-tabela tbody tr:hover { background: var(--sup-04, rgba(255, 255, 255, 0.04)); }
+.flow-tabela td { padding: 11px 16px; vertical-align: top; }
+.flow-tabela__sub { display: block; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.flow-tabela__sub.is-erro { color: #f87171; }
+.flow-tabela__vazio { color: var(--text-muted); font-style: italic; }
+.flow-tabela td.is-alerta { color: #f59e0b; font-weight: 600; }
+@media (max-width: 860px) {
+  /* Rolagem lateral em vez de empilhar as células: uma tabela de negócios
+     virada em cartões perde o alinhamento das colunas, que é o que permite
+     comparar valores de relance. */
+  .flow-tabela { display: block; overflow-x: auto; white-space: nowrap; }
+}
+
+/* ── Fila de validação ─────────────────────────────────────────────────────── */
+
+.flow-fila { display: flex; flex-direction: column; gap: 12px; }
+.flow-fila__item { padding: 16px 18px; }
+.flow-fila__topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ds-shell .flow-fila__abrir {
+  display: flex; flex-direction: column; gap: 2px; width: auto; text-align: left;
+  background: transparent; border: 0; padding: 0; cursor: pointer; font-family: inherit;
+  box-shadow: none; transform: none;
+}
+.ds-shell .flow-fila__abrir:hover { background: transparent; box-shadow: none; transform: none; }
+.ds-shell .flow-fila__abrir:hover strong { text-decoration: underline; }
+.flow-fila__codigo { font-family: var(--s-mono, ui-monospace, monospace); font-size: 9.5px; letter-spacing: 0.08em; color: var(--text-muted); }
+.flow-fila__abrir strong { font-size: 14px; }
+.flow-fila__etapa {
+  flex: none; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  color: var(--cor); background: color-mix(in srgb, var(--cor) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cor) 30%, transparent);
+}
+.flow-fila__dados { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 11px; margin: 0 0 14px; }
+.flow-fila__dados dt {
+  font-family: var(--s-mono, ui-monospace, monospace);
+  font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted);
+}
+.flow-fila__dados dd { margin: 2px 0 0; font-size: 12.5px; }
+.flow-fila__setores { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 700px) { .flow-fila__setores { grid-template-columns: 1fr; } }
+.flow-fila__setores .flow-setor { margin-bottom: 0; }
+
+/* ── Comissões ─────────────────────────────────────────────────────────────── */
+
+.flow-mes { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.flow-mes strong { font-size: 15px; text-transform: capitalize; min-width: 170px; text-align: center; }
+.ds-shell .flow-mes button {
+  width: 32px; height: 32px; padding: 0; border-radius: 9px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sup-06, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: var(--text-muted); box-shadow: none; transform: none;
+}
+.ds-shell .flow-mes button:hover:not(:disabled) { background: var(--sup-12, rgba(255, 255, 255, 0.12)); color: var(--text-main); box-shadow: none; transform: none; }
+.ds-shell .flow-mes button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.flow-corretores { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.flow-corretores li {
+  display: flex; align-items: center; gap: 12px; padding: 9px 0;
+  border-bottom: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
+}
+.flow-corretores li:last-child { border-bottom: 0; }
+.flow-corretores__nome { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.flow-corretores__nome strong { font-size: 13px; }
+.flow-corretores__nome span { font-size: 11.5px; color: var(--text-muted); }
+.flow-corretores__valor { font-size: 15px; color: #d4af37; }
+
+/* ── Captação ──────────────────────────────────────────────────────────────── */
+
+.flow-fontes { display: flex; flex-direction: column; gap: 12px; }
+.flow-fonte { padding: 16px 18px; }
+.flow-fonte header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.flow-fonte header strong { display: block; font-size: 14px; }
+.flow-fonte__canal { font-size: 11.5px; color: var(--text-muted); }
+.flow-fonte__campo { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.flow-fonte__campo > span {
+  flex: none; width: 128px;
+  font-family: var(--s-mono, ui-monospace, monospace);
+  font-size: 8.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--text-muted);
+}
+.flow-fonte__campo code {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 7px 10px; border-radius: 8px; font-size: 11.5px;
+  font-family: ui-monospace, monospace;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+/* O segredo aparece, e é deliberado (ver a rota): ele assina, não autentica
+   sozinho. Meio apagado para não competir com a URL, que é o que se copia
+   primeiro. */
+.flow-fonte__campo code.is-segredo { opacity: 0.6; }
+.ds-shell .flow-fonte__campo button {
+  flex: none; width: 30px; height: 30px; padding: 0; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08)); border: 0; color: var(--text-muted);
+  box-shadow: none; transform: none;
+}
+.ds-shell .flow-fonte__campo button:hover { background: var(--sup-14, rgba(255, 255, 255, 0.14)); color: var(--text-main); box-shadow: none; transform: none; }
+.flow-fonte footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 11px; font-size: 11.5px; color: var(--text-muted);
+  border-top: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
+}
+.flow-fonte__acoes { display: flex; align-items: center; gap: 9px; }
+.flow-fonte__acoes em { font-style: normal; font-size: 11px; opacity: 0.8; }
+.ds-shell .flow-fonte__acoes button {
+  width: auto; padding: 5px 9px; border-radius: 7px; border: 0; cursor: pointer;
+  background: var(--sup-08, rgba(255, 255, 255, 0.08)); color: var(--text-muted);
+  box-shadow: none; transform: none;
+}
+.ds-shell .flow-fonte__acoes button.is-perigo:hover { background: rgba(239, 68, 68, 0.16); color: #f87171; box-shadow: none; transform: none; }
+
+.flow-eventos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.flow-eventos li {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) 64px minmax(0, 1.4fr) auto;
+  align-items: center; gap: 10px; padding: 8px 0; font-size: 12px;
+  border-bottom: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
+}
+.flow-eventos li:last-child { border-bottom: 0; }
+.flow-eventos__marca { color: var(--text-muted); }
+.flow-eventos li.is-aceito .flow-eventos__marca { color: #10b981; }
+.flow-eventos li.is-recusado .flow-eventos__marca, .flow-eventos li.is-erro .flow-eventos__marca { color: #f87171; }
+.flow-eventos__quando, .flow-eventos__status { color: var(--text-muted); font-size: 11px; }
+.flow-eventos__corpo summary { cursor: pointer; font-size: 11px; color: var(--text-muted); }
+.flow-eventos__corpo pre {
+  grid-column: 1 / -1; max-height: 240px; overflow: auto; margin: 8px 0 0;
+  padding: 11px 13px; border-radius: 9px; font-size: 10.5px; line-height: 1.6;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+}
+@media (max-width: 860px) { .flow-eventos li { grid-template-columns: 20px 1fr; } }
+
+/* ── O modal da trava ──────────────────────────────────────────────────────── */
+
+.flow-modal-veu {
+  position: fixed; inset: 0; z-index: 9994;
+  display: grid; place-items: center; padding: 24px;
+  background: rgba(5, 7, 12, 0.72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.flow-modal {
+  width: min(480px, 100%); padding: 28px 30px 24px; border-radius: 18px; text-align: center;
+  background: #14121c; border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.9);
+  color: #f1edf9;
+}
+.flow-modal__selo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px; border-radius: 14px; margin-bottom: 14px;
+  background: rgba(245, 158, 11, 0.14); color: #f59e0b;
+}
+.flow-modal__titulo { margin: 0 0 10px; font-size: 19px; font-weight: 700; }
+.flow-modal__texto { margin: 0 0 16px; font-size: 13.5px; line-height: 1.65; color: #a9a3ba; }
+.flow-modal__texto strong { color: #f1edf9; }
+.flow-modal__lista {
+  list-style: none; margin: 0 0 20px; padding: 0; text-align: left;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.flow-modal__lista li {
+  padding: 11px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.55;
+  background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2);
+  color: #d8d2e6;
+}
+.flow-modal__acoes { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-barra__preenchida, .funil-col, .funil-cartao { transition: none; }
+}
+
+/* ── Configurações → Omnimob Flow ────────────────────────────────────────────
+   Só o que é desta seção; a moldura (`Secao`) é a mesma das outras abas. */
+.flow-cfg-estado {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  color: var(--text-muted);
+  background: var(--sup-06, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+}
+.flow-cfg-estado.is-ok { color: #10b981; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.28); }
+.flow-cfg-dica { display: block; margin-top: 5px; font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+.flow-cfg-perc { display: flex; align-items: center; gap: 8px; }
+.flow-cfg-perc input { flex: 1; }
+.flow-cfg-perc > span { font-size: 14px; font-weight: 600; color: var(--text-muted); }
+/* A prévia em reais. Percentual abstrato não ajuda quem está decidindo a
+   política; "R$ 30.000, sendo R$ 15.000 do corretor" ajuda. */
+.flow-cfg-exemplo {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline;
+  margin-top: 14px; padding: 13px 16px; border-radius: 11px;
+  font-size: 12.5px; color: var(--text-muted);
+  background: rgba(212, 175, 55, 0.07); border: 1px solid rgba(212, 175, 55, 0.2);
+}
+.flow-cfg-exemplo strong { color: var(--text-main); }
+
+/* ── O add-on do Omnimob Flow, na aba de Plano ───────────────────────────────
+   Verde-azulado não: a cor do módulo é o rosa do wordmark. Aqui ele entra só na
+   borda e no botão — um cartão inteiro rosa no meio da tela de cobrança
+   competiria com os três cartões de plano, que são a escolha principal. */
+.cfg-flow {
+  margin-top: 16px; padding: 16px 18px; border-radius: 13px;
+  background: color-mix(in srgb, #ec0b5b 6%, transparent);
+  border: 1px solid color-mix(in srgb, #ec0b5b 24%, transparent);
+}
+.cfg-flow__topo { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
+.cfg-flow__topo img { width: 30px; height: 30px; object-fit: contain; flex: none; }
+.cfg-flow__topo > div { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 2px; }
+.cfg-flow__topo strong { font-size: 14px; }
+.cfg-flow__topo span { font-size: 12px; line-height: 1.55; color: var(--text-muted); }
+.ds-shell .cfg-flow__botao {
+  width: auto; flex: none; padding: 9px 18px; border-radius: 10px;
+  font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  border: 0; box-shadow: none; transform: none;
+  background: #ec0b5b; color: #fff;
+}
+.ds-shell .cfg-flow__botao:hover:not(:disabled) { filter: brightness(1.1); box-shadow: none; transform: none; }
+.ds-shell .cfg-flow__botao:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Desativar é destrutivo do ponto de vista de quem usa, mesmo não apagando
+   nada: o botão deixa de ser o convite e vira a saída discreta. */
+.ds-shell .cfg-flow__botao.is-remover {
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--linha-14, rgba(255,255,255,0.14));
+}
+.ds-shell .cfg-flow__botao.is-remover:hover:not(:disabled) {
+  background: rgba(239,68,68,0.12); color: #f87171; border-color: rgba(239,68,68,0.3);
+}
+.cfg-flow__lista {
+  list-style: none; margin: 14px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 7px 18px;
+}
+.cfg-flow__lista li {
+  position: relative; padding-left: 20px;
+  font-size: 12.5px; line-height: 1.55; color: var(--text-muted);
+}
+.cfg-flow__lista li::before {
+  content: ""; position: absolute; left: 0; top: 9px;
+  width: 11px; height: 2px; border-radius: 2px; background: #ec0b5b;
+}

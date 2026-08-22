@@ -53,6 +53,12 @@ export async function provisionTenant(input = {}) {
     email = "",
     whatsapp = "",
     plano = null,
+    /* ── OS MÓDULOS CONTRATADOS ────────────────────────────────────────────
+       Vêm da caixa que o comercial marca ao criar a conta. Ausente é `["HUB"]`
+       — o que a conta sempre teve — e nunca o pacote completo: o padrão de um
+       campo que decide cobrança tem que ser o mais barato, senão um esquecimento
+       entrega produto de graça. */
+    modulos = null,
     statusPagamento,
     valorMensal,
     proximoVencimento,
@@ -90,6 +96,7 @@ export async function provisionTenant(input = {}) {
       email,
       whatsapp,
       plano,
+      ...(Array.isArray(modulos) && modulos.length ? { modulos } : {}),
       // 2. Configura licença/cobrança inicial.
       statusPagamento: STATUS_VALIDOS.includes(statusPagamento) ? statusPagamento : "TRIAL",
       valorMensal: valorMensal != null && valorMensal !== "" ? Number(valorMensal) : null,

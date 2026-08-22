@@ -25,6 +25,7 @@ import { ehDominioDaOmnimob, slugDoDominioAtual } from "./utils/dominioVitrine";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
 import { LimiteDeErro } from "./components/LimiteDeErro.jsx";
+import { FLOW, modulosDoUsuario } from "./utils/modulos";
 
 /* ── Divisão por rota ────────────────────────────────────────────────────────
    Tudo vivia num pacote só: quem abria a landing baixava o formulário de
@@ -46,6 +47,38 @@ const ShowcaseEditorPage = lazy(() =>
   import("./pages/ShowcaseEditorPage").then((m) => ({ default: m.ShowcaseEditorPage })));
 const SuperAdminPage = lazy(() =>
   import("./pages/SuperAdminPage").then((m) => ({ default: m.SuperAdminPage })));
+
+/* ── O Omnimob Flow é uma QUARTA família ─────────────────────────────────────
+
+   Ele entra por `import()` pelo mesmo motivo das três de cima: quem só tem o
+   Hub — que é a maioria das contas — nunca baixa o funil, o motor de contratos
+   nem a tela de comissões. São telas que aquela pessoa não vai abrir nunca, e
+   elas custariam ~120 kB no pacote comum de todo mundo.
+
+   As seis do Flow ficam JUNTAS num pedaço só, e não uma por rota. É a mesma
+   regra que mantém o painel do Hub inteiro: são telas que a mesma pessoa
+   percorre na mesma sessão — funil, negócio, validação, contrato —, e fatiá-las
+   trocaria um download por seis esperas no meio do trabalho. */
+const FlowInicioPage = lazy(() =>
+  import("./pages/flow/FlowInicioPage").then((m) => ({ default: m.FlowInicioPage })));
+const FunilPage = lazy(() =>
+  import("./pages/flow/FunilPage").then((m) => ({ default: m.FunilPage })));
+const NegociosPage = lazy(() =>
+  import("./pages/flow/NegociosPage").then((m) => ({ default: m.NegociosPage })));
+const NegocioPage = lazy(() =>
+  import("./pages/flow/NegocioPage").then((m) => ({ default: m.NegocioPage })));
+const NegocioNovoPage = lazy(() =>
+  import("./pages/flow/NegocioNovoPage").then((m) => ({ default: m.NegocioNovoPage })));
+const ValidacaoPage = lazy(() =>
+  import("./pages/flow/ValidacaoPage").then((m) => ({ default: m.ValidacaoPage })));
+const ComissoesPage = lazy(() =>
+  import("./pages/flow/ComissoesPage").then((m) => ({ default: m.ComissoesPage })));
+const CaptacaoPage = lazy(() =>
+  import("./pages/flow/CaptacaoPage").then((m) => ({ default: m.CaptacaoPage })));
+const ContratosPage = lazy(() =>
+  import("./pages/flow/ContratosPage").then((m) => ({ default: m.ContratosPage })));
+const ModelosPage = lazy(() =>
+  import("./pages/flow/ModelosPage").then((m) => ({ default: m.ModelosPage })));
 
 /* As páginas públicas fora da landing: termos, privacidade, sobre, contato e a
    galeria de vitrines. Carregadas sob demanda e SEPARADAS da landing — quem
@@ -194,7 +227,17 @@ export default function App() {
              Comparar o token resolve: se ele mudou (ou sumiu), esta resposta é
              de uma sessão que não existe mais e deve ser descartada. */
           if (sessionRef.current?.token !== s.token) return;
-          const next = { ...s, usuario };
+          /* `usuario` vem inteiro; do TENANT vêm só os campos voláteis da conta
+             (módulos contratados e plano). Espalhar o tenant inteiro aqui
+             desfaria a edição que a pessoa acabou de fazer em Configurações —
+             aquela tela atualiza a sessão na hora, e este efeito roda de novo a
+             cada foco da janela. Ver `GET /auth/me`. */
+          const { tenant: daConta, ...dadosDoUsuario } = usuario;
+          const next = {
+            ...s,
+            usuario: dadosDoUsuario,
+            tenant: daConta ? { ...s.tenant, ...daConta } : s.tenant,
+          };
           saveSession(next);
           setSession(next);
         })
@@ -283,14 +326,30 @@ export default function App() {
   }
 
   const cargo = session?.usuario?.cargo;
-  const canAccessTenantPanel = Boolean(cargo?.acessarPainel || cargo?.editarPagina);
+  /* ── A porta do Flow ──────────────────────────────────────────────────────
+     Contratado pela conta E aberto pelo cargo. As duas perguntas, e as duas
+     precisam ser sim — ver `utils/modulos.js`. */
+  const podeFlow = modulosDoUsuario(session?.tenant, cargo).includes(FLOW);
+  /* `acessarFlow` entra aqui junto de `acessarPainel`: existe usuário SÓ-FLOW
+     (o Jurídico e o Financeiro do catálogo de cargos nascem assim), e sem esta
+     linha ele seria despejado na vitrine pública no login — com a permissão do
+     módulo na mão e nenhuma tela para abrir. Foi o mesmo sintoma que
+     `editarPagina` teve quando o Editor de Vitrine virou um cargo. */
+  const canAccessTenantPanel = Boolean(cargo?.acessarPainel || cargo?.editarPagina || cargo?.acessarFlow);
 
   const defaultPublicPath = session?.tenant?.slug ? `/vitrine/${session.tenant.slug}` : DEFAULT_PUBLIC_SHOWCASE;
   /* Para onde a pessoa vai ao entrar. Quem dirige a imobiliária começa no
      Painel do Gestor — é a tela que responde "o que aconteceu desde ontem". Sem
      essa permissão, o painel de imóveis, que é o trabalho dela. */
+  /* Para onde a pessoa vai ao entrar.
+
+     Quem SÓ tem o Flow cai no Flow — mandá-la para o Dashboard do Hub abriria
+     uma tela que o cargo dela não alcança, e o primeiro contato com o produto
+     seria um redirecionamento. Quem tem os dois começa no Hub, que continua
+     sendo a casa: é lá que mora o acervo. */
   const destinoAposLogin = !canAccessTenantPanel
     ? defaultPublicPath
+    : !cargo?.acessarPainel && podeFlow ? "/flow"
     : cargo?.verPainelGestor ? "/inicio" : "/";
 
   /* ── Conta suspensa: a parede antes de qualquer rota ──────────────────────
@@ -512,6 +571,87 @@ export default function App() {
           cargo?.gerenciarImoveis && cargo?.verRelatorios
             ? <PropertyInsightsPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
+        } />
+
+        {/* ══════════════════════════════════════════════════════════════════
+            OMNIMOB FLOW
+            ══════════════════════════════════════════════════════════════════
+
+            Dentro do MESMO layout do Hub, e é a decisão central desta divisão:
+            a moldura não troca. `ds-head`, `ds-head--link`, `ds-foot`, a barra
+            que abre no hover, o menu do perfil, os toasts — tudo continua sendo
+            o mesmo componente, na mesma posição. O que muda é o conteúdo da
+            navegação e o acento.
+
+            Um `<Route element={<FlowLayout/>}>` paralelo seria a saída óbvia e
+            é justamente a armadilha que o editor de vitrine já caiu duas vezes:
+            duas versões da mesma moldura divergem, e a segunda envelhece
+            calada. Aqui elas não podem divergir porque só existe uma.
+
+            ── AS DUAS PORTAS, EM CADA ROTA ──
+
+            `podeFlow` é `tenant.modulos` ∩ `cargo.acessarFlow`. As duas
+            perguntas precisam ser sim, e elas são diferentes: a conta pode ter
+            contratado sem que esta pessoa alcance, e esta pessoa pode ter a
+            permissão numa conta que não contratou. Ver `utils/modulos.js`.
+
+            Sem acesso, cai no destino padrão em vez de numa parede: quem chegou
+            aqui por um link antigo ou por um menu que mudou não precisa de uma
+            explicação, precisa de uma tela que funcione. */}
+        <Route path="/flow" element={
+          podeFlow ? <FlowInicioPage session={session} /> : <Navigate to={destinoAposLogin} replace />
+        } />
+        <Route path="/flow/funil" element={
+          podeFlow && cargo?.gerenciarNegocios
+            ? <FunilPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        {/* `/novo` antes de `/:negocioId` — o roteador já prefere o literal ao
+            parâmetro, mas ler as duas na ordem em que resolvem poupa a dúvida.
+            É a mesma nota de `/imoveis/portfolio`, acima. */}
+        <Route path="/flow/negocios/novo" element={
+          podeFlow && cargo?.gerenciarNegocios
+            ? <NegocioNovoPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        <Route path="/flow/negocios/:negocioId" element={
+          podeFlow && cargo?.gerenciarNegocios
+            ? <NegocioPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        <Route path="/flow/negocios" element={
+          podeFlow && cargo?.gerenciarNegocios
+            ? <NegociosPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        {/* Basta UMA das duas permissões de validação: o jurídico e o
+            financeiro veem a mesma fila, e cada um só consegue marcar a caixa
+            do setor dele. Exigir as duas trancaria a tela para exatamente quem
+            ela foi feita. */}
+        <Route path="/flow/validacao" element={
+          podeFlow && (cargo?.validarJuridico || cargo?.validarFinanceiro)
+            ? <ValidacaoPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        <Route path="/flow/comissoes" element={
+          podeFlow && cargo?.verComissoes
+            ? <ComissoesPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        <Route path="/flow/captacao" element={
+          podeFlow && cargo?.gerenciarCaptacao
+            ? <CaptacaoPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        <Route path="/flow/contratos" element={
+          podeFlow && cargo?.gerenciarContratos
+            ? <ContratosPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
+        } />
+        <Route path="/flow/modelos" element={
+          podeFlow && cargo?.gerenciarContratos
+            ? <ModelosPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : destinoAposLogin} replace />
         } />
       </Route>
 

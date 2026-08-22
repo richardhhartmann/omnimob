@@ -1,0 +1,13 @@
+-- O id da assinatura no Stripe.
+--
+-- Sem ele nao da para MEXER numa assinatura viva: trocar de plano ou contratar
+-- o Omnimob Flow no meio do ciclo exige apontar para a subscription la dentro,
+-- e ate aqui o produto nao sabia qual era. As duas rotas respondiam
+-- cobrancaAjustada: false e o valor da fatura era acertado a mao pelo time.
+--
+-- Anulavel, e vai continuar nulo para toda conta que ja assinou: o id nunca foi
+-- guardado. Isso NAO impede o ajuste — quando a coluna esta vazia, a assinatura
+-- e encontrada pela busca por metadata.tenantId (que sempre gravamos) e o
+-- resultado e escrito aqui. Conta antiga se conserta sozinha no primeiro
+-- ajuste, sem backfill e sem janela de manutencao.
+ALTER TABLE "tb_tenants" ADD COLUMN "tnt_assinatura_id" TEXT;

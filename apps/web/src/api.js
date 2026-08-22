@@ -814,6 +814,160 @@ export const api = {
   getTrialStatus: (tenantSlug) =>
     request("/api/tenants/me/trial", { headers: { "x-tenant-slug": tenantSlug } }),
 
+  /* "Esta conta já foi recebida." Marca no BANCO que o assistente de primeiro
+     acesso terminou, para ele não recomeçar em outra máquina ou numa guia
+     anônima. `modo` é "teste" ou "assinante" — são duas recepções distintas. */
+  /* ═══════════════════════════════════════════════════════════════════════
+     OMNIMOB FLOW
+     ═══════════════════════════════════════════════════════════════════════
+     Todas passam `x-tenant-slug` como o resto do painel. O que muda é a porta
+     do outro lado: o `flowRouter` exige, além da sessão, que a imobiliária
+     tenha contratado o módulo — e devolve 403 com `moduloNaoContratado` quando
+     não tem, que é o que a tela usa para oferecer o caminho certo. */
+
+  /* Liga ou desliga o Omnimob Flow numa conta que já paga. Muda o que a
+     imobiliária USA; o valor da fatura é ajustado pelo time (a resposta traz
+     `cobrancaAjustada: false`), como a troca de plano já faz. */
+  contratarFlow: (tenantSlug, flow) =>
+    request("/api/tenants/me/modulos", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ flow }),
+    }),
+
+  painelFlow: (tenantSlug) =>
+    request("/api/flow/painel", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  listarNegocios: (tenantSlug, filtros = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) if (v != null && v !== "") q.set(k, String(v));
+    const sufixo = q.toString() ? `?${q}` : "";
+    return request(`/api/flow/negocios${sufixo}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
+  obterNegocio: (tenantSlug, id) =>
+    request(`/api/flow/negocios/${id}`, { headers: { "x-tenant-slug": tenantSlug } }),
+  criarNegocio: (tenantSlug, payload) =>
+    request("/api/flow/negocios", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  salvarNegocio: (tenantSlug, id, payload) =>
+    request(`/api/flow/negocios/${id}`, {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  /* A recusa aqui é 422 com `motivos` — a trava do fechamento. Quem chama tem
+     que tratar o corpo, e não só a mensagem: é a lista do que falta. */
+  moverNegocio: (tenantSlug, id, estagio, motivo) =>
+    request(`/api/flow/negocios/${id}/estagio`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ estagio, motivo }),
+    }),
+  anotarNegocio: (tenantSlug, id, texto) =>
+    request(`/api/flow/negocios/${id}/nota`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify({ texto }),
+    }),
+
+  validarNegocio: (tenantSlug, id, setor, payload) =>
+    request(`/api/flow/negocios/${id}/validar/${setor}`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  filaDeValidacao: (tenantSlug) =>
+    request("/api/flow/validacao", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  anexarDocumento: (tenantSlug, negocioId, payload) =>
+    request(`/api/flow/negocios/${negocioId}/documentos`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  verificarDocumento: (tenantSlug, id, payload) =>
+    request(`/api/flow/documentos/${id}/verificar`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  removerDocumento: (tenantSlug, id) =>
+    request(`/api/flow/documentos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  camposDeMinuta: (tenantSlug) =>
+    request("/api/flow/minutas/campos", { headers: { "x-tenant-slug": tenantSlug } }),
+  listarModelos: (tenantSlug) =>
+    request("/api/flow/modelos", { headers: { "x-tenant-slug": tenantSlug } }),
+  criarModelo: (tenantSlug, payload) =>
+    request("/api/flow/modelos", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  salvarModelo: (tenantSlug, id, payload) =>
+    request(`/api/flow/modelos/${id}`, {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  removerModelo: (tenantSlug, id) =>
+    request(`/api/flow/modelos/${id}`, { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+
+  previaContrato: (tenantSlug, negocioId, payload) =>
+    request(`/api/flow/negocios/${negocioId}/contratos/previa`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  gerarContrato: (tenantSlug, negocioId, payload) =>
+    request(`/api/flow/negocios/${negocioId}/contratos`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  listarContratos: (tenantSlug, filtros = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) if (v) q.set(k, String(v));
+    const sufixo = q.toString() ? `?${q}` : "";
+    return request(`/api/flow/contratos${sufixo}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
+  salvarContrato: (tenantSlug, id, payload) =>
+    request(`/api/flow/contratos/${id}`, {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  enviarParaAssinatura: (tenantSlug, id, signatarios) =>
+    request(`/api/flow/contratos/${id}/enviar`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify({ signatarios }),
+    }),
+  /* Releitura sob demanda. Existe porque webhook se perde, e "o cliente jura
+     que assinou e o painel diz pendente" não se resolve esperando. */
+  sincronizarContrato: (tenantSlug, id) =>
+    request(`/api/flow/contratos/${id}/sincronizar`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug },
+    }),
+  cancelarContrato: (tenantSlug, id) =>
+    request(`/api/flow/contratos/${id}/cancelar`, {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug },
+    }),
+
+  comissoesFlow: (tenantSlug, { ano, mes } = {}) => {
+    const q = new URLSearchParams();
+    if (ano) q.set("ano", String(ano));
+    if (mes) q.set("mes", String(mes));
+    const sufixo = q.toString() ? `?${q}` : "";
+    return request(`/api/flow/comissoes${sufixo}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
+
+  listarFontesCaptacao: (tenantSlug) =>
+    request("/api/flow/captacao/fontes", { headers: { "x-tenant-slug": tenantSlug } }),
+  criarFonteCaptacao: (tenantSlug, payload) =>
+    request("/api/flow/captacao/fontes", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  salvarFonteCaptacao: (tenantSlug, id, payload) =>
+    request(`/api/flow/captacao/fontes/${id}`, {
+      method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+  removerFonteCaptacao: (tenantSlug, id) =>
+    request(`/api/flow/captacao/fontes/${id}`, {
+      method: "DELETE", headers: { "x-tenant-slug": tenantSlug },
+    }),
+  eventosCaptacao: (tenantSlug, filtros = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) if (v) q.set(k, String(v));
+    const sufixo = q.toString() ? `?${q}` : "";
+    return request(`/api/flow/captacao/eventos${sufixo}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
+
+  marcarBoasVindas: (tenantSlug, modo) =>
+    request("/api/tenants/me/boas-vindas", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ modo }),
+    }),
+
   /* Resposta da pesquisa que aparece durante o teste. Quando `escolha` for
      "ESTENDER", a mesma chamada empurra o vencimento — uma vez por
      imobiliária; a resposta diz em `estendido` se o prazo foi dado. */

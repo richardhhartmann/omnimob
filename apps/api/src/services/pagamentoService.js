@@ -44,20 +44,71 @@ const env = (...nomes) => nomes.map((n) => process.env[n]).find(Boolean) || "";
      STRIPE_PRICE_BASICO_ANUAL        (ou STRIPE_PRICE_BASIC_ANNUAL)
      STRIPE_PRICE_PROFISSIONAL_ANUAL  (ou STRIPE_PRICE_PRO_ANNUAL)
      STRIPE_PRICE_PREMIUM_ANUAL       (ou STRIPE_PRICE_PREMIUM_ANNUAL) */
+/* ── E, desde o Omnimob Flow, DOIS PACOTES por plano ──────────────────────────
+
+   `HUB` é o que sempre existiu. `HUB_FLOW` é a conta com os dois módulos, num
+   preço próprio. A conta completa é 3 planos × 2 pacotes × 2 períodos = DOZE
+   objetos de preço no Stripe. Seis já existiam (os do Hub, mensal e anual); os
+   seis novos são os do Flow.
+
+   As variáveis do Flow são NOVAS e OPCIONAIS. Enquanto não existirem, o pacote
+   com Flow simplesmente não é vendável e a landing não o oferece; o Hub segue
+   funcionando exatamente como antes. Nada quebra por falta delas — é a mesma
+   escolha que o preço anual fez quando entrou.
+
+     STRIPE_PRICE_BASICO_FLOW              STRIPE_PRICE_BASICO_FLOW_ANUAL
+     STRIPE_PRICE_PROFISSIONAL_FLOW        STRIPE_PRICE_PROFISSIONAL_FLOW_ANUAL
+     STRIPE_PRICE_PREMIUM_FLOW             STRIPE_PRICE_PREMIUM_FLOW_ANUAL
+
+   O aninhamento é `plano → pacote → periodo`, e não `plano → periodo` com o
+   pacote no nome da chave: com o pacote na chave, `periodosDoPlano` e
+   `planoTemPreco` teriam de decompor string, e a primeira variação nova (um
+   terceiro módulo) multiplicaria as combinações escritas à mão. */
 const PRECOS = {
   BASICO: {
-    mensal: env("STRIPE_PRICE_BASICO", "STRIPE_PRICE_BASIC"),
-    anual: env("STRIPE_PRICE_BASICO_ANUAL", "STRIPE_PRICE_BASIC_ANNUAL"),
+    HUB: {
+      mensal: env("STRIPE_PRICE_BASICO", "STRIPE_PRICE_BASIC"),
+      anual: env("STRIPE_PRICE_BASICO_ANUAL", "STRIPE_PRICE_BASIC_ANNUAL"),
+    },
+    HUB_FLOW: {
+      mensal: env("STRIPE_PRICE_BASICO_FLOW", "STRIPE_PRICE_BASIC_FLOW"),
+      anual: env("STRIPE_PRICE_BASICO_FLOW_ANUAL", "STRIPE_PRICE_BASIC_FLOW_ANNUAL"),
+    },
   },
   PROFISSIONAL: {
-    mensal: env("STRIPE_PRICE_PROFISSIONAL", "STRIPE_PRICE_PRO"),
-    anual: env("STRIPE_PRICE_PROFISSIONAL_ANUAL", "STRIPE_PRICE_PRO_ANNUAL"),
+    HUB: {
+      mensal: env("STRIPE_PRICE_PROFISSIONAL", "STRIPE_PRICE_PRO"),
+      anual: env("STRIPE_PRICE_PROFISSIONAL_ANUAL", "STRIPE_PRICE_PRO_ANNUAL"),
+    },
+    HUB_FLOW: {
+      mensal: env("STRIPE_PRICE_PROFISSIONAL_FLOW", "STRIPE_PRICE_PRO_FLOW"),
+      anual: env("STRIPE_PRICE_PROFISSIONAL_FLOW_ANUAL", "STRIPE_PRICE_PRO_FLOW_ANNUAL"),
+    },
   },
   PREMIUM: {
-    mensal: env("STRIPE_PRICE_PREMIUM"),
-    anual: env("STRIPE_PRICE_PREMIUM_ANUAL", "STRIPE_PRICE_PREMIUM_ANNUAL"),
+    HUB: {
+      mensal: env("STRIPE_PRICE_PREMIUM"),
+      anual: env("STRIPE_PRICE_PREMIUM_ANUAL", "STRIPE_PRICE_PREMIUM_ANNUAL"),
+    },
+    HUB_FLOW: {
+      mensal: env("STRIPE_PRICE_PREMIUM_FLOW"),
+      anual: env("STRIPE_PRICE_PREMIUM_FLOW_ANUAL", "STRIPE_PRICE_PREMIUM_FLOW_ANNUAL"),
+    },
   },
 };
+
+/** Pacotes aceitos. Qualquer outra coisa vinda do cliente vira "HUB" — o padrão
+ *  seguro é o que a conta sempre teve, e nunca o que custa mais caro. */
+export const PACOTES_VALIDOS = ["HUB", "HUB_FLOW"];
+export function normalizarPacote(valor) {
+  return PACOTES_VALIDOS.includes(String(valor)) ? String(valor) : "HUB";
+}
+
+/** Os módulos que um pacote entrega — é o que vira `Tenant.modulos` ao assinar.
+ *  Espelho de `modulosDoPacote` em `apps/web/src/utils/planos.js`. */
+export function modulosDoPacote(pacote) {
+  return normalizarPacote(pacote) === "HUB_FLOW" ? ["HUB", "FLOW"] : ["HUB"];
+}
 
 /** Períodos aceitos. Qualquer outra coisa vinda do cliente vira "mensal". */
 export const PERIODOS = ["mensal", "anual"];
@@ -65,9 +116,12 @@ export function normalizarPeriodo(valor) {
   return PERIODOS.includes(String(valor)) ? String(valor) : "mensal";
 }
 
-/** O id de preço do Stripe para um plano num período. */
-function idDoPreco(plano, periodo) {
-  return PRECOS[plano]?.[normalizarPeriodo(periodo)] || "";
+/** O id de preço do Stripe para um plano, num pacote e num período.
+ *
+ *  `pacote` é o último parâmetro e tem padrão: as chamadas antigas continuam
+ *  significando o que sempre significaram — o Hub sozinho. */
+function idDoPreco(plano, periodo, pacote = "HUB") {
+  return PRECOS[plano]?.[normalizarPacote(pacote)]?.[normalizarPeriodo(periodo)] || "";
 }
 
 export function pagamentoConfigurado() {
@@ -202,13 +256,15 @@ export async function diagnosticarPagamento() {
   };
 }
 
-export function planoTemPreco(plano, periodo) {
-  return periodo ? Boolean(idDoPreco(plano, periodo)) : Boolean(idDoPreco(plano, "mensal"));
+export function planoTemPreco(plano, periodo, pacote = "HUB") {
+  return periodo
+    ? Boolean(idDoPreco(plano, periodo, pacote))
+    : Boolean(idDoPreco(plano, "mensal", pacote));
 }
 
 /** Períodos que um plano realmente pode cobrar hoje (o anual só quando existe). */
-export function periodosDoPlano(plano) {
-  return PERIODOS.filter((periodo) => Boolean(idDoPreco(plano, periodo)));
+export function periodosDoPlano(plano, pacote = "HUB") {
+  return PERIODOS.filter((periodo) => Boolean(idDoPreco(plano, periodo, pacote)));
 }
 
 /* A API do Stripe é form-urlencoded e aceita aninhamento por colchetes
@@ -272,7 +328,7 @@ async function stripe(caminho, { method = "POST", dados, idempotencia } = {}) {
  *                  PLANO_SOB_CONSULTA | PERIODO_INDISPONIVEL | RECUSADO |
  *                  PENDENTE | PROVEDOR_FALHOU
  */
-export async function criarAssinatura({ tenant, plano, periodo, tokenPagamento }) {
+export async function criarAssinatura({ tenant, plano, periodo, pacote, tokenPagamento }) {
   if (!pagamentoConfigurado()) {
     const err = new Error(
       "Cobrança automática ainda não está conectada. Fale com o time para fechar o plano.",
@@ -286,13 +342,14 @@ export async function criarAssinatura({ tenant, plano, periodo, tokenPagamento }
     throw err;
   }
   const periodoEscolhido = normalizarPeriodo(periodo);
-  const preco = idDoPreco(plano, periodoEscolhido);
+  const pacoteEscolhido = normalizarPacote(pacote);
+  const preco = idDoPreco(plano, periodoEscolhido, pacoteEscolhido);
   if (!preco) {
     /* Sem preço para ESTE período. Duas causas, e a mensagem distingue: o plano
        nunca teve cobrança automática (sob consulta), ou o anual ainda não foi
        cadastrado no ambiente — que é erro de configuração nosso, não decisão
        comercial, e o cliente não deve ler "fale com o time" por isso. */
-    const temMensal = Boolean(idDoPreco(plano, "mensal"));
+    const temMensal = Boolean(idDoPreco(plano, "mensal", pacoteEscolhido));
     const err = new Error(
       temMensal && periodoEscolhido === "anual"
         ? "A cobrança anual deste plano ainda não está disponível. Escolha mensal ou fale com o time."
@@ -578,15 +635,15 @@ const FOLGA_DO_MANDATO = 1.3;
 /* Pix e boleto são o MESMO fluxo com dois campos diferentes: assinatura nasce
    pendente, o cliente conclui por fora, o webhook confirma. Duas funções quase
    idênticas divergiriam no primeiro ajuste — e o ajuste sempre chega. */
-export async function criarAssinaturaBoleto({ tenant, plano, periodo, tokenPagamento }) {
-  return criarAssinaturaAssincrona({ tenant, plano, periodo, meio: "boleto", tokenPagamento });
+export async function criarAssinaturaBoleto({ tenant, plano, periodo, pacote, tokenPagamento }) {
+  return criarAssinaturaAssincrona({ tenant, plano, periodo, pacote, meio: "boleto", tokenPagamento });
 }
 
-export async function criarAssinaturaPix({ tenant, plano, periodo }) {
-  return criarAssinaturaAssincrona({ tenant, plano, periodo, meio: "pix" });
+export async function criarAssinaturaPix({ tenant, plano, periodo, pacote }) {
+  return criarAssinaturaAssincrona({ tenant, plano, periodo, pacote, meio: "pix" });
 }
 
-async function criarAssinaturaAssincrona({ tenant, plano, periodo, meio, tokenPagamento }) {
+async function criarAssinaturaAssincrona({ tenant, plano, periodo, pacote, meio, tokenPagamento }) {
   if (!pagamentoConfigurado()) {
     const err = new Error(
       "Cobrança automática ainda não está conectada. Fale com o time para fechar o plano.",
@@ -596,9 +653,10 @@ async function criarAssinaturaAssincrona({ tenant, plano, periodo, meio, tokenPa
   }
 
   const periodoEscolhido = normalizarPeriodo(periodo);
-  const preco = idDoPreco(plano, periodoEscolhido);
+  const pacoteEscolhido = normalizarPacote(pacote);
+  const preco = idDoPreco(plano, periodoEscolhido, pacoteEscolhido);
   if (!preco) {
-    const temMensal = Boolean(idDoPreco(plano, "mensal"));
+    const temMensal = Boolean(idDoPreco(plano, "mensal", pacoteEscolhido));
     const err = new Error(
       temMensal && periodoEscolhido === "anual"
         ? "A cobrança anual deste plano ainda não está disponível. Escolha mensal ou fale com o time."
@@ -887,10 +945,26 @@ export async function precosDosPlanos() {
   /* Um par por plano: { mensal, anual }. O anual pode faltar — enquanto a
      variável não existir no ambiente, o plano volta com `anual: null` e a
      página não oferece a opção. */
+  /* ── A FORMA DA RESPOSTA, e por que ela não é uma matriz ──────────────────
+
+     `{ BASICO: { mensal, anual, economia, flow: { mensal, anual, economia } } }`
+
+     O pacote HUB fica na RAIZ do plano, exatamente onde sempre esteve, e o
+     Hub+Flow entra num `flow` aninhado. A forma simétrica
+     (`{ BASICO: { HUB: {...}, HUB_FLOW: {...} } }`) é mais bonita e quebraria
+     todos os consumidores de uma vez — a landing, a aba de Plano, o modal de
+     boas-vindas e a parede de reativação leem `precos.BASICO.mensal.rotulo`
+     hoje.
+
+     Assimetria deliberada, então: o que existia continua onde estava, e o que é
+     novo é opcional. Quem não conhece o Flow nem percebe que a chave apareceu.
+     ────────────────────────────────────────────────────────────────────────── */
   const saida = {};
   const pedidos = [];
-  for (const [plano, porPeriodo] of Object.entries(PRECOS)) {
-    for (const periodo of PERIODOS) {
+  for (const [plano, porPacote] of Object.entries(PRECOS)) {
+    for (const pacote of PACOTES_VALIDOS) {
+      const porPeriodo = porPacote[pacote] || {};
+      for (const periodo of PERIODOS) {
       const id = porPeriodo[periodo];
       if (!id) continue;
       pedidos.push(
@@ -900,13 +974,17 @@ export async function precosDosPlanos() {
             const intervalo = preco.recurring?.interval;
             const sufixo = intervalo === "month" ? "/mês" : intervalo === "year" ? "/ano" : "";
             saida[plano] = saida[plano] || {};
+            /* O HUB na raiz; o HUB_FLOW em `flow`. Ver o comentário acima. */
+            const alvo = pacote === "HUB_FLOW"
+              ? (saida[plano].flow = saida[plano].flow || {})
+              : saida[plano];
             /* `rotulo` inteiro para quem só quer imprimir; `numero` e `sufixo`
                separados para quem desenha os dois em tamanhos diferentes (a
                landing põe o valor em 34px e o "/mês" pequeno ao lado). Partido
                aqui e não no navegador porque quem monta a string é este arquivo:
                separar lá seria adivinhar onde o número termina, e a moeda pode
                mudar de formato. */
-            saida[plano][periodo] = {
+            alvo[periodo] = {
               valor: (preco.unit_amount ?? 0) / 100,
               numero: formatarBRL(preco.unit_amount, preco.currency),
               sufixo,
@@ -916,10 +994,11 @@ export async function precosDosPlanos() {
           } catch (erro) {
             // Preço apagado ou id errado no .env: melhor sumir da lista do que
             // oferecer um plano que vai falhar na hora de cobrar.
-            console.warn(`[pagamento] preço ${periodo} do plano ${plano} indisponível:`, erro.message);
+            console.warn(`[pagamento] preço ${periodo} do plano ${plano} (${pacote}) indisponível:`, erro.message);
           }
         })(),
       );
+      }
     }
   }
   await Promise.all(pedidos);
@@ -931,8 +1010,271 @@ export async function precosDosPlanos() {
   for (const dados of Object.values(saida)) {
     const economia = economiaDoAnual(dados.mensal?.valor, dados.anual?.valor);
     if (economia) dados.economia = economia;
+    /* O pacote com Flow tem a economia dele, calculada dos preços DELE. Herdar
+       a do Hub anunciaria um desconto que a fatura do Hub+Flow não pratica. */
+    if (dados.flow) {
+      const doFlow = economiaDoAnual(dados.flow.mensal?.valor, dados.flow.anual?.valor);
+      if (doFlow) dados.flow.economia = doFlow;
+    }
   }
 
   cachePrecos = { em: Date.now(), dados: saida };
   return saida;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AJUSTAR UMA ASSINATURA QUE JÁ ESTÁ RODANDO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Trocar de plano ou contratar o Omnimob Flow no meio do ciclo. Até aqui as
+   duas rotas mudavam o que a imobiliária USA e respondiam `cobrancaAjustada:
+   false` — o valor era acertado à mão pelo time, porque o id da assinatura no
+   provedor não era guardado em lugar nenhum.
+
+   ── O PROPORCIONAL É DO STRIPE, E NÃO NOSSO ──
+
+   A tentação é calcular: "faltam 18 dias de 30, a diferença é R$ 40, cobro
+   R$ 24". Errado por três motivos, e todos aparecem em produção:
+
+     · o ciclo não tem 30 dias — tem o que o mês tiver, e o anual tem 365 ou 366;
+     · a data de corte é a da assinatura, não a do calendário;
+     · desconto, cupom e imposto entram na conta e nós não os conhecemos.
+
+   O Stripe faz essa conta com os dados que só ele tem. Mandamos
+   `proration_behavior` e ele emite as linhas de crédito e débito. Duplicar a
+   aritmética aqui produziria um número que discorda da fatura — e o número que
+   vale é sempre o da fatura.
+
+   ── POR QUE `create_prorations`, E NÃO COBRAR NA HORA ──
+
+   `always_invoice` fecha uma fatura no ato e passa o cartão. Para quem clicou
+   em "contratar o Flow" isso é uma cobrança inesperada no meio do dia, de um
+   valor quebrado que ninguém conferiu.
+
+   `create_prorations` lança as linhas na PRÓXIMA fatura, que é quando o cliente
+   já espera pagar. A diferença aparece discriminada, ele confere, e o valor
+   fecha com o ciclo. É o comportamento que assinatura B2B tem em todo lugar.
+
+   Na REMOÇÃO isso importa ainda mais: sair do Flow gera crédito, e crédito com
+   `always_invoice` viraria uma fatura de valor negativo — que o Stripe trata
+   como saldo, e o cliente lê como cobrança estranha.
+
+   ── ACHAR A ASSINATURA ──
+
+   `tenant.assinaturaId` é o caminho rápido. Vazio (toda conta anterior a esta
+   coluna) cai na busca por `metadata.tenantId`, e o que ela achar é GRAVADO —
+   a conta se conserta sozinha no primeiro ajuste, sem backfill.
+
+   O id guardado nunca é usado às cegas: a assinatura é LIDA antes de qualquer
+   escrita. Um id morto vira "não achei" e cai na busca também.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Os estados em que ainda faz sentido mexer. `incomplete` fica de fora: é
+ *  boleto ou Pix esperando dinheiro, e mudar o preço antes de a primeira
+ *  cobrança liquidar produziria uma fatura que não bate com a guia que o
+ *  cliente já tem na mão. */
+const AJUSTAVEIS = ["active", "trialing", "past_due"];
+
+/** O período que a assinatura cobra hoje, lido do preço dela.
+ *
+ *  Do PROVEDOR e não de uma coluna nossa: é ele quem sabe o que está cobrando,
+ *  e uma cópia aqui seria a segunda fonte de verdade que o comentário de
+ *  `cobrancaEmAberto` alerta contra. */
+function periodoDaAssinatura(assinatura) {
+  const intervalo = assinatura?.items?.data?.[0]?.price?.recurring?.interval;
+  return intervalo === "year" ? "anual" : "mensal";
+}
+
+/**
+ * Acha a assinatura viva do tenant. Devolve `null` quando não há nenhuma.
+ *
+ * @returns {Promise<{ assinatura: object, veioDaBusca: boolean }|null>}
+ */
+async function acharAssinatura(tenant) {
+  // 1. O caminho rápido: o id guardado.
+  if (tenant.assinaturaId) {
+    try {
+      const a = await stripe(`/subscriptions/${tenant.assinaturaId}`, { method: "GET" });
+      if (a && a.status !== "canceled") return { assinatura: a, veioDaBusca: false };
+    } catch {
+      /* Id morto (assinatura apagada no painel, conta trocada). Não é erro: cai
+         na busca, que é justamente o caminho de quem não tem id nenhum. */
+    }
+  }
+
+  // 2. O resgate: a mesma busca que `cobrancaEmAberto` usa.
+  try {
+    const busca = await stripe(
+      `/subscriptions/search?limit=1&query=${encodeURIComponent(`metadata['tenantId']:'${tenant.id}'`)}`,
+      { method: "GET" },
+    );
+    const a = busca?.data?.[0];
+    if (a && a.status !== "canceled") return { assinatura: a, veioDaBusca: true };
+  } catch {
+    /* Busca indisponível é indistinguível de "não achou" para quem chama: nos
+       dois casos não há o que ajustar, e a resposta é a mesma. */
+  }
+  return null;
+}
+
+/* O motivo, em português, de um ajuste que não aconteceu. Ele vai para a tela,
+   então cada um diz o que FAZER — "não foi possível" sozinho manda a pessoa
+   abrir chamado para descobrir o óbvio. */
+const MOTIVOS = {
+  SEM_PROVEDOR: "A cobrança automática não está configurada nesta instalação.",
+  SEM_ASSINATURA: "Não encontramos uma assinatura ativa desta conta no provedor. O valor será acertado pelo nosso time.",
+  ESTADO: "A assinatura está com uma cobrança em aberto. O valor será ajustado assim que ela liquidar.",
+  SEM_PRECO: "Ainda não há preço cadastrado para esta combinação de plano e módulos. O valor será acertado pelo nosso time.",
+  IGUAL: "O valor da assinatura não mudou.",
+  FALHOU: "O provedor recusou o ajuste. O valor será acertado pelo nosso time.",
+};
+
+/**
+ * Aponta a assinatura viva para o preço de (plano × pacote), no MESMO período
+ * que ela já cobra, e deixa o Stripe calcular o proporcional.
+ *
+ * Nunca lança: um ajuste de cobrança que falha não pode desfazer a mudança de
+ * plano ou de módulo que já foi gravada — o cliente ficaria sem o que pediu E
+ * sem explicação. A falha vira `{ ajustada: false, motivo }` e a tela conta a
+ * verdade.
+ *
+ * @param {object} args
+ * @param {object} args.tenant  precisa de `id`, `assinaturaId`
+ * @param {string} args.plano   BASICO | PROFISSIONAL | PREMIUM
+ * @param {string} args.pacote  HUB | HUB_FLOW
+ * @returns {Promise<{ ajustada, motivo?, de?, para?, periodo?, valorMensal?, proximoVencimento?, assinaturaId? }>}
+ */
+export async function ajustarAssinatura({ tenant, plano, pacote }) {
+  if (!pagamentoConfigurado()) return { ajustada: false, motivo: MOTIVOS.SEM_PROVEDOR };
+
+  const achado = await acharAssinatura(tenant);
+  if (!achado) return { ajustada: false, motivo: MOTIVOS.SEM_ASSINATURA };
+
+  const { assinatura, veioDaBusca } = achado;
+  if (!AJUSTAVEIS.includes(assinatura.status)) {
+    return { ajustada: false, motivo: MOTIVOS.ESTADO, assinaturaId: assinatura.id };
+  }
+
+  const item = assinatura.items?.data?.[0];
+  if (!item?.id) return { ajustada: false, motivo: MOTIVOS.FALHOU, assinaturaId: assinatura.id };
+
+  /* O período NÃO muda num ajuste de plano ou de módulo. Quem assinou o anual
+     continua no anual: trocar o ciclo junto seria decidir por ele uma coisa que
+     ele não pediu, e ainda geraria um proporcional de doze meses. */
+  const periodo = periodoDaAssinatura(assinatura);
+  const precoNovo = idDoPreco(plano, periodo, pacote);
+  if (!precoNovo) {
+    return { ajustada: false, motivo: MOTIVOS.SEM_PRECO, assinaturaId: assinatura.id, periodo };
+  }
+
+  const precoAtual = item.price?.id || null;
+  if (precoAtual === precoNovo) {
+    return { ajustada: false, motivo: MOTIVOS.IGUAL, semMudanca: true, assinaturaId: assinatura.id, periodo };
+  }
+
+  try {
+    const atualizada = await stripe(`/subscriptions/${assinatura.id}`, {
+      dados: {
+        items: [{ id: item.id, price: precoNovo }],
+        /* Ver o cabeçalho: as linhas entram na PRÓXIMA fatura, e não numa
+           cobrança imediata. */
+        proration_behavior: "create_prorations",
+        /* O metadata acompanha o que passou a ser cobrado. Ele é lido pelo
+           webhook e pela busca; deixá-lo apontando para o plano antigo faria a
+           conciliação contar errado no mês seguinte. */
+        metadata: { tenantId: tenant.id, plano, periodo, pacote },
+        expand: ["items.data.price"],
+      },
+      /* Idempotência pelo DESTINO, e não por um carimbo de tempo: dois cliques
+         no mesmo botão pedem exatamente o mesmo ajuste, e o segundo tem que ser
+         inofensivo. Com a hora dentro da chave ele viraria um segundo
+         proporcional sobre o primeiro. */
+      idempotencia: `ajuste-${tenant.id}-${precoNovo}`,
+    });
+
+    const novoItem = atualizada.items?.data?.[0];
+    const valorCobrado = (novoItem?.price?.unit_amount ?? 0) / 100;
+
+    return {
+      ajustada: true,
+      assinaturaId: atualizada.id,
+      /* Gravado pelo chamador quando veio da busca — é o que conserta a conta
+         antiga sem backfill. */
+      gravarId: veioDaBusca || tenant.assinaturaId !== atualizada.id,
+      de: precoAtual,
+      para: precoNovo,
+      periodo,
+      valorCobrado,
+      /* A coluna se chama `valorMensal` e é lida como tal na tela e no e-mail;
+         no anual, o valor do ano é dividido antes de ir para lá. Mesma regra de
+         `criarAssinatura`. */
+      valorMensal: periodo === "anual" ? Math.round((valorCobrado / 12) * 100) / 100 : valorCobrado,
+      proximoVencimento: atualizada.current_period_end
+        ? new Date(atualizada.current_period_end * 1000)
+        : null,
+    };
+  } catch (erro) {
+    console.warn("[pagamento] o provedor recusou o ajuste:", erro?.message || erro);
+    return { ajustada: false, motivo: MOTIVOS.FALHOU, assinaturaId: assinatura.id, detalhe: erro?.message };
+  }
+}
+
+/**
+ * Quanto o ajuste vai somar (ou abater) na próxima fatura, ANTES de aplicar.
+ *
+ * É informativo e por isso nunca derruba nada: qualquer falha devolve `null` e
+ * a tela simplesmente não mostra o número. A operação em si não depende dele.
+ *
+ * ⚠ A rota de prévia de fatura mudou de nome entre versões da API do Stripe
+ * (`/invoices/upcoming` nas antigas, `/invoices/create_preview` nas novas).
+ * Tentamos a antiga e, no 404, a nova — em vez de cravar uma e quebrar
+ * conforme a versão configurada na conta.
+ */
+export async function previaDoAjuste({ tenant, plano, pacote }) {
+  if (!pagamentoConfigurado()) return null;
+
+  try {
+    const achado = await acharAssinatura(tenant);
+    if (!achado) return null;
+    const { assinatura } = achado;
+    if (!AJUSTAVEIS.includes(assinatura.status)) return null;
+
+    const item = assinatura.items?.data?.[0];
+    const periodo = periodoDaAssinatura(assinatura);
+    const precoNovo = idDoPreco(plano, periodo, pacote);
+    if (!item?.id || !precoNovo || item.price?.id === precoNovo) return null;
+
+    const params = new URLSearchParams({
+      subscription: assinatura.id,
+      "subscription_items[0][id]": item.id,
+      "subscription_items[0][price]": precoNovo,
+      subscription_proration_behavior: "create_prorations",
+    });
+
+    let previa = null;
+    try {
+      previa = await stripe(`/invoices/upcoming?${params}`, { method: "GET" });
+    } catch {
+      previa = await stripe(`/invoices/create_preview?${params}`, { method: "GET" }).catch(() => null);
+    }
+    if (!previa) return null;
+
+    /* Só as linhas de PROPORCIONAL. O total da prévia inclui a mensalidade
+       cheia do próximo ciclo, e anunciar isso como "o que você vai pagar a
+       mais" assustaria por um valor que não tem nada a ver com a mudança. */
+    const linhas = (previa.lines?.data || []).filter((l) => l.proration);
+    const centavos = linhas.reduce((soma, l) => soma + (l.amount || 0), 0);
+    if (!linhas.length) return null;
+
+    return {
+      /* Positivo é o que entra a mais; negativo é crédito (saída do Flow). A
+         tela decide a palavra — "a mais" ou "de crédito" —, e o sinal é a
+         informação. */
+      valor: centavos / 100,
+      credito: centavos < 0,
+      quando: previa.next_payment_attempt ? new Date(previa.next_payment_attempt * 1000) : null,
+    };
+  } catch {
+    return null;
+  }
 }

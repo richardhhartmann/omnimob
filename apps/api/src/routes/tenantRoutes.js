@@ -11,6 +11,9 @@ import {
   meiosDisponiveis,
   marcaDaConta,
   cobrancaEmAberto,
+  ajustarAssinatura,
+  normalizarPacote,
+  modulosDoPacote,
   precosDosPlanos,
   agendarCancelamentoDoSlug,
   normalizarPeriodo,
@@ -40,6 +43,8 @@ import {
 } from "../services/dominioService.js";
 import { planoInfo, requirePlano, requirePlanoDominio } from "../middlewares/planoMiddleware.js";
 import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
+import { cifrar } from "../services/cofre.js";
+import { modulosDoTenant } from "../services/modulos.js";
 import { exportarTudo } from "../services/exportacaoCompleta.js";
 
 /* A linha do tenant sem o que não é da conta do navegador.
@@ -62,11 +67,31 @@ const SEGREDOS_DO_TENANT = [
   "mercadoLivreToken",
   "mercadoLivreRefresh",
   "whatsappPonteToken",
+  /* O token do provedor de assinatura (Clicksign/DocuSign). É a credencial que
+     ASSINA CONTRATO em nome da imobiliária — a mais sensível desta lista. Ver
+     `services/flow/assinatura.js`. */
+  "assinaturaToken",
+  /* Este NÃO é credencial, e está aqui por outro motivo: é a referência da
+     assinatura dentro da conta Stripe da Omnimob. Ninguém no navegador do
+     cliente tem uso para ela, e um id de cobrança circulando na resposta é o
+     tipo de detalhe interno que acaba num print de suporte ou num relato de
+     bug público. O filtro se chama SEGREDOS, mas o que ele garante é "não sai
+     na resposta" — e é isso que este campo precisa. */
+  "assinaturaId",
 ];
 
 function semSegredos(tenant) {
   if (!tenant) return tenant;
   const saida = { ...tenant };
+  /* ── EXISTE, sem dizer QUAL ────────────────────────────────────────────────
+     A tela de Configurações → Flow precisa mostrar "conectado à Clicksign" e
+     oferecer substituir o token. Devolver o valor mascarado seria a saída fácil
+     e é uma armadilha: um campo que volta com asteriscos convida a "salvar sem
+     mexer", e o salvamento gravaria os asteriscos por cima da chave boa. O
+     sintoma seria "os contratos pararam de sair", no dia seguinte, sem pista.
+
+     Um booleano responde a pergunta da tela e não carrega segredo nenhum. */
+  saida.assinaturaConfigurada = Boolean(tenant.assinaturaToken);
   for (const campo of SEGREDOS_DO_TENANT) delete saida[campo];
   return saida;
 }
@@ -135,7 +160,20 @@ tenantRouter.get(
 
 tenantRouter.get("/me", requireTenant, async (req, res) => {
   try {
-    return res.json(req.tenant);
+    /* ── `semSegredos`, e não `req.tenant` cru ────────────────────────────
+       Esta rota devolvia a linha inteira do banco. O `tenantMiddleware` põe em
+       `req.tenant` o resultado de um `findUnique` sem `select`, ou seja, TODAS
+       as colunas — inclusive o token da página do Facebook, os do Mercado Livre,
+       o da ponte de WhatsApp e o do provedor de assinatura.
+
+       Eles são cifrados em repouso (`services/cofre.js`), então o que saía era
+       texto cifrado e não a credencial em claro. Ainda assim não devia sair: o
+       filtro existe exatamente para isso e esta rota era a única que não passava
+       por ele — as outras seis já passavam.
+
+       Foi um teste do ajuste de cobrança que encontrou, ao conferir que o
+       `assinaturaId` (esse sim em claro) não vazava. */
+    return res.json(semSegredos(req.tenant));
   } catch {
     return res.status(500).json({ error: "Erro ao buscar perfil do tenant." });
   }
@@ -147,9 +185,36 @@ tenantRouter.put("/me/configuracao", requireAuth, requireTenant, requirePermissa
     if (!parsed.success) {
       return res.status(400).json({ error: "Dados inválidos para configuração.", details: parsed.error.flatten() });
     }
+
+    const dados = { ...parsed.data };
+
+    /* ── OS CAMPOS DO FLOW SÃO DE QUEM ADMINISTRA A CONTA ────────────────────
+       Esta rota abre para `editarPagina || gerenciarUsuarios` — o editor de
+       vitrine e o gerente de equipe. Nenhum dos dois tem por que trocar a
+       credencial que assina contrato nem a política de comissão da casa.
+
+       Removidos em vez de recusados: quem tem só `editarPagina` está salvando
+       cores e logo, e derrubar a requisição inteira por causa de um campo que
+       ele nem viu na tela seria um 403 sem sintoma. O que ele não pode mexer,
+       ele não mexe. */
+    const CAMPOS_DO_FLOW = [
+      "assinaturaProvedor", "assinaturaToken", "assinaturaConta", "assinaturaSandbox",
+      "comissaoPercentual", "comissaoCorretorPerc",
+    ];
+    if (!req.authCargo?.verConfiguracoes) {
+      for (const campo of CAMPOS_DO_FLOW) delete dados[campo];
+    }
+
+    /* ── O TOKEN É CIFRADO ANTES DE ENCOSTAR NO BANCO ────────────────────────
+       Ele chega em claro (é o que a pessoa colou) e nunca é gravado assim: é a
+       mesma regra do token da página do Facebook e do Mercado Livre. Um dump do
+       banco não pode virar a capacidade de assinar contrato em nome de
+       centenas de imobiliárias. Ver `services/cofre.js`. */
+    if (dados.assinaturaToken) dados.assinaturaToken = cifrar(dados.assinaturaToken);
+
     const tenant = await prisma.tenant.update({
       where: { id: req.tenant.id },
-      data: parsed.data,
+      data: dados,
     });
     /* Endereço e horário alimentam os widgets da vitrine, que guardam o
        resultado apurado por um minuto. Sem isto, quem corrige o endereço e vai
@@ -494,6 +559,7 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
         // Para pré-preencher o pagador do boleto, que exige endereço completo.
         email: true, cnpj: true, cep: true, endereco: true, cidade: true, estado: true,
         migracaoIntencao: true, migracaoResolvidaEm: true, trialEstendidoEm: true,
+        boasVindasVistas: true, modulos: true,
       },
     });
     if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
@@ -539,11 +605,10 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
        QUANDO ela começou o schema não guarda, e quem "assina" pode ter testado
        antes por semanas, então a idade do tenant não serve de pista.
 
-       Quem garante que o modal aparece uma vez só é o cliente, com uma marca no
-       navegador. É deliberado: gravar isso no servidor pediria coluna nova (e
-       migração) para um detalhe de interface. O preço é que um cliente antigo
-       abrindo em outra máquina veria uma boas-vindas fora de hora — some assim
-       que existir um `assinadoEm` de verdade. */
+       Quem garante que o modal aparece uma vez só é `boasVindasVistas`, logo
+       abaixo, e ela vem do BANCO. Era uma marca no navegador, e o preço disso
+       aparecia em toda guia anônima e em toda máquina nova: o assistente de
+       primeiro acesso recomeçava para quem já o tinha concluído. */
     const assinaturaAtiva = tenant.statusPagamento === "EM_DIA";
 
     return res.json({
@@ -599,6 +664,15 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
         diasExtensao: DIAS_DE_EXTENSAO,
         estendidoEm: tenant.trialEstendidoEm,
       },
+      /* Quais recepções esta conta já teve ("teste", "assinante"). Viaja junto
+         porque quem pergunta é o mesmo modal que já espera por esta resposta —
+         um endpoint separado o faria esperar duas idas ao banco em série,
+         justamente na montagem do painel. */
+      boasVindasVistas: tenant.boasVindasVistas || [],
+      /* Os módulos contratados. A aba de Plano lê daqui para saber se oferece
+         "contratar o Flow" ou "desativar" — e não da sessão, que pode estar de
+         antes da última mudança. */
+      modulos: modulosDoTenant(tenant),
       /* Só vai quando ainda está PENDENTE. Quem já importou (ou já disse que
          faz depois) não precisa ver a oferta de novo, e resolver isso aqui
          evita que cada tela que consome esta resposta refaça a mesma conta. */
@@ -611,6 +685,203 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
     return res.status(500).json({ error: "Erro ao carregar situação do teste." });
   }
 });
+
+/* ─── "Esta conta já foi recebida" ───────────────────────────────────────────
+
+   O desfecho do assistente de primeiro acesso (`BoasVindasModal`, no web).
+
+   MORA NO BANCO, e não no navegador, porque a pergunta é sobre a CONTA e não
+   sobre a máquina. Enquanto foi uma marca de `localStorage`, toda guia anônima,
+   todo navegador novo e todo computador diferente reabriam o assistente inteiro
+   — ficha da imobiliária, endereço da vitrine, importação da base — para quem
+   já tinha respondido tudo.
+
+   `verConfiguracoes` porque é exatamente quem VÊ o modal: as decisões que ele
+   toma (domínio, migração, plano) são de quem administra a conta, e o painel já
+   o esconde de todo mundo mais.
+
+   Idempotente e só ADITIVO: marcar duas vezes não muda nada, e uma recepção
+   nunca apaga a outra. Quem viu as do teste e depois assina continua tendo a de
+   assinante pela frente. */
+const MODOS_BOAS_VINDAS = ["teste", "assinante"];
+
+tenantRouter.post(
+  "/me/boas-vindas",
+  requireAuth,
+  requireTenant,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    const modo = String(req.body?.modo || "").trim();
+    if (!MODOS_BOAS_VINDAS.includes(modo)) {
+      return res.status(400).json({ error: "Modo de boas-vindas inválido." });
+    }
+
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: { boasVindasVistas: true },
+      });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      const vistas = tenant.boasVindasVistas || [];
+      if (vistas.includes(modo)) return res.json({ boasVindasVistas: vistas });
+
+      const atualizado = await prisma.tenant.update({
+        where: { id: req.tenant.id },
+        data: { boasVindasVistas: [...vistas, modo] },
+        select: { boasVindasVistas: true },
+      });
+      return res.json({ boasVindasVistas: atualizado.boasVindasVistas });
+    } catch (err) {
+      console.error("[POST /tenants/me/boas-vindas]", err);
+      return res.status(500).json({ error: "Erro ao registrar as boas-vindas." });
+    }
+  },
+);
+
+/* A frase que a tela mostra depois de contratar ou dispensar o Flow.
+
+   Mora aqui, e não na tela, porque ela é CONSEQUÊNCIA da operação: o que dizer
+   depende de a cobrança ter sido ajustada ou não, e de por que não. Escrevê-la
+   no navegador exigiria repetir lá esta mesma árvore de decisão — e ela mudaria
+   sozinha, do jeito errado, no dia em que um caso novo aparecesse aqui. */
+function montarAvisoDoAjuste(querFlow, ajuste) {
+  const oQueMudou = querFlow
+    ? "O Omnimob Flow já está disponível."
+    : "O Omnimob Flow foi desativado. Seus negócios e contratos continuam guardados, e voltam se você contratar de novo.";
+
+  if (ajuste.ajustada) {
+    /* O proporcional entra na PRÓXIMA fatura, e dizer isso é metade do
+       recado: sem a frase, quem contrata no dia 3 espera uma cobrança que não
+       vem, e quem cancela no dia 28 acha que não foi creditado. */
+    return querFlow
+      ? `${oQueMudou} A diferença proporcional aos dias que faltam entra na sua próxima fatura.`
+      : `${oQueMudou} O crédito proporcional aos dias já pagos entra na sua próxima fatura.`;
+  }
+  /* semMudanca não é falha: é o preço já sendo o certo (o cliente já estava
+     nessa combinação). Anunciar "o time vai acertar" aí criaria uma expectativa
+     de cobrança que não existe. */
+  if (ajuste.semMudanca) return oQueMudou;
+  return `${oQueMudou} ${ajuste.motivo}`;
+}
+
+/* ─── Contratar (ou dispensar) o Omnimob Flow ────────────────────────────────
+
+   O par de `/me/plano`, e com a MESMA honestidade sobre o que ele não faz.
+
+   Ele muda o que a imobiliária USA — `Tenant.modulos` —, e não o que ela PAGA.
+   Ajustar a assinatura no Stripe exigiria o id dela, que o schema não guarda em
+   lugar nenhum; enquanto essa coluna não existir, o valor da próxima fatura é
+   acertado pelo time.
+
+   ⚠ ISSO MUDOU: a coluna existe (`Tenant.assinaturaId`) e o ajuste é
+   automático. `ajustarAssinatura` aponta a assinatura para o preço do novo
+   pacote e deixa o Stripe calcular o proporcional, que entra na próxima
+   fatura. `cobrancaAjustada` continua no corpo e continua podendo vir
+   `false` — conta sem assinatura no provedor, preço não cadastrado, provedor
+   fora do ar —, e aí `aviso` diz o motivo em português.
+
+   ── POR QUE LIGAR NA HORA, EM VEZ DE SÓ ABRIR UM CHAMADO ──
+
+   Porque o contrário é pior nos dois sentidos. Quem quer o módulo hoje não
+   deveria esperar um dia útil por um interruptor que leva um segundo; e quem
+   quer SAIR dele muito menos — deixar alguém preso pagando por um módulo até
+   alguém responder o e-mail é o tipo de atrito que vira reclamação pública.
+
+   ── DESLIGAR NÃO APAGA NADA ──
+
+   Negócios, contratos e comissões continuam no banco. O que se fecha é o
+   acesso, e a resposta diz isso: quem volta a contratar reencontra o que
+   deixou. Apagar seria irreversível e ninguém pediu isso. */
+tenantRouter.post(
+  "/me/modulos",
+  requireAuth,
+  requireTenant,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    const querFlow = req.body?.flow === true;
+
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: { id: true, modulos: true, statusPagamento: true, assinaturaId: true },
+      });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      /* Em teste, o módulo vem junto do que a landing ofereceu e a troca é a
+         assinatura. Deixar o trial ligar o Flow por aqui daria produto de graça
+         — mesma guarda de `/me/plano`. */
+      if (tenant.statusPagamento === "TRIAL") {
+        return res.status(409).json({
+          error: "Sua conta ainda está em teste. Escolha o pacote ao assinar.",
+          code: "EM_TRIAL",
+        });
+      }
+
+      const atuais = modulosDoTenant(tenant);
+      const jaTem = atuais.includes("FLOW");
+      if (jaTem === querFlow) {
+        return res.status(400).json({
+          error: querFlow ? "O Flow já está ativo nesta conta." : "O Flow já não está ativo.",
+        });
+      }
+
+      const novos = querFlow
+        ? [...atuais, "FLOW"]
+        : atuais.filter((m) => m !== "FLOW");
+
+      const atualizado = await prisma.tenant.update({
+        where: { id: tenant.id },
+        data: { modulos: novos },
+        select: { id: true, modulos: true, plano: true },
+      });
+
+      /* ── A COBRANÇA, DEPOIS DO ACESSO ────────────────────────────────────
+         A ordem importa e é deliberada: o módulo é liberado PRIMEIRO, e o
+         ajuste da fatura vem em seguida.
+
+         Se o provedor recusar, o cliente fica com o que pediu e o valor é
+         acertado à mão — que é o pior desfecho aceitável. Na ordem inversa, uma
+         falha no Stripe deixaria alguém que clicou em "contratar" sem o módulo
+         e sem saber por quê.
+
+         `ajustarAssinatura` nunca lança: ela devolve o motivo em português. */
+      const ajuste = await ajustarAssinatura({
+        tenant: { id: tenant.id, assinaturaId: tenant.assinaturaId },
+        plano: atualizado.plano || "BASICO",
+        pacote: querFlow ? "HUB_FLOW" : "HUB",
+      });
+
+      /* Conta antiga não tinha o id guardado; a busca achou e agora ele fica.
+         É o que faz o próximo ajuste ser instantâneo, sem backfill. */
+      if (ajuste.assinaturaId && ajuste.assinaturaId !== tenant.assinaturaId) {
+        await prisma.tenant.update({
+          where: { id: tenant.id },
+          data: { assinaturaId: ajuste.assinaturaId },
+        }).catch(() => {});
+      }
+      if (ajuste.ajustada && ajuste.valorMensal != null) {
+        await prisma.tenant.update({
+          where: { id: tenant.id },
+          data: { valorMensal: ajuste.valorMensal },
+        }).catch(() => {});
+      }
+
+      return res.json({
+        modulos: atualizado.modulos,
+        cobrancaAjustada: ajuste.ajustada,
+        /* O que a tela diz depois de gravar. Vem do servidor porque é
+           consequência da operação: a frase muda conforme a cobrança tenha sido
+           ajustada ou não, e escrevê-la na tela exigiria repetir lá a mesma
+           árvore de decisão. */
+        aviso: montarAvisoDoAjuste(querFlow, ajuste),
+      });
+    } catch (err) {
+      console.error("[POST /tenants/me/modulos]", err);
+      return res.status(500).json({ error: "Erro ao alterar os módulos." });
+    }
+  },
+);
 
 /* ─── Pesquisa espontânea do teste ───────────────────────────────────────────
    Resposta do modal que aparece sozinho depois de a pessoa cadastrar ou editar
@@ -746,9 +1017,13 @@ tenantRouter.post("/me/migracao/resolvida", requireAuth, requireTenant, async (r
    ATENÇÃO — O QUE ESTA ROTA NÃO FAZ: ela muda o que o cliente USA, não o que
    ele PAGA. Ajustar a assinatura no Stripe exige o id dela, e o schema não o
    guarda em lugar nenhum (`criarAssinatura` devolve `assinaturaId` e ninguém
-   persiste). Enquanto essa coluna não existir, o valor da próxima fatura é
-   acertado pelo time — e a resposta diz isso em `cobrancaAjustada: false` para
-   a tela não prometer o que não aconteceu. */
+   persiste).
+
+   ⚠ ISSO MUDOU: a coluna existe (`Tenant.assinaturaId`) e a fatura é ajustada
+   aqui também. O pacote NÃO muda numa troca de plano — quem tinha o Flow
+   continua com ele —, então o preço-alvo é o do mesmo pacote no plano novo.
+   `cobrancaAjustada` segue no corpo, e `motivoCobranca` explica quando ele
+   vem `false`. */
 tenantRouter.post(
   "/me/plano",
   requireAuth,
@@ -811,10 +1086,42 @@ tenantRouter.post(
       const atualizado = await prisma.tenant.update({
         where: { id: tenant.id },
         data: { plano },
-        select: { id: true, plano: true, statusPagamento: true, valorMensal: true, proximoVencimento: true },
+        select: { id: true, plano: true, statusPagamento: true, valorMensal: true, proximoVencimento: true, modulos: true, assinaturaId: true },
       });
 
-      return res.json({ tenant: atualizado, cobrancaAjustada: false, perdasAplicadas: perdas });
+      /* ── E A FATURA ACOMPANHA ────────────────────────────────────────────
+         Era aqui que o comentário no alto desta rota dizia "enquanto essa
+         coluna não existir, o valor é acertado pelo time". A coluna existe.
+
+         O pacote é o que a conta JÁ TEM — trocar de plano não mexe nos módulos,
+         então quem tinha o Flow continua com ele e o preço-alvo é o do pacote
+         completo no plano novo. */
+      const temFlow = modulosDoTenant(atualizado).includes("FLOW");
+      const ajuste = await ajustarAssinatura({
+        tenant: { id: tenant.id, assinaturaId: atualizado.assinaturaId },
+        plano,
+        pacote: temFlow ? "HUB_FLOW" : "HUB",
+      });
+
+      const remendo = {};
+      if (ajuste.assinaturaId && ajuste.assinaturaId !== atualizado.assinaturaId) {
+        remendo.assinaturaId = ajuste.assinaturaId;
+      }
+      if (ajuste.ajustada && ajuste.valorMensal != null) remendo.valorMensal = ajuste.valorMensal;
+      if (Object.keys(remendo).length) {
+        await prisma.tenant.update({ where: { id: tenant.id }, data: remendo }).catch(() => {});
+        Object.assign(atualizado, remendo);
+      }
+
+      return res.json({
+        tenant: atualizado,
+        cobrancaAjustada: ajuste.ajustada,
+        /* O motivo quando NÃO ajustou. A tela precisa dele: "a cobrança será
+           acertada pelo time" e "ainda não há preço para esta combinação" pedem
+           reações diferentes de quem lê. */
+        motivoCobranca: ajuste.ajustada ? null : ajuste.motivo,
+        perdasAplicadas: perdas,
+      });
     } catch (err) {
       console.error("[POST /tenants/me/plano]", err);
       return res.status(500).json({ error: "Erro ao trocar o plano." });
@@ -840,7 +1147,7 @@ tenantRouter.post(
   requireTenantMesmoSuspenso,
   requirePermissao("verConfiguracoes"),
   async (req, res) => {
-    const { plano, periodo, meio, tokenPagamento } = req.body || {};
+    const { plano, periodo, pacote, meio, tokenPagamento } = req.body || {};
     if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
       return res.status(400).json({ error: "Plano inválido." });
     }
@@ -862,8 +1169,8 @@ tenantRouter.post(
       if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
 
       const r = meio === "boleto"
-        ? await criarAssinaturaBoleto({ tenant, plano, periodo, tokenPagamento })
-        : await criarAssinaturaPix({ tenant, plano, periodo });
+        ? await criarAssinaturaBoleto({ tenant, plano, periodo, pacote, tokenPagamento })
+        : await criarAssinaturaPix({ tenant, plano, periodo, pacote });
       return res.json(r);
     } catch (err) {
       if (
@@ -893,23 +1200,34 @@ tenantRouter.post(
      concluir a compra. */
   requirePermissao("verConfiguracoes"),
   async (req, res) => {
-    const { plano, periodo, tokenPagamento } = req.body || {};
+    const { plano, periodo, pacote, tokenPagamento } = req.body || {};
     if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
       return res.status(400).json({ error: "Plano inválido." });
     }
     // Período desconhecido não é erro: cai no mensal, que é o que sempre houve.
     const periodoEscolhido = normalizarPeriodo(periodo);
+    /* Pacote desconhecido cai no HUB — o padrão seguro é o que a conta sempre
+       teve, e nunca o que custa mais caro. Ver `normalizarPacote`. */
+    const pacoteEscolhido = normalizarPacote(pacote);
 
     try {
       const tenant = await prisma.tenant.findUnique({ where: { id: req.tenant.id } });
       if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
 
-      const assinatura = await criarAssinatura({ tenant, plano, periodo: periodoEscolhido, tokenPagamento });
+      const assinatura = await criarAssinatura({ tenant, plano, periodo: periodoEscolhido, pacote: pacoteEscolhido, tokenPagamento });
 
       const atualizado = await fidelizarTrial(tenant.id, {
         plano,
         valorMensal: assinatura.valorMensal,
         proximoVencimento: assinatura.proximoVencimento,
+        /* É AQUI que o Flow é entregue. O pacote escolhido vira a lista de
+           módulos da conta, e é ela que abre o seletor na barra lateral e as
+           rotas `/flow/*`. Sem esta linha, a pessoa pagaria pelo pacote com
+           Flow e continuaria vendo só o Hub. */
+        modulos: modulosDoPacote(pacoteEscolhido),
+        /* Guardado agora, e não numa varredura depois: é a única vez em que
+           temos o id na mão sem precisar procurar no provedor. */
+        assinaturaId: assinatura.assinaturaId,
       });
 
       /* Confirmação por escrito: a tela de comemoração some quando a pessoa
@@ -931,6 +1249,10 @@ tenantRouter.post(
           urlVitrine: enderecoDaVitrine(tenant, (process.env.APP_URL || "").replace(/\/+$/, "")),
           imobiliaria: tenant.name,
           plano: info?.nome || plano,
+          /* O pacote escolhido, para o e-mail confirmar por escrito que o Flow
+             veio junto. Sai da mesma fonte que gravou `Tenant.modulos` — e não
+             de uma releitura do tenant, que ainda pode estar em cache. */
+          modulos: modulosDoPacote(pacoteEscolhido),
           /* No anual o que foi cobrado é o ano inteiro; anunciar o valor
              mensal aqui faria o e-mail contradizer a fatura do cartão. */
           valorRotulo: assinatura.valorCobrado

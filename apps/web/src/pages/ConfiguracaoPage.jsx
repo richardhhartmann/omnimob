@@ -20,6 +20,9 @@ import { TEMAS } from "../utils/temaDoPainel";
 import { EditorDeAtalhos } from "../components/EditorDeAtalhos.jsx";
 import { apenasMudancas } from "../utils/atalhos";
 import { Keyboard } from "@phosphor-icons/react";
+import { FLOW, modulosDoTenant } from "../utils/modulos";
+import { SecaoFlow } from "../components/flow/SecaoFlow.jsx";
+import { ToggleDoFlow } from "../components/ToggleDoFlow.jsx";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -166,6 +169,45 @@ function Campo({ label, hint, children }) {
 /* Classes em vez de só estilo inline: o tema claro precisa de um gancho para
    trocar fundo e borda, e `rgba(255,255,255,α)` inline é invisível sobre fundo
    claro. O layout continua inline; virou classe só o que muda com o tema. */
+/* ── O cartão do Omnimob Flow na aba de Plano ────────────────────────────────
+
+   Dois estados, e o texto muda inteiro entre eles: quem NÃO tem precisa saber o
+   que o módulo faz; quem TEM precisa de uma saída sem falar com ninguém.
+
+   Não aparece em conta de teste. Lá o pacote é escolhido na assinatura, e
+   oferecer "contratar" a quem ainda não paga nada seria vender duas vezes.
+
+   ⚠ O valor da fatura NÃO é ajustado aqui — a resposta do servidor traz
+   `cobrancaAjustada: false` e o aviso que a tela exibe diz isso em português.
+   É a mesma limitação da troca de plano, pela mesma razão: o id da assinatura
+   no Stripe não é guardado em lugar nenhum do schema. */
+function CartaoDoFlow({ temFlow, ocupado, pode, aoAlternar }) {
+  /* O MESMO interruptor da landing, do assinar e da parede de reativação.
+
+     Aqui ele grava de IMEDIATO — não existe um botão de confirmar depois —, e é
+     por isso que a `nota` carrega o aviso que as outras três telas não precisam
+     dar: nas outras a escolha ainda vai passar pelo cartão; nesta ela já vale, e
+     a fatura acompanha. */
+  return (
+    <div className="cfg-flow">
+      <ToggleDoFlow
+        id="pkg-config"
+        ligado={temFlow}
+        ocupado={ocupado}
+        desabilitado={!pode}
+        aoAlternar={aoAlternar}
+        nota={
+          !pode
+            ? "Só quem administra a conta pode contratar ou dispensar módulos."
+            : temFlow
+              ? "Ativo. Ao desmarcar, os negócios e contratos continuam guardados — o que se fecha é o acesso, e o crédito proporcional entra na próxima fatura."
+              : "Ao marcar, o módulo é liberado na hora e a diferença proporcional aos dias que faltam entra na sua próxima fatura."
+        }
+      />
+    </div>
+  );
+}
+
 function Secao({ icone, titulo, cor, children }) {
   const accent = cor || "rgba(99,102,241,0.7)";
   return (
@@ -426,7 +468,10 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
     }
   }
 
-  const abas = abasVisiveis(session?.usuario?.cargo, session?.tenant?.plano, { podeImportar });
+  const abas = abasVisiveis(session?.usuario?.cargo, session?.tenant?.plano, {
+    podeImportar,
+    temFlow: modulosDoTenant(session?.tenant).includes(FLOW),
+  });
   const pedida = searchParams.get("ver");
   const tab = abas.some((a) => a.key === pedida) ? pedida : "MENU";
   const setTab = (proxima) => setSearchParams(proxima === "MENU" ? {} : { ver: proxima });
@@ -442,6 +487,10 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
      ──────────────────────────────────────────────────────────────────────── */
   const [cobranca, setCobranca] = useState(null); // { emTrial, precos, ... }
   const [trocandoPlano, setTrocandoPlano] = useState("");
+  /* O add-on do Flow, nesta tela. Separado de `trocandoPlano` porque são duas
+     operações distintas com duas rotas distintas — juntá-las num estado só
+     desabilitaria os cartões de plano enquanto o Flow grava, e vice-versa. */
+  const [mexendoNoFlow, setMexendoNoFlow] = useState(false);
   const [planoMsg, setPlanoMsg] = useState(null);  // { tipo, texto }
   /* Cancelamento em duas etapas, espelhando a rota: `confirmarCancelamento`
      guarda o que o servidor respondeu no ensaio (até quando o acesso vale) e é
@@ -512,6 +561,33 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   /* Troca de plano de cliente pagante. O aviso sobre a cobrança está no texto da
      confirmação porque é a única hora em que a pessoa ainda pode desistir — e é
      verdade que o produto muda agora e a fatura não. */
+  async function alternarFlow(querFlow) {
+    if (mexendoNoFlow) return;
+    if (!querFlow && !window.confirm(
+      "Desativar o Omnimob Flow? Os negócios, contratos e comissões continuam guardados — " +
+      "o que se fecha é o acesso, e ele volta se você contratar de novo."
+    )) return;
+
+    setMexendoNoFlow(true);
+    setPlanoMsg(null);
+    try {
+      const r = await api.contratarFlow(tenantSlug, querFlow);
+      /* A sessão carrega os módulos, e é ela que decide o seletor da barra
+         lateral. Sem repassar, a pessoa contrataria o Flow e continuaria sem
+         ver o seletor até sair e entrar. */
+      onSessionUpdate?.({
+        ...session,
+        tenant: { ...session.tenant, modulos: r.modulos },
+      });
+      setCobranca((c) => (c ? { ...c, modulos: r.modulos } : c));
+      setPlanoMsg({ tipo: "ok", texto: r.aviso });
+    } catch (e) {
+      setPlanoMsg({ tipo: "error", texto: e.message || "Não consegui alterar os módulos." });
+    } finally {
+      setMexendoNoFlow(false);
+    }
+  }
+
   async function trocarPlano(destino) {
     const de = planoInfo(plano);
     const para = planoInfo(destino);
@@ -521,7 +597,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
       (subindo
         ? `Os recursos do ${para.nome} passam a valer imediatamente. `
         : `Os recursos exclusivos do ${de.nome} deixam de aparecer imediatamente. `) +
-      "O valor da próxima fatura é ajustado pelo nosso time — a cobrança não muda sozinha aqui.",
+      "A diferença proporcional aos dias que faltam entra na sua próxima fatura.",
       subindo ? "Fazer upgrade" : "Fazer downgrade",
       // Downgrade tira recurso de quem está usando; upgrade não é perigo nenhum.
       subindo ? "primary" : "danger",
@@ -531,16 +607,27 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
     setTrocandoPlano(destino);
     setPlanoMsg(null);
     try {
-      await api.trocarPlano(tenantSlug, destino);
+      const r = await api.trocarPlano(tenantSlug, destino);
       setPlano(destino);
       // A sessão carrega o plano e é ela que libera recursos nas outras telas;
       // sem sincronizar, o painel só mudaria no próximo login.
       if (onSessionUpdate && session?.tenant) {
         onSessionUpdate({ ...session, tenant: { ...session.tenant, plano: destino } });
       }
+      /* ── A MENSAGEM SEGUE O QUE O SERVIDOR FEZ ──────────────────────────
+         Ela dizia "vamos ajustar a cobrança" em todos os casos, porque o ajuste
+         nunca acontecia. Agora acontece na maioria — e continuar prometendo
+         intervenção humana faria o cliente esperar um contato que não vem.
+
+         Quando NÃO ajusta (conta sem assinatura no provedor, preço não
+         cadastrado, provedor fora do ar), o servidor manda o motivo em
+         `motivoCobranca` e é ele que aparece. Inventar a frase aqui exigiria
+         repetir a árvore de decisão do servidor no navegador. */
       setPlanoMsg({
         tipo: "success",
-        texto: `Plano alterado para ${para.nome}. Vamos ajustar a cobrança e confirmar por e-mail.`,
+        texto: r?.cobrancaAjustada
+          ? `Plano alterado para ${para.nome}. A diferença proporcional entra na sua próxima fatura.`
+          : `Plano alterado para ${para.nome}. ${r?.motivoCobranca || "O valor será acertado pelo nosso time."}`,
       });
     } catch (err) {
       setPlanoMsg({ tipo: "error", texto: err.message || "Não foi possível trocar o plano." });
@@ -1391,6 +1478,29 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             <ImportadorDados session={session} />
           </Secao>
           </>)}
+
+          {/* ── O add-on do Flow, na tela onde se decide o que se paga ─────
+              Fica na aba de Plano e não na do Flow de propósito: aquela é sobre
+              CONFIGURAR o módulo (provedor de assinatura, comissão) e só existe
+              para quem já o tem. A decisão de contratar é uma decisão de plano,
+              e mora ao lado das outras. */}
+          {tab === "plano" && cobranca && !cobranca.emTrial ? (
+            <CartaoDoFlow
+              temFlow={(cobranca.modulos || []).includes("FLOW")}
+              ocupado={mexendoNoFlow}
+              pode={podeTrocarPlano}
+              aoAlternar={alternarFlow}
+            />
+          ) : null}
+
+          {tab === "flow" && (
+            /* A seção do Flow mora num componente próprio, e não inline como as
+               outras: ela tem estado próprio (o token, os percentuais, a prévia
+               do split) e acrescentaria ~200 linhas a uma página que já tem
+               mil e quinhentas. `Secao` vai por prop para o desenho continuar
+               sendo o mesmo das outras abas — é a moldura desta tela. */
+            <SecaoFlow session={session} Secao={Secao} showToast={showToast} />
+          )}
 
           {tab === "plano" && (<>
           {/* Plano e recursos */}

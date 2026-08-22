@@ -488,7 +488,7 @@ export async function registrarPesquisa({ tenantId, autor = "", sentimento = nul
 }
 
 /** Converte um trial em cliente pagante. É só virar a chave. */
-export async function fidelizarTrial(tenantId, { plano, valorMensal, proximoVencimento } = {}) {
+export async function fidelizarTrial(tenantId, { plano, valorMensal, proximoVencimento, modulos, assinaturaId } = {}) {
   const prisma = getGlobalPrisma();
   return prisma.tenant.update({
     where: { id: tenantId },
@@ -502,6 +502,22 @@ export async function fidelizarTrial(tenantId, { plano, valorMensal, proximoVenc
       ...(plano ? { plano } : {}),
       ...(valorMensal != null && valorMensal !== "" ? { valorMensal: Number(valorMensal) } : {}),
       ...(proximoVencimento ? { proximoVencimento: new Date(proximoVencimento) } : {}),
+      /* ── OS MÓDULOS CONTRATADOS ─────────────────────────────────────────
+         Vêm do PACOTE escolhido na assinatura (`modulosDoPacote`), e só quando
+         a assinatura os informa. Ausente NÃO significa "só o Hub": significa
+         "esta chamada não é sobre módulos" — uma reativação de conta suspensa
+         passa por aqui, e reduzi-la ao Hub tiraria o Flow de quem já pagava
+         por ele, em silêncio, no exato momento em que a pessoa voltou. */
+      ...(Array.isArray(modulos) && modulos.length ? { modulos } : {}),
+      /* O id da assinatura no provedor. É ele que permite MEXER na cobrança
+         depois — trocar de plano ou contratar o Flow no meio do ciclo. Nunca foi
+         guardado, e por isso as duas operações respondiam
+         `cobrancaAjustada: false`.
+
+         Só grava quando vem: uma reativação de conta suspensa passa por aqui
+         sem criar assinatura nova, e apagar o id existente cortaria o caminho de
+         volta justamente de quem acabou de voltar. */
+      ...(assinaturaId ? { assinaturaId } : {}),
     },
   });
 }

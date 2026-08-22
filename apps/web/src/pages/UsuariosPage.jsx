@@ -6,6 +6,7 @@ import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, 
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { CargoEmLinha } from "../components/CargoEmLinha.jsx";
+import { FLOW, modulosDoTenant } from "../utils/modulos";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 
@@ -389,6 +390,7 @@ export function UsuariosPage({ session }) {
               valor={form.cargoCodigo}
               cargos={cargos}
               plano={session?.tenant?.plano}
+              temFlow={modulosDoTenant(session?.tenant).includes(FLOW)}
               tenantSlug={tenantSlug}
               disabled={loading}
               aoTrocar={(v) => setForm((p) => ({ ...p, cargoCodigo: v }))}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus, X } from "@phosphor-icons/react";
 import { api } from "../api";
 import { SelectCustom } from "./SelectCustom";
-import { PERMISSOES_DE_RISCO, cargoVazio } from "../utils/permissoesCargo.jsx";
+import { PERMISSOES_DE_RISCO, cargoVazio, gruposDePermissao } from "../utils/permissoesCargo.jsx";
 import { ModalCiencia } from "./ModalCiencia";
 import { GradeDePermissoes } from "./GradeDePermissoes.jsx";
 
@@ -25,14 +25,31 @@ import { GradeDePermissoes } from "./GradeDePermissoes.jsx";
    desenho inteiro. Antes cada tela tinha o seu, e elas já tinham divergido —
    esta aqui nem mostrava o ícone de cada permissão.
 
-   ── `verConfiguracoes` NÃO APARECE ──
+   ── `verConfiguracoes` NÃO APARECE COMO CAIXA ──
 
    Ela não é escolha: o servidor a recalcula a cada gravação a partir do nome do
    cargo. Um cargo chamado "Administrador" a ganha; qualquer outro, não. Mostrar
    a caixa aqui prometeria um controle que não existe.
+
+   Na PRÉVIA ela aparece, e não é contradição: lá a pergunta é outra — não "o
+   que eu decido?", e sim "o que esta pessoa vai alcançar?". Configurações reúne
+   plano, cobrança e domínio, e omiti-la faria a prévia mentir por baixo
+   justamente sobre o acesso mais sensível da casa.
+
+   ── A PRÉVIA DO CARGO ESCOLHIDO ──
+
+   Escolher o cargo de alguém era escolher às cegas: o combo dizia "Corretor
+   sênior" e mais nada, e a única forma de saber o que aquilo abre era abandonar
+   o cadastro e ir até a tela de Cargos. A prévia responde ali mesmo, e responde
+   nos dois sentidos — o que o cargo alcança e o que ele NÃO alcança.
+
+   Vale também para o cargo recém-criado pelo `+`: ele entra na lista e é
+   selecionado, então a prévia o descreve como descreveria qualquer outro. Não
+   há caminho especial para esse caso, e é de propósito — um segundo caminho é
+   como as duas metades divergem.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function CargoEmLinha({ valor, cargos, plano, tenantSlug, disabled, aoTrocar, aoCriar, aoAvisar }) {
+export function CargoEmLinha({ valor, cargos, plano, tenantSlug, temFlow = false, disabled, aoTrocar, aoCriar, aoAvisar }) {
   const [aberto, setAberto] = useState(false);
   const [form, setForm] = useState(cargoVazio);
   const [salvando, setSalvando] = useState(false);
@@ -85,6 +102,22 @@ export function CargoEmLinha({ valor, cargos, plano, tenantSlug, disabled, aoTro
     }
   }
 
+  /* O cargo escolhido, tal como o servidor o devolveu — com todas as
+     permissões e o `ehAdministrador` já calculado por ele (ver `cargoRoutes`).
+     Deduzir "é o Administrador?" aqui pelo nome seria a segunda cópia de uma
+     regra que já mora num lugar só. */
+  const escolhido = valor ? cargos.find((c) => String(c.id) === String(valor)) : null;
+
+  const previa = (() => {
+    if (!escolhido) return null;
+    /* A conta soma os DOIS grupos quando a conta tem o Flow. "4 de 9" numa
+       imobiliária com dezesseis permissões possíveis seria um número errado no
+       lugar mais visível da prévia. */
+    const itens = gruposDePermissao(plano, { temFlow }).flatMap((g) => g.itens);
+    const ligadas = itens.filter((p) => escolhido[p.key]).length;
+    return { total: itens.length, ligadas };
+  })();
+
   const risco = concessaoPendente ? PERMISSOES_DE_RISCO[concessaoPendente] : null;
   const nomeDoCargo = form.descricao.trim();
   const alvoDoAviso = nomeDoCargo ? `ao cargo "${nomeDoCargo}"` : "a este cargo";
@@ -128,6 +161,44 @@ export function CargoEmLinha({ valor, cargos, plano, tenantSlug, disabled, aoTro
         </button>
       </div>
 
+      {/* ── O que o cargo escolhido alcança ─────────────────────────────────
+          Fica FORA do formulário de criação: enquanto o `+` está aberto, quem
+          descreve o cargo são as caixas ali dentro, e uma segunda lista ao lado
+          delas — de outro cargo — só confundiria. */}
+      {!aberto && escolhido ? (
+        <div className="cel-previa">
+          <div className="cel-previa__topo">
+            <span className="cel-previa__titulo">
+              O que <strong>{escolhido.descricao}</strong> alcança
+            </span>
+            <span className="cel-previa__conta">
+              {previa.ligadas} de {previa.total}
+            </span>
+          </div>
+
+          <GradeDePermissoes plano={plano} temFlow={temFlow} valores={escolhido} somenteLeitura />
+
+          {/* Configurações não é caixa de ninguém: o servidor a concede pelo
+              NOME do cargo. Dizer isso aqui evita a leitura errada de que ela
+              foi esquecida na hora de montar o cargo. */}
+          <p className="cel-previa__nota">
+            {escolhido.ehAdministrador ? (
+              <>
+                Abre também <strong>Configurações</strong> — plano, cobrança e domínio —, que é
+                automático para o cargo Administrador.
+              </>
+            ) : (
+              <>
+                Não abre <strong>Configurações</strong> (plano, cobrança e domínio): só o cargo
+                Administrador a recebe, e isso não é uma caixa que se marque.
+              </>
+            )}{" "}
+            Para mudar o que este cargo alcança, vá em <strong>Cargos</strong> — a alteração vale
+            para todo mundo que o tem.
+          </p>
+        </div>
+      ) : null}
+
       {aberto ? (
         <div className="cel-form">
           <label className="cel-campo">
@@ -148,6 +219,7 @@ export function CargoEmLinha({ valor, cargos, plano, tenantSlug, disabled, aoTro
                 "próprio cargo" de quem editar. */}
             <GradeDePermissoes
               plano={plano}
+              temFlow={temFlow}
               valores={form}
               desabilitado={salvando}
               aoAlternar={aoAlternarPermissao}

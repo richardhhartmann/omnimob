@@ -50,6 +50,10 @@ const PLANO_OPCOES = PLANOS.map((p) => ({
 const EMPTY_FORM = {
   name: "", slug: "", email: "", whatsapp: "", plano: "",
   statusPagamento: "TRIAL", valorMensal: "", proximoVencimento: "",
+  /* O add-on do Omnimob Flow. Nasce DESLIGADO, e é o padrão certo: este campo
+     decide o que a conta paga, e um esquecimento com o padrão invertido entrega
+     o módulo de graça. */
+  temFlow: false,
 };
 
 // ─── Endereço da vitrine ─────────────────────────────────────────────────────
@@ -269,6 +273,7 @@ export function SuperAdminPage({ session, onLogout }) {
     setForm({
       name: t.name || "", slug: t.slug || "", email: t.email || "", whatsapp: t.whatsapp || "",
       plano: t.plano || "", statusPagamento: t.statusPagamento || "TRIAL",
+      temFlow: Array.isArray(t.modulos) && t.modulos.includes("FLOW"),
       valorMensal: t.valorMensal ?? "", proximoVencimento: toDateInput(t.proximoVencimento),
     });
     setFormError("");
@@ -297,6 +302,11 @@ export function SuperAdminPage({ session, onLogout }) {
       const payload = {
         name: form.name, email: form.email, whatsapp: form.whatsapp, plano: form.plano,
         statusPagamento: form.statusPagamento,
+        /* Sempre a lista COMPLETA, e não só o que mudou: o servidor grava o
+           array inteiro, então mandar apenas `["FLOW"]` tiraria o Hub da conta.
+           O Hub é garantido do lado de lá também (`modulosDoCorpo`), mas mandar
+           certo daqui é o que mantém a intenção legível. */
+        modulos: form.temFlow ? ["HUB", "FLOW"] : ["HUB"],
         valorMensal: form.valorMensal === "" ? null : Number(form.valorMensal),
         proximoVencimento: form.proximoVencimento || null,
       };
@@ -597,6 +607,35 @@ export function SuperAdminPage({ session, onLogout }) {
                   </Field>
                 </div>
 
+                {/* ── O add-on do Flow ────────────────────────────────────
+                    Fora da grade de campos e com uma linha explicando o que
+                    ele entrega: é a única escolha deste formulário que muda o
+                    PRODUTO, e não um dado cadastral. Numa célula ao lado de
+                    "Valor mensal" ela leria como mais um campo de preenchimento.
+
+                    Ao TIRAR o Flow de uma conta que o tinha, nada é apagado —
+                    negócios, contratos e comissões continuam no banco. O que
+                    some é o acesso. O aviso está aqui porque quem desmarca a
+                    caixa precisa saber disso antes de salvar. */}
+                <label className="sa-addon">
+                  <input
+                    type="checkbox"
+                    className="sw"
+                    checked={form.temFlow}
+                    onChange={(e) => setField("temFlow", e.target.checked)}
+                  />
+                  <span>
+                    <strong>Incluir o Omnimob Flow</strong>
+                    <small>
+                      Captação por webhook, funil de negócios, minutas contratuais, assinatura
+                      digital e comissão. Sem isto a conta fica só com o Hub.
+                      {editingId && !form.temFlow
+                        ? " Ao remover, os negócios e contratos continuam guardados — só o acesso é fechado."
+                        : ""}
+                    </small>
+                  </span>
+                </label>
+
                 {!editingId ? (
                   <p className="dl-mono sa-modal__extra-label">
                     // o acesso do administrador é criado junto, com senha provisória e troca
@@ -631,6 +670,19 @@ export function SuperAdminPage({ session, onLogout }) {
 /* Só o que é DESTA aba. A moldura — fundo, topbar, sidebar — mora no
    `AdminShell`, junto do JSX que a usa. */
 const CSS = `
+/* ── O add-on do Flow, no formulario de tenant ──────────────────────────────
+   Fora da grade de campos de proposito: e a unica escolha deste formulario que
+   muda o PRODUTO, e nao um dado cadastral. Numa celula ao lado de "Valor
+   mensal" ela leria como mais um campo de preenchimento.
+   (Sem crases nestes comentarios: template literal.) */
+.sa-addon {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-top: 18px; padding: 14px 16px; border-radius: 12px; cursor: pointer;
+  background: rgba(20,184,166,0.06); border: 1px solid rgba(20,184,166,0.22);
+}
+.sa-addon > span { display: flex; flex-direction: column; gap: 3px; }
+.sa-addon strong { font-size: 13.5px; }
+.sa-addon small { font-size: 12px; line-height: 1.55; color: var(--subtle, #b6b6c2); }
 .sa-head { margin-bottom: 34px; }
 .sa-title { max-width: 22ch; }
 .sa-stats { margin-top: 4px; }

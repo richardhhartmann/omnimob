@@ -321,6 +321,99 @@ model Tenant {
    */
   trialEstendidoEm DateTime? @map("tnt_trial_estendido_em")
 
+  /**
+   * ─── A ASSINATURA NO PROVEDOR ──────────────────────────────────────────────
+   *
+   * O id da subscription no Stripe. Sem ele não dá para MEXER numa assinatura
+   * viva — trocar de plano ou contratar o Flow no meio do ciclo exige apontar
+   * para o objeto lá dentro, e até aqui o produto não sabia qual era: as duas
+   * rotas respondiam `cobrancaAjustada: false` e o valor era acertado à mão.
+   *
+   * ── E POR QUE UMA COLUNA, SE JÁ HÁ A BUSCA POR METADATA ──
+   *
+   * `cobrancaEmAberto` acha a assinatura por `metadata.tenantId` e o comentário
+   * de lá argumenta contra esta coluna — "mais uma coisa para sair de sincronia
+   * com a verdade, que mora lá". O argumento continua valendo para LEITURA.
+   *
+   * Para ESCRITA ele não basta, por dois motivos: o índice de busca do Stripe é
+   * eventualmente consistente (a documentação fala em até um minuto de atraso),
+   * e uma assinatura recém-criada pode simplesmente não aparecer; e a busca é
+   * uma chamada de rede a mais no caminho de uma operação que já faz duas.
+   *
+   * O arranjo usa os dois: a coluna é o caminho rápido, a busca é o resgate
+   * quando ela está vazia — e o resultado da busca é GRAVADO aqui. Ou seja,
+   * conta antiga se conserta sozinha no primeiro ajuste. E coluna velha não
+   * mente por muito tempo: quem for usá-la lê a assinatura no provedor antes de
+   * escrever, então um id morto vira "não achei" e cai na busca.
+   */
+  assinaturaId String? @map("tnt_assinatura_id")
+
+  /**
+   * Quais boas-vindas do painel esta imobiliária já recebeu: "teste" e/ou
+   * "assinante" (ver `BoasVindasModal`, no web).
+   *
+   * Estava no `localStorage`, e o custo aparecia toda vez que alguém entrava de
+   * outra máquina, de outro navegador ou de uma janela anônima: o assistente de
+   * primeiro acesso voltava do zero — a ficha da imobiliária, o endereço da
+   * vitrine, a importação da base — para quem já tinha respondido tudo. Marca de
+   * navegador não responde "esta CONTA já foi recebida?", ela responde "este
+   * navegador já viu?", que é outra pergunta.
+   *
+   * Lista e não booleano porque são duas recepções distintas, com mensagens
+   * distintas: quem viu as do teste e depois assina precisa ver as de
+   * assinante. Lista e não duas colunas porque um terceiro momento (renovou,
+   * mudou de plano) entra sem migração.
+   */
+  boasVindasVistas String[] @default([]) @map("tnt_boas_vindas_vistas")
+
+  /**
+   * ─── OS MÓDULOS QUE ESTA IMOBILIÁRIA CONTRATOU ─────────────────────────────
+   *
+   * O produto deixou de ser uma coisa só. `HUB` é tudo que existia até aqui —
+   * acervo, vitrine, leads, equipe, relatórios. `FLOW` é a operação comercial:
+   * captação por webhook, funil de negócios, minutas, assinatura digital e
+   * comissão.
+   *
+   * LISTA, e não um booleano `temFlow`. O terceiro módulo é uma string nova
+   * aqui e nada mais — enquanto um booleano por módulo vira uma coluna por
+   * módulo, e a pergunta "o que esta conta tem?" passa a exigir ler todas.
+   *
+   * `HUB` sempre presente na prática (é onde o cadastro vive), mas não é
+   * imposto pelo banco: uma imobiliária que um dia só use o Flow é um cenário
+   * de negócio plausível, e um `@default` que mente sobre isso seria pior que
+   * um `@default` que só descreve o começo.
+   *
+   * Quem contratou é o TENANT; quem alcança é o CARGO (`Cargo.acessarFlow`).
+   * As duas perguntas são diferentes e as duas precisam ser sim.
+   */
+  modulos ModuloOmnimob[] @default([HUB]) @map("tnt_modulos")
+
+  /**
+   * Percentual padrão de comissão da imobiliária sobre o valor do negócio, e
+   * quanto desse percentual fica com o corretor. Padrões do mercado brasileiro:
+   * 6% de comissão, metade para quem vendeu.
+   *
+   * São PADRÕES, não regra: cada negócio pode ter o seu (ver `Negocio`). Ter os
+   * dois aqui é o que faz o cálculo automático ter de onde partir sem obrigar
+   * quem cadastra a digitar percentual em todo negócio.
+   */
+  comissaoPercentual   Decimal @default(6) @map("tnt_comissao_percentual") @db.Decimal(5, 2)
+  comissaoCorretorPerc Decimal @default(50) @map("tnt_comissao_corretor_perc") @db.Decimal(5, 2)
+
+  /**
+   * Credenciais do provedor de assinatura digital DESTA imobiliária.
+   * Cifradas em repouso pelo `services/cofre.js`, como o token da página do
+   * Facebook, e filtradas na saída por `SEGREDOS_DO_TENANT`.
+   *
+   * Por tenant e não global: quem assina o contrato é a imobiliária, em nome
+   * dela, com a conta dela na Clicksign ou na DocuSign. Uma credencial nossa
+   * faria todo contrato do país sair assinado pela Omnimob.
+   */
+  assinaturaProvedor String? @map("tnt_assinatura_provedor")
+  assinaturaToken    String? @map("tnt_assinatura_token")
+  assinaturaConta    String? @map("tnt_assinatura_conta")
+  assinaturaSandbox  Boolean @default(true) @map("tnt_assinatura_sandbox")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -338,6 +431,14 @@ model Tenant {
   auditorias  Auditoria[]
   leadEventos LeadEvento[]
   perfisBusca PerfilBusca[]
+
+  // ─── Omnimob Flow ───
+  negocios        Negocio[]
+  negocioEventos  NegocioEvento[]
+  modelosContrato ModeloContrato[]
+  contratos       Contrato[]
+  fontesCaptacao  FonteCaptacao[]
+  captacaoEventos CaptacaoEvento[]
 
   @@map("tb_tenants")
 }
@@ -444,6 +545,45 @@ model Cargo {
    * Nasce `false` inclusive para cargos que já existem — dado sensível não pode
    * aparecer para ninguém por efeito colateral de uma migração. */
   verPainelGestor   Boolean @default(false) @map("ver_painel_gestor")
+
+  // ─── Omnimob Flow ──────────────────────────────────────────────────────────
+  /**
+   * A PORTA do módulo, e o par de `acessarPainel`.
+   *
+   * `acessarPainel` responde "esta pessoa entra no Hub?"; esta responde "esta
+   * pessoa entra no Flow?". As duas independentes de propósito: existe quem só
+   * cuide do acervo e da vitrine, quem só trabalhe negócios, e quem faça as
+   * duas coisas. O seletor de módulo na barra lateral só aparece para quem tem
+   * as duas — sem isso ele ofereceria uma porta que dá em 403.
+   *
+   * Nasce `false` inclusive para cargos que já existem. A imobiliária contratar
+   * o Flow não pode liberar contrato e comissão para a equipe inteira por
+   * efeito colateral de uma migração — quem decide é quem administra a conta,
+   * cargo por cargo.
+   *
+   * `acessarPainel` continua sendo forçada em toda gravação (existir como cargo
+   * é entrar no Hub); esta NÃO é, e é justamente a diferença.
+   */
+  acessarFlow       Boolean @default(false) @map("acessar_flow")
+  /** Ver e mover negócios no funil. É o trabalho do corretor dentro do Flow. */
+  gerenciarNegocios Boolean @default(false) @map("gerenciar_negocios")
+  /** Montar minutas, gerar contrato e mandar para assinatura. */
+  gerenciarContratos Boolean @default(false) @map("gerenciar_contratos")
+  /**
+   * As duas flags que TRAVAM o fechamento do negócio.
+   *
+   * Elas não são "ver a aba jurídica": são o poder de dizer "conferi, está de
+   * pé". Nenhuma delas nasce em cargo nenhum, nem no Administrador, e é
+   * deliberado — se o Administrador as tivesse por padrão, a trava viraria
+   * ornamento no dia em que a imobiliária tem um administrador só, que é a
+   * maioria. Quem quiser que ele valide precisa dizer isso explicitamente.
+   */
+  validarJuridico   Boolean @default(false) @map("validar_juridico")
+  validarFinanceiro Boolean @default(false) @map("validar_financeiro")
+  /** Ver o split de comissão — quanto ficou com a casa e quanto com cada um. */
+  verComissoes      Boolean @default(false) @map("ver_comissoes")
+  /** Configurar as fontes de captação (os webhooks dos portais e das redes). */
+  gerenciarCaptacao Boolean @default(false) @map("gerenciar_captacao")
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   usuarios Usuario[]
@@ -552,6 +692,12 @@ model Usuario {
    */
   origemExterna   String?           @map("origem_externa")
   leadsAtribuidos PropertyLead[]    @relation("LeadsDoResponsavel")
+
+  // ─── Omnimob Flow ───
+  negocios           Negocio[]          @relation("NegociosDoResponsavel")
+  negociosJuridico   Negocio[]          @relation("NegociosValidadosJuridico")
+  negociosFinanceiro Negocio[]          @relation("NegociosValidadosFinanceiro")
+  documentosEnviados NegocioDocumento[] @relation("DocumentosEnviados")
 
   @@unique([tenantId, origemExterna], name: "usuario_origem")
   @@index([tenantId, ativo])
@@ -782,6 +928,22 @@ model Cliente {
   bairro            String?   @map("clt_bairro")
   cidade            String?   @map("clt_cidade")
   estado            String?   @map("clt_estado")
+  numero            String?   @map("clt_numero")
+  /**
+   * ─── A QUALIFICAÇÃO ────────────────────────────────────────────────────────
+   * Nacionalidade, estado civil e profissão não são enfeite de cadastro: são o
+   * que a lei chama de qualificação das partes, e nenhuma minuta de compra e
+   * venda existe sem as três. Enquanto elas não existiam, o motor de contratos
+   * (services/flow/minutas.js) tinha três marcadores permanentemente em
+   * pendência e a imobiliária completava à mão — que é exatamente o trabalho
+   * que o módulo promete eliminar.
+   * Opcionais porque o Hub não precisa delas: quem só anuncia imóvel cadastra
+   * cliente com nome e telefone, e exigir profissão ali seria cobrar do módulo
+   * errado.
+   */
+  nacionalidade     String?   @map("clt_nacionalidade")
+  estadoCivil       String?   @map("clt_estado_civil")
+  profissao         String?   @map("clt_profissao")
   observacoes       String?   @map("clt_observacoes") @db.Text
   ativo             Boolean   @default(true) @map("clt_ativo")
   // Contato optou por receber divulgações de imóveis (base para broadcast WhatsApp).
@@ -804,6 +966,10 @@ model Cliente {
    */
   origemExterna String?       @map("origem_externa")
   perfisBusca   PerfilBusca[]
+
+  // ─── Omnimob Flow ───
+  negociosComprando Negocio[] @relation("NegociosComoComprador")
+  negociosVendendo  Negocio[] @relation("NegociosComoVendedor")
 
   @@unique([tenantId, origemExterna], name: "cliente_origem")
   @@index([tenantId, ativo])
@@ -949,6 +1115,16 @@ model Property {
    * exibição por bairro. Esconder na interface e mandar no JSON seria esconder
    * de quem olha e entregar a quem procura.
    */
+  /**
+   * Número da matrícula no Cartório de Registro de Imóveis.
+   * É O identificador legal do imóvel — o que a escritura, a certidão e o
+   * contrato citam. O sistema tinha endereço e não tinha isto, e o resultado é
+   * que toda minuta gerada saía com a matrícula em branco para ser preenchida à
+   * mão, no documento que menos admite preenchimento à mão.
+   * Texto e não número: matrícula tem formato de cartório, com pontos, traços e
+   * às vezes letra.
+   */
+  matricula              String?               @map("prp_matricula")
   exibirEnderecoCompleto Boolean     @default(false) @map("prp_exibir_endereco_completo")
   viewCount       Int              @default(0)
   leadCount       Int              @default(0)
@@ -975,6 +1151,9 @@ model Property {
    * eles não têm nada a ver um com o outro.
    */
   origemExterna String?               @map("origem_externa")
+
+  // ─── Omnimob Flow ───
+  negocios Negocio[]
 
   @@unique([tenantId, origemExterna], name: "property_origem")
   @@index([tenantId, status])
@@ -1075,6 +1254,8 @@ model PropertyLead {
    */
   responsavel Usuario?     @relation("LeadsDoResponsavel", fields: [responsavelId], references: [id], onDelete: SetNull)
   eventos     LeadEvento[]
+  // ─── Omnimob Flow ───
+  negocios    Negocio[]
 
   @@index([tenantId, propertyId, createdAt])
   @@index([tenantId, estagio])
@@ -1203,4 +1384,515 @@ model PerfilBusca {
   @@index([tenantId, ativo])
   @@index([tenantId, clienteId])
   @@map("tb_perfil_busca")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OMNIMOB FLOW — captação, funil, contrato e comissão
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// O Hub responde "o que a imobiliária TEM" (acervo, vitrine, equipe). O Flow
+// responde "o que a imobiliária está FECHANDO". São dois assuntos, e por isso
+// dois módulos: quem só anuncia não precisa de minuta contratual, e quem só
+// fecha não precisa de editor de vitrine.
+//
+// ── A LIGAÇÃO ENTRE OS DOIS ──
+//
+// Um Negocio aponta para o PropertyLead que o originou, e o lead continua
+// sendo do Hub. NÃO existe uma segunda tabela de leads: o webhook de captação
+// grava no PropertyLead de sempre e abre um negócio ao lado. Duas caixas de
+// entrada divergiriam no primeiro mês, e a imobiliária passaria a ter dois
+// números diferentes para "quantos interessados chegaram ontem".
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Os módulos do produto. Ver Tenant.modulos e Cargo.acessarFlow.
+ * Enum e não texto livre: ao contrário de UsuarioTutorial.etapa, aqui a lista
+ * é fechada por natureza — módulo novo é uma decisão de produto com tela, preço
+ * e migração, não uma string que aparece sozinha.
+ */
+enum ModuloOmnimob {
+  HUB
+  FLOW
+}
+
+/**
+ * ─── O funil do Flow ───────────────────────────────────────────────────────
+ *
+ * Sete estágios de avanço mais um de saída. Não é o mesmo funil de
+ * LeadEstagio, e a diferença é de OBJETO: aquele descreve um interessado que
+ * mandou mensagem; este descreve um negócio de setecentos mil reais em
+ * aprovação jurídica. Misturar os dois faria a caixa de entrada do corretor
+ * mostrar contratos e o relatório de conversão contar curiosos como propostas.
+ *
+ * PERDIDO fica fora da sequência de propósito: ele é alcançável de qualquer
+ * estágio e não tem "próximo". Um funil que o desenha entre APROVACAO e GANHO
+ * sugere que se passa por ele.
+ */
+enum NegocioEstagio {
+  LEAD
+  CONTATO
+  VISITA
+  PROPOSTA
+  NEGOCIACAO
+  APROVACAO
+  GANHO
+  PERDIDO
+}
+
+enum NegocioEventoTipo {
+  CRIADO
+  ESTAGIO
+  RESPONSAVEL
+  NOTA
+  DOCUMENTO
+  CONTRATO
+  VALIDACAO
+  COMISSAO
+}
+
+/**
+ * De onde o interessado veio. É o que responde "qual portal vale o que
+ * pagamos?" — pergunta que a imobiliária faz todo mês e que hoje ela responde
+ * de memória.
+ */
+enum CanalCaptacao {
+  ZAP
+  VIVAREAL
+  OLX
+  MERCADOLIVRE
+  FACEBOOK
+  INSTAGRAM
+  WHATSAPP
+  SITE
+  INDICACAO
+  OUTRO
+}
+
+enum ContratoStatus {
+  RASCUNHO
+  ENVIADO
+  PARCIAL
+  ASSINADO
+  RECUSADO
+  CANCELADO
+  EXPIRADO
+}
+
+enum SignatarioStatus {
+  PENDENTE
+  ASSINADO
+  RECUSADO
+}
+
+/**
+ * O papel de quem assina. Guardado no signatário e não deduzido da ordem: um
+ * contrato com dois compradores e um procurador não tem ordem que descreva quem
+ * é quem, e "o segundo é sempre o vendedor" quebra no primeiro caso real.
+ */
+enum SignatarioPapel {
+  COMPRADOR
+  VENDEDOR
+  IMOBILIARIA
+  TESTEMUNHA
+  FIADOR
+  PROCURADOR
+}
+
+enum DocumentoTipo {
+  RG
+  CPF
+  CNPJ
+  COMPROVANTE_RENDA
+  COMPROVANTE_RESIDENCIA
+  CERTIDAO_ESTADO_CIVIL
+  MATRICULA_IMOVEL
+  IPTU
+  CONTRATO_SOCIAL
+  PROCURACAO
+  OUTRO
+}
+
+// ─── Negócio ─────────────────────────────────────────────────────────────────
+
+/**
+ * Um negócio em andamento: alguém querendo um imóvel, alguém vendendo, e o
+ * caminho entre as duas coisas.
+ *
+ * ── POR QUE O CÓDIGO É INTEIRO E SEQUENCIAL ──
+ *
+ * Mesma razão do Chamado.numero: este é um id que PESSOAS dizem em voz alta.
+ * "O negócio 412 travou no jurídico" funciona ao telefone; um cuid não. O
+ * sequencial é global e não por tenant — numeração por imobiliária exigiria uma
+ * sequence por tenant ou um contador com trava, e o ganho seria cosmético.
+ *
+ * ── AS DUAS PONTAS DA NEGOCIAÇÃO ──
+ *
+ * comprador e vendedor são dois Cliente. O vendedor costuma ser o proprietário
+ * do imóvel e é opcional porque o negócio nasce antes de a imobiliária saber
+ * quem ele é — quando o lead chega, existe interessado e imóvel, e mais nada.
+ * Exigi-los na criação faria o webhook falhar em todo lead capturado, que é
+ * justamente o caso de uso principal.
+ *
+ * ── O QUE ESTA TABELA NÃO DECIDE ──
+ *
+ * Se o negócio PODE ir para GANHO. Isso depende das duas validações e do
+ * contrato assinado, e a regra mora em services/flow/funil.js, num lugar só —
+ * a mesma trava vale para a tela, para a API pública e para qualquer rota nova.
+ */
+model Negocio {
+  id       String @id @default(cuid()) @map("neg_id")
+  codigo   Int    @unique @default(autoincrement()) @map("neg_codigo")
+  tenantId String @map("tenant_id")
+
+  titulo  String         @map("neg_titulo")
+  estagio NegocioEstagio @default(LEAD) @map("neg_estagio")
+
+  propertyId  String? @map("property_id")
+  leadId      String? @map("lea_id")
+  compradorId String? @map("neg_comprador_id")
+  vendedorId  String? @map("neg_vendedor_id")
+  /**
+   * O corretor dono do negócio. Sai da MESMA roleta que distribui os leads
+   * (services/distribuicaoLeads.js) — duas filas produziriam dois rodízios
+   * desencontrados, e o corretor que recebeu o lead descobriria o negócio dele
+   * na mão de outra pessoa.
+   */
+  responsavelId String? @map("neg_responsavel_id")
+
+  canal CanalCaptacao @default(SITE) @map("neg_canal")
+  /** Texto livre com a origem exata ("zap-imoveis", "campanha-facebook-out"). */
+  origem String @default("") @map("neg_origem")
+
+  valorProposta Decimal? @map("neg_valor_proposta") @db.Decimal(12, 2)
+  valorFechado  Decimal? @map("neg_valor_fechado") @db.Decimal(12, 2)
+
+  /**
+   * ── AS DUAS TRAVAS ──
+   * Marcadas por gente, uma a uma, por quem tem a permissão do setor. Guardamos
+   * QUEM e QUANDO junto do booleano: "o financeiro liberou" sem nome nem data
+   * não serve para nada no dia em que a operação é questionada, que é
+   * exatamente o dia em que alguém vem ler esta linha.
+   */
+  juridicoOk    Boolean   @default(false) @map("neg_juridico_ok")
+  juridicoPorId String?   @map("neg_juridico_por")
+  juridicoEm    DateTime? @map("neg_juridico_em")
+  juridicoNota  String?   @map("neg_juridico_nota") @db.Text
+
+  financeiroOk    Boolean   @default(false) @map("neg_financeiro_ok")
+  financeiroPorId String?   @map("neg_financeiro_por")
+  financeiroEm    DateTime? @map("neg_financeiro_em")
+  financeiroNota  String?   @map("neg_financeiro_nota") @db.Text
+
+  /**
+   * ── O split, CONGELADO ──
+   * Os percentuais são copiados do tenant no momento do cálculo, e os valores
+   * gravados em vez de recalculados na leitura. A imobiliária muda a política
+   * de comissão e o negócio fechado em março não pode mudar junto — quem
+   * recebeu já recebeu, e um relatório que reescreve o passado é pior que
+   * relatório nenhum.
+   */
+  comissaoPercentual   Decimal?  @map("neg_comissao_percentual") @db.Decimal(5, 2)
+  comissaoCorretorPerc Decimal?  @map("neg_comissao_corretor_perc") @db.Decimal(5, 2)
+  comissaoTotal        Decimal?  @map("neg_comissao_total") @db.Decimal(12, 2)
+  comissaoImobiliaria  Decimal?  @map("neg_comissao_imobiliaria") @db.Decimal(12, 2)
+  comissaoCorretor     Decimal?  @map("neg_comissao_corretor") @db.Decimal(12, 2)
+  comissaoCalculadaEm  DateTime? @map("neg_comissao_calculada_em")
+
+  perdidoMotivo String?   @map("neg_perdido_motivo")
+  fechadoEm     DateTime? @map("neg_fechado_em")
+  /** Última vez que alguém encostou no negócio — alimenta o alerta de parado. */
+  ultimoContatoEm DateTime? @map("neg_ultimo_contato_em")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property  Property?     @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  lead      PropertyLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  comprador Cliente?      @relation("NegociosComoComprador", fields: [compradorId], references: [id], onDelete: SetNull)
+  vendedor  Cliente?      @relation("NegociosComoVendedor", fields: [vendedorId], references: [id], onDelete: SetNull)
+  /** SetNull como nos leads: desligar um corretor não apaga os negócios dele. */
+  responsavel   Usuario? @relation("NegociosDoResponsavel", fields: [responsavelId], references: [id], onDelete: SetNull)
+  juridicoPor   Usuario? @relation("NegociosValidadosJuridico", fields: [juridicoPorId], references: [id], onDelete: SetNull)
+  financeiroPor Usuario? @relation("NegociosValidadosFinanceiro", fields: [financeiroPorId], references: [id], onDelete: SetNull)
+
+  eventos    NegocioEvento[]
+  documentos NegocioDocumento[]
+  contratos  Contrato[]
+
+  @@index([tenantId, estagio])
+  @@index([tenantId, responsavelId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, propertyId])
+  @@map("tb_negocio")
+}
+
+/**
+ * O histórico do negócio, uma linha por coisa que aconteceu.
+ * Mesma forma de LeadEvento, inclusive o usuarioNome copiado: o histórico de um
+ * negócio precisa continuar legível depois que o corretor sai da empresa.
+ */
+model NegocioEvento {
+  id          String            @id @default(cuid()) @map("nev_id")
+  tenantId    String            @map("tenant_id")
+  negocioId   String            @map("neg_id")
+  usuarioId   String?           @map("usu_id")
+  usuarioNome String?           @map("nev_usuario_nome")
+  tipo        NegocioEventoTipo @map("nev_tipo")
+  de          String?           @map("nev_de")
+  para        String?           @map("nev_para")
+  texto       String?           @map("nev_texto") @db.Text
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  negocio Negocio @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, negocioId, createdAt])
+  @@map("tb_negocio_evento")
+}
+
+/**
+ * Documento de comprovação cadastral anexado ao negócio.
+ *
+ * O arquivo vai direto do navegador para o Cloudinary, como a foto do imóvel —
+ * o backend nunca vê o binário. O que fica aqui é o endereço e o que ele é.
+ *
+ * verificado é separado de "existe o arquivo" de propósito: subir um PDF não é
+ * o mesmo que alguém ter conferido que ele bate com o CPF do comprador. A trava
+ * de fechamento olha a validação do SETOR (no negócio), não esta marca — ela
+ * serve para o conferente saber o que já passou pelo olho dele.
+ */
+model NegocioDocumento {
+  id        String        @id @default(cuid()) @map("ndo_id")
+  tenantId  String        @map("tenant_id")
+  negocioId String        @map("neg_id")
+  tipo      DocumentoTipo @default(OUTRO) @map("ndo_tipo")
+  /** De quem é o documento: "comprador", "vendedor" ou "imovel". */
+  refereA String @default("comprador") @map("ndo_refere_a")
+  nome    String @map("ndo_nome")
+  url     String @map("ndo_url")
+  mime    String @default("") @map("ndo_mime")
+  tamanho Int?   @map("ndo_tamanho")
+
+  verificado   Boolean   @default(false) @map("ndo_verificado")
+  verificadoEm DateTime? @map("ndo_verificado_em")
+  observacao   String?   @map("ndo_observacao") @db.Text
+
+  enviadoPorId String?  @map("ndo_enviado_por")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  negocio    Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  enviadoPor Usuario? @relation("DocumentosEnviados", fields: [enviadoPorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, negocioId])
+  @@map("tb_negocio_documento")
+}
+
+// ─── Minutas e contratos ─────────────────────────────────────────────────────
+
+/**
+ * A minuta em branco: o texto do contrato com marcadores no lugar dos dados.
+ *
+ * Os marcadores (comprador.nome, imovel.endereco, negocio.valorFechado) estão
+ * catalogados em services/flow/minutas.js, e é de lá que a tela tira a lista
+ * que mostra ao lado do editor. Marcador desconhecido NÃO é apagado em
+ * silêncio: o motor devolve a lista de pendências e a tela recusa gerar. Um
+ * contrato que sai com um marcador impresso no meio do parágrafo é pior que um
+ * contrato que não sai.
+ *
+ * Uma imobiliária tem várias: compra e venda, locação residencial, locação
+ * comercial, autorização de venda. tipo só existe para agrupá-las na tela.
+ */
+model ModeloContrato {
+  id       String  @id @default(cuid()) @map("mct_id")
+  tenantId String  @map("tenant_id")
+  nome     String  @map("mct_nome")
+  tipo     String  @default("VENDA") @map("mct_tipo")
+  corpo    String  @map("mct_corpo") @db.Text
+  ativo    Boolean @default(true) @map("mct_ativo")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contratos Contrato[]
+
+  @@index([tenantId, ativo])
+  @@map("tb_modelo_contrato")
+}
+
+/**
+ * A minuta PREENCHIDA, já com os dados daquele negócio, e o rastro dela no
+ * provedor de assinatura.
+ *
+ * ── O CORPO É CONGELADO, e isso é o ponto ──
+ *
+ * corpo guarda o texto renderizado no momento da geração, e não uma referência
+ * ao modelo. A imobiliária edita a minuta padrão em julho e o contrato assinado
+ * em maio não pode mudar junto — o que foi assinado foi aquele texto. modeloId
+ * fica só para dizer de onde ele saiu, e é SetNull: apagar o modelo não pode
+ * levar embora contratos assinados.
+ *
+ * ── STATUS EM TEMPO REAL ──
+ *
+ * status é atualizado por duas vias: o webhook do provedor
+ * (POST /api/flow/assinatura/webhook/:provedor) e uma releitura sob demanda
+ * quando a tela abre. As duas porque webhook se perde — e "o cliente jura que
+ * assinou e o painel diz pendente" é o tipo de dúvida que não se resolve
+ * esperando.
+ */
+model Contrato {
+  id        String         @id @default(cuid()) @map("ctr_id")
+  tenantId  String         @map("tenant_id")
+  negocioId String         @map("neg_id")
+  modeloId  String?        @map("mct_id")
+  titulo    String         @map("ctr_titulo")
+  corpo     String         @map("ctr_corpo") @db.Text
+  status    ContratoStatus @default(RASCUNHO) @map("ctr_status")
+
+  /**
+   * "clicksign" ou "docusign". Copiado no envio: trocar de fornecedor não pode
+   * deixar contratos antigos apontando para a API errada.
+   */
+  provedor         String? @map("ctr_provedor")
+  documentoExterno String? @map("ctr_documento_externo")
+  urlDocumento     String? @map("ctr_url_documento")
+  /**
+   * O PDF assinado, baixado do provedor e guardado por nós. Sem isto, cancelar
+   * a conta na Clicksign levaria junto a prova de todos os contratos.
+   */
+  urlAssinado String? @map("ctr_url_assinado")
+
+  enviadoEm   DateTime? @map("ctr_enviado_em")
+  assinadoEm  DateTime? @map("ctr_assinado_em")
+  canceladoEm DateTime? @map("ctr_cancelado_em")
+  /** Última vez que perguntamos ao provedor como está. */
+  sincronizadoEm DateTime? @map("ctr_sincronizado_em")
+  ultimoErro     String?   @map("ctr_ultimo_erro") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  negocio     Negocio              @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  modelo      ModeloContrato?      @relation(fields: [modeloId], references: [id], onDelete: SetNull)
+  signatarios ContratoSignatario[]
+
+  @@index([tenantId, negocioId])
+  @@index([tenantId, status])
+  @@map("tb_contrato")
+}
+
+/**
+ * Quem tem que assinar, e se já assinou.
+ * Sem FK para Cliente ou Usuario: o signatário é um nome, um e-mail e um papel
+ * no momento do envio. Testemunha e procurador muitas vezes não são cadastro
+ * nenhum no sistema, e exigir que fossem transformaria "mandar para assinar" em
+ * "cadastre mais duas pessoas primeiro".
+ */
+model ContratoSignatario {
+  id         String           @id @default(cuid()) @map("csg_id")
+  contratoId String           @map("ctr_id")
+  nome       String           @map("csg_nome")
+  email      String           @map("csg_email")
+  documento  String?          @map("csg_documento")
+  papel      SignatarioPapel  @default(COMPRADOR) @map("csg_papel")
+  ordem      Int              @default(0) @map("csg_ordem")
+  status     SignatarioStatus @default(PENDENTE) @map("csg_status")
+  assinadoEm DateTime?        @map("csg_assinado_em")
+  /**
+   * O id que o provedor deu para este signatário — é por ele que o webhook
+   * encontra quem assinou.
+   */
+  chaveExterna  String? @map("csg_chave_externa")
+  urlAssinatura String? @map("csg_url_assinatura")
+
+  contrato Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+
+  @@index([contratoId])
+  @@map("tb_contrato_signatario")
+}
+
+// ─── Captação ────────────────────────────────────────────────────────────────
+
+/**
+ * Uma porta de entrada de lead: o webhook que um portal ou uma rede social
+ * chama quando alguém demonstra interesse.
+ *
+ * ── POR QUE UMA LINHA POR FONTE, E NÃO UM ENDEREÇO SÓ ──
+ *
+ * Porque o segredo é por fonte. Com um webhook único, vazar a URL do ZAP daria
+ * a quem a tivesse o poder de injetar lead falso dizendo que veio do Facebook.
+ * Com uma fonte por canal, revogar o ZAP não derruba o resto — é a mesma razão
+ * de ChaveApi existir por integração e não por tenant.
+ *
+ * segredo é guardado em claro, ao contrário da ChaveApi: aqui ele não autentica
+ * sozinho, ele ASSINA (HMAC do corpo, como em services/webhooks.js, só que na
+ * direção contrária). Hash não serve para conferir assinatura — para recalcular
+ * o HMAC é preciso o segredo, não o resumo dele.
+ */
+model FonteCaptacao {
+  id       String        @id @default(cuid()) @map("fca_id")
+  tenantId String        @map("tenant_id")
+  nome     String        @map("fca_nome")
+  canal    CanalCaptacao @map("fca_canal")
+  /** A parte pública do endereço: /api/captacao/:chave */
+  chave   String  @unique @map("fca_chave")
+  segredo String  @map("fca_segredo")
+  ativa   Boolean @default(true) @map("fca_ativa")
+
+  /**
+   * O que fazer com o lead que chega: abrir negócio no funil (o padrão) ou só
+   * registrar o lead. Nem toda fonte merece um negócio — uma campanha de
+   * captação de PROPRIETÁRIO enche o funil de vendas de gente que quer anunciar.
+   */
+  abrirNegocio Boolean @default(true) @map("fca_abrir_negocio")
+
+  ultimoEventoEm DateTime? @map("fca_ultimo_evento_em")
+  totalRecebido  Int       @default(0) @map("fca_total_recebido")
+  totalRecusado  Int       @default(0) @map("fca_total_recusado")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  eventos CaptacaoEvento[]
+
+  @@index([tenantId, ativa])
+  @@map("tb_fonte_captacao")
+}
+
+/**
+ * O que chegou em cada chamada do webhook, cru.
+ *
+ * GUARDAR O PAYLOAD BRUTO NÃO É LUXO. Portal muda o formato do corpo sem
+ * avisar, e o sintoma é "paramos de receber leads do VivaReal" três dias
+ * depois. Sem o corpo original não há como descobrir o que mudou — e o lead
+ * daqueles três dias está perdido para sempre. Com ele, dá para consertar o
+ * leitor e reprocessar.
+ *
+ * Fica 90 dias e a faxina apaga: é diagnóstico, não acervo.
+ */
+model CaptacaoEvento {
+  id       String @id @default(cuid()) @map("cev_id")
+  tenantId String @map("tenant_id")
+  fonteId  String @map("fca_id")
+
+  payload Json @map("cev_payload")
+  /** ACEITO | RECUSADO | DUPLICADO | ERRO */
+  status String  @default("ACEITO") @map("cev_status")
+  erro   String? @map("cev_erro") @db.Text
+
+  leadId    String? @map("lea_id")
+  negocioId String? @map("neg_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fonte  FonteCaptacao @relation(fields: [fonteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([fonteId, createdAt])
+  @@map("tb_captacao_evento")
 }

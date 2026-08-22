@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 // A marca do WhatsApp — a cópia local virou `utils/marcasDeRede`.
 import { WhatsappMarca } from "../utils/marcasDeRede.jsx";
 import { Link } from "react-router-dom";
@@ -35,7 +35,11 @@ import LineSidebar from "../components/LineSidebar";
 import Counter from "../components/Counter";
 import SpecularButton from "../components/SpecularButton";
 import { TrialModal } from "../components/TrialModal";
-import { PLANOS, RECURSOS_PLANOS, planoInfo } from "../utils/planos";
+import { PLANOS, PACOTES, RECURSOS_PLANOS, RECURSOS_FLOW_PLANOS, planoInfo } from "../utils/planos";
+/* Renomeado no import: `MODULOS` sozinho colidiria com a leitura desta
+   página, que fala de "módulos" no sentido de seções. */
+import { MODULOS as MODULOS_DO_PRODUTO } from "../utils/modulos";
+import { ToggleDoFlow } from "../components/ToggleDoFlow.jsx";
 import { IconeCheck, IconeX } from "../components/Icones.jsx";
 import {
   ACCENT,
@@ -48,6 +52,8 @@ import {
   Eyebrow,
   LOGO_LOCKUP_HEADER_SRC,
   LOGO_SRC,
+  LOGO_ALT,
+  LOGO_SIMBOLO_SRC,
   LogoLockup,
   Reveal,
   Scallop,
@@ -819,18 +825,63 @@ function incluiRecurso(planKey, recurso) {
    preço e não é. Se a resposta vier sem preço para o plano (provedor desligado,
    ou plano sem cobrança automática), o cartão diz "Sob consulta", que é a
    verdade: aquele plano se fecha falando com o time. */
-const PLANS_BASE = PLANOS.map((p) => ({
-  key: p.key,
-  name: p.nome,
-  desc: p.descricao,
-  price: "",
-  per: "",
-  nota: "",
-  carregando: true,
-  linhas: LINHAS_PLANO.map((r) => ({ label: r.label, incluso: incluiRecurso(p.key, r) })),
-  resumo: resumoDoPlano(p.key),
-  highlight: p.key === "PROFISSIONAL",
-}));
+/* ── A base dos cartões, agora dependente do PACOTE ──────────────────────────
+
+   Com o Omnimob Flow, o mesmo plano tem duas caras: o Hub sozinho e o Hub com
+   o Flow junto. O que muda entre elas é o preço e as linhas da tabela — o nome,
+   a descrição e o destaque continuam do plano.
+
+   Uma função em vez de uma constante porque as linhas do Flow entram no meio
+   da lista. Dois arrays prontos (um por pacote) seriam mais rápidos de ler e
+   dobrariam o lugar onde `incluiRecurso` é aplicado — que é exatamente a conta
+   que não pode ter duas versões. */
+/* ── A LISTA VEM ORDENADA: primeiro o que ENTRA, depois o que fica de fora ──
+
+   Antes as linhas saíam na ordem em que foram escritas — as do Hub e, atrás,
+   as do Flow. Num plano intermediário isso produzia ✓✓✓✗✗ ✓✓✗✗, com os dois
+   grupos intercalados, e o olho tinha de percorrer a coluna inteira para saber
+   o que aquele plano dá.
+
+   Ordenar por inclusão junta as respostas: em cima tudo que o cartão entrega —
+   sem distinguir se é Hub ou Flow, porque para quem compra é tudo o mesmo
+   produto —, embaixo tudo que falta. Duas leituras, não nove.
+
+   `sort` estável (garantido no JS moderno): dentro de cada grupo a ordem
+   original se mantém, então os recursos do Hub continuam vindo antes dos do
+   Flow. É o que evita a lista embaralhar a cada render. */
+function ordenarPorInclusao(linhas) {
+  return [...linhas].sort((a, b) => Number(b.incluso) - Number(a.incluso));
+}
+
+/* Recebe um MAPA `{ BASICO: "HUB", PROFISSIONAL: "HUB_FLOW", … }`, e não um
+   pacote só: cada cartão tem o seu interruptor. */
+function planosBase(pacotes) {
+  return PLANOS.map((p) => {
+    const comFlow = pacotes[p.key] === "HUB_FLOW";
+    const linhas = comFlow ? [...LINHAS_PLANO, ...RECURSOS_FLOW_PLANOS] : LINHAS_PLANO;
+
+    return {
+      key: p.key,
+      name: p.nome,
+      desc: p.descricao,
+      price: "",
+      per: "",
+      nota: "",
+      carregando: true,
+      comFlow,
+      linhas: ordenarPorInclusao(
+        linhas.map((r) => ({ label: r.label, incluso: incluiRecurso(p.key, r) })),
+      ),
+      /* No resumo do celular, o Flow entra ANTES dos recursos próprios do plano:
+         quem ligou o interruptor ligou por causa dele, e é a primeira coisa que
+         o cartão precisa confirmar. */
+      resumo: comFlow
+        ? [{ label: "Tudo do Hub, mais o Omnimob Flow", heranca: true }, ...resumoDoPlano(p.key).slice(0, 3)]
+        : resumoDoPlano(p.key),
+      highlight: p.key === "PROFISSIONAL",
+    };
+  });
+}
 
 /* Busca os preços vigentes uma vez por carga da página.
 
@@ -847,7 +898,7 @@ const PLANS_BASE = PLANOS.map((p) => ({
    preços. Nada de percentual escrito à mão aqui: se o valor mudar no painel, a
    página passa a anunciar o desconto novo sem deploy, e é impossível prometer
    um abatimento que a fatura não pratica. */
-function usePrecosVigentes(periodo) {
+function usePrecosVigentes(periodo, pacotes) {
   const [precos, setPrecos] = useState(null);
   useEffect(() => {
     let vivo = true;
@@ -866,13 +917,30 @@ function usePrecosVigentes(periodo) {
      não forem criadas, não existe — e oferecer a escolha seria vender o que a
      cobrança recusa. Durante o carregamento o alternador já aparece, senão ele
      surgiria depois do resto e empurraria os cartões para baixo. */
-  const temAnual = carregando || Object.values(precos).some((p) => p?.anual);
+  /* O anual existe para ALGUM dos pacotes em uso? Com o interruptor por cartão,
+     perguntar por um pacote só faria o alternador sumir quando o único plano
+     sem preço anual fosse justamente o que está com o Flow ligado. */
+  const temAnual = carregando || Object.values(precos).some((p) => p?.anual || p?.flow?.anual);
+
+  /* ── O pacote com Flow existe para VENDER? ────────────────────────────────
+     Só quando há preço cadastrado para ele no Stripe. Enquanto as variáveis
+     `STRIPE_PRICE_*_FLOW` não existirem, o alternador de pacote nem aparece e a
+     landing continua exatamente como era. É a mesma escolha do preço anual: o
+     recurso novo não pode fazer a página prometer o que a cobrança recusa.
+
+     Durante o carregamento ele NÃO aparece — ao contrário do alternador de
+     período, que já nasce visível. A diferença é que este muda o conteúdo da
+     TABELA, e não só o número: mostrá-lo e escondê-lo depois faria as linhas
+     dos cartões piscarem. */
+  const temFlow = !carregando && Object.values(precos).some((p) => p?.flow?.mensal);
 
   const planos = useMemo(
     () =>
-      PLANS_BASE.map((p) => {
+      planosBase(pacotes).map((p) => {
         if (carregando) return p; // p.carregando = true; o cartão desenha o esqueleto
-        const vivo = precos?.[p.key];
+        /* O HUB mora na raiz do plano; o HUB_FLOW em `.flow`. A assimetria é
+           deliberada e está explicada em `precosDosPlanos`, no servidor. */
+        const vivo = pacotes[p.key] === "HUB_FLOW" ? precos?.[p.key]?.flow : precos?.[p.key];
         // Plano sem preço anual cadastrado continua mostrando o mensal: some a
         // vantagem, não o plano.
         const doPeriodo = vivo?.[periodo] || vivo?.mensal;
@@ -894,10 +962,10 @@ function usePrecosVigentes(periodo) {
           economia: ehAnual ? vivo.economia || null : null,
         };
       }),
-    [precos, periodo, carregando],
+    [precos, periodo, pacotes, carregando],
   );
 
-  return { planos, temAnual, carregando };
+  return { planos, temAnual, temFlow, carregando };
 }
 
 /* Desconto do anual em palavras. Prefere os MESES GRÁTIS ao percentual: "2,5
@@ -914,6 +982,11 @@ function selosDaEconomia(economia) {
   }
   return economia.percentual > 0 ? `${economia.percentual}% off` : null;
 }
+
+/* O alternador de pacote é o `ToggleDoFlow`, o mesmo das três telas de
+   pagamento do painel. Ele já foi dois cartões lado a lado aqui — mas Hub e
+   Hub+Flow não são opções concorrentes: uma é a outra MAIS alguma coisa, e o
+   switch diz isso na forma. Ver o cabeçalho do componente. */
 
 /* Alternador mensal / anual.
    Um grupo de rádio de verdade (não dois botões): são opções mutuamente
@@ -1016,6 +1089,92 @@ function CabecalhoDaLanding() {
 
 // Cabeçalho de seção: título grande à esquerda em duas cores, parágrafo curto
 // alinhado pela base à direita.
+/* ── Os dois módulos, lado a lado ────────────────────────────────────────────
+
+   Duas colunas com a MESMA estrutura: marca, o que é, e as quatro coisas que
+   ele faz. A simetria é o argumento — ela diz que são dois produtos do mesmo
+   tamanho, e não um produto e um acessório.
+
+   As listas são curtas de propósito (quatro itens). A tabela de planos, logo
+   abaixo, tem a lista completa; aqui a pergunta é "o que é isso", e uma lista
+   de doze itens responde "é complicado".
+
+   Sem ilustração e sem animação: esta seção existe entre duas que já têm
+   (o baralho de canais acima, o fundo em ondas dos planos abaixo), e uma
+   terceira no meio cansa a rolagem. */
+function DoisModulos() {
+  const [caixaRef, visivel] = useReveal();
+
+  /* ── A IDENTIDADE VEM DE `utils/modulos.js`, e não daqui ───────────────────
+     Nome, cor e tagline saem de `MODULOS` — a mesma fonte que o seletor da
+     barra lateral lê. Escritos à mão nesta seção, eles já divergiram na
+     primeira meia hora: o Flow nasceu verde-azulado antes de a arte existir, a
+     logo chegou rosa, o painel foi corrigido e a landing continuou anunciando
+     o teal. Duas cores para a mesma marca na mesma sessão de trabalho.
+
+     O que fica AQUI é só o que é de venda: o parágrafo e as quatro linhas. Isso
+     é texto de landing, não identidade — e não tem nada a fazer dentro de um
+     módulo que o painel importa. */
+  const COPY = {
+    HUB: {
+      texto:
+        "Cadastre os imóveis uma vez e eles aparecem na sua vitrine, nos portais e nas redes. " +
+        "Os interessados chegam organizados, com a equipe e as permissões sob controle.",
+      itens: [
+        "Cadastro de imóveis com fotos, tour 360° e marca d'água",
+        "Vitrine pública com editor de arrastar e soltar",
+        "Envio aos portais e às redes sociais",
+        "Leads, clientes, equipe, cargos e relatórios",
+      ],
+    },
+    FLOW: {
+      novo: true,
+      texto:
+        "Do lead ao contrato assinado. O interessado entra sozinho pelos portais, cai na fila " +
+        "de um corretor e anda por um funil que só deixa fechar quando a documentação está de pé.",
+      itens: [
+        "Captação automática por webhook e fila de corretores",
+        "Funil visual de sete etapas, do lead ao ganho",
+        "Minuta contratual preenchida e assinatura digital",
+        "Trava do jurídico e do financeiro, e comissão calculada",
+      ],
+    },
+  };
+
+  const modulos = MODULOS_DO_PRODUTO.map((m) => ({
+    key: m.key,
+    nome: m.nomeCompleto,
+    cor: m.acento,
+    chamada: m.tagline,
+    ...COPY[m.key],
+  }));
+
+  return (
+    <div className={`dl-modulos${visivel ? " is-in" : ""}`} ref={caixaRef}>
+      {modulos.map((m, i) => (
+        <article key={m.key} className="dl-modulo" style={{ "--cor": m.cor, "--i": i }}>
+          <header>
+            <span className="dl-modulo__marca" aria-hidden="true">
+              <img src={LOGO_ALT} alt="" />
+            </span>
+            <div>
+              <h3>
+                {m.nome}
+                {m.novo ? <span className="dl-modulo__novo">novo</span> : null}
+              </h3>
+              <span className="dl-modulo__chamada">{m.chamada}</span>
+            </div>
+          </header>
+          <p>{m.texto}</p>
+          <ul>
+            {m.itens.map((t) => <li key={t}>{t}</li>)}
+          </ul>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function SectionHead({ eyebrow, eyebrowTone, strong, soft, children }) {
   return (
     <Reveal className="dl-head">
@@ -1057,7 +1216,7 @@ function DashboardMockup() {
 
           <div className="dl-mockup__body">
             <aside className="dl-mockup__side">
-              <img className="dl-mockup__logo" src={LOGO_SRC} alt="" />
+              <img className="dl-mockup__logo" src={LOGO_SIMBOLO_SRC} alt="" />
               {["Imóveis", "Leads", "Vitrine", "Métricas"].map((item, i) => (
                 <span key={item} className={`dl-mockup__nav${i === 0 ? " is-active" : ""}`}>{item}</span>
               ))}
@@ -2017,7 +2176,7 @@ function realceDoPlano(chave) {
 const ONDA_INICIAL = FLARE.PROFISSIONAL.onda;
 
 
-function Planos({ planos, aoTestar }) {
+function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
   const [caixaRef, visivel] = useReveal();
   const trilhoRef = useRef(null);
   const [atual, setAtual] = useState(0);
@@ -2346,6 +2505,25 @@ function Planos({ planos, aoTestar }) {
             >
               {p.carregando ? " " : p.nota}
             </span>
+
+            {/* ── O interruptor do Flow, DENTRO do cartão ──────────────────
+                Entre o preço e a lista, que é o caminho que o olho faz: vê
+                quanto custa, decide se quer o módulo, e lê o que vem junto. Ele
+                muda as duas coisas em volta — o número acima e a lista abaixo —,
+                e ficar entre elas é o que torna esse efeito legível.
+
+                `stopPropagation` no clique: o cartão inteiro é uma área que
+                reage ao ponteiro (é ela que tinge o fundo em ondas), e sem isso
+                marcar o interruptor dispararia junto o comportamento do cartão. */}
+            {temFlow ? (
+              <div className="dl-plan__flow" onClick={(e) => e.stopPropagation()}>
+                <ToggleDoFlow
+                  id={`pkg-${p.key.toLowerCase()}`}
+                  ligado={Boolean(p.comFlow)}
+                  aoAlternar={(on) => aoAlternarPacote(p.key, on)}
+                />
+              </div>
+            ) : null}
 
             <PlanoRecursos
               id={`plano-lista-${p.key}`}
@@ -2854,8 +3032,27 @@ function ConteudoDaLanding() {
      saber quanto custa. */
   const [periodo, setPeriodo] = useState("mensal");
 
+  /* ── UM PACOTE POR CARTÃO ──────────────────────────────────────────────
+     Era um alternador só, no topo da seção, e ele obrigava a comparar os três
+     planos sempre no mesmo pacote. Mas a pergunta real de quem está escolhendo
+     é outra — "quanto custa o Profissional COM o Flow contra o Premium SEM?" —,
+     e com um interruptor único ela exigia trocar, ler, trocar de volta e
+     lembrar do número.
+
+     Com um por cartão, os três preços convivem na tela em qualquer combinação.
+
+     Todos começam em HUB pelo mesmo motivo do mensal: é o menor número, e abrir
+     no pacote completo faria a página anunciar o preço mais alto para quem só
+     quer saber quanto custa. */
+  const [pacotes, setPacotes] = useState(
+    () => Object.fromEntries(PLANOS.map((p) => [p.key, "HUB"])),
+  );
+  const alternarPacote = useCallback((planoKey, comFlow) => {
+    setPacotes((atuais) => ({ ...atuais, [planoKey]: comFlow ? "HUB_FLOW" : "HUB" }));
+  }, []);
+
   // Valores vigentes no provedor; enquanto não chegam, valem os de reserva.
-  const { planos: PLANS, temAnual } = usePrecosVigentes(periodo);
+  const { planos: PLANS, temAnual, temFlow } = usePrecosVigentes(periodo, pacotes);
 
   /* O selo do alternador é o melhor desconto entre os planos — um número só
      para uma escolha só. Por plano, a economia em reais aparece no cartão. */
@@ -3131,6 +3328,23 @@ function ConteudoDaLanding() {
         </div>
       </section>
 
+      {/* ── Os dois módulos ─────────────────────────────────────────────────
+          Vem depois de Canais e antes de Planos, e a posição é o argumento: a
+          pessoa acabou de ver o que o Hub faz, e esta seção diz que existe uma
+          segunda metade. Colocada antes, ela apresentaria o Flow para quem
+          ainda não sabe o que é o produto; depois dos planos, chegaria tarde —
+          a escolha do pacote já teria sido feita sem saber o que se escolhia. */}
+      <section className="dl-section" id="modulos">
+        <div className="dl-wrap">
+          <SectionHead eyebrow="DOIS MÓDULOS" strong="Anunciar é metade." soft="Fechar é a outra.">
+            O Hub cuida do que a imobiliária tem. O Flow cuida do que ela está fechando.
+            Você leva um, ou os dois.
+          </SectionHead>
+
+          <DoisModulos />
+        </div>
+      </section>
+
       {/* ── Destaques: parede à deriva no fundo da seção inteira ──
           O conteúdo fica por cima da parede, não ao lado dela — por isso a
           seção é o palco (`position: relative`) e a parede é uma camada
@@ -3152,11 +3366,20 @@ function ConteudoDaLanding() {
             Sem fidelidade, cancele quando quiser.
           </SectionHead>
 
+          {/* O interruptor do Flow desceu para DENTRO de cada cartão — ver o
+              comentário em `pacotes`. Aqui em cima fica só o período, que é uma
+              escolha da página inteira: ninguém paga um plano no mensal e outro
+              no anual. */}
           {temAnual ? (
             <PeriodoToggle valor={periodo} aoTrocar={setPeriodo} selo={seloPeriodo} />
           ) : null}
 
-          <Planos planos={PLANS} aoTestar={abrirTeste} />
+          <Planos
+            planos={PLANS}
+            aoTestar={abrirTeste}
+            temFlow={temFlow}
+            aoAlternarPacote={alternarPacote}
+          />
         </div>
       </section>
 
@@ -3249,7 +3472,7 @@ function ConteudoDaLanding() {
               seção clara, a única em que os vazados do PNG (as janelas e o
               miolo do "D") têm fundo para aparecer. */}
           <span className="dl-cta__brand">
-            <img src={LOGO_SRC} alt="Omnimob" />
+            <img src={LOGO_SIMBOLO_SRC} alt="Omnimob" />
           </span>
           <Eyebrow tone={ACCENT_SOFT}>PRÓXIMO PASSO</Eyebrow>
           <h2 className="dl-cta__title">
@@ -4668,6 +4891,20 @@ ${editorCSS()}
   border-right: 1px solid var(--line);
 }
 .dl-plan:last-child { border-right: 0; }
+/* ── O BOTAO SENTA NO PE DO CARTAO ──────────────────────────────────────────
+   Os tres cartoes tem a mesma altura (a grade estica), mas as listas de
+   recursos nao tem o mesmo tamanho — e passaram a diferir MUITO quando o
+   interruptor do Flow virou por cartao: com o Flow ligado num so, um cartao
+   ganha nove linhas e os outros nao.
+
+   Sem isto o botao segue a lista e para onde ela acabar: dois flutuando no meio
+   do cartao e um la embaixo. Medido, era 897 / 1234 / 898 dentro de cartoes de
+   1310 — o rodape da secao lia como inacabado.
+
+   margin-top auto empurra o ultimo item para o fim do flex column. Vale em
+   qualquer combinacao de interruptores, que e o ponto: nao ha altura escrita
+   para acertar. */
+.dl-plan > .dl-btn--block:last-child { margin-top: auto; }
 .dl-plan.is-highlight { background: var(--surface); }
 /* ── Etiqueta "mais popular" ──
    Virou uma pastilha na cor do plano (--realce, o mesmo roxo do neon do cartão),
@@ -4781,6 +5018,117 @@ ${editorCSS()}
   margin: -1px; padding: 0; border: 0;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OS DOIS MODULOS — a secao que apresenta Hub e Flow
+   ══════════════════════════════════════════════════════════════════════════
+
+   Duas colunas de MESMA largura, e a simetria e o argumento: ela diz que sao
+   dois produtos do mesmo tamanho, e nao um produto e um acessorio. Por isso
+   1fr 1fr e nao um destaque maior para o Flow.
+
+   Sem ilustracao e sem animacao de entrada alem do fade: esta secao fica entre
+   duas que ja tem (o baralho de canais acima, o fundo em ondas dos planos
+   abaixo), e uma terceira no meio cansa a rolagem.
+   (SEM CRASES nestes comentarios: eles vivem dentro de um template literal.) */
+.dl-modulos {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px; margin-top: 44px;
+}
+@media (max-width: 860px) { .dl-modulos { grid-template-columns: 1fr; gap: 16px; } }
+
+.dl-modulo {
+  position: relative;
+  padding: 28px 30px 30px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  /* Entrada escalonada pelo indice: as duas colunas nao sobem juntas, o que
+     faria a secao inteira piscar de uma vez. 90ms e o bastante para o olho
+     perceber a ordem sem sentir espera. */
+  opacity: 0; transform: translateY(18px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: calc(var(--i) * 90ms);
+}
+.dl-modulos.is-in .dl-modulo { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .dl-modulo { transition: none; opacity: 1; transform: none; }
+}
+
+/* O fio de cor no topo do cartao. E a unica coisa que distingue os dois
+   visualmente, e e o bastante: a cor ja e a identidade do modulo no painel, e
+   repeti-la aqui ensina a associacao antes de a pessoa entrar no produto. */
+.dl-modulo::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 3px;
+  border-radius: 20px 20px 0 0;
+  background: linear-gradient(90deg, var(--cor), transparent);
+}
+
+.dl-modulo header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.dl-modulo__marca {
+  flex: none; width: 44px; height: 44px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--cor) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cor) 30%, transparent);
+}
+.dl-modulo__marca img { width: 62%; height: 62%; object-fit: contain; }
+.dl-modulo h3 {
+  display: flex; align-items: center; gap: 9px;
+  margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.02em; color: var(--strong);
+}
+.dl-modulo__novo {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700;
+  padding: 3px 8px; border-radius: 999px;
+  color: var(--cor);
+  background: color-mix(in srgb, var(--cor) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cor) 32%, transparent);
+}
+.dl-modulo__chamada {
+  display: block; margin-top: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--subtle);
+}
+.dl-modulo p { margin: 0 0 18px; font-size: 14.5px; line-height: 1.72; color: var(--default); }
+.dl-modulo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.dl-modulo li {
+  position: relative; padding-left: 24px;
+  font-size: 13.5px; line-height: 1.6; color: var(--default);
+}
+/* O marcador e um tracinho na cor do modulo, e nao um check verde: check diz
+   "incluido no plano", e essa e a conversa da tabela logo abaixo. Aqui a lista
+   e descritiva. */
+.dl-modulo li::before {
+  content: ""; position: absolute; left: 0; top: 10px;
+  width: 12px; height: 2px; border-radius: 2px; background: var(--cor);
+}
+
+/* A caixa do interruptor do Flow. O componente traz o desenho dele; o que fica
+   aqui e so a largura e o respiro nesta pagina — largura de leitura, centrada,
+   e nao a coluna inteira de 1200px, onde uma frase de duas linhas ficaria com
+   quinze palavras por linha.
+   (Sem crases nestes comentarios: template literal.) */
+/* O interruptor do Flow DENTRO do cartao de plano.
+
+   Ele reaproveita o componente compartilhado (ToggleDoFlow), e o que muda aqui
+   e so o aperto: num cartao de 300px a caixa solta da pagina ficaria com uma
+   palavra por linha. O texto encolhe, a descricao vira duas linhas curtas, e a
+   caixa perde a moldura — dentro de um cartao que ja tem borda, uma segunda
+   borda a dois centimetros da primeira lê como caixa presa em caixa.
+   (Sem crases nestes comentarios: template literal.) */
+.dl-plan__flow { margin: 0 0 16px; }
+.dl-plan__flow .pkg-caixa {
+  padding: 11px 12px; border-radius: 11px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--strong) 4%, transparent);
+}
+.dl-plan__flow .pkg-caixa.is-on {
+  border-color: color-mix(in srgb, var(--pkg-cor) 30%, transparent);
+}
+.dl-plan__flow .pkg-linha { gap: 10px; }
+.dl-plan__flow input.sw { font-size: 12px; }
+.dl-plan__flow .pkg-titulo { font-size: 12.5px; gap: 7px; }
+.dl-plan__flow .pkg-desc { font-size: 11px; line-height: 1.45; }
 
 /* ── Alternador mensal / anual ──────────────────────────────────────────────
    A pílula que marca a opção é UM elemento que desliza, não um fundo aceso em

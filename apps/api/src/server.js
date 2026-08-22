@@ -16,6 +16,8 @@ import { apiPublicaRouter } from "./routes/apiPublicaRoutes.js";
 import { chavesApiRouter } from "./routes/chavesApiRoutes.js";
 import { webhookRouter } from "./routes/webhookRoutes.js";
 import { canaisRouter } from "./routes/canaisRoutes.js";
+import { flowRouter } from "./routes/flowRoutes.js";
+import { captacaoPublicaRouter } from "./routes/captacaoPublicaRoutes.js";
 import { agendarSincronizacoes } from "./services/sincronizacao.js";
 import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
@@ -173,7 +175,26 @@ app.use("/api/v1", express.text({ type: ["application/xml", "text/xml"], limit: 
 
 // Limite maior que o padrão (100kb) para acomodar imagens em base64 enviadas
 // à IA (rota /api/ai/imovel/sugerir). Demais rotas continuam pequenas.
-app.use(express.json({ limit: "12mb" }));
+app.use(express.json({
+  limit: "12mb",
+  /* ── O CORPO CRU, GUARDADO AO PASSAR ──────────────────────────────────────
+     O webhook de captação do Flow confere a assinatura HMAC do corpo, e para
+     isso precisa dos BYTES EXATOS que chegaram. Recalcular sobre
+     `JSON.stringify(req.body)` não funciona: a ordem das chaves e o espaçamento
+     mudam na ida e volta pelo parser, e a assinatura nunca bateria — o sintoma
+     seria "todo lead do ZAP chega com assinatura inválida", sem pista nenhuma.
+
+     Os outros dois webhooks (Meta e Stripe) resolvem isso montando o router
+     ANTES deste parser, com `express.raw`. Aqui não dá: a rota de captação
+     precisa do JSON já interpretado no caso comum, em que a fonte não assina.
+     Guardar de passagem custa uma referência ao Buffer que já existe.
+
+     Só quando há corpo: `verify` roda para toda requisição, e criar a
+     propriedade em GETs vazios seria trabalho por nada. */
+  verify: (req, _res, buf) => {
+    if (buf?.length) req.rawBody = buf.toString("utf8");
+  },
+}));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -217,6 +238,28 @@ app.use("/api/importacao", importacaoRouter);
 app.use("/api/chaves-api", chavesApiRouter);
 app.use("/api/webhooks-saida", webhookRouter);
 app.use("/api/canais", canaisRouter);
+/* ─── Omnimob Flow ──────────────────────────────────────────────────────────
+
+   ── POR QUE O WEBHOOK NÃO MORA EM /api/flow ──────────────────────────────
+
+   Ele morava, em `/api/flow/captacao/:chave`, e a montagem parecia certa: o
+   público antes do autenticado, o mais específico primeiro. Estava errada de
+   um jeito que só apareceu no navegador.
+
+   `GET /api/flow/captacao/:chave` casa com QUALQUER coisa naquela posição —
+   inclusive com `fontes` e `eventos`, que são as rotas de GERÊNCIA do painel.
+   O resultado: a tela de captação pedia a lista de fontes e recebia "fonte não
+   encontrada" 404, porque o webhook tinha interpretado a palavra "fontes" como
+   uma chave de portal.
+
+   Trocar a ordem não resolve — inverter só transfere o problema para o lead,
+   que passaria a levar 401. O que resolve é o webhook não compartilhar prefixo
+   com nada autenticado. Em `/api/captacao` ele fica sozinho, e a colisão deixa
+   de ser possível em vez de ficar contornada.
+
+   Também lê melhor no painel do portal, que é onde a URL é colada. */
+app.use("/api/captacao", captacaoPublicaRouter);
+app.use("/api/flow", flowRouter);
 /* A API pública da imobiliária.
 
    Passa pelo `generalLimiter` (300/min por IP) como todo o resto, E tem um teto

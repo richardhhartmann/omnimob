@@ -11,6 +11,7 @@ import { situacaoDeGraca } from "../services/trialService.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { loginSchema } from "../validators/authValidators.js";
 import { PERMISSOES } from "../services/cargosPadrao.js";
+import { modulosDoTenant } from "../services/modulos.js";
 import { normalizarAtalhos } from "../services/atalhos.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
@@ -125,6 +126,17 @@ function montarSessao(usuario, { escopo = null } = {}) {
          tela teria de buscar o domínio por conta própria, e alguma esqueceria. */
       dominioProprio: usuario.tenant.dominioProprio,
       dominioStatus: usuario.tenant.dominioStatus,
+      /* ── Os módulos contratados ──────────────────────────────────────────
+         Vão na sessão porque quem decide o que DESENHAR é o `AdminLayout`, no
+         primeiro quadro: o seletor de módulo, a barra lateral inteira e a rota
+         inicial dependem disto. Buscar por uma chamada à parte faria o painel
+         montar como Hub e trocar para Flow um segundo depois, na frente da
+         pessoa — e quem entra direto numa rota do Flow seria despejado antes de
+         a resposta chegar.
+
+         Normalizado aqui e não na tela: `modulosDoTenant` garante o HUB para
+         conta antiga (coluna vazia), e essa regra não pode ter duas versões. */
+      modulos: modulosDoTenant(usuario.tenant),
     },
   };
 }
@@ -492,6 +504,25 @@ authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {
             vinculadoEm: usuario.googleVinculadoEm,
           }
         : null,
+      /* ── O que mudou na CONTA, e não na pessoa ───────────────────────────
+         Esta rota é relida na montagem do painel e a cada foco da janela, e até
+         aqui ela só devolvia o usuário. Bastava enquanto a única coisa volátil
+         era a permissão do cargo.
+
+         Com os módulos deixou de bastar: o administrador contrata o Flow e a
+         equipe inteira continua sem o seletor na barra lateral por até sete
+         dias — o tempo do token —, sem nada na tela explicando por quê. O plano
+         tem exatamente o mesmo problema e sempre teve; quem faz upgrade para
+         destravar um recurso precisa recarregar para vê-lo.
+
+         Só estes dois campos, e não o tenant inteiro: o resto (cores, logo,
+         vitrine) é editado pela própria pessoa em Configurações, que já atualiza
+         a sessão na hora. Mandar tudo aqui atropelaria essa edição a cada foco
+         da janela. */
+      tenant: {
+        modulos: modulosDoTenant(req.tenant),
+        plano: (req.tenant.plano || "BASICO").toUpperCase(),
+      },
     });
   } catch (err) {
     console.error("[GET /auth/me]", err);

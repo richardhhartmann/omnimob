@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { getTrialStatusCompartilhado } from "../utils/trialStatus";
+import { getTrialStatusCompartilhado, esquecerTrialStatus } from "../utils/trialStatus";
 import { PLANOS } from "../utils/planos";
 import { IconeCheck, IconeEstrela } from "./Icones.jsx";
 import { PerfilInicialPasso, PERFIL_INICIAL_CSS } from "./PerfilInicialPasso.jsx";
 import { DominioVitrine } from "./DominioVitrine.jsx";
-import { chaveDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
+import { lerDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Boas-vindas de quem acabou de assinar, no primeiro acesso ao painel.
@@ -16,35 +16,19 @@ import { chaveDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
    troca de senha obrigatória — e nunca vê. Este modal fecha essa lacuna: quem
    assinou é recebido dentro do produto, no momento em que vai usá-lo.
 
-   Aparece uma vez só, e quem garante isso é uma marca no navegador — não o
-   banco. O schema não guarda QUANDO a assinatura começou, e a idade do tenant
-   não serve de pista: quem testa três semanas e só então assina tem um tenant
-   velho. Registrar a data pediria coluna nova (e migração) para um detalhe de
-   interface, então por ora o critério é "assinatura ativa e ainda não vista
-   aqui". O custo é um cliente antigo, em máquina nova, ver boas-vindas fora de
-   hora.
+   ── APARECE UMA VEZ SÓ, E QUEM GARANTE ISSO É O BANCO ──
+
+   `Tenant.boasVindasVistas` guarda quais recepções esta conta já teve
+   ("teste", "assinante"). Era uma marca de `localStorage`, e a pergunta que ela
+   respondia estava errada: "este NAVEGADOR já viu?" em vez de "esta CONTA já
+   foi recebida?". O sintoma aparecia em toda guia anônima e em toda máquina
+   nova — o assistente inteiro voltava do zero, pedindo de novo a ficha da
+   imobiliária, o endereço da vitrine e a importação da base para quem já tinha
+   respondido tudo, e não havia como convencê-lo do contrário.
+
+   Continua havendo uma marca local, e ela é só um ATALHO: decide se o véu de
+   espera aparece no primeiro quadro, nunca se o modal aparece. Ver `esperando`.
    ──────────────────────────────────────────────────────────────────────────── */
-
-/* Chave separada por modo: quem viu as boas-vindas do teste e depois assina
-   precisa ver as de assinante também — é outra mensagem, em outro momento.
-
-   Amarrada ao ID da imobiliária, e não ao slug. Slug é reutilizável: uma
-   empresa cancela, o endereço fica livre, outra assina e escolhe o mesmo — e o
-   navegador entregava a marca de "já viu" da anterior, deixando a nova sem o
-   modal de primeiro acesso. Ver `utils/chaveDoTenant.js`. */
-const chaveVisto = (tenantId, modo) => chaveDoTenant(`${CHAVES.boasVindasVisto}_${modo}`, tenantId);
-
-/* Qual versão se aplica a esta imobiliária, da última vez que perguntamos:
-   "teste", "assinante" ou "nenhum". Guardado só para decidir se o véu de espera
-   precisa aparecer — ver `esperando`, mais abaixo. Nunca substitui a resposta do
-   servidor: o modal em si continua saindo do `/me/trial` de agora. */
-const chaveModo = (tenantId) => chaveDoTenant(CHAVES.boasVindasModo, tenantId);
-
-/* Lê uma chave que pode ser nula (sem id) sem derrubar a tela. */
-const ler = (chave) => {
-  if (!chave) return null;
-  try { return localStorage.getItem(chave); } catch { return null; }
-};
 
 // Duração da saída. Precisa bater com a das animações no CSS.
 const SAIDA_MS = 260;
@@ -160,29 +144,20 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
      inteiro clicável nesse intervalo — a pessoa começava a trabalhar e o modal
      de boas-vindas caía por cima do que ela estava fazendo.
 
-     Quem não vai ver modal nenhum também não deve ver véu, e é aí que a versão
-     anterior errava: ela só dispensava o véu de quem tivesse visto AS DUAS
-     versões — teste e assinante. Só que ninguém está nas duas situações ao mesmo
-     tempo. Quem está em teste vê as boas-vindas do teste, ganha a marca "teste"
-     e nunca a de "assinante" — então a condição jamais fechava, e "Preparando
-     seu painel…" voltava a cada acesso, para sempre, para todo mundo.
+     ── E QUEM NÃO VAI VER MODAL NENHUM TAMBÉM NÃO DEVE VER VÉU ──
 
-     A pergunta certa não é "viu as duas?", é "viu a que se aplica a você?". Qual
-     se aplica depende do servidor, mas a de ONTEM está guardada, e ela acerta em
-     todo acesso menos um: o primeiro depois de assinar. Nesse, o véu não aparece
-     e o modal de assinante entra sem ele — uma vez na vida do cliente, contra o
-     véu eterno que existia antes. */
-  const [esperando, setEsperando] = useState(() => {
-    if (!tenantSlug) return false;
-    const modoConhecido = ler(chaveModo(tenantId));
-    // Nem teste nem assinante: não há boas-vindas para esta conta.
-    if (modoConhecido === "nenhum") return false;
-    if (modoConhecido && ler(chaveVisto(tenantId, modoConhecido))) return false;
-    /* Sem modo guardado (acesso anterior a esta versão): cai no critério
-       antigo, que continua correto quando fecha — quem viu as duas não verá
-       mais nenhuma. */
-    return !(ler(chaveVisto(tenantId, "teste")) && ler(chaveVisto(tenantId, "assinante")));
-  });
+     Essa é a única coisa que a marca local ainda decide. Quem manda sobre o
+     modal é o banco, mas a resposta dele leva segundos, e segurar a tela num
+     "Preparando seu painel…" a cada recarregamento de uma conta já recebida
+     seria pagar o preço todo dia por uma resposta que já se sabe qual é.
+
+     O atalho nunca faz APARECER o que não deveria: ele só silencia o véu, e só
+     depois de o servidor ter dito, uma vez, que não há nada a mostrar. Se a
+     situação mudar (o teste virou assinatura), o servidor manda abrir e o modal
+     abre — sem véu, uma vez na vida do cliente. */
+  const [esperando, setEsperando] = useState(
+    () => Boolean(tenantSlug) && lerDoTenant(CHAVES.boasVindasResolvido, tenantId) !== "1",
+  );
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -190,20 +165,23 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
     getTrialStatusCompartilhado(tenantSlug)
       .then((r) => {
         const qual = r?.assinaturaAtiva ? "assinante" : r?.emTrial ? "teste" : null;
-        /* Grava o modo ANTES de qualquer saída: é justamente para os acessos em
-           que nada é exibido que o próximo precisa saber que não haverá véu. */
-        gravarNoTenant(CHAVES.boasVindasModo, tenantId, qual || "nenhum");
-        if (!qual) { aoResolver?.(); return; }
-        /* Sem id não há como saber se esta conta já viu — e mostrar de novo é
-           melhor que esconder o primeiro acesso de quem nunca viu. */
-        if (ler(chaveVisto(tenantId, qual))) { aoResolver?.(); return; }
+        /* Nada a mostrar (nem teste nem assinatura), ou esta conta já recebeu a
+           recepção que se aplica a ela. Nos dois casos o atalho é gravado: é
+           justamente para os acessos em que nada aparece que o próximo precisa
+           saber que não haverá véu. */
+        const jaVistas = Array.isArray(r?.boasVindasVistas) ? r.boasVindasVistas : [];
+        if (!qual || jaVistas.includes(qual)) {
+          gravarNoTenant(CHAVES.boasVindasResolvido, tenantId, "1");
+          aoResolver?.();
+          return;
+        }
         setDados(r);
         setModo(qual);
         setAberto(true);
       })
       .catch(() => { aoResolver?.(); })
       .finally(() => setEsperando(false));
-    // `tenantId` entra junto: ele é quem decide a chave de "já viu", e trocar de
+    // `tenantId` entra junto: ele é quem chaveia o atalho, e trocar de
     // imobiliária sem refazer esta consulta deixaria a decisão presa na anterior.
   }, [tenantSlug, tenantId]);
 
@@ -236,8 +214,22 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
 
   function fechar() {
     if (saindo) return; // clique duplo não deve reiniciar a saída
-    // Sem storage (ou sem id) o modal volta na próxima entrada — aceitável.
-    gravarNoTenant(`${CHAVES.boasVindasVisto}_${modo}`, tenantId, "1");
+
+    /* O REGISTRO É NO SERVIDOR, e a navegação não espera por ele.
+
+       Se a gravação falhar, o pior que acontece é a recepção voltar no próximo
+       acesso — travar a pessoa na porta do painel por causa de um carimbo seria
+       pior que o problema que ele resolve. Mesma escolha de `encerrarMigracao`,
+       logo abaixo.
+
+       O cache de `/me/trial` é descartado junto: ele acabou de ficar velho
+       nesta exata informação, e uma remontagem dentro da janela de 15s
+       receberia a resposta anterior, sem o modo que acabamos de marcar. */
+    api.marcarBoasVindas(tenantSlug, modo)
+      .then(() => esquecerTrialStatus(tenantSlug))
+      .catch(() => {});
+    // Atalho do véu (ver `esperando`): local, e só sobre o véu.
+    gravarNoTenant(CHAVES.boasVindasResolvido, tenantId, "1");
     /* Desmonta só depois da animação. Tirar do DOM na hora cortaria o
        fechamento pela metade — o elemento sumiria antes de terminar. */
     setSaindo(true);

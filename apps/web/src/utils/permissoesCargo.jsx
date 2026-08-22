@@ -1,6 +1,7 @@
 import {
   Shield, Buildings, UserCircle, UserSquare,
   ClockCounterClockwise, PencilSimple, ShareNetwork, ChartPieSlice,
+  SignIn, Kanban, FileText, Scales, CurrencyCircleDollar, Coins, Broadcast,
 } from "@phosphor-icons/react";
 import { planoLiberaRedes } from "./planos";
 import { IconeRelatorios } from "./iconesRelatorios";
@@ -33,6 +34,32 @@ export const PERMISSOES = [
   { key: "publicarRedes",     label: "Publicar em Redes",     Icon: ShareNetwork },
 ];
 
+/* ── AS PERMISSÕES DO OMNIMOB FLOW ───────────────────────────────────────────
+
+   Lista separada, e não sete itens a mais na de cima. Duas razões:
+
+   1. Elas só existem para quem CONTRATOU o módulo. Uma imobiliária só de Hub
+      não deve nem ver estas caixas — oferecer o que a conta não tem produz a
+      pior conversa possível com o suporte ("marquei e não funciona").
+
+   2. Dezessete caixas numa lista corrida deixam de ser uma tela e viram um
+      formulário de imposto de renda. Agrupadas, a pessoa lê "o que ele faz no
+      Hub" e "o que ele faz no Flow" — que é como ela pensa ao montar o cargo.
+
+   `acessarFlow` está aqui e `acessarPainel` não está na lista do Hub, e a
+   diferença é real: entrar no Hub é consequência de existir como cargo (o
+   servidor força em toda gravação); entrar no Flow é uma DECISÃO, e é
+   exatamente a decisão que o cliente pediu para poder tomar pessoa a pessoa. */
+export const PERMISSOES_FLOW = [
+  { key: "acessarFlow",        label: "Acessar o Flow",       Icon: SignIn },
+  { key: "gerenciarNegocios",  label: "Gerenciar Negócios",   Icon: Kanban },
+  { key: "gerenciarContratos", label: "Gerenciar Contratos",  Icon: FileText },
+  { key: "gerenciarCaptacao",  label: "Configurar Captação",  Icon: Broadcast },
+  { key: "validarJuridico",    label: "Validar (Jurídico)",   Icon: Scales },
+  { key: "validarFinanceiro",  label: "Validar (Financeiro)", Icon: CurrencyCircleDollar },
+  { key: "verComissoes",       label: "Ver Comissões",        Icon: Coins },
+];
+
 /* `acessarPainel` também não está, e pelo mesmo motivo: ela não é uma escolha.
    Criar um cargo é dizer que aquelas pessoas entram no painel — a pergunta que
    sobra é O QUE elas alcançam lá dentro.
@@ -59,10 +86,31 @@ export function permissoesDoPlano(plano) {
   });
 }
 
-/** Um cargo em branco, com todas as permissões desmarcadas. */
+/* ── Os DOIS grupos que a tela desenha ───────────────────────────────────────
+
+   Devolve `[{ titulo, itens }]`. O grupo do Flow só aparece quando a conta
+   contratou o módulo — ver `PERMISSOES_FLOW`.
+
+   Por que uma função e não os dois arrays exportados soltos: quem desenha
+   (`GradeDePermissoes`) não deve precisar saber que existe módulo, nem cruzar
+   `tenant.modulos` por conta própria. Ele recebe grupos e desenha grupos; a
+   regra de quais existem mora aqui, num lugar só. */
+export function gruposDePermissao(plano, { temFlow = false } = {}) {
+  const grupos = [{ titulo: null, itens: permissoesDoPlano(plano) }];
+  if (temFlow) {
+    grupos.push({ titulo: "No Omnimob Flow", itens: PERMISSOES_FLOW });
+  }
+  return grupos;
+}
+
+/** Um cargo em branco, com todas as permissões desmarcadas — as dos dois
+ *  módulos. Zerar só as do Hub deixaria as do Flow como `undefined`, e o
+ *  servidor as gravaria como `false` de qualquer jeito; o problema seria na
+ *  TELA, onde uma caixa controlada que começa `undefined` vira não-controlada e
+ *  o React reclama no console a cada clique. */
 export function cargoVazio() {
   const f = { descricao: "" };
-  for (const p of PERMISSOES) f[p.key] = false;
+  for (const p of [...PERMISSOES, ...PERMISSOES_FLOW]) f[p.key] = false;
   return f;
 }
 
@@ -82,6 +130,37 @@ export function cargoVazio() {
    Um aviso genérico ("esta permissão é sensível") ensina a clicar em confirmar
    sem ler — e aí o modal deixa de proteger e vira só um passo a mais. */
 export const PERMISSOES_DE_RISCO = {
+  /* ── As duas travas do Flow ───────────────────────────────────────────────
+     Elas não concedem acesso a nada: concedem o poder de dizer "conferi, pode
+     fechar". É a permissão mais silenciosa do produto — quem a tem não vê
+     nenhuma tela nova, só ganha um botão —, e por isso é a mais fácil de
+     conceder por engano ao montar um cargo às pressas.
+
+     O aviso existe porque o estrago é assimétrico: dar `gerenciarImoveis` a
+     mais faz alguém editar um anúncio; dar `validarFinanceiro` a mais faz um
+     negócio de setecentos mil fechar sem ninguém do financeiro ter olhado. */
+  validarJuridico: {
+    titulo: "Conceder a validação jurídica?",
+    verbo: "o poder de liberar juridicamente um negócio para fechamento",
+    riscos: [
+      "Nenhum negócio vira GANHO sem esta marca. Quem a tem destrava o fechamento sozinho.",
+      "É uma conferência de documentação — matrícula, certidões, qualificação das partes. Quem não faz essa leitura não deveria poder atestá-la.",
+      "A liberação fica registrada com o nome da pessoa e a data. Se o negócio for questionado depois, é o nome dela que responde.",
+      "Num time pequeno, dar isto ao mesmo cargo que trabalha o negócio elimina a conferência: a pessoa aprova o próprio trabalho.",
+    ],
+    textoCiencia: "Estou ciente de que este cargo poderá liberar juridicamente negócios para fechamento, e quero conceder assim mesmo.",
+  },
+  validarFinanceiro: {
+    titulo: "Conceder a validação financeira?",
+    verbo: "o poder de liberar financeiramente um negócio para fechamento",
+    riscos: [
+      "Nenhum negócio vira GANHO sem esta marca — e é no fechamento que a comissão é calculada e congelada.",
+      "É a conferência de sinal, forma de pagamento e financiamento aprovado. Liberar antes disso fecha um negócio que ainda pode cair.",
+      "A liberação fica registrada com o nome da pessoa e a data.",
+      "Num time pequeno, dar isto a quem também vende elimina a conferência: a pessoa libera o próprio negócio.",
+    ],
+    textoCiencia: "Estou ciente de que este cargo poderá liberar financeiramente negócios para fechamento, e quero conceder assim mesmo.",
+  },
   gerenciarCargos: {
     titulo: "Conceder Gerenciar Cargos?",
     verbo: "o poder de editar cargos e permissões desta imobiliária",

@@ -1,4 +1,4 @@
-import { permissoesDoPlano } from "../utils/permissoesCargo.jsx";
+import { gruposDePermissao } from "../utils/permissoesCargo.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    As caixas de permissão de um cargo. Uma só, para as duas telas.
@@ -32,6 +32,17 @@ import { permissoesDoPlano } from "../utils/permissoesCargo.jsx";
    tela filtrasse por conta própria, uma delas esqueceria o filtro na próxima
    permissão que dependa de plano — e ofereceria uma caixa que o servidor
    recusa.
+
+   ── `somenteLeitura`: A MESMA GRADE, SEM MEXER ──
+
+   A prévia do cargo escolhido, no cadastro de usuário, mostra exatamente esta
+   lista — e por isso é este componente, e não um segundo desenho ao lado. O que
+   muda é COMPORTAMENTO, como em todo o resto: não há caixa para clicar, e cada
+   item traz um ✓ ou um ✕ no lugar dela.
+
+   O ✕ importa tanto quanto o ✓. Quem escolhe o cargo de alguém precisa ver o
+   que aquela pessoa NÃO vai alcançar — uma lista só do que está ligado deixa a
+   pergunta "e o resto?" sem resposta na tela.
    ──────────────────────────────────────────────────────────────────────────── */
 
 export function GradeDePermissoes({
@@ -45,21 +56,78 @@ export function GradeDePermissoes({
   travadas = [],
   motivoTravada,
   dataTour,
+  /* Prévia: desenha a mesma grade sem nada para clicar. Ver o cabeçalho. */
+  somenteLeitura = false,
+  /* A imobiliária contratou o Omnimob Flow? Só com ele o segundo grupo de
+     permissões existe. Ver `gruposDePermissao`. */
+  temFlow = false,
 }) {
-  const permissoes = permissoesDoPlano(plano);
+  const grupos = gruposDePermissao(plano, { temFlow });
 
   return (
-    <div className="perm-grade" data-tour={dataTour}>
-      {permissoes.map(({ key, label, Icon }) => {
+    <>
+      {grupos.map((grupo) => (
+        <div key={grupo.titulo || "hub"} className="perm-secao">
+          {/* Título só no segundo grupo. O primeiro é "as permissões", e dar
+              nome a ele numa conta sem Flow criaria uma divisão onde não há
+              nada do outro lado. */}
+          {grupo.titulo ? <span className="perm-secao__titulo">{grupo.titulo}</span> : null}
+          <GradeDeUmGrupo
+            itens={grupo.itens}
+            valores={valores}
+            aoAlternar={aoAlternar}
+            desabilitado={desabilitado}
+            travadas={travadas}
+            motivoTravada={motivoTravada}
+            somenteLeitura={somenteLeitura}
+            dataTour={grupo.titulo ? undefined : dataTour}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/* A grade de um grupo. Saiu do componente de cima quando o segundo módulo
+   trouxe o segundo grupo — o desenho de um item é o mesmo nos dois, e é ele que
+   não pode ter duas versões. */
+function GradeDeUmGrupo({
+  itens, valores = {}, aoAlternar, desabilitado, travadas = [], motivoTravada,
+  somenteLeitura, dataTour,
+}) {
+  return (
+    <div className={`perm-grade${somenteLeitura ? " is-previa" : ""}`} data-tour={dataTour}>
+      {itens.map(({ key, label, Icon }) => {
         const travada = travadas.includes(key);
         /* Travada aparece SEMPRE marcada: o que ela comunica é "você tem isto e
            não pode abrir mão", e não "isto está desligado". */
         const marcada = travada ? true : Boolean(valores[key]);
 
+        /* Só na prévia o item apagado ganha marca própria. Na grade de edição a
+           ausência de marca já é a caixa desmarcada, e apagar o item ali faria
+           parecer indisponível em vez de desligado. */
+        const classe = `perm-item${marcada ? " is-on" : somenteLeitura ? " is-off" : ""}`
+          + (travada ? " is-travada" : "");
+
+        if (somenteLeitura) {
+          /* `<div>` e não `<label>`: rótulo sem controle é rótulo apontando
+             para nada, e o leitor de tela anuncia um campo que não existe. */
+          return (
+            <div key={key} className={classe}>
+              <span className="perm-marca" aria-hidden="true">{marcada ? "✓" : "✕"}</span>
+              {Icon ? <Icon size={16} weight={marcada ? "fill" : "regular"} /> : null}
+              <span>{label}</span>
+              {/* O estado por extenso, só para quem ouve a tela: o ✓/✕ é
+                  decorativo e a cor não chega a ninguém. */}
+              <span className="sr-only">{marcada ? ": tem acesso" : ": sem acesso"}</span>
+            </div>
+          );
+        }
+
         return (
           <label
             key={key}
-            className={`perm-item${marcada ? " is-on" : ""}${travada ? " is-travada" : ""}`}
+            className={classe}
             title={travada ? motivoTravada : undefined}
           >
             <input

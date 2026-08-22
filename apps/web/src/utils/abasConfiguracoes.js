@@ -5,8 +5,10 @@ import {
   ShareNetwork,
   Database,
   Crown,
+  Kanban,
 } from "@phosphor-icons/react";
 import { planoLiberaRedes } from "./planos";
+import { FLOW, modulosDoTenant } from "./modulos";
 
 /* ────────────────────────────────────────────────────────────────────────────
    As seções de Configurações, num lugar só.
@@ -63,6 +65,21 @@ export const ABAS_CONFIG = [
     desc: "Traga imóveis, clientes e usuários do sistema que você usava antes — pelo feed XML dele ou pela nossa API.",
   },
   {
+    /* ── O Flow tem uma ABA, e não uma tela de configuração própria ─────────
+       O módulo tem duas coisas para configurar — o provedor de assinatura e a
+       política de comissão — e nenhuma delas justifica uma segunda tela com
+       plano, cobrança e domínio duplicados ao lado. Uma segunda Configurações é
+       a divergência que este projeto já pagou duas vezes.
+
+       Por isso o item "Configurações" da barra do Flow aponta para
+       `/configuracoes?ver=flow`: mesmo destino, âncora diferente. */
+    key: "flow",
+    label: "Omnimob Flow",
+    cor: "#94a3b8",
+    Icon: Kanban,
+    desc: "Assinatura digital dos contratos e a política de comissão da casa.",
+  },
+  {
     key: "plano",
     label: "Plano e recursos",
     cor: "#94a3b8",
@@ -88,12 +105,17 @@ export const rotuloDaAba = (chave) => ABAS_CONFIG.find((a) => a.key === chave)?.
    Escondido, e não bloqueado: quem vende plano é a tela de planos. Uma seção
    cheia de cadeados vende pior e frustra mais.
    ────────────────────────────────────────────────────────────────────────── */
-export function abasVisiveis(cargo, plano, { podeImportar }) {
+export function abasVisiveis(cargo, plano, { podeImportar, temFlow = false }) {
   return ABAS_CONFIG.filter((a) => {
     if (a.key === "dados") return podeImportar(cargo);
     /* Tudo o que mora em Redes — Facebook, Instagram, Mercado Livre, ponte de
        WhatsApp, portais — começa no Profissional. */
     if (a.key === "redes") return planoLiberaRedes(plano);
+    /* A seção do Flow só existe para quem contratou o módulo — e, dentro dele,
+       para quem administra a conta. Escondida e não bloqueada, como o resto:
+       quem vende módulo é a tela de planos, não um cadeado no meio das
+       configurações. */
+    if (a.key === "flow") return temFlow && Boolean(cargo?.verConfiguracoes);
     return true;
   });
 }

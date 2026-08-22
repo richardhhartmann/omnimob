@@ -14,6 +14,32 @@
 
 export const CARGO_ADMIN = "Administrador";
 
+/* ── As permissões do segundo módulo ─────────────────────────────────────────
+
+   Ficam numa lista à parte e são concatenadas em `PERMISSOES` logo abaixo. Duas
+   razões, e nenhuma é organização:
+
+   1. A TELA precisa saber quais são do Flow para agrupá-las — a grade de
+      permissões mostra "O que este cargo pode fazer" e misturar "Editar Página"
+      com "Validar Financeiro" numa lista corrida de dezessete caixas não é uma
+      tela, é um formulário de imposto de renda.
+
+   2. Elas só valem para quem contratou o módulo. Uma imobiliária só de Hub não
+      deve nem ver estas sete caixas, e é esta lista que diz quais esconder.
+
+   `PERMISSOES` continua sendo a lista canônica única que `cargoRoutes` percorre
+   ao gravar — separar aqui não cria uma segunda fonte de verdade, só um recorte
+   nomeado dela. */
+export const PERMISSOES_FLOW_LISTA = [
+  "acessarFlow",
+  "gerenciarNegocios",
+  "gerenciarContratos",
+  "validarJuridico",
+  "validarFinanceiro",
+  "verComissoes",
+  "gerenciarCaptacao",
+];
+
 /* `gerenciarLeads` SAIU desta lista.
 
    Leads deixaram de ser uma tela própria: viraram um item dentro de
@@ -44,17 +70,42 @@ export const PERMISSOES = [
   "verAuditoria",
   "publicarRedes",
   "verPainelGestor",
+  // ─── Omnimob Flow ───
+  ...PERMISSOES_FLOW_LISTA,
 ];
 
 /* `verConfiguracoes`, `gerenciarCargos`, `verAuditoria` e `verPainelGestor`
    aparecem SÓ no Administrador, e é deliberado: são as chaves da casa. Configurações guarda plano, cobrança,
    domínio e o cancelamento da assinatura; Gerenciar Cargos permite reescrever
    as permissões de todo mundo — inclusive conceder a si mesmo o que faltava. */
+/* ── O Flow nos cargos que já nascem prontos ─────────────────────────────────
+
+   Só três dos sete cargos padrão o alcançam, e o Administrador NÃO recebe as
+   duas validações mesmo tendo tudo o resto.
+
+   É a única exceção à regra "o Administrador tem tudo", e ela existe porque a
+   trava perde o sentido sem ela. `validarJuridico` e `validarFinanceiro` são o
+   que segura um negócio antes do fechamento; numa imobiliária com um
+   administrador só — que é a maioria dos clientes — dá-las a ele por padrão
+   faria a pessoa aprovar o próprio negócio com dois cliques e nunca perceber
+   que havia uma conferência ali. Quem quiser esse arranjo pode marcá-las na
+   tela; o que não pode é ele vir de fábrica.
+
+   Os cargos "Jurídico" e "Financeiro" entram no catálogo por isso: eles são a
+   forma DESENHADA de usar o recurso, e um catálogo que não a oferece obriga
+   toda imobiliária a descobri-la sozinha. */
 export const CARGOS_PADRAO = [
-  { descricao: CARGO_ADMIN, permite: PERMISSOES },
+  {
+    descricao: CARGO_ADMIN,
+    permite: PERMISSOES.filter((p) => p !== "validarJuridico" && p !== "validarFinanceiro"),
+  },
   {
     descricao: "Gerente",
-    permite: ["acessarPainel", "editarPagina", "gerenciarImoveis", "gerenciarUsuarios", "gerenciarClientes", "verRelatorios", "publicarRedes"],
+    permite: [
+      "acessarPainel", "editarPagina", "gerenciarImoveis", "gerenciarUsuarios",
+      "gerenciarClientes", "verRelatorios", "publicarRedes",
+      "acessarFlow", "gerenciarNegocios", "gerenciarContratos", "verComissoes", "gerenciarCaptacao",
+    ],
   },
   {
     descricao: "Corretor",
@@ -77,6 +128,27 @@ export const CARGOS_PADRAO = [
   {
     descricao: "Consulta (Somente Leitura)",
     permite: ["acessarPainel", "verRelatorios"],
+  },
+  /* ── Os três do Flow ──────────────────────────────────────────────────────
+     Jurídico e Financeiro entram SEM `acessarPainel`: eles não têm nada a fazer
+     no Hub. Quem confere documentação de um negócio não precisa do cadastro de
+     imóvel nem do editor de vitrine, e dar acesso "porque não custa nada" é
+     como as permissões incham até ninguém saber mais quem alcança o quê.
+
+     São, na prática, os primeiros cargos SÓ-FLOW do produto — e existirem no
+     catálogo é o que prova que usuário só-Flow é um arranjo previsto, e não um
+     efeito colateral de desmarcar caixas. */
+  {
+    descricao: "Jurídico",
+    permite: ["acessarFlow", "gerenciarNegocios", "gerenciarContratos", "validarJuridico"],
+  },
+  {
+    descricao: "Financeiro",
+    permite: ["acessarFlow", "gerenciarNegocios", "validarFinanceiro", "verComissoes"],
+  },
+  {
+    descricao: "Corretor Flow",
+    permite: ["acessarPainel", "acessarFlow", "gerenciarImoveis", "gerenciarClientes", "verRelatorios", "gerenciarNegocios"],
   },
 ];
 

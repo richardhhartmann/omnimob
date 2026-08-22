@@ -291,6 +291,10 @@ export function emailAvisoNovoTrial({
 
 export function emailAssinaturaConfirmada({
   imobiliaria, plano, valorRotulo, proximaCobranca, inventario = {}, recursos = [], base, slug, urlVitrine,
+  /* Os módulos contratados. Opcional de propósito: o e-mail existia antes de
+     eles existirem, e uma chamada antiga que não os passe continua produzindo a
+     mensagem de sempre em vez de uma linha vazia. */
+  modulos = null,
 }) {
   const subject = `Assinatura confirmada — bem-vindo à Omnimob, ${imobiliaria}`;
 
@@ -302,10 +306,21 @@ export function emailAssinaturaConfirmada({
     inventario.usuarios ? `${inventario.usuarios} usuários` : null,
   ].filter(Boolean);
 
+  /* ── O QUE FOI CONTRATADO, e não só quanto custa ─────────────────────────
+     Plano e pacote são coisas diferentes: "Profissional" não diz se o Flow veio
+     junto. Sem esta linha, a única confirmação por escrito de que o cliente
+     pagou pelo módulo seria a fatura do cartão — e é justamente esse e-mail que
+     ele procura quando o Flow não aparece no painel.
+
+     Só aparece quando há Flow: numa conta só-Hub, uma linha dizendo "Módulos:
+     Hub" é ruído sobre uma divisão que aquele cliente não precisa conhecer. */
+  const temFlow = Array.isArray(modulos) && modulos.includes("FLOW");
+
   const body = [
     `Obrigado! A assinatura da ${imobiliaria} está ativa.`,
     "",
     `Plano:            ${plano}`,
+    temFlow ? "Módulos:          Omnimob Hub + Omnimob Flow" : "",
     `Valor:            ${valorRotulo}`,
     proximaCobranca ? `Próxima cobrança: ${proximaCobranca}` : "",
     "",
@@ -314,6 +329,14 @@ export function emailAssinaturaConfirmada({
       : "Seu ambiente segue exatamente como estava.",
     "",
     recursos.length ? `O plano libera:\n- ${recursos.join("\n- ")}` : "",
+    temFlow
+      ? "\nE o Omnimob Flow acrescenta:\n" +
+        "- Captação automática de leads pelos portais e redes\n" +
+        "- Funil de vendas de sete etapas, do lead ao fechamento\n" +
+        "- Minutas contratuais preenchidas e assinatura digital\n" +
+        "- Conferência do jurídico e do financeiro antes de fechar\n" +
+        "- Comissão calculada e dividida no fechamento"
+      : "",
     "",
     `Painel:  ${base}/login`,
     `Vitrine: ${vitrineUrl({ urlVitrine, base, slug })}`,

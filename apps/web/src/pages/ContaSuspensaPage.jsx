@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { PLANOS } from "../utils/planos";
+import { ToggleDoFlow } from "../components/ToggleDoFlow.jsx";
 import { carregarStripe, stripeConfigurado, APARENCIA_STRIPE } from "../utils/stripe";
 import { IconeCheck } from "../components/Icones.jsx";
 
@@ -49,6 +50,17 @@ export function ContaSuspensaPage({ session, onLogout }) {
   const [situacao, setSituacao] = useState(null);
   const [plano, setPlano] = useState("");
   const [periodo, setPeriodo] = useState("mensal");
+  /* ── O PACOTE, que esta tela não perguntava ────────────────────────────────
+     Ela reativa uma conta vencida, e a conta pode ter tido o Flow. Sem esta
+     escolha, quem voltava era recolocado no Hub puro — perdia o módulo no ato
+     de voltar a pagar, e sem uma palavra explicando.
+
+     Começa LIGADO quando a conta já tinha o Flow: reativar é voltar ao que era,
+     e obrigar a pessoa a remarcar o que ela já contratava seria cobrar duas
+     vezes pela mesma decisão. */
+  const [pacote, setPacote] = useState(
+    () => (session?.tenant?.modulos?.includes("FLOW") ? "HUB_FLOW" : "HUB"),
+  );
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState("");
   const [pronto, setPronto] = useState(false);
@@ -76,7 +88,7 @@ export function ContaSuspensaPage({ session, onLogout }) {
   useEffect(() => {
     if (!plano || !stripeConfigurado()) return undefined;
 
-    const escolhido = precos[plano]?.[periodo] || precos[plano]?.mensal;
+    const escolhido = doPacote(plano)?.[periodo] || doPacote(plano)?.mensal;
     const valor = escolhido?.valor;
     if (valor == null) return undefined;
 
@@ -107,7 +119,7 @@ export function ContaSuspensaPage({ session, onLogout }) {
       if (elemento) elemento.destroy();
       elementsRef.current = null;
     };
-  }, [plano, periodo, precos]);
+  }, [plano, periodo, pacote, precos]);
 
   async function reativar() {
     setEnviando(true);
@@ -125,7 +137,8 @@ export function ContaSuspensaPage({ session, onLogout }) {
       }
       await api.assinarPlano(tenantSlug, {
         plano,
-        periodo: precos[plano]?.[periodo] ? periodo : "mensal",
+        periodo: doPacote(plano)?.[periodo] ? periodo : "mensal",
+        pacote,
         tokenPagamento,
       });
       setPronto(true);
@@ -160,9 +173,17 @@ export function ContaSuspensaPage({ session, onLogout }) {
   }
 
   const temProvedor = Object.keys(precos).length > 0;
-  const ofertaveis = temProvedor ? PLANOS.filter((p) => precos[p.key]?.mensal) : PLANOS;
-  const periodoDe = (k) => (precos[k]?.[periodo] ? periodo : "mensal");
-  const precoDe = (k) => precos[k]?.[periodoDe(k)]?.rotulo || PRECOS_RESERVA[k];
+  /* O bloco de preços DESTE pacote. O Hub mora na raiz do plano e o Hub+Flow em
+     `.flow` — a assimetria está explicada em `precosDosPlanos`, no servidor. */
+  const doPacote = (k) => (pacote === "HUB_FLOW" ? precos[k]?.flow : precos[k]) || null;
+  const ofertaveis = temProvedor
+    ? PLANOS.filter((p) => (pacote === "HUB_FLOW" ? precos[p.key]?.flow?.mensal : precos[p.key]?.mensal))
+    : PLANOS;
+  const periodoDe = (k) => (doPacote(k)?.[periodo] ? periodo : "mensal");
+  const precoDe = (k) => doPacote(k)?.[periodoDe(k)]?.rotulo || PRECOS_RESERVA[k];
+  /* Só existe para vender com preço cadastrado. Sem as variáveis do Flow no
+     Stripe, o interruptor nem aparece e a tela é a de antes. */
+  const temFlow = Object.values(precos).some((p) => p?.flow?.mensal);
   const temAnual = Object.values(precos).some((p) => p?.anual);
   const eraTeste = situacao?.emTrial ?? true;
 
@@ -219,6 +240,21 @@ export function ContaSuspensaPage({ session, onLogout }) {
               </div>
             ) : null}
           </div>
+
+          {temFlow ? (
+            <div className="cs-pacote">
+              <ToggleDoFlow
+                id="pkg-reativar"
+                ligado={pacote === "HUB_FLOW"}
+                aoAlternar={(on) => setPacote(on ? "HUB_FLOW" : "HUB")}
+                nota={
+                  session?.tenant?.modulos?.includes("FLOW")
+                    ? "Sua conta tinha o Flow. Desmarcando, ele não volta — mas os negócios e contratos continuam guardados."
+                    : undefined
+                }
+              />
+            </div>
+          ) : null}
 
           <div className="cs-planos">
             {ofertaveis.map((p) => (
@@ -321,6 +357,7 @@ const CSS = `
 
 .cs-secao { display: flex; flex-direction: column; gap: 12px; }
 .cs-secao__cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cs-pacote { margin-bottom: 14px; }
 .cs-periodo { display: flex; padding: 3px; border-radius: 10px; }
 .cs-periodo__op {
   width: auto; padding: 5px 12px; border-radius: 8px; border: none;

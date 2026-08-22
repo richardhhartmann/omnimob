@@ -92,6 +92,80 @@ export const PLANOS = [
   },
 ];
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   OS DOIS PACOTES — Hub, e Hub + Flow
+   ═══════════════════════════════════════════════════════════════════════════
+
+   O plano diz o TAMANHO da conta (Básico, Profissional, Premium). O pacote diz
+   QUANTOS MÓDULOS ela leva. São duas perguntas independentes, e é por isso que
+   são dois eixos e não seis planos numa lista só:
+
+     · seis planos numa escada obrigariam o cliente Básico que quer o funil a
+       comprar IA junto;
+     · e a tabela de recursos viraria seis colunas, que ninguém compara.
+
+   No Stripe isso dá 3 planos × 2 pacotes × 2 períodos = DOZE preços — seis já
+   existiam (os do Hub) e seis são novos (os do Flow). O `pacote` viaja
+   junto do plano na assinatura; o servidor grava `Tenant.modulos` a partir dele.
+
+   ── DENTRO DO FLOW, O PLANO CONTINUA MANDANDO ──
+
+   Contratar o Flow no Básico dá funil, negócios, documentos, minutas e
+   comissão. Captação por webhook e assinatura digital são do Profissional para
+   cima; IA na minuta é do Premium. A régua é a mesma do Hub, e não é
+   coincidência: "IA é Premium" é uma frase só no produto inteiro.
+   Ver `utils/modulos.js` → `RECURSOS_FLOW`. */
+export const PACOTES = [
+  {
+    key: "HUB",
+    nome: "Hub",
+    modulos: ["HUB"],
+    titulo: "Só o Omnimob Hub",
+    descricao: "Acervo, vitrine pública, leads, clientes, equipe e relatórios.",
+  },
+  {
+    key: "HUB_FLOW",
+    nome: "Hub + Flow",
+    modulos: ["HUB", "FLOW"],
+    titulo: "Omnimob Hub + Flow",
+    descricao:
+      "Tudo do Hub, mais a operação comercial: captação automática dos portais, " +
+      "funil de negócios, minuta contratual, assinatura digital e comissão.",
+    /* Selo da coluna na landing. É o pacote que queremos vender e a tabela pode
+       dizer isso — o que ela não pode é esconder que o outro existe. */
+    destaque: true,
+  },
+];
+
+export function normalizePacote(p) {
+  const k = String(p || "").toUpperCase();
+  return PACOTES.some((x) => x.key === k) ? k : "HUB";
+}
+
+export function pacoteInfo(p) {
+  return PACOTES.find((x) => x.key === normalizePacote(p)) || PACOTES[0];
+}
+
+/** Os módulos que um pacote entrega — é o que vira `Tenant.modulos`. */
+export function modulosDoPacote(p) {
+  return pacoteInfo(p).modulos;
+}
+
+/* O que o Flow acrescenta, linha a linha, para a tabela comparativa da landing.
+   Separado de `RECURSOS_PLANOS` porque ele só aparece na coluna do pacote com
+   Flow — misturá-los faria a tabela do Hub prometer funil de negócios. */
+export const RECURSOS_FLOW_PLANOS = [
+  { label: "Funil de vendas visual com 7 etapas", plans: "BASICO" },
+  { label: "Distribuição automática de leads por corretor", plans: "BASICO" },
+  { label: "Documentos de comprovação anexados ao negócio", plans: "BASICO" },
+  { label: "Minutas contratuais preenchidas automaticamente", plans: "BASICO" },
+  { label: "Split de comissão calculado no fechamento", plans: "BASICO" },
+  { label: "Captação automática dos portais e das redes", plans: ["PROFISSIONAL"] },
+  { label: "Assinatura digital (Clicksign ou DocuSign)", plans: ["PROFISSIONAL"] },
+  { label: "Trava de fechamento por jurídico e financeiro", plans: ["PROFISSIONAL"] },
+  { label: "Minuta revisada e sugerida por IA", plans: ["PREMIUM"] },
+];
+
 // Recursos por linha (para a tabela comparativa). `plans` = quais planos incluem.
 const TODOS = ["BASICO", "PROFISSIONAL", "PREMIUM"];
 export const RECURSOS_PLANOS = [

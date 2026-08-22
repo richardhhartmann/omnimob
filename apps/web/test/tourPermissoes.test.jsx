@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { montarFluxoTour } from "../src/utils/tourFluxo.js";
+import { montarFluxoTour, totalDePassos } from "../src/utils/tourFluxo.js";
 import { montarTourDeTela, chavesDasTelas } from "../src/utils/tourTelas.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -140,4 +140,72 @@ test("o tour fecha para qualquer cargo", () => {
     assert.ok(alvos.includes('[data-tour="ajuda"]'), "falta o passo da Ajuda");
     assert.ok(alvos.includes('[data-tour="perfil"]'), "falta o encerramento");
   }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   O NÚMERO ANUNCIADO É O NÚMERO ENTREGUE.
+
+   O convite do primeiro acesso promete "N paradas curtas" e o contador do tour
+   caminha até N/N. São dois textos, e o que os une é `totalDePassos` — antes
+   cada um fazia o próprio `reduce`, igual por coincidência e livre para
+   divergir.
+
+   O que estes testes guardam não é o valor de N (ele muda toda vez que uma
+   parada nova entra no roteiro, e travá-lo só faria o teste pedir manutenção),
+   e sim a RELAÇÃO: N sai do que aquele cargo abre, e cresce junto com isso.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const PERMISSOES_QUE_ABREM_ETAPA = [
+  "verPainelGestor", "gerenciarImoveis", "verRelatorios", "gerenciarClientes",
+  "gerenciarUsuarios", "gerenciarCargos", "verAuditoria", "verConfiguracoes",
+  "editarPagina",
+];
+
+test("o número de paradas sai do cargo, não de uma constante", () => {
+  const minimo = totalDePassos(montarFluxoTour({ cargo: { acessarPainel: true }, tenantSlug: "x" }));
+  const cheio = totalDePassos(montarFluxoTour({ cargo: ADMIN, tenantSlug: "x" }));
+
+  assert.ok(minimo > 0, "um cargo mínimo não pode receber um tour de zero paradas");
+  assert.ok(
+    cheio > minimo,
+    `o Administrador abre mais telas e tem que ter mais paradas (${cheio} vs ${minimo})`,
+  );
+});
+
+test("cada permissão que abre uma tela acrescenta paradas", () => {
+  const base = { acessarPainel: true };
+  const semNada = totalDePassos(montarFluxoTour({ cargo: base, tenantSlug: "x" }));
+
+  for (const chave of PERMISSOES_QUE_ABREM_ETAPA) {
+    const com = totalDePassos(montarFluxoTour({ cargo: { ...base, [chave]: true }, tenantSlug: "x" }));
+    assert.ok(
+      com > semNada,
+      `liberar ${chave} tem que aumentar o tour (${com} não é maior que ${semNada})`,
+    );
+  }
+});
+
+test("o total é a soma das etapas — a mesma conta que o contador do tour faz", () => {
+  /* `tg-contador` mostra `passoGlobal/totalGlobal`, e o último passo tem que
+     cair exatamente no total. Somar por fora aqui é o que prova que a função
+     não está descontando nada pelas costas. */
+  for (const cargo of [{ acessarPainel: true }, { acessarPainel: true, gerenciarImoveis: true }, ADMIN]) {
+    const fluxo = montarFluxoTour({ cargo, tenantSlug: "x" });
+    const naoMao = fluxo.reduce((n, e) => n + e.passos.length, 0);
+    assert.equal(totalDePassos(fluxo), naoMao);
+
+    // O último passo da última etapa é o N-ésimo, e não o (N-1)-ésimo.
+    const ultimaEtapa = fluxo.length - 1;
+    const anteriores = fluxo.slice(0, ultimaEtapa).reduce((n, e) => n + e.passos.length, 0);
+    const ultimoPasso = anteriores + fluxo[ultimaEtapa].passos.length;
+    assert.equal(ultimoPasso, totalDePassos(fluxo));
+  }
+});
+
+test("fluxo vazio ou torto não derruba a conta", () => {
+  // O convite monta antes de o fluxo existir em alguns quadros; `0` é a
+  // resposta certa, e o modal cai no "Algumas paradas curtas".
+  assert.equal(totalDePassos([]), 0);
+  assert.equal(totalDePassos(undefined), 0);
+  assert.equal(totalDePassos([{ chave: "x" }]), 0);
 });

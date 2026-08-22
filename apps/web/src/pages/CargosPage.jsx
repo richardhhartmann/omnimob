@@ -8,6 +8,7 @@ import { useConfirm } from "../components/ConfirmModal";
 import { ModalCiencia } from "../components/ModalCiencia";
 import { PERMISSOES, PERMISSOES_DE_RISCO, permissoesDoPlano, cargoVazio } from "../utils/permissoesCargo.jsx";
 import { GradeDePermissoes } from "../components/GradeDePermissoes.jsx";
+import { FLOW, modulosDoTenant } from "../utils/modulos";
 
 /* Cada permissão carrega o ÍCONE do lugar que ela abre — o mesmo da barra
    lateral e do painel inicial. Marcar "Ver Relatórios" e reconhecer ali o
@@ -265,6 +266,11 @@ export function CargosPage({ session, onSessionUpdate }) {
                 tela: auto-save ao editar e o modal da permissão de risco. */}
             <GradeDePermissoes
               plano={session?.tenant?.plano}
+              /* As sete permissões do Flow só aparecem para quem contratou o
+                 módulo. Oferecer caixas de um produto que a conta não tem
+                 produz a pior conversa possível com o suporte — "marquei e não
+                 funciona". Ver `gruposDePermissao`. */
+              temFlow={modulosDoTenant(session?.tenant).includes(FLOW)}
               valores={form}
               desabilitado={loading || saving}
               travadas={ehProprioCargoDoUsuario ? LOCKED_NO_PROPRIO_CARGO : []}

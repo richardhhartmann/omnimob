@@ -10,6 +10,47 @@ O produto tem duas faces:
 
 ---
 
+## Os dois MÓDULOS
+
+O produto deixou de ser um sistema só. São dois, dentro do mesmo painel:
+
+| | **Omnimob Hub** | **Omnimob Flow** |
+|---|---|---|
+| responde | o que a imobiliária TEM | o que ela está FECHANDO |
+| conteúdo | acervo, vitrine, leads, clientes, equipe, relatórios | captação por webhook, funil de negócios, minuta, assinatura digital, comissão |
+| é | tudo que existia antes desta divisão | o módulo novo |
+| acento | índigo `#6366f1` | rosa `#ec0b5b` (a cor da palavra "flow" na arte) |
+
+**Três perguntas, e as três precisam ser sim:**
+
+1. A imobiliária CONTRATOU? → `Tenant.modulos` (`HUB`, `FLOW`)
+2. Esta pessoa ALCANÇA? → `Cargo.acessarPainel` / `Cargo.acessarFlow`
+3. O PLANO libera o recurso? → `RECURSOS_FLOW`
+
+As três produzem telas diferentes de propósito: "fale com o comercial", "peça
+ao administrador" e "faça upgrade" são conversas distintas. Colapsá-las numa
+mensagem só ("indisponível") foi a primeira tentativa e estava errada.
+
+Existe usuário **só-Hub**, **só-Flow** e **híbrido** — os cargos `Jurídico` e
+`Financeiro` do catálogo nascem só-Flow, e existirem prova que o arranjo é
+previsto e não efeito colateral de desmarcar caixas.
+
+**A moldura não troca.** `AdminLayout` é UM: `ds-head`, `ds-head--link`,
+`ds-foot` e a barra que abre no hover são os mesmos elementos nos dois módulos.
+O que muda é o conteúdo da `<nav>` (`components/navegacaoDoPainel.jsx`) e o
+acento. Um segundo layout seria a armadilha que o editor de vitrine já caiu duas
+vezes.
+
+**Fonte única:** `apps/web/src/utils/modulos.js` (tela) e
+`apps/api/src/services/modulos.js` (servidor, que é quem protege). Mesmo arranjo
+que `planos.js` tem com `planoMiddleware.js`.
+
+**Ligar o Flow numa conta de dev:** `npm run modulos -- --slug=X --flow --aplicar`
+(em `apps/api`). Em produção quem liga é a assinatura — o pacote escolhido vira
+`Tenant.modulos` em `fidelizarTrial`.
+
+---
+
 ## Monorepo
 
 ```
@@ -60,6 +101,15 @@ omnimob/
   importação por planilha; ver `formatosImportacao.js`
 - `/api/webhooks-saida/*` — webhooks de saída (Profissional+). O inverso do
   feed: o evento é nosso, e nós avisamos
+- `/api/flow/*` — **o Omnimob Flow**. Negócios e funil, documentos, as duas
+  validações setoriais, minutas, contratos e assinatura digital, comissões e as
+  fontes de captação. Atrás de `requireFlow` (a conta contratou?) e, por rota,
+  de `requirePermissao` + `requireRecursoFlow` (o plano libera?)
+- `POST /api/flow/captacao/:chave` — **a porta de entrada de lead**, chamada
+  pelos PORTAIS. Pública por natureza (quem chama é um robô do ZAP, sem sessão);
+  autenticada pela chave no caminho e pelo HMAC do corpo. Montada ANTES do
+  `flowRouter` no `server.js`, senão o `requireAuth` dele a engoliria.
+  Responde 200 quase sempre — portal que recebe erro desativa a integração
 - `/api/canais/*` — a central de canais: retrato de onde os imóveis aparecem,
   OAuth e publicação no Mercado Livre, e a ponte de WhatsApp
 - `GET /api/tenants/me/exportar` — tudo da imobiliária num JSON, para
@@ -157,6 +207,32 @@ invisíveis porque com um cliente só o sintoma não aparece.
   da Meta em nome de centenas de clientes.
 - `provisioningService.js`, `migrationService.js`, `healthService.js`, `notificationService.js` (stub).
 
+**Camada do Flow (`src/services/flow/`):**
+- `funil.js` — os sete estágios e **a trava do fechamento**. Um lugar só decide
+  se um negócio vira GANHO: jurídico validou, financeiro validou, e há contrato
+  assinado (esta última só quando o plano tem assinatura digital — cobrar um
+  documento que o Básico não produz travaria o negócio para sempre). Devolve os
+  MOTIVOS, nunca um booleano solto.
+- `comissoes.js` — o split. `Prisma.Decimal` do começo ao fim (6% sobre
+  R$ 847.300 em float dá 50838.000000000007), arredondamento uma vez só e a
+  parte da imobiliária é o RESTO — nunca um segundo arredondamento. Os valores
+  são **congelados** no negócio: mudar a política não reescreve o passado.
+- `minutas.js` — o motor de contratos. **Marcador sem dado não vira vazio: vira
+  pendência, e o contrato não sai.** Vocabulário fechado (`CAMPOS`), conferido
+  ao salvar o MODELO e não ao gerar. Sem biblioteca de template de propósito —
+  laço e condicional num campo editável pelo cliente é execução de código.
+  Traz `porExtenso` escrito à mão, com a regra do "de reais".
+- `assinatura.js` — o adaptador de Clicksign e DocuSign. Quatro verbos
+  (`enviar`, `consultar`, `cancelar`, `lerWebhook`); o resto do sistema nunca
+  fala com fornecedor nenhum. ⚠ **Escrito contra a documentação, não verificado
+  contra a API real** — mesma situação de `mercadoLivre.js`; os pontos dúbios
+  estão marcados `REVISAR`.
+- `captacao.js` — a tradução do que os portais mandam. Um leitor por canal
+  quando o formato é conhecido, e um **genérico** por baixo que varre o corpo
+  atrás de e-mail, telefone e nome. É o genérico que faz "cole esta URL no seu
+  integrador" funcionar no primeiro dia. Não toca no banco — o risco ali é
+  INTERPRETAÇÃO, como em `formatosImportacao.js`.
+
 **Versionamento de banco:** migrado de `db push` → **Prisma Migrate**. Baseline em `prisma/migrations/0_init`. Ver [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) para o passo de baseline e o roadmap completo.
 
 **Middlewares:**
@@ -194,6 +270,22 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_UPLOAD_PRESET` | — | `dpwuxmbli` / `domus-app` | idem — **os mesmos valores dos `VITE_`** |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
+
+**Sobre o ajuste de fatura em assinatura viva:** trocar de plano
+(`POST /me/plano`) ou contratar o Flow (`POST /me/modulos`) aponta a assinatura
+do Stripe para o preço novo e deixa **ele** calcular o proporcional
+(`proration_behavior: create_prorations` — as linhas entram na PRÓXIMA fatura,
+não numa cobrança imediata). A conta é do provedor de propósito: o ciclo não tem
+30 dias, a data de corte é a da assinatura, e cupom e imposto entram na conta.
+
+O ajuste roda **depois** de o acesso ser gravado, e nunca lança: se o provedor
+recusar, o cliente fica com o que pediu e a resposta traz `cobrancaAjustada:
+false` mais o motivo em português. A ordem inversa deixaria quem clicou em
+"contratar" sem o módulo e sem explicação.
+
+Quem sabe qual assinatura é: `Tenant.assinaturaId`, com a busca por
+`metadata.tenantId` como resgate — e o que a busca achar é **gravado**, então
+conta antiga se conserta sozinha no primeiro ajuste, sem backfill.
 
 **Sobre o preço anual:** cada plano tem dois preços no Stripe — o mensal
 (`interval: month`) e o anual (`interval: year`), objetos separados no painel.
@@ -262,6 +354,12 @@ Modelos principais:
 | `Webhook` | Endereço que recebe aviso de evento, com segredo de assinatura e desarme por falhas |
 | `PropertyPublication` | Fila de publicação social (Facebook/Instagram/WhatsApp) |
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
+| `Negocio` | **Flow.** O negócio no funil. `codigo` é inteiro sequencial porque é um id que PESSOAS dizem em voz alta. Guarda as duas travas (quem validou e quando) e o split congelado |
+| `NegocioEvento` | Histórico do negócio, com `usuarioNome` copiado |
+| `NegocioDocumento` | Comprovação cadastral. Arquivo no Cloudinary; `verificado` é separado de "existe o arquivo" |
+| `ModeloContrato` / `Contrato` | A minuta em branco e a preenchida. O `corpo` do contrato é **congelado** — editar o modelo não muda contrato assinado |
+| `ContratoSignatario` | Quem assina. Sem FK: testemunha e procurador não são cadastro |
+| `FonteCaptacao` / `CaptacaoEvento` | A porta de cada portal, e o corpo CRU de cada chamada (90 dias). Sem o corpo original não há como descobrir por que um portal parou |
 
 **Campos que a vitrine lê:** `Usuario.exibirNaVitrine` (opt-in), `foto`,
 `creci`, `whatsapp` e `cargoVitrine` alimentam o widget de Equipe;
@@ -671,7 +769,15 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 - Isolamento por schema/banco-por-tenant (seam pronto em `tenantRegistry.js`)
 - Coordenadas (lat/lng) e busca por raio — hoje endereço é texto
 - Exclusão lógica (`deletedAt`) e retenção/anonimização (LGPD)
-- Módulos ERP: Contratos, Agenda, Financeiro, Vistorias, Proprietários, Corretores
+- Módulos ERP: Agenda, Financeiro, Vistorias, Proprietários (Contratos saiu
+  desta lista — é o Omnimob Flow)
+- **Os 6 preços NOVOS do Flow no Stripe** (a matriz completa é 3 planos ×
+  2 pacotes × 2 períodos = 12; os 6 do Hub já existem). O código já lê
+  `STRIPE_PRICE_{BASICO,PROFISSIONAL,PREMIUM}_FLOW[_ANUAL]`; enquanto elas não
+  existirem no ambiente, o pacote Hub+Flow não é vendável e o alternador some da
+  landing — sem erro nenhum, como o preço anual fez quando entrou
+- **A troca de módulo pelo super-admin.** Hoje é `npm run modulos` ou a
+  assinatura; falta a tela
 - Blog/conteúdo para SEO (o site institucional já existe: `/sobre`, `/contato`, `/termos`, `/privacidade`, `/vitrines`)
 - Testes automatizados e deploy CI/CD (recuperação de senha **já existe** — `POST /api/auth/recuperar-senha`)
 

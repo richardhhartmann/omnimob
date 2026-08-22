@@ -24,7 +24,8 @@
     "subdominios": "node scripts/subdominios.js",
     "test": "node --test \"test/*.test.js\"",
     "test:isolamento": "node --test test/isolamento.test.js",
-    "conferir-nomes": "node ../web/scripts/conferir-imports.mjs src"
+    "conferir-nomes": "node ../web/scripts/conferir-imports.mjs src",
+    "modulos": "node scripts/modulos.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

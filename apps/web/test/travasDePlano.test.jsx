@@ -38,8 +38,17 @@ test("Redes some no Básico e volta no Profissional", () => {
   assert.ok(basico.length >= pro.length - 1);
 });
 
+/* ── O MENU MUDOU DE ENDEREÇO ────────────────────────────────────────────────
+   Era `AdminLayout.jsx`; virou `navegacaoDoPainel.jsx` quando o segundo módulo
+   entrou e a navegação passou a ter duas versões (Hub e Flow) dentro do mesmo
+   layout.
+
+   O que este arquivo guarda continua o mesmo, e é o que importa: o menu e a
+   tela leem a MESMA lista. Só o caminho do arquivo acompanhou a mudança. */
+const ARQUIVO_DO_MENU = "src/components/navegacaoDoPainel.jsx";
+
 test("as duas telas usam a MESMA função — não um filtro cada", () => {
-  for (const arquivo of ["src/components/AdminLayout.jsx", "src/pages/ConfiguracaoPage.jsx"]) {
+  for (const arquivo of [ARQUIVO_DO_MENU, "src/pages/ConfiguracaoPage.jsx"]) {
     const s = fs.readFileSync(arquivo, "utf8");
     assert.match(s, /abasVisiveis\(/, `${arquivo} deveria chamar a função compartilhada`);
     /* O sinal do defeito antigo: reconstruir a lista com um filter local. */
@@ -83,7 +92,7 @@ test("relatório fechado não entra nem pelo endereço", () => {
 });
 
 test("cartões e menu leem a MESMA lista de relatórios", () => {
-  for (const arquivo of ["src/pages/RelatoriosPage.jsx", "src/components/AdminLayout.jsx"]) {
+  for (const arquivo of ["src/pages/RelatoriosPage.jsx", ARQUIVO_DO_MENU]) {
     const texto = fs.readFileSync(arquivo, "utf8");
     assert.match(texto, /relatoriosVisiveis\(/, `${arquivo} deveria ler a lista compartilhada`);
     /* O sinal do defeito: uma lista de cartões escrita à mão aqui dentro. */

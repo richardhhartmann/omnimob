@@ -404,6 +404,22 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
   return etapas.map((e) => ({ ...e, tenantSlug }));
 }
 
+/* ── O número de paradas, contado num lugar só ───────────────────────────────
+
+   Duas telas anunciam esse número, e elas TÊM que dizer o mesmo: o convite
+   promete "8 paradas curtas" e o contador do tour precisa terminar em 8/8. Cada
+   uma fazia o próprio `reduce` sobre o mesmo fluxo — igual hoje, e livre para
+   divergir no dia em que uma delas passasse a descontar algo (passo já visto,
+   etapa oculta) e a outra não. O sintoma seria um tour que promete oito e
+   entrega dez, que é a forma mais barata de a ferramenta perder a confiança de
+   quem está sendo apresentado a ela.
+
+   O número sai do fluxo JÁ FILTRADO pelo cargo — quem abre duas telas tem um
+   tour menor, e é o menor que ele lê no convite. */
+export function totalDePassos(fluxo) {
+  return (fluxo || []).reduce((n, e) => n + (e?.passos?.length || 0), 0);
+}
+
 /** Todas as chaves do fluxo, incluindo o modal — é o que "pular tudo" marca. */
 export function chavesDoFluxo(fluxo) {
   return [ETAPA_BOAS_VINDAS, ...fluxo.map((e) => e.chave)];

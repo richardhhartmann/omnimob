@@ -56,8 +56,13 @@ export function gravarNoTenant(prefixo, tenantId, valor) {
    algo por imobiliária começar pelo lugar certo — foi a falta de um lugar assim
    que deixou quatro chaves nascerem chaveadas por slug, em quatro arquivos. */
 export const CHAVES = {
-  boasVindasVisto: "domus_boas_vindas_visto",
-  boasVindasModo: "domus_boas_vindas_modo",
+  /* ATALHO de leitura, não fonte de verdade — mesma natureza de
+     `tourResolvido`, abaixo. Quem manda sobre as boas-vindas é o banco
+     (`Tenant.boasVindasVistas`); isto aqui existe só para o recarregamento de
+     quem já foi recebido não segurar a tela num véu de "Preparando seu painel…"
+     esperando por uma resposta que só pode ser "não há nada a mostrar".
+     Ver `BoasVindasModal`. */
+  boasVindasResolvido: "domus_boas_vindas_resolvido",
   leadsVistos: "domus_leads_seen",
   historicoEditor: "domus_builder_history",
   pulsoTrial: "domus_pulso_trial",
@@ -66,6 +71,24 @@ export const CHAVES = {
      esperar uma ida e voltar ao servidor mostrando um véu. Ver
      `PrimeiroAcessoTour`. */
   tourResolvido: "domus_tour_resolvido",
+  /* Em que módulo a pessoa estava da última vez (Hub ou Flow).
+
+     É PREFERÊNCIA, não permissão — cabe no navegador. Quem manda sobre o acesso
+     continua sendo o banco (`Tenant.modulos` mais `Cargo.acessarFlow`), e o
+     valor guardado aqui é conferido contra os dois na leitura: um cargo que
+     perdeu o Flow volta para o Hub sozinho, mesmo com a marca antiga no
+     armazenamento.
+
+     Chaveada por USUÁRIO dentro do tenant, e é o mesmo motivo do
+     `tourResolvido`: numa recepção com um computador compartilhado, guardar por
+     imobiliária faria a corretora que trabalha no Flow abrir o painel no módulo
+     em que o colega do administrativo parou. */
+  moduloAtivo: "domus_modulo_ativo",
+  /* Mesmo atalho do `tourResolvido`, para o tour do OUTRO módulo. Uma chave
+     própria e não um sufixo na mesma: o tour do Hub e o do Flow são resolvidos
+     em momentos diferentes (um no primeiro acesso ao painel, outro na primeira
+     entrada no módulo), e uma marca só faria concluir um silenciar o outro. */
+  tourFlowResolvido: "domus_tour_flow_resolvido",
 };
 
 /* ── Chave da PESSOA, e não da imobiliária ───────────────────────────────────

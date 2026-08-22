@@ -167,6 +167,18 @@ export function Eyebrow({ children, tone }) {
    O cabeçalho da landing usa uma arte própria (`_HEADER`), de mesma proporção,
    ajustada para aquele contexto. Todo o resto fica no lockup padrão. */
 export const LOGO_SRC = "/logo.png";
+export const LOGO_ALT = "/logo_alt.png";
+
+/* ── O SÍMBOLO NOVO ──────────────────────────────────────────────────────────
+   O prédio com o traço em espiral, sem tipografia nenhuma. É uma arte à parte
+   e não uma substituição do `LOGO_SRC`: ele entra onde a marca aparece GRANDE e
+   sozinha — o selo do CTA, o ladrilho do mockup, o seletor de módulo do painel.
+
+   Onde ela NÃO entra é igualmente deliberado: o favicon, o cabeçalho da landing
+   e o lockup continuam no `LOGO_SRC`. Trocar tudo de uma vez é o tipo de
+   mudança de marca que se faz com a marca inteira revisada, e não por arquivo
+   solto — e o favicon, em 16px, precisa da silhueta simples. */
+export const LOGO_SIMBOLO_SRC = "/logo_nova.png";
 export const LOGO_LOCKUP_SRC = "/tipo_alt.png";
 export const LOGO_LOCKUP_HEADER_SRC = "/tipo_header_alt.png";
 

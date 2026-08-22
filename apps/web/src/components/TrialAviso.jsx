@@ -7,6 +7,7 @@ import {
 } from "../utils/trialStatus";
 import { ouvirPedidoDeAssinatura } from "../utils/pulsoTrial";
 import { PLANOS } from "../utils/planos";
+import { ToggleDoFlow } from "./ToggleDoFlow.jsx";
 import { carregarStripe, stripeConfigurado, chavesDaMesmaConta, APARENCIA_STRIPE } from "../utils/stripe";
 import { IconeCheck } from "./Icones.jsx";
 
@@ -85,6 +86,14 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   /* Mensal ou anual. Só aparece quando o provedor tem preço anual cadastrado —
      ver `temAnual` mais abaixo. */
   const [periodo, setPeriodo] = useState("mensal");
+  /* ── Hub, ou Hub + Flow ───────────────────────────────────────────────────
+     Começa no HUB pelo mesmo motivo do mensal: é o menor número da tela, e
+     abrir no pacote completo faria o painel anunciar o preço mais alto para
+     quem só quer saber quanto custa.
+
+     O alternador só aparece quando existe preço do Flow cadastrado no Stripe —
+     ver `temFlow`. Enquanto não existir, esta tela é exatamente a de antes. */
+  const [pacote, setPacote] = useState("HUB");
   const [aguardandoAssinc, setAguardandoAssinc] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState("");
@@ -169,7 +178,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
     /* Plano sem preço anual cai no mensal — o mesmo que o servidor faria. É o
        que impede o Elements de ser montado com valor nulo enquanto o alternador
        está no anual e aquele plano ainda não tem preço lá. */
-    const escolhido = precosVivos[plano]?.[periodo] || precosVivos[plano]?.mensal;
+    const escolhido = doPacote(plano)?.[periodo] || doPacote(plano)?.mensal;
     const valor = escolhido?.valor;
     if (valor == null) {
       setFalha("Não consegui ler o valor do plano. Volte e escolha de novo.");
@@ -209,7 +218,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
       if (elemento) elemento.destroy();
       elementsRef.current = null;
     };
-  }, [passo, plano, periodo, precosVivos]);
+  }, [passo, plano, periodo, pacote, precosVivos]);
 
   /* O que sobra DEPOIS do vencimento. Vem do servidor, da mesma constante que
      a faxina usa para apagar — cravar o número aqui seria a forma mais fácil de
@@ -231,16 +240,32 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
      plano sem preço daria 503 na hora de cobrar, depois de a pessoa já ter
      digitado o cartão. Sem provedor, mostramos todos e o caminho é o time. */
   const temProvedor = Object.keys(precosVivos).length > 0;
-  const planosOfertaveis = temProvedor ? PLANOS.filter((p) => precosVivos[p.key]?.mensal) : PLANOS;
+  const planosOfertaveis = temProvedor
+    ? PLANOS.filter((p) => (pacote === "HUB_FLOW"
+        ? precosVivos[p.key]?.flow?.mensal
+        : precosVivos[p.key]?.mensal))
+    : PLANOS;
   /* O período que este plano REALMENTE consegue cobrar. Quem não tem preço
      anual cadastrado segue no mensal em silêncio, em vez de sumir da lista por
      causa de uma opção que nem é a principal. */
-  const periodoDe = (chave) => (precosVivos[chave]?.[periodo] ? periodo : "mensal");
+  /* O bloco de preços DESTE pacote. O Hub mora na raiz do plano e o Hub+Flow
+     em `.flow` — a assimetria está explicada em `precosDosPlanos`, no servidor.
+
+     Cai de volta na raiz quando o pacote com Flow não tem preço para o plano:
+     assim um plano sem SKU de Flow segue vendável no Hub em vez de sumir. */
+  const doPacote = (chave) =>
+    (pacote === "HUB_FLOW" ? precosVivos[chave]?.flow : precosVivos[chave]) || null;
+
+  const periodoDe = (chave) => (doPacote(chave)?.[periodo] ? periodo : "mensal");
   const precoDe = (chave) =>
-    precosVivos[chave]?.[periodoDe(chave)]?.rotulo || PRECOS_RESERVA[chave];
+    doPacote(chave)?.[periodoDe(chave)]?.rotulo || PRECOS_RESERVA[chave];
   const economiaDe = (chave) =>
-    periodoDe(chave) === "anual" ? precosVivos[chave]?.economia || null : null;
-  const temAnual = Object.values(precosVivos).some((p) => p?.anual);
+    periodoDe(chave) === "anual" ? doPacote(chave)?.economia || null : null;
+  const temAnual = Object.values(precosVivos).some((p) => (pacote === "HUB_FLOW" ? p?.flow?.anual : p?.anual));
+  /* O pacote com Flow existe para vender? Só com preço cadastrado. Enquanto as
+     variáveis `STRIPE_PRICE_*_FLOW` não existirem, o alternador nem aparece —
+     mesma escolha que o preço anual fez quando entrou. */
+  const temFlow = Object.values(precosVivos).some((p) => p?.flow?.mensal);
   const nomeDoPlano = (chave) => PLANOS.find((p) => p.key === chave)?.nome || chave;
   /* O plano em que o teste está rodando. Deixou de ser sempre o Premium — vem
      da escolha feita na landing —, então tanto o texto quanto a etiqueta "SEU
@@ -328,11 +353,11 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
         tipo = paymentMethod.type;
       }
 
-      const periodoDoPlano = precosVivos[plano]?.[periodo] ? periodo : "mensal";
+      const periodoDoPlano = doPacote(plano)?.[periodo] ? periodo : "mensal";
 
       if (tipo !== "card") {
         const r = await api.assinarPlanoAssincrono(tenantSlug, {
-          plano, periodo: periodoDoPlano, meio: tipo, tokenPagamento,
+          plano, periodo: periodoDoPlano, pacote, meio: tipo, tokenPagamento,
         });
         esquecerTrialStatus(tenantSlug);
         setAguardandoAssinc({ meio: tipo, guia: r.guia || null });
@@ -340,7 +365,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
       }
 
       const resposta = await api.assinarPlano(tenantSlug, {
-        plano, periodo: periodoDoPlano, tokenPagamento,
+        plano, periodo: periodoDoPlano, pacote, tokenPagamento,
       });
       esquecerTrialStatus(tenantSlug);
       setConcluido(resposta?.tenant || {});
@@ -501,6 +526,23 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                     : <>Escolha o plano que combina com a sua rotina. Subir libera mais recursos;
                         descer tira o que você vinha usando no teste.</>}
                 </p>
+
+                {/* ── O PACOTE VEM ANTES DO PERÍODO ──────────────────────
+                    Ele decide o PRODUTO; o outro decide só a forma de pagar.
+                    Invertidos, a pessoa escolheria como pagar antes de saber o
+                    que está comprando.
+
+                    O mesmo `ToggleDoFlow` da landing, da parede de reativação e
+                    de Configurações → Plano. */}
+                {temFlow ? (
+                  <div className="tv-pacote-caixa">
+                    <ToggleDoFlow
+                      id="pkg-assinar"
+                      ligado={pacote === "HUB_FLOW"}
+                      aoAlternar={(on) => setPacote(on ? "HUB_FLOW" : "HUB")}
+                    />
+                  </div>
+                ) : null}
 
                 {temAnual ? (
                   <div className="tv-periodo" role="radiogroup" aria-label="Forma de cobrança">
@@ -900,6 +942,10 @@ const CSS = `
   background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.3);
 }
 .tv-plano__desc { font-size: 12px; line-height: 1.5; color: #64748b; }
+
+/* A caixa do interruptor do Flow. O desenho vem do componente; aqui so o
+   respiro ate o alternador de periodo, logo abaixo. */
+.tv-pacote-caixa { margin-bottom: 12px; }
 
 /* Alternador mensal / anual do passo 2. Dois botões dentro de uma cápsula, no
    mesmo desenho dos cartões de plano logo abaixo — é a mesma escolha, num grão

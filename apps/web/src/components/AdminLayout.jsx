@@ -8,7 +8,11 @@ import { PulsoTrialModal } from "./PulsoTrialModal";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
 import { relatoriosVisiveis, PARAMETRO_DE } from "../utils/relatorios";
+import { SeletorDeModulo } from "./SeletorDeModulo.jsx";
+import { gruposDoModulo } from "./navegacaoDoPainel.jsx";
+import { FLOW, HUB, moduloDaRota, moduloInfo, modulosDoUsuario } from "../utils/modulos";
 import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
+import { PrimeiroAcessoFlow } from "./PrimeiroAcessoFlow.jsx";
 import { TourDeTela } from "./TourDeTela";
 import { AjudaModal } from "./AjudaModal";
 import { corDeTextoPara } from "./adminUi";
@@ -20,7 +24,7 @@ import { SeloBeta } from "./SeloBeta.jsx";
 import { MenuDoPerfil } from "./MenuDoPerfil.jsx";
 import { ModalPreferencias, ModalMeusDados } from "./ModaisDoPerfil.jsx";
 import { TEMAS, observarSistema, temaEfetivo, temaEscolhido } from "../utils/temaDoPainel";
-import { lerDoTenant, CHAVES } from "../utils/chaveDoTenant";
+import { lerDoTenant, lerDoUsuario, gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import { useAtalhos } from "./useAtalhos";
 import { ProvedorDeAtalhos } from "./ContextoDeAtalhos.jsx";
@@ -112,11 +116,11 @@ function SeloPlano({ plano }) {
    achar o item — nomeado de propósito, em vez de seletor estrutural: um
    `.ds-nav > div:nth-child(3) a` quebraria calado no dia em que um grupo novo
    entrar no meio do menu. */
-function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge, tourId, beta }) {
+function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge, tourId, beta, bloqueado }) {
   /* `has-beta` solta o rótulo do `flex: 1` para o selo sentar ENCOSTADO no
      nome, e não na borda direita do item. Na borda ele leria como o contador de
      leads, que é o outro elemento que mora ali. */
-  const cls = `ds-item${active ? " is-active" : ""}${!collapsed && beta ? " has-beta" : ""}`;
+  const cls = `ds-item${active ? " is-active" : ""}${!collapsed && beta ? " has-beta" : ""}${bloqueado ? " is-bloqueado" : ""}`;
 
   const content = (
     <>
@@ -133,7 +137,12 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
           de volta o re-render que a expansão por CSS evita. */}
       <span className="ds-item__label">{label}</span>
       {beta ? <SeloBeta /> : null}
-      {badge > 0 ? (
+      {/* O degrau de plano, dito no próprio item. O item continua CLICÁVEL: a
+          tela do outro lado é o convite ao upgrade, e um item morto na barra só
+          ensina que aquele pedaço do produto não funciona. O selo existe para a
+          pessoa saber que há um degrau ali antes de gastar o clique. */}
+      {bloqueado ? <span className="ds-item__cadeado">{bloqueado}</span> : null}
+      {badge > 0 && !bloqueado ? (
         <span className="ds-item__badge">{badge > 99 ? "99+" : badge}</span>
       ) : null}
     </>
@@ -423,6 +432,79 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   // /imoveis/editar, que é o formulário de imóvel.
   const isShowcaseEditor = p.startsWith("/vitrine/") && p.endsWith("/editar");
 
+  /* ═══════════════════════════════════════════════════════════════════════
+     O MÓDULO ATIVO
+     ═══════════════════════════════════════════════════════════════════════
+
+     Três fontes, e a precedência resolve todos os casos reais:
+
+       1. A ROTA manda, sempre. Chegar em `/flow/negocios/412` por um link do
+          WhatsApp tem que abrir o Flow, mesmo que a última visita tenha sido no
+          Hub. Deixar a preferência ganhar aqui mostraria a barra do Hub em
+          cima de uma tela do Flow — e a pessoa procuraria o menu que não está
+          lá.
+       2. A PREFERÊNCIA, para as rotas comuns aos dois (`/configuracoes`) e para
+          a entrada em `/`.
+       3. O primeiro módulo que a pessoa alcança, quando nada mais diz.
+
+     `disponiveis` cruza o que a conta contratou com o que o cargo abre. É ele
+     que também decide se o seletor existe: com um item só, não há o que
+     selecionar. */
+  const disponiveis = useMemo(
+    () => modulosDoUsuario(session?.tenant, cargo),
+    [session?.tenant, cargo],
+  );
+
+  const moduloDestaRota = moduloDaRota(p);
+  /* Rota que pertence aos DOIS. `/configuracoes` é o caso: o Flow acrescenta uma
+     aba lá dentro em vez de ter uma tela de configuração própria, então estar
+     nela não diz em que módulo a pessoa está. */
+  const rotaCompartilhada = p === "/configuracoes";
+
+  const [moduloPreferido, setModuloPreferido] = useState(() => {
+    const guardado = lerDoUsuario(CHAVES.moduloAtivo, tenantId, session?.usuario?.id);
+    return guardado === FLOW || guardado === HUB ? guardado : null;
+  });
+
+  /* O módulo que a barra desenha. Nunca um que a pessoa não alcança — a
+     conferência contra `disponiveis` acontece aqui e não na gravação, porque o
+     acesso pode ser retirado enquanto a marca antiga segue no navegador. */
+  const moduloAtivo = useMemo(() => {
+    const candidato = rotaCompartilhada ? (moduloPreferido || moduloDestaRota) : moduloDestaRota;
+    if (disponiveis.includes(candidato)) return candidato;
+    return disponiveis[0] || HUB;
+  }, [rotaCompartilhada, moduloPreferido, moduloDestaRota, disponiveis]);
+
+  /* Guarda a preferência quando ela muda de verdade. Roda depois da renderização
+     de propósito: gravar durante o cálculo do módulo faria um efeito colateral
+     dentro de um `useMemo`, e o React tem toda liberdade de reexecutá-lo. */
+  useEffect(() => {
+    if (!tenantId || !session?.usuario?.id) return;
+    if (moduloAtivo === moduloPreferido) return;
+    setModuloPreferido(moduloAtivo);
+    gravarNoUsuario(CHAVES.moduloAtivo, tenantId, session.usuario.id, moduloAtivo);
+  }, [moduloAtivo, moduloPreferido, tenantId, session?.usuario?.id]);
+
+  const infoModulo = moduloInfo(moduloAtivo);
+
+  /* Enquanto o balão do seletor está no ar, a barra continua aberta. Ver o
+     comentário em `SeletorDeModulo`: o balão sai por portal para o `body`, e o
+     `:hover` da barra não o alcança. */
+  const [seletorAberto, setSeletorAberto] = useState(false);
+
+  /* Trocar de módulo NAVEGA. Só mudar a barra deixaria a pessoa no Dashboard do
+     Hub com o menu do Flow em volta — e o primeiro clique dela seria num item
+     que não tem nada a ver com o que está na tela. O destino de cada módulo
+     mora em `utils/modulos.js`, junto do resto da definição dele. */
+  const trocarDeModulo = useCallback((proximo) => {
+    const destino = moduloInfo(proximo).inicial(cargo);
+    if (tenantId && session?.usuario?.id) {
+      gravarNoUsuario(CHAVES.moduloAtivo, tenantId, session.usuario.id, proximo);
+    }
+    setModuloPreferido(proximo);
+    navigate(destino);
+  }, [cargo, navigate, tenantId, session?.usuario?.id]);
+
   /* Esta tela tem tour? A resposta decide se o modal de ajuda oferece "rever o
      tour" ou explica que aqui não existe um. Vem da mesma fonte que o TourDeTela
      consulta — nada de uma segunda lista de rotas para desencontrar da primeira. */
@@ -454,6 +536,30 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   }, [tenantSlug, tenantId, canSeeLeads]);
   useEffect(() => { if (isLeads) setLeadsBadge(0); }, [isLeads]);
 
+  /* ── Negócios parados ─────────────────────────────────────────────────────
+     O contador do Flow NÃO conta negócios novos, e é a diferença que importa:
+     no Hub, "chegou lead" é notícia; no Flow, negócio chegando é o normal do
+     dia. O que merece um marcador vermelho é negócio ESQUECIDO — o que ninguém
+     encosta há dias e morre de silêncio.
+
+     A conta é do servidor (`GET /api/flow/painel`), e não daqui: "parado" é
+     regra de negócio e ela tem que valer igual para o painel, para a barra e
+     para o alerta da tela inicial. */
+  const [negociosBadge, setNegociosBadge] = useState(0);
+  const podeNegocios = Boolean(cargo?.acessarFlow && cargo?.gerenciarNegocios);
+  useEffect(() => {
+    if (!tenantSlug || !podeNegocios) return undefined;
+    let vivo = true;
+    function conferir() {
+      api.painelFlow(tenantSlug)
+        .then((r) => { if (vivo) setNegociosBadge(r?.parados ?? 0); })
+        .catch(() => {});
+    }
+    conferir();
+    window.addEventListener("focus", conferir);
+    return () => { vivo = false; window.removeEventListener("focus", conferir); };
+  }, [tenantSlug, podeNegocios]);
+
   // ── Grupos de navegação ───────────────────────────────────────────────────────
   // Um grupo só aparece se sobrar algum item depois do filtro de permissões.
   const podeVerPainel = Boolean(cargo?.verPainelGestor);
@@ -473,105 +579,37 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     ativos: session?.tenant?.atalhosAtivos !== false,
   });
 
-  const grupos = useMemo(() => {
-    const g = [
-      {
-        /* O Painel do Gestor NÃO tem item aqui: chega-se a ele pelo cabeçalho
-           da barra, logo acima. Dois caminhos para a mesma tela — um item de
-           menu e o logotipo — fariam a pessoa se perguntar se são telas
-           diferentes. */
-        itens: [{ key: "dashboard", Icon: House, label: "Dashboard", active: isDashboard, onClick: () => navigate("/") }],
+  /* ── A navegação sai daqui ─────────────────────────────────────────────────
+     Os itens de cada módulo moram em `navegacaoDoPainel.jsx`. O layout continua
+     sendo UM: o que troca é o conteúdo da <nav>, e nada mais. `ds-head`,
+     `ds-head--link`, `ds-foot` e a mecânica de recolher/expandir são os mesmos
+     elementos nos dois módulos, na mesma posição — é isso que faz a troca
+     parecer virar de página em vez de entrar em outro sistema. */
+  const grupos = useMemo(
+    () => gruposDoModulo(moduloAtivo, {
+      cargo,
+      plano: session?.tenant?.plano,
+      temFlow: disponiveis.includes(FLOW),
+      navigate,
+      rota: p,
+      ver,
+      leadsBadge,
+      negociosBadge,
+      showcaseLink,
+      showcaseEditorLink,
+      flags: {
+        isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads,
+        isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
       },
-      {
-        label: "IMÓVEIS",
-        itens: cargo?.gerenciarImoveis ? [
-          {
-            key: "imoveis-novo", Icon: Buildings, label: "Gerenciar Imóveis",
-            active: isGerenciarImoveis, onClick: () => navigate("/imoveis"),
-            subitens: [
-              { key: "imovel-form", Icon: PlusCircle, label: "Novo Imóvel", active: p === "/imoveis/novo", onClick: () => navigate("/imoveis/novo") },
-              { key: "imovel-tipos", Icon: Tag, label: "Categoria de Imóvel", active: p === "/tipos-imovel", onClick: () => navigate("/tipos-imovel") },
-            ],
-          },
-          { key: "imoveis-lista", Icon: SquaresFour, label: "Portfólio Ativo", active: isImovelList || isInsights, onClick: () => navigate("/imoveis/portfolio") },
-        ] : [],
-      },
-      {
-        label: "RELACIONAMENTO",
-        itens: [
-          /* Um item só para tudo que é leitura do que aconteceu: leads, relatório
-             mensal, funil e comissões. O rótulo é "Relatórios" e o destino é a
-             página que reúne os quatro — cada recurso novo entra LÁ DENTRO, e não
-             como mais uma linha nesta barra. */
-          cargo?.verRelatorios && {
-            key: "leads", Icon: IconeRelatorios, label: "Relatórios",
-            active: isLeads, onClick: () => navigate("/relatorios"), badge: leadsBadge,
-            subitens: [
-              /* Os subitens saem da MESMA lista que desenha os cartões do
-                 índice (`utils/relatorios.js`), inclusive a regra de plano.
-                 Uma cópia aqui já deu um menu que oferecia o relatório mensal
-                 no Básico enquanto a tela mostrava convite de upgrade. */
-              ...relatoriosVisiveis(session?.tenant?.plano).map((r) => ({
-                key: `rel-${PARAMETRO_DE[r.chave]}`,
-                Icon: ICONES_RELATORIOS[r.chave],
-                label: r.title,
-                active: ver === PARAMETRO_DE[r.chave],
-                onClick: () => navigate(`/relatorios?ver=${PARAMETRO_DE[r.chave]}`),
-              })),
-            ],
-          },
-          cargo?.gerenciarClientes && { key: "clientes", Icon: UserCircle, label: "Clientes", active: isClientes, onClick: () => navigate("/clientes") },
-        ].filter(Boolean),
-      },
-      {
-        label: "EQUIPE",
-        itens: [
-          cargo?.gerenciarUsuarios && { key: "usuarios", Icon: UserSquare, label: "Usuários", active: isUsuarios, onClick: () => navigate("/usuarios") },
-          cargo?.gerenciarCargos && { key: "cargos", Icon: Shield, label: "Cargos", active: isCargos, onClick: () => navigate("/cargos") },
-          /* Registro de atividade vive em EQUIPE, e não em Configurações: a
-             pergunta que ele responde é sobre PESSOAS — quem apagou, quem
-             alterou —, e é ao lado de Usuários e Cargos que ela é feita. */
-          cargo?.verAuditoria && { key: "auditoria", Icon: ClockCounterClockwise, label: "Registro de Atividade", active: isAuditoria, onClick: () => navigate("/auditoria") },
-        ].filter(Boolean),
-      },
-      {
-        label: "VITRINE",
-        itens: [
-          /* Permissão própria, e só do Administrador. Saía de
-             `editarPagina || gerenciarUsuarios`: tirar "Gerenciar Usuários" de
-             um cargo levava junto Configurações, que não tem nada a ver com
-             gerir gente — e, do outro lado, o Editor de Vitrine entrava numa
-             tela com plano, cobrança e cancelamento de assinatura. */
-          cargo?.verConfiguracoes && {
-            key: "config", Icon: GearSix, label: "Configurações",
-            active: isConfiguracoes, onClick: () => navigate("/configuracoes"),
-            /* Os subitens saem da MESMA lista que desenha os cartões da tela
-               (`utils/abasConfiguracoes.js`), inclusive a regra de permissão da
-               seção de Dados. Uma cópia aqui daria um menu que promete uma
-               seção que a tela não abre. */
-            subitens: abasVisiveis(cargo, session?.tenant?.plano, { podeImportar })
-              .map((a) => ({
-                key: `config-${a.key}`, Icon: a.Icon, label: a.label,
-                active: isConfiguracoes && ver === a.key,
-                onClick: () => navigate(`/configuracoes?ver=${a.key}`),
-              })),
-          },
-          /* O editor de vitrine ainda está em Beta, e o selo aparece aqui e no
-             topo do próprio editor — a mesma tag, o mesmo componente. Aqui
-             porque é onde a pessoa decide entrar; lá porque é onde ela trabalha
-             e precisa continuar sabendo. */
-          cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar Página", active: isShowcaseEditor, href: showcaseEditorLink, beta: true },
-          { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver Página", href: showcaseLink, external: true },
-        ].filter(Boolean),
-      },
-    ];
-    return g.filter((grupo) => grupo.itens.length > 0);
-  }, [
-    cargo, navigate, leadsBadge, showcaseEditorLink, showcaseLink,
-    isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads,
-    isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
-    p, ver,
-  ]);
+    }),
+    [
+      moduloAtivo, cargo, session?.tenant?.plano, disponiveis, navigate, leadsBadge, negociosBadge,
+      showcaseEditorLink, showcaseLink,
+      isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads,
+      isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
+      p, ver,
+    ],
+  );
 
   /* Os rótulos são SEMPRE desenhados agora, e quem os esconde é o CSS.
      Antes o JSX os removia do DOM quando recolhida — com a expansão por hover
@@ -615,14 +653,29 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       />
       ) : null}
 
-      {/* Vale para todo mundo: dono, corretor, tenant pagante e tenant em
-          teste. O tour é sobre onde ficam as telas — pergunta que independe
-          de quem pagou a conta. */}
-      <PrimeiroAcessoTour
-        session={session}
-        pronto={contaResolvida}
-        aoMudarEstado={setTourGlobalAtivo}
-      />
+      {/* ── UM TOUR POR MÓDULO ──────────────────────────────────────────
+          O do Hub vale para todo mundo que entra no painel; o do Flow só é
+          montado quando a pessoa ESTÁ no Flow.
+
+          Montá-lo sempre faria uma consulta ao progresso do tutorial em toda
+          sessão de quem só usa o Hub — que é a maioria das contas. E emendar os
+          passos do Flow no tour do Hub não funcionaria: a etapa `boas-vindas`
+          já está FINALIZADA no banco de todo cliente atual, então nada novo
+          dentro daquele fluxo voltaria a aparecer para quem vai contratar o
+          módulo. Ver `utils/tourFlow.js`. */}
+      {moduloAtivo === FLOW ? (
+        <PrimeiroAcessoFlow
+          session={session}
+          pronto={contaResolvida}
+          aoMudarEstado={setTourGlobalAtivo}
+        />
+      ) : (
+        <PrimeiroAcessoTour
+          session={session}
+          pronto={contaResolvida}
+          aoMudarEstado={setTourGlobalAtivo}
+        />
+      )}
 
       {/* Tours de tela: abrem só quando a pessoa entra na página por vontade
           própria, e ficam quietos enquanto o global estiver na frente. */}
@@ -702,14 +755,43 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         ref={shellRef}
         className="ds-shell"
         data-tema={efetivo}
-        style={{ "--tenant-primary": corPrimaria, "--tenant-primary-ink": tintaPrimaria }}
+        data-modulo={moduloAtivo}
+        /* ── Duas cores, duas perguntas ────────────────────────────────────
+           `--tenant-primary` é a cor da IMOBILIÁRIA: avatar, iniciais, botão
+           primário. Ela é do cliente e varia de conta para conta.
+
+           `--modulo-acento` é a cor do MÓDULO: o seletor, o item ativo da barra
+           e os realces do Flow. Ela é do PRODUTO e é igual em toda conta — é
+           justamente por não variar que ela consegue dizer, de relance, em qual
+           metade do sistema a pessoa está. Colapsá-las numa só faria a troca de
+           módulo passar despercebida em qualquer imobiliária que use índigo. */
+        style={{
+          "--tenant-primary": corPrimaria,
+          "--tenant-primary-ink": tintaPrimaria,
+          "--modulo-acento": infoModulo.acento,
+          "--modulo-acento-suave": infoModulo.acentoSuave,
+        }}
       >
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
         {/* `ds-side` reserva os 64px no fluxo; `ds-side__interno` é quem cresce,
             por cima do conteúdo. Fosse a própria `aside` a crescer, cada passada
             de mouse empurraria a página inteira para o lado. */}
-        <aside className="ds-side" data-tour="sidebar">
+        <aside className={`ds-side${seletorAberto ? " is-mod-aberto" : ""}`} data-tour="sidebar">
           <div className="ds-side__interno">
+
+          {/* ── O seletor de módulo ────────────────────────────────────────
+              Em cima de tudo, e antes da marca da imobiliária. A ordem responde
+              duas perguntas na sequência em que elas se fazem: "que produto é
+              este?" e só então "de quem é esta conta?".
+
+              Com um módulo só ele vira uma faixa de identidade — sem chevron,
+              sem hover, sem clique. Ver `SeletorDeModulo`. */}
+          <SeletorDeModulo
+            atual={moduloAtivo}
+            disponiveis={disponiveis}
+            aoTrocar={trocarDeModulo}
+            aoAlternarAberto={setSeletorAberto}
+          />
 
           {/* ── Header: a porta do Painel do Gestor ────────────────────────
               Ele é a marca da imobiliária, e é por isso que serve: "clicar no
@@ -792,6 +874,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                       external={item.external}
                       badge={item.badge}
                       beta={item.beta}
+                      bloqueado={item.bloqueado}
                       collapsed={c}
                       tourId={`nav-${item.key}`}
                     />
@@ -1045,7 +1128,12 @@ const CSS = `
 /* focus-within porque quem navega por teclado nunca passa o mouse: sem isto a
    barra ficaria de 64px com o foco dentro, e o item focado seria invisivel.
    (Sem crases: template literal.) */
-.ds-side:focus-within .ds-side__interno {
+.ds-side:focus-within .ds-side__interno,
+/* is-mod-aberto: o balao do seletor de modulo esta no ar. Ele sai por portal
+   para o body, entao mover o ponteiro ate ele e SAIR da barra — e sem esta
+   terceira condicao a barra recolhia por baixo do balao no meio do gesto.
+   Ver SeletorDeModulo. */
+.ds-side.is-mod-aberto .ds-side__interno {
   width: 240px;
   box-shadow: 24px 0 60px -24px rgba(0,0,0,0.75);
 }
@@ -1059,30 +1147,192 @@ const CSS = `
 
    O preco e a transicao: nao da para animar display. Some seco, como antes.
    (Sem crases nestes comentarios: template literal.) */
-.ds-side:not(:hover):not(:focus-within) .ds-item__label,
-.ds-side:not(:hover):not(:focus-within) .ds-head__text,
-.ds-side:not(:hover):not(:focus-within) .ds-plano,
-.ds-side:not(:hover):not(:focus-within) .ds-profile__text,
-.ds-side:not(:hover):not(:focus-within) .ds-group__label,
-.ds-side:not(:hover):not(:focus-within) .ds-item__badge,
-.ds-side:not(:hover):not(:focus-within) .selo-beta,
-.ds-side:not(:hover):not(:focus-within) .ds-sub { display: none; }
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-item__label,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-head__text,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-plano,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-profile__text,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-group__label,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-item__badge,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .selo-beta,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-sub { display: none; }
 
 /* E o que some ao ABRIR: as formas recolhidas dos mesmos elementos. */
 .ds-side:hover .ds-group__rule,
 .ds-side:focus-within .ds-group__rule,
+.ds-side.is-mod-aberto .ds-group__rule,
 .ds-side:hover .ds-item__pip,
-.ds-side:focus-within .ds-item__pip { display: none; }
-.ds-side:not(:hover):not(:focus-within) .ds-group__rule { display: block; }
+.ds-side:focus-within .ds-item__pip,
+.ds-side.is-mod-aberto .ds-item__pip { display: none; }
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-group__rule { display: block; }
 
 /* Geometria da barra recolhida — os mesmos valores que a classe is-collapsed
    tinha. O gap zerado importa: com ele, o icone centralizado ficava deslocado
    pela metade da folga que sobrava do rotulo ausente. */
-.ds-side:not(:hover):not(:focus-within) .ds-shell .ds-item,
-.ds-side:not(:hover):not(:focus-within) .ds-item { justify-content: center; padding: 8px; gap: 0; }
-.ds-side:not(:hover):not(:focus-within) .ds-head { justify-content: center; padding: 0; gap: 0; }
-.ds-side:not(:hover):not(:focus-within) .ds-shell button.ds-profile,
-.ds-side:not(:hover):not(:focus-within) button.ds-profile { justify-content: center; padding: 10px 8px; gap: 0; }
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-shell .ds-item,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-item { justify-content: center; padding: 8px; gap: 0; }
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-head { justify-content: center; padding: 0; gap: 0; }
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-shell button.ds-profile,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) button.ds-profile { justify-content: center; padding: 10px 8px; gap: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O SELETOR DE MODULO — a peca mais alta da barra
+   ══════════════════════════════════════════════════════════════════════════
+
+   Uma faixa de identidade com um chevron no canto. A lista de modulos NAO
+   cresce para dentro da barra: ela brota ao LADO, como o submenu do menu do
+   perfil (.mp-flutuante). Crescer para dentro empurrava a navegacao inteira
+   dois centimetros para baixo a cada passada de mouse no topo — um sobressalto
+   por um gesto que quase sempre e acidental.
+   (SEM CRASES nestes comentarios: eles vivem dentro de um template literal, e
+   uma crase aqui encerra a string no meio da folha.) */
+.ds-mod {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--s-border);
+  background: color-mix(in srgb, var(--modulo-acento, #6366f1) 7%, transparent);
+}
+.ds-mod__atual, .ds-mod.is-solo {
+  display: flex; align-items: center; gap: 10px;
+  height: 52px; padding: 0 12px 0 14px;
+}
+
+/* ── O ladrilho do simbolo: SO com a barra recolhida ────────────────────────
+   Aberta, ele sumia por repeticao — o predio ja esta dentro do tipo_header, e
+   dois predios lado a lado na mesma linha leem como erro de montagem.
+   A tinta do acento e o unico sinal do modulo em 64px: sem o anel, Hub e Flow
+   ficam identicos ali. */
+.ds-mod__marca {
+  flex: none; width: 28px; height: 28px; border-radius: 8px; overflow: hidden;
+  display: none; align-items: center; justify-content: center;
+}
+.ds-mod__marca img { width: 68%; height: 68%; object-fit: contain; }
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__marca { display: flex; }
+
+/* ── A LOGO COMPOSTA: tipo + palavra do modulo ──────────────────────────────
+
+   O problema: as duas artes tem SOBRAS diferentes dentro do quadro.
+   tipo_header_alt e 2852x603 com o texto OMNIMOB ocupando so a faixa y=197..403
+   — 34% da altura. hub.png e flow.png sao recortados rente a palavra, ou seja,
+   100% do quadro e tinta. Dar a mesma height as duas fazia o OMNIMOB sair com
+   um terco do tamanho da palavra do modulo.
+
+   A solucao: uma variavel com a altura da TINTA, e os dois tamanhos derivados
+   dela. Os fatores foram MEDIDOS nas proprias artes, nao estimados:
+
+     603 / 207 = 2,913   quanto o quadro do tipo e maior que o texto dentro dele
+     197 / 603 = 0,327   onde esse texto comeca, em fracao do quadro
+
+   Assim OMNIMOB e "Hub" saem com a mesma altura de letra, e o deslocamento do
+   topo poe as duas na mesma linha. Mexer no tamanho da logo e mexer em --tinta,
+   num lugar so.
+
+   align-items baseline nao resolve: o navegador nao sabe onde esta a linha de
+   base DENTRO de um PNG e alinha pela borda de baixo do quadro — que no tipo
+   fica 200px abaixo do texto. Era o que empurrava a palavra para baixo. */
+.ds-mod__logo {
+  --tinta: 10px;
+  flex: 1; min-width: 0;
+  display: flex; align-items: flex-start; gap: 7px;
+  overflow: hidden;
+}
+.ds-mod__tipo {
+  height: calc(var(--tinta) * 2.913); width: auto; flex: none; display: block;
+}
+.ds-mod__palavra {
+  height: var(--tinta); width: auto; flex: none; display: block;
+  margin-top: calc(var(--tinta) * 2.913 * 0.327); padding-left: 5px;
+}
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__logo { display: none; }
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__atual,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod.is-solo { justify-content: center; padding: 0; gap: 0; }
+
+/* ── O gatilho e o balao ────────────────────────────────────────────────────
+   O INVOLUCRO escuta o ponteiro, e nao o botao: com o listener no botao, sair
+   dele em direcao ao balao fecharia a lista antes de o ponteiro chegar la. E a
+   mesma montagem de .mp-linha-caixa. */
+.ds-mod__gatilho { position: relative; flex: none; display: flex; }
+.ds-shell .ds-mod__caret {
+  width: 24px; height: 24px; padding: 0; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; box-shadow: none; transform: none;
+  color: var(--s-text); cursor: pointer;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+.ds-shell .ds-mod__caret:hover, .ds-shell .ds-mod__caret.is-aberto {
+  background: var(--s-hover); color: var(--modulo-acento, #6366f1);
+  box-shadow: none; transform: none;
+}
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__gatilho { display: none; }
+
+/* ── O balao vive no BODY, por portal ───────────────────────────────────────
+   position fixed, com left/top vindos do JSX. Nao e absolute com left 100%:
+   .ds-side__interno tem overflow-x hidden — o que impede o conteudo de vazar
+   com a barra em 64px — e isso RECORTA qualquer filho posicionado para fora. O
+   balao media certo e simplesmente nao aparecia na tela. Mesma solucao do
+   .mp-balao. Alinhado pelo TOPO (e nao pela base, como o do perfil) porque este
+   nasce no alto da barra: la o espaco sobra em cima, aqui sobra embaixo. */
+.ds-mod__balao {
+  position: fixed;
+  min-width: 228px; z-index: 61;
+  padding: 6px; border-radius: 14px;
+  background: #141821; border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.9);
+  display: flex; flex-direction: column; gap: 3px;
+  animation: dsModAbre 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes dsModAbre { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ds-mod__balao { animation: none; } }
+
+/* Uma ponte invisivel entre o chevron e o balao. Sem ela, os 10px de folga
+   entre os dois sao um vao onde o ponteiro sai do involucro e a lista fecha no
+   meio do caminho. */
+.ds-mod__balao::before {
+  content: ""; position: absolute; left: -16px; top: 0; width: 16px; height: 100%;
+}
+
+/* ── ATENCAO AO SELETOR: o balao NAO esta dentro do .ds-shell ───────────────
+   Ele vai para o document.body por portal, entao qualquer regra escrita como
+   .ds-shell .ds-mod__opcao simplesmente nao casa — e o botao cai no reset
+   global do painel, que pinta fundo indigo e sombra. Foi exatamente o que
+   aconteceu: as duas opcoes apareceram como dois botoes roxos.
+
+   A saida e a mesma do .mp-linha, que tem o mesmo problema pelo mesmo motivo:
+   declarar os DOIS seletores. O .ds-shell na frente existe so para vencer o
+   reset global em especificidade; quem de fato casa, aqui, e o segundo. */
+.ds-shell .ds-mod__opcao, .ds-mod__opcao {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  width: 100%; padding: 11px 12px; border-radius: 11px;
+  font-family: inherit; text-align: left; cursor: pointer;
+  color: #cbd5e1; background: transparent;
+  border: 1px solid transparent; box-shadow: none; transform: none;
+  transition: background 0.13s ease, border-color 0.13s ease;
+}
+.ds-shell .ds-mod__opcao:hover, .ds-mod__opcao:hover {
+  background: var(--acento-suave);
+  border-color: color-mix(in srgb, var(--acento) 34%, transparent);
+  box-shadow: none; transform: none;
+}
+.ds-shell .ds-mod__opcao.is-atual, .ds-mod__opcao.is-atual {
+  background: var(--acento-suave);
+  border-color: color-mix(in srgb, var(--acento) 30%, transparent);
+  cursor: default;
+}
+/* No balao a logo tem espaco e vai maior que na barra. */
+/* No balao ha ~204px uteis contra ~182 na barra, entao a tinta vai um ponto
+   maior. Um numero so, e o resto acompanha. */
+.ds-mod__logo.is-na-lista { flex: none; --tinta: 11px; }
+/* Fora do .ds-shell, entao --s-mono e --s-text nao existem aqui: as variaveis
+   da barra sao declaradas no shell. Valores literais, os mesmos que o
+   .mp-balao usa — ele tem exatamente o mesmo problema. */
+.ds-mod__opcao .ds-mod__tagline {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  /* 10px e nao 8,5: aqui a tagline e a UNICA coisa que diferencia os dois para
+     quem nunca abriu o outro modulo, e no tamanho da barra ela era decorativa
+     em vez de legivel. */
+  font-size: 10px; letter-spacing: 0.03em;
+  color: #94a3b8; white-space: normal; line-height: 1.45;
+}
+.ds-mod__check { position: absolute; top: 9px; right: 10px; color: var(--acento); }
 
 /* ── Header ── */
 .ds-head {
@@ -1162,9 +1412,32 @@ const CSS = `
   background: var(--s-hover); color: var(--s-strong);
   box-shadow: none; transform: none; border-color: transparent;
 }
+/* O item ativo pinta com o acento do MODULO, e nao com um indigo cravado.
+   Era o indigo fixo, e no Flow o realce continuaria dizendo Hub — a unica pista
+   de que a pessoa trocou de modulo seria a lista de itens. Com o acento, o
+   realce muda junto e a troca se ve sem ler nada.
+   color-mix em vez de duas variaveis por tom: o acento e uma cor so, e derivar
+   as opacidades dele evita que alguem acrescente um modulo e esqueca metade.
+   (Sem crases nestes comentarios: eles vivem dentro de um template literal.) */
 .ds-shell .ds-item.is-active {
-  background: var(--s-active); color: var(--s-strong);
-  border-color: rgba(129,140,248,0.26);
+  background: color-mix(in srgb, var(--modulo-acento, #818cf8) 12%, transparent);
+  color: var(--s-strong);
+  border-color: color-mix(in srgb, var(--modulo-acento, #818cf8) 30%, transparent);
+}
+.ds-shell .ds-item.is-active .ds-item__icon { color: var(--modulo-acento, #818cf8); }
+
+/* Item que o PLANO nao libera. Continua clicavel de proposito: a tela do outro
+   lado e o convite ao upgrade, e um item morto na barra so ensina que aquele
+   pedaco do produto nao funciona. O cadeado diz que ha um degrau ali antes de a
+   pessoa gastar o clique. */
+.ds-shell .ds-item.is-bloqueado { opacity: 0.62; }
+.ds-item__cadeado {
+  margin-left: auto; flex: none;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  font-family: var(--s-mono);
+  padding: 2px 6px; border-radius: 5px;
+  color: #d4af37; background: rgba(212,175,55,0.12);
+  border: 1px solid rgba(212,175,55,0.28);
 }
 
 /* O dourado da marca só neste item: é o que faz o olho achá-lo no rodapé sem

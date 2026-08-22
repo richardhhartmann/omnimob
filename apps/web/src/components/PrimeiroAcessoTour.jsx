@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { PrimeiroAcessoModal } from "./PrimeiroAcessoModal";
 import { TourGuiado } from "./TourGuiado";
-import { ETAPA_BOAS_VINDAS, chavesDoFluxo, montarFluxoTour } from "../utils/tourFluxo";
+import { ETAPA_BOAS_VINDAS, chavesDoFluxo, montarFluxoTour, totalDePassos } from "../utils/tourFluxo";
 import { chavesDasTelas } from "../utils/tourTelas";
 import { lerDoUsuario, gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
 import { IconeChapeuFormatura } from "./Icones.jsx";
@@ -41,10 +41,11 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   // carregando · oculto · convite · tour · concluido
   const [fase, setFase] = useState("carregando");
 
-  const totalPassos = useMemo(
-    () => fluxo.reduce((n, e) => n + e.passos.length, 0),
-    [fluxo],
-  );
+  /* O que o convite promete. Sai do fluxo JÁ FILTRADO pelo cargo, e da MESMA
+     função que o contador do tour usa — se as duas contas fossem separadas,
+     nada impediria o convite prometer oito paradas e o contador terminar em
+     dez. Ver `totalDePassos`. */
+  const totalPassos = useMemo(() => totalDePassos(fluxo), [fluxo]);
 
   /* ── Decide se este acesso mostra alguma coisa ────────────────────────────
 

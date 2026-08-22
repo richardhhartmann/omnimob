@@ -1,0 +1,12 @@
+-- "Esta imobiliária já foi recebida?" sai do navegador e vem para o banco.
+--
+-- A marca morava no localStorage, chaveada pelo id do tenant. Funcionava numa
+-- máquina só: guia anônima, outro navegador ou outro computador e o assistente
+-- de primeiro acesso recomeçava do zero — pedindo de novo a ficha da
+-- imobiliária, o endereço da vitrine e a importação da base para quem já tinha
+-- respondido tudo.
+--
+-- Lista de texto ("teste", "assinante") porque são duas recepções diferentes:
+-- quem viu a do teste e depois assina precisa ver a de assinante, que é outra
+-- mensagem em outro momento.
+ALTER TABLE "tb_tenants" ADD COLUMN "tnt_boas_vindas_vistas" TEXT[] DEFAULT ARRAY[]::TEXT[];

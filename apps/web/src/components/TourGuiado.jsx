@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
+import { totalDePassos } from "../utils/tourFluxo";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Motor do tour guiado — holofote em quatro painéis + cartão flutuante.
@@ -722,7 +723,8 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
     : "Próximo →";
 
   const passoGlobal = fluxo.slice(0, pos.etapa).reduce((n, e) => n + e.passos.length, 0) + pos.passo + 1;
-  const totalGlobal = fluxo.reduce((n, e) => n + e.passos.length, 0);
+  // A MESMA conta do convite do primeiro acesso. Ver `totalDePassos`.
+  const totalGlobal = totalDePassos(fluxo);
 
   return createPortal(
     <>

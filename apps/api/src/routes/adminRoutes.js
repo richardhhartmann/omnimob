@@ -97,6 +97,7 @@ function serializeTenant(t) {
     estado: t.estado,
     ativo: t.ativo,
     plano: t.plano,
+    modulos: t.modulos?.length ? t.modulos : ["HUB"],
     statusPagamento: t.statusPagamento,
     proximoVencimento: t.proximoVencimento,
     valorMensal: t.valorMensal != null ? Number(t.valorMensal) : null,
@@ -142,6 +143,19 @@ adminRouter.get("/tenants/:id", async (req, res) => {
    usuário é um ambiente onde ninguém entra. As credenciais voltam na resposta
    porque é a única vez em que a senha existe em texto — depois disto só há o
    hash, e ela vale só até o primeiro acesso, que obriga a troca. */
+/* Os módulos que o comercial pode entregar. Lista fechada aqui e não um
+   passe-livre para o que o cliente mandar: `modulos` decide o que a conta paga,
+   e uma string desconhecida gravada no array viraria um módulo fantasma que
+   nenhuma tela reconhece. */
+const MODULOS_VALIDOS = ["HUB", "FLOW"];
+function modulosDoCorpo(body) {
+  if (!Array.isArray(body?.modulos)) return null;
+  const limpos = [...new Set(body.modulos.filter((m) => MODULOS_VALIDOS.includes(m)))];
+  /* O HUB entra sempre: é onde o cadastro vive, e uma conta só-Flow criada por
+     engano no painel seria uma imobiliária sem lugar para cadastrar imóvel. */
+  return limpos.includes("HUB") ? limpos : ["HUB", ...limpos];
+}
+
 adminRouter.post("/tenants", async (req, res) => {
   try {
     const body = req.body || {};
@@ -159,6 +173,7 @@ adminRouter.post("/tenants", async (req, res) => {
       ...body,
       name: nome,
       slug: endereco.slug,
+      modulos: modulosDoCorpo(body),
     });
     res.status(201).json({
       id: tenant.id,
@@ -182,6 +197,11 @@ adminRouter.put("/tenants/:id", async (req, res) => {
       if (k in b) data[k] = b[k];
     }
     if ("ativo" in b) data.ativo = Boolean(b.ativo);
+    /* Tirar o Flow de uma conta NÃO apaga nada: os negócios, contratos e
+       comissões continuam no banco. O que some é o acesso — e é o certo, porque
+       quem volta a contratar espera reencontrar o que deixou. */
+    const modulos = modulosDoCorpo(b);
+    if (modulos) data.modulos = modulos;
     if ("statusPagamento" in b && STATUS_VALIDOS.includes(b.statusPagamento)) data.statusPagamento = b.statusPagamento;
     if ("valorMensal" in b) data.valorMensal = b.valorMensal === "" || b.valorMensal == null ? null : Number(b.valorMensal);
     if ("proximoVencimento" in b) data.proximoVencimento = b.proximoVencimento ? new Date(b.proximoVencimento) : null;
