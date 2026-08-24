@@ -157,7 +157,17 @@ export async function apagarImobiliaria(tenantId) {
  */
 export async function subirApi(routers) {
   const app = express();
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({
+    limit: "2mb",
+    /* O MESMO `verify` do `server.js`. Sem ele o webhook de captação cai no
+       `JSON.stringify(req.body)` de emergência — que funciona por acidente
+       quando o teste manda as chaves na mesma ordem, e mente: a suíte passaria
+       verde enquanto a assinatura de verdade nunca bate em produção. O andaime
+       precisa entregar o corpo exatamente como o servidor entrega. */
+    verify: (req, _res, buf) => {
+      if (buf?.length) req.rawBody = buf.toString("utf8");
+    },
+  }));
   for (const [caminho, router] of Object.entries(routers)) app.use(caminho, router);
 
   const servidor = await new Promise((resolve) => {

@@ -752,10 +752,10 @@ publicRouter.get("/vitrines", async (req, res) => {
 
 
 /* ── Feed dos portais ────────────────────────────────────────────────────────
-   `GET /public/:slug/feed.xml` — o endereço que a imobiliária cadastra no
-   painel do ZAP, do VivaReal ou do OLX Imóveis. O robô do portal vem buscar; a
-   Omnimob não empurra nada. Ver `services/feedPortais.js` para o formato e o
-   porquê.
+   `GET /public/feed/:chave.xml` — o endereço NOVO, com chave aleatória.
+   `GET /public/:slug/feed.xml` — o endereço ANTIGO, mantido para quem já cadastrou.
+   Ambos levam ao mesmo XML; a chave não é adivinhável e pode ser rotacionada.
+   Ver `services/feedPortais.js` para o formato e o porquê.
 
    Público e sem autenticação de propósito: é o robô do portal que lê, e ele não
    tem como se autenticar. O que protege é o conteúdo — só imóvel que a própria
@@ -766,10 +766,12 @@ publicRouter.get("/vitrines", async (req, res) => {
    vazio diz "nada mudou" e é infinitamente menos destrutivo do que isso.
    ────────────────────────────────────────────────────────────────────────── */
 async function servirFeed(req, res) {
-  const slug = String(req.params.slug || "");
+  /* A chave vem de /public/feed/:chave.xml; o slug vem de /public/:slug/feed.xml.
+     Um dos dois SEMPRE existe — as rotas garantem. */
+  const chave = req.params.chave;
+  const slug = req.params.slug;
 
-  /* Qual portal está pedindo. Sem `:portal` na URL é o endereço ANTIGO, que
-     leva tudo — ver a exceção documentada em `services/portais.js`. */
+  /* Qual portal está pedindo. Sem `:portal` na URL é o endereço que leva tudo. */
   const portal = req.params.portal ? portalPorCaminho(req.params.portal) : null;
   if (req.params.portal && !portal) {
     res.type("application/xml");
@@ -777,8 +779,9 @@ async function servirFeed(req, res) {
   }
 
   try {
+    const where = chave ? { feedChave: chave } : { slug };
     const tenant = await prisma.tenant.findUnique({
-      where: { slug },
+      where,
       select: { id: true, name: true, slug: true, email: true, ativo: true, statusPagamento: true, dominioProprio: true, dominioStatus: true },
     });
 
@@ -828,20 +831,24 @@ async function servirFeed(req, res) {
     res.set("Cache-Control", "public, max-age=1800, s-maxage=1800");
     return res.send(corpo);
   } catch (erro) {
-    console.error(`[feed.xml] ${slug}${portal ? `/${portal.caminho}` : ""}:`, erro.message);
+    const ident = chave ? `chave:${chave}` : `slug:${slug}`;
+    console.error(`[feed.xml] ${ident}${portal ? `/${portal.caminho}` : ""}:`, erro.message);
     res.type("application/xml");
     return res.send(montarFeedVRSync({ name: "Omnimob" }, [], null));
   }
 }
 
-/* Um endereço por portal — é assim que a separação por portal existe de fato,
-   porque quem decide o que cada portal lê é a URL cadastrada no painel DELE. */
-publicRouter.get("/:slug/feed/:portal.xml", servirFeed);
+/* NOVO: endereço com chave aleatória — não adivinhável, revogável. */
+publicRouter.get("/feed/:chave.xml", servirFeed);
 
-/* O endereço antigo continua de pé, e leva TUDO que tem portal marcado.
-   Imobiliárias já o cadastraram nos três painéis; trocar o comportamento dele
-   por baixo derrubaria a carga delas sem aviso. */
+/* NOVO: endereço com chave + portal específico. */
+publicRouter.get("/feed/:chave/:portal.xml", servirFeed);
+
+/* ANTIGO: endereço com slug — mantido para quem já cadastrou. */
 publicRouter.get("/:slug/feed.xml", servirFeed);
+
+/* ANTIGO: endereço com slug + portal — mantido para quem já cadastrou. */
+publicRouter.get("/:slug/feed/:portal.xml", servirFeed);
 
 publicRouter.get("/sitemap.xml", async (req, res) => {
   try {

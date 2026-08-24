@@ -49,7 +49,16 @@ function Card({ Icone, cor, nome, selo, seloTom = "neutro", children, acao }) {
 }
 
 export function CanaisDoImovel({
-  tenantSlug, propertyId, publicarPortais, aoTrocarPortais, disabled,
+  /* `portais` é a LISTA de portais marcados, não o booleano `publicarPortais`
+     do formulário. A assinatura dizia `publicarPortais` e o corpo lia `portais`
+     — como o nome errado nunca era usado, nada reclamava até o render, e aí
+     estourava `ReferenceError` na última etapa do cadastro, que é a única tela
+     que monta este componente.
+
+     O padrão `= []` não é enfeite: quem chama passa `portaisDoImovel(form)`, e
+     um imóvel ainda sem escolha nenhuma faria `undefined.includes` derrubar a
+     mesma tela por outro caminho. */
+  tenantSlug, propertyId, portais = [], aoTrocarPortais, disabled,
 }) {
   const [automacao, setAutomacao] = useState(null);
   const [canais, setCanais] = useState([]);

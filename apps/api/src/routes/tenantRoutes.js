@@ -46,6 +46,7 @@ import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
 import { cifrar } from "../services/cofre.js";
 import { modulosDoTenant } from "../services/modulos.js";
 import { exportarTudo } from "../services/exportacaoCompleta.js";
+import { exportacaoParaXml } from "../services/exportacaoXml.js";
 
 /* A linha do tenant sem o que não é da conta do navegador.
  *
@@ -145,10 +146,27 @@ tenantRouter.get(
     try {
       const dados = await exportarTudo(req.tenant.id);
       const data = new Date().toISOString().slice(0, 10);
+
+      /* ── OS DOIS FORMATOS RESPONDEM A DUAS PESSOAS ──────────────────────
+         O JSON é para quem vai programar em cima do arquivo. O XML é para quem
+         vai MIGRAR: é o que o sistema imobiliário do outro lado sabe ler, e é o
+         que transforma "me dá o que é meu" em algo que a imobiliária consegue
+         entregar sozinha, sem intermediário.
+
+         `?formato=xml` e não uma rota nova, pela mesma razão que a API do
+         tenant já usa `?formato=xml`: é a mesma exportação, escrita de outro
+         jeito — duas rotas divergiriam no primeiro campo novo. */
+      const xml = String(req.query.formato || "").toLowerCase() === "xml";
+      const extensao = xml ? "xml" : "json";
+
       /* `Content-Disposition` para o navegador BAIXAR em vez de desenhar. Sem
-         ele, um JSON de dezenas de megabytes abre numa aba e trava a máquina de
-         quem clicou. */
-      res.setHeader("Content-Disposition", `attachment; filename="omnimob-${req.tenant.slug}-${data}.json"`);
+         ele, um arquivo de dezenas de megabytes abre numa aba e trava a máquina
+         de quem clicou. */
+      res.setHeader("Content-Disposition", `attachment; filename="omnimob-${req.tenant.slug}-${data}.${extensao}"`);
+      if (xml) {
+        res.type("application/xml");
+        return res.send(exportacaoParaXml(dados));
+      }
       res.type("application/json");
       return res.send(JSON.stringify(dados, null, 2));
     } catch (erro) {

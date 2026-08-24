@@ -403,6 +403,464 @@ function ReverTour({ tenantSlug }) {
   );
 }
 
+
+// ─── Topologia das integrações sociais ────────────────────────────────────────
+
+/*
+  A topologia é navegação além de ser status: TODOS os canais aparecem, mesmo
+  quando ainda não estão configurados. Clicar num card leva a pessoa ao ponto
+  da própria aba onde aquela integração é feita.
+
+  WhatsApp fica sempre ativo porque não exige conexão OAuth neste fluxo.
+  Facebook e Instagram usam o status real já carregado por `getSocialStatus`.
+  ZAP, VivaReal e OLX aparecem sempre porque a configuração deles vive em
+  `CentralDeCanais`; esta página não duplica a regra do componente nem inventa
+  estado de portal. Neles o card funciona como atalho para a configuração XML.
+*/
+function TopologiaDeRedes({ socialStatus, carregando, erro, aoIrParaConfiguracao }) {
+  const facebookAtivo = Boolean(socialStatus?.facebook?.connected);
+  const instagramAtivo = Boolean(socialStatus?.instagram?.connected);
+
+  /*
+    No desktop, os canais formam uma topologia radial ao redor da Omnimob:
+    WhatsApp fica fixo à esquerda do hub, redes sociais Meta na parte superior
+    e portais distribuídos nas laterais/parte inferior. Em telas estreitas o CSS troca para uma composição em grade para
+    preservar legibilidade sem sobrepor os cards.
+  */
+  const canais = [
+    {
+      key: "whatsapp",
+      posicao: "esq",
+      nome: "WhatsApp",
+      detalhe: "Disponível por padrão",
+      sempreAtivo: true,
+      monitorado: false,
+      alvo: null,
+      icone: <IconeCelular size={18} />,
+    },
+    {
+      key: "facebook",
+      posicao: "sup-esq",
+      nome: "Facebook",
+      detalhe: facebookAtivo
+        ? (socialStatus?.facebook?.pageName ? `Página: ${socialStatus.facebook.pageName}` : "Página conectada")
+        : "Clique para conectar",
+      ativo: facebookAtivo,
+      monitorado: true,
+      alvo: "facebook",
+      icone: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+        </svg>
+      ),
+    },
+    {
+      key: "instagram",
+      posicao: "sup-dir",
+      nome: "Instagram",
+      detalhe: instagramAtivo ? "Conta Business conectada" : "Clique para conectar",
+      ativo: instagramAtivo,
+      monitorado: true,
+      alvo: "instagram",
+      icone: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="5" />
+          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+          <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+        </svg>
+      ),
+    },
+    {
+      key: "zap",
+      posicao: "dir",
+      nome: "ZAP Imóveis",
+      detalhe: "Integração via XML / VRSync",
+      monitorado: false,
+      alvo: "portais",
+      icone: <span aria-hidden="true" style={{ fontSize: "15px", fontWeight: 900 }}>Z</span>,
+    },
+    {
+      key: "vivareal",
+      posicao: "inf-dir",
+      nome: "VivaReal",
+      detalhe: "Integração via XML / VRSync",
+      monitorado: false,
+      alvo: "portais",
+      icone: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v10h13V10" /><path d="M9 20v-6h6v6" />
+        </svg>
+      ),
+    },
+    {
+      key: "olx",
+      posicao: "inf-esq",
+      nome: "OLX Imóveis",
+      detalhe: "Integração via XML / VRSync",
+      monitorado: false,
+      alvo: "portais",
+      icone: <span aria-hidden="true" style={{ fontSize: "11px", fontWeight: 900, letterSpacing: "-0.7px" }}>olx</span>,
+    },
+  ];
+
+  function estadoDo(canal) {
+    // WhatsApp não exige OAuth nem feed: a publicação/compartilhamento está
+    // disponível no produto por padrão, então este nó é sempre verde.
+    if (canal.sempreAtivo) return "ativo";
+
+    // O status dos portais continua pertencendo à CentralDeCanais.
+    if (!canal.monitorado) return "configurar";
+
+    /* Falha da rota de status Meta não significa que Facebook E Instagram
+       quebraram. É uma falha de consulta. Por isso os nós ficam neutros e o
+       aviso global explica o problema, em vez de contar dois erros falsos. */
+    if (erro && !socialStatus) return "indisponivel";
+    if (carregando && !socialStatus) return "recente";
+    return canal.ativo ? "ativo" : "configurar";
+  }
+
+  function corDoEstado(estado) {
+    if (estado === "ativo") return "#22c55e";
+    if (estado === "recente") return "#f59e0b";
+    if (estado === "erro") return "#ef4444";
+    return "rgba(148,163,184,0.58)";
+  }
+
+  const ativos = canais.filter((c) => estadoDo(c) === "ativo").length;
+  const configuraveis = canais.filter((c) => estadoDo(c) === "configurar").length;
+  const erros = canais.filter((c) => estadoDo(c) === "erro").length;
+  /*
+    Pontos do diagrama radial. Mantemos as coordenadas em porcentagem do SVG
+    para as linhas acompanharem a composição mesmo quando o card muda de
+    tamanho. Os cards em si ficam em slots absolutos e responsivos.
+  */
+  const caminhos = {
+    whatsapp:  "M 50 50 C 41 50, 29 50, 15 50",
+    facebook:  "M 50 50 C 44 45, 34 26, 20 17",
+    instagram: "M 50 50 C 56 45, 66 26, 80 17",
+    zap:       "M 50 50 C 62 50, 74 50, 86 50",
+    vivareal:  "M 50 50 C 58 58, 67 75, 76 82",
+    olx:       "M 50 50 C 42 58, 33 75, 24 82",
+  };
+
+  return (
+    <div className="cfg-topologia">
+      <style>{TOPOLOGIA_REDES_CSS}</style>
+
+      <div className="cfg-topologia__cab">
+        <div>
+          <h2>Topologia das integrações</h2>
+          <p>
+            {carregando && !socialStatus
+              ? "Verificando conexões…"
+              : erro && !socialStatus
+                ? `${ativos} ativo${ativos === 1 ? "" : "s"} · ${configuraveis} para configurar · status Meta indisponível`
+                : `${ativos} ativo${ativos === 1 ? "" : "s"} · ${configuraveis} para configurar${erros ? ` · ${erros} erro${erros === 1 ? "" : "s"}` : ""}`}
+          </p>
+        </div>
+
+        <div className="cfg-topologia__legenda" aria-label="Legenda dos estados">
+          <span><i style={{ background: "#22c55e" }} />Ativo</span>
+          <span><i style={{ background: "#f59e0b" }} />Verificando</span>
+          <span><i style={{ background: "#ef4444" }} />Erro</span>
+          <span><i className="cfg-topologia__dot-inativo" />Configurar</span>
+        </div>
+      </div>
+
+      <div className="cfg-topologia__canvas" aria-label="Mapa das integrações da Omnimob">
+        <div className="cfg-topologia__grupo cfg-topologia__grupo--social">Redes sociais</div>
+        <div className="cfg-topologia__grupo cfg-topologia__grupo--portais">Portais imobiliários</div>
+
+        <svg className="cfg-topologia__linhas" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          {canais.map((canal) => {
+            const estado = estadoDo(canal);
+            return (
+              <path
+                key={canal.key}
+                className={`cfg-topologia__linha cfg-topologia__linha--${estado}`}
+                d={caminhos[canal.key]}
+                style={{ stroke: corDoEstado(estado) }}
+              />
+            );
+          })}
+        </svg>
+
+        <div className="cfg-topologia__node cfg-topologia__node--omnimob">
+          <div className="cfg-topologia__omni-icone" aria-hidden="true">O</div>
+          <div className="cfg-topologia__node-texto">
+            <strong>Omnimob</strong>
+            <span>Central de publicação</span>
+          </div>
+        </div>
+
+        {canais.map((canal) => {
+          const estado = estadoDo(canal);
+          const cor = corDoEstado(estado);
+          const detalhe = estado === "recente"
+            ? "Verificando…"
+            : estado === "erro"
+              ? "Erro na integração"
+              : estado === "indisponivel"
+                ? "Status indisponível · clique para configurar"
+                : canal.detalhe;
+
+          const conteudo = (
+            <>
+              <div className={`cfg-topologia__marca cfg-topologia__marca--${canal.key}`}>
+                {canal.icone}
+              </div>
+              <div className="cfg-topologia__node-texto">
+                <strong style={{ color: estado === "erro" ? "#fca5a5" : "inherit" }}>{canal.nome}</strong>
+                <span title={detalhe}>{detalhe}</span>
+              </div>
+              <span className={`cfg-topologia__status cfg-topologia__status--${estado}`} style={{ background: cor }} />
+            </>
+          );
+
+          return (
+            <div
+              className={`cfg-topologia__slot cfg-topologia__slot--${canal.posicao}`}
+              key={canal.key}
+            >
+              {canal.alvo ? (
+                <button
+                  type="button"
+                  className="cfg-topologia__node cfg-topologia__node--canal"
+                  style={{
+                    borderColor: cor,
+                    boxShadow: estado === "ativo" ? `0 0 18px ${cor}22` : "none",
+                  }}
+                  onClick={() => aoIrParaConfiguracao?.(canal.alvo)}
+                  title={`Ir para a configuração de ${canal.nome}`}
+                  aria-label={`Ir para a configuração de ${canal.nome}`}
+                >
+                  {conteudo}
+                  <span className="cfg-topologia__ir" aria-hidden="true">↓</span>
+                </button>
+              ) : (
+                <div
+                  className="cfg-topologia__node cfg-topologia__node--canal cfg-topologia__node--fixo"
+                  style={{
+                    borderColor: cor,
+                    boxShadow: `0 0 18px ${cor}22`,
+                  }}
+                  title={`${canal.nome}: disponível por padrão`}
+                  aria-label={`${canal.nome}: integração sempre ativa`}
+                >
+                  {conteudo}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="cfg-topologia__vivo">
+          <span className={erro ? "cfg-topologia__vivo-ponto cfg-topologia__vivo-ponto--erro" : "cfg-topologia__vivo-ponto"} />
+          {erro ? "Status Meta indisponível" : carregando ? "Atualizando…" : "Clique em uma plataforma para configurar"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/*
+  Scroll centralizado + um brilho curto no destino. `scroll-margin-top` evita
+  que a barra superior esconda a linha quando o navegador termina o movimento.
+*/
+function irParaConfiguracaoDaRede(alvo) {
+  const elemento = document.querySelector(`[data-config-rede="${alvo}"]`);
+  if (!elemento) return;
+
+  elemento.scrollIntoView({ behavior: "smooth", block: "center" });
+  elemento.classList.remove("cfg-config-alvo--pulso");
+  // Reinicia a animação mesmo quando a pessoa clica duas vezes no mesmo card.
+  void elemento.offsetWidth;
+  elemento.classList.add("cfg-config-alvo--pulso");
+  window.setTimeout(() => elemento.classList.remove("cfg-config-alvo--pulso"), 1450);
+}
+
+const TOPOLOGIA_REDES_CSS = `
+.cfg-topologia {
+  background: var(--sup-03, rgba(255,255,255,0.03));
+  border: 1px solid var(--linha-08, rgba(255,255,255,0.08));
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+  padding: 20px;
+}
+.cfg-topologia__cab {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 18px; margin-bottom: 14px;
+}
+.cfg-topologia__cab h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.cfg-topologia__cab p { margin: 4px 0 0; font-size: 11px; color: var(--text-muted); }
+.cfg-topologia__legenda { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.cfg-topologia__legenda span { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.cfg-topologia__legenda i { width: 7px; height: 7px; border-radius: 999px; display: block; }
+.cfg-topologia__dot-inativo { background: rgba(148,163,184,0.58) !important; }
+
+.cfg-topologia__canvas {
+  height: 520px; min-width: 0; position: relative; overflow: hidden;
+  border: 1px solid var(--linha-07, rgba(255,255,255,0.07));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 25% 50%, rgba(99,102,241,0.09), transparent 28%),
+    linear-gradient(var(--sup-01, rgba(255,255,255,0.01)), var(--sup-01, rgba(255,255,255,0.01)));
+}
+.cfg-topologia__canvas::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.26;
+  background-image: radial-gradient(circle, var(--linha-15, rgba(148,163,184,0.35)) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.cfg-topologia__grupo {
+  position: absolute; left: 50%; z-index: 4; transform: translateX(-50%);
+  padding: 3px 7px; border-radius: 999px; font-size: 8.5px; font-weight: 700;
+  letter-spacing: .055em; text-transform: uppercase; color: var(--text-muted);
+  background: var(--sup-04, rgba(255,255,255,.04)); border: 1px solid var(--linha-07, rgba(255,255,255,.07));
+}
+.cfg-topologia__grupo--social { top: 2.2%; }
+.cfg-topologia__grupo--portais { bottom: 2.2%; }
+.cfg-topologia__linhas { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.cfg-topologia__linha {
+  fill: none; stroke-width: 0.45; vector-effect: non-scaling-stroke;
+  stroke-linecap: round; opacity: 0.7;
+}
+.cfg-topologia__linha--ativo,
+.cfg-topologia__linha--recente {
+  stroke-dasharray: 5 6;
+  animation: cfg-topologia-fluxo 1.7s linear infinite;
+}
+.cfg-topologia__linha--erro { stroke-dasharray: 3 4; }
+.cfg-topologia__linha--configurar,
+.cfg-topologia__linha--indisponivel { stroke-dasharray: 2 6; opacity: 0.45; }
+@keyframes cfg-topologia-fluxo { to { stroke-dashoffset: -22; } }
+
+.cfg-topologia__node {
+  display: flex; align-items: center; gap: 10px;
+  border: 1.5px solid var(--linha-10, rgba(255,255,255,0.1));
+  background: var(--bg, #111827); color: var(--text);
+  border-radius: 12px; padding: 10px 12px; z-index: 3;
+  min-width: 150px; max-width: 240px; box-sizing: border-box;
+  transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease, background-color .25s ease;
+}
+.cfg-topologia__node--omnimob {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  border: 2px solid rgba(99,102,241,0.8);
+  box-shadow: 0 0 24px rgba(99,102,241,0.13);
+  min-width: 170px;
+}
+.cfg-topologia__slot {
+  position: absolute; z-index: 3; width: min(250px, 28%);
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+.cfg-topologia__slot--sup-esq { left: 5%; top: 8%; }
+.cfg-topologia__slot--sup-dir { right: 5%; top: 8%; }
+.cfg-topologia__slot--esq { left: 2.5%; top: 50%; transform: translateY(-50%); }
+.cfg-topologia__slot--dir { right: 2.5%; top: 50%; transform: translateY(-50%); }
+.cfg-topologia__slot--inf-dir { right: 9%; bottom: 8%; }
+.cfg-topologia__slot--inf-esq { left: 9%; bottom: 8%; }
+.cfg-topologia__node--canal {
+  position: relative; width: 100%; max-width: 250px; min-width: 0;
+  padding-right: 42px; appearance: none; text-align: left; font: inherit;
+  cursor: pointer; pointer-events: auto;
+}
+.cfg-topologia__node--canal:hover,
+.cfg-topologia__node--canal:focus-visible {
+  transform: translateY(-2px);
+  background: var(--sup-05, rgba(255,255,255,0.05));
+  outline: none;
+}
+.cfg-topologia__node--canal:focus-visible { box-shadow: 0 0 0 3px rgba(99,102,241,.22); }
+.cfg-topologia__node--fixo { cursor: default; padding-right: 34px; }
+.cfg-topologia__node--fixo:hover { transform: none; background: var(--bg, #111827); }
+.cfg-topologia__omni-icone {
+  width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 17px; font-weight: 800;
+  color: #fff; background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  box-shadow: 0 6px 16px rgba(99,102,241,0.28);
+}
+.cfg-topologia__marca {
+  width: 31px; height: 31px; border-radius: 8px; flex: 0 0 auto;
+  display: grid; place-items: center; color: #fff;
+}
+.cfg-topologia__marca--whatsapp { background: #25D366; }
+.cfg-topologia__marca--facebook { background: #1877f2; }
+.cfg-topologia__marca--instagram { background: linear-gradient(135deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%); }
+.cfg-topologia__marca--zap { background: linear-gradient(135deg, #ff7a00, #6d28d9); }
+.cfg-topologia__marca--vivareal { background: linear-gradient(135deg, #22c7e8, #2563eb); }
+.cfg-topologia__marca--olx { background: linear-gradient(135deg, #6d28d9, #ec4899); }
+.cfg-topologia__node-texto { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.cfg-topologia__node-texto strong { font-size: 12px; font-weight: 650; line-height: 1.2; }
+.cfg-topologia__node-texto span {
+  display: block; max-width: 100%; font-size: 9.5px; color: var(--text-muted); line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cfg-topologia__status {
+  position: absolute; right: 25px; top: 50%; transform: translateY(-50%);
+  width: 6px; height: 6px; border-radius: 999px;
+}
+.cfg-topologia__ir {
+  position: absolute; right: 9px; top: 50%; transform: translateY(-52%);
+  color: var(--text-muted); opacity: .48; font-size: 11px;
+  transition: transform .2s ease, opacity .2s ease;
+}
+.cfg-topologia__node--canal:hover .cfg-topologia__ir { transform: translateY(-30%); opacity: .9; }
+.cfg-topologia__status--ativo::after,
+.cfg-topologia__status--recente::after {
+  content: ""; position: absolute; inset: -4px; border-radius: inherit;
+  border: 1px solid currentColor; opacity: .35; animation: cfg-topologia-pulso 1.8s ease-out infinite;
+}
+@keyframes cfg-topologia-pulso { 0% { transform: scale(.7); opacity: .45; } 100% { transform: scale(1.45); opacity: 0; } }
+.cfg-topologia__vivo {
+  position: absolute; left: 12px; bottom: 10px; z-index: 4;
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; border-radius: 999px;
+  font-size: 9px; color: var(--text-muted);
+  background: var(--sup-04, rgba(255,255,255,0.04));
+  border: 1px solid var(--linha-07, rgba(255,255,255,0.07));
+}
+.cfg-topologia__vivo-ponto { width: 5px; height: 5px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.10); }
+.cfg-topologia__vivo-ponto--erro { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.10); }
+
+.cfg-config-alvo { scroll-margin-top: 96px; border-radius: 18px; }
+.cfg-config-alvo--pulso { animation: cfg-config-destino 1.4s ease-out; }
+@keyframes cfg-config-destino {
+  0% { box-shadow: 0 0 0 0 rgba(99,102,241,.0); }
+  22% { box-shadow: 0 0 0 4px rgba(99,102,241,.28), 0 0 30px rgba(99,102,241,.16); }
+  100% { box-shadow: 0 0 0 0 rgba(99,102,241,.0); }
+}
+
+@media (max-width: 680px) {
+  .cfg-topologia { padding: 16px; }
+  .cfg-topologia__cab { flex-direction: column; }
+  .cfg-topologia__legenda { justify-content: flex-start; gap: 9px; }
+  .cfg-topologia__canvas { height: 790px; }
+  /* No celular a topologia vira um "hub + grade" para nenhum card se sobrepor.
+     No desktop ela continua verdadeiramente radial, em volta da Omnimob. */
+  .cfg-topologia__node--omnimob { left: 50%; top: 9%; min-width: 148px; padding: 9px; }
+  .cfg-topologia__linhas { display: none; }
+  .cfg-topologia__grupo--social { top: 31%; }
+  .cfg-topologia__grupo--portais { top: 52%; bottom: auto; }
+  .cfg-topologia__slot { width: 45%; transform: none; }
+  .cfg-topologia__slot--esq { left: 50%; top: 19%; transform: translateX(-50%); width: 72%; }
+  .cfg-topologia__slot--sup-esq { left: 3%; top: 36%; }
+  .cfg-topologia__slot--sup-dir { right: 3%; top: 36%; }
+  .cfg-topologia__slot--dir { left: 50%; right: auto; top: 58%; transform: translateX(-50%); }
+  .cfg-topologia__slot--inf-dir { right: 3%; bottom: 12%; }
+  .cfg-topologia__slot--inf-esq { left: 3%; bottom: 12%; }
+  .cfg-topologia__node--canal { width: 100%; max-width: none; padding: 9px 34px 9px 9px; }
+  .cfg-topologia__node-texto span { font-size: 8.5px; }
+  .cfg-topologia__status { right: 20px; }
+  .cfg-topologia__ir { right: 7px; }
+  .cfg-topologia__marca { width: 28px; height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cfg-topologia__linha--ativo, .cfg-topologia__linha--recente,
+  .cfg-topologia__status--ativo::after, .cfg-topologia__status--recente::after,
+  .cfg-config-alvo--pulso { animation: none; }
+  .cfg-topologia__node { transition: none; }
+}
+`;
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function ConfiguracaoPage({ session, onSessionUpdate }) {
@@ -516,6 +974,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
      dois lados daria duas verdades sobre o mesmo endereço no dia em que a API
      mudar de casa. */
   const [socialLoading, setSocialLoading] = useState(false);
+  const [socialErro, setSocialErro] = useState(false);
   const [socialMsg, setSocialMsg] = useState(null); // { type: "success"|"error", text }
   const [oauthLoading, setOauthLoading] = useState(false);
   const [disconnectLoading, setDisconnectLoading] = useState(false);
@@ -689,15 +1148,37 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
     }
   }
 
-  // Carrega status das redes sociais
+  // Carrega status das redes sociais e mantém a topologia viva enquanto a aba
+  // estiver aberta. O polling é leve (uma consulta a cada 15s) e evita que o
+  // diagrama fique mentindo depois de uma conexão/desconexão feita em outra aba.
   useEffect(() => {
-    if (!tenantSlug) return;
-    setSocialLoading(true);
-    api.getSocialStatus(tenantSlug)
-      .then(setSocialStatus)
-      .catch(() => {})
-      .finally(() => setSocialLoading(false));
-  }, [tenantSlug]);
+    if (!tenantSlug || tab !== "redes") return;
+
+    let montado = true;
+
+    async function atualizarStatusSocial({ silencioso = false } = {}) {
+      if (!silencioso) setSocialLoading(true);
+      try {
+        const status = await api.getSocialStatus(tenantSlug);
+        if (!montado) return;
+        setSocialStatus(status);
+        setSocialErro(false);
+      } catch {
+        if (!montado) return;
+        setSocialErro(true);
+      } finally {
+        if (montado && !silencioso) setSocialLoading(false);
+      }
+    }
+
+    atualizarStatusSocial();
+    const timer = window.setInterval(() => atualizarStatusSocial({ silencioso: true }), 15000);
+
+    return () => {
+      montado = false;
+      window.clearInterval(timer);
+    };
+  }, [tenantSlug, tab]);
 
   async function handleConectarRedes() {
     if (!tenantSlug) return;
@@ -1336,6 +1817,16 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           )}
 
           {tab === "redes" && (<>
+          {/* A topologia é uma leitura rápida do estado real das integrações.
+              Não substitui nenhum controle abaixo: ela só resume visualmente o
+              mesmo status que já alimenta "Contas conectadas". */}
+          <TopologiaDeRedes
+            socialStatus={socialStatus}
+            carregando={socialLoading}
+            erro={socialErro}
+            aoIrParaConfiguracao={irParaConfiguracaoDaRede}
+          />
+
           {/* ── Onde os imóveis aparecem ──────────────────────────────────────
               Substitui a seção "Portais imobiliários", que mostrava o endereço
               do feed e mais nada. O endereço continua aqui — junto de quantos
@@ -1345,13 +1836,15 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               E junto dos outros canais, porque a pergunta de quem divulga é uma
               só: onde meus imóveis aparecem? Que uns sejam buscados, outros
               empurrados e um seja manual é mecânica nossa, não dela. */}
-          <Secao cor="#0ea5e9" titulo="Onde seus imóveis aparecem" icone={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1.5" />
-            </svg>
-          }>
-            <CentralDeCanais session={session} />
-          </Secao>
+          <div data-config-rede="portais" className="cfg-config-alvo">
+            <Secao cor="#0ea5e9" titulo="Onde seus imóveis aparecem" icone={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1.5" />
+              </svg>
+            }>
+              <CentralDeCanais session={session} />
+            </Secao>
+          </div>
 
           {/* Redes Sociais */}
           <Secao cor="#1877f2" titulo="Contas conectadas" icone={
@@ -1386,7 +1879,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             {/* Status das plataformas */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {/* Facebook */}
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
+              <div data-config-rede="facebook" className="cfg-config-alvo" style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                 <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
                 </div>
@@ -1399,7 +1892,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               </div>
 
               {/* Instagram */}
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
+              <div data-config-rede="instagram" className="cfg-config-alvo" style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "10px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                 <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
                 </div>

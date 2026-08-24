@@ -552,6 +552,14 @@ export const api = {
   listarCanais: (tenantSlug) =>
     request("/api/canais", { headers: { "x-tenant-slug": tenantSlug } }),
 
+  /* Gera uma nova chave do feed — invalida a anterior. O endereço antigo para
+     de funcionar imediatamente; quem já cadastrou no Canal Pro precisa atualizar. */
+  regenerarChaveFeed: (tenantSlug) =>
+    request("/api/canais/feed/regenerar-chave", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
   conectarMercadoLivre: (tenantSlug) =>
     request("/api/canais/mercadolivre/conectar", { headers: { "x-tenant-slug": tenantSlug } }),
 
@@ -625,8 +633,9 @@ export const api = {
      Não passa pelo `request`: a resposta é um arquivo, não JSON, e lê-la como
      objeto para depois reserializar dobraria na memória um conteúdo que pode ter
      dezenas de megabytes. Aqui o corpo vira `blob` e o navegador salva. */
-  async exportarTudo(tenantSlug) {
-    const r = await fetch(`${API_URL}/api/tenants/me/exportar`, {
+  async exportarTudo(tenantSlug, formato = "json") {
+    const xml = formato === "xml";
+    const r = await fetch(`${API_URL}/api/tenants/me/exportar${xml ? "?formato=xml" : ""}`, {
       headers: { Authorization: `Bearer ${authToken}`, "x-tenant-slug": tenantSlug },
     });
     if (!r.ok) {
@@ -637,7 +646,7 @@ export const api = {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `omnimob-${tenantSlug}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `omnimob-${tenantSlug}-${new Date().toISOString().slice(0, 10)}.${xml ? "xml" : "json"}`;
     document.body.appendChild(a);
     a.click();
     a.remove();

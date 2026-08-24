@@ -203,6 +203,12 @@ model Tenant {
    * agora?" era uma pergunta sem resposta possível.
    */
   feedLidoEm         DateTime? @map("feed_lido_em")
+  /**
+   * Chave aleatória para o feed dos portais.
+   * Substitui o slug na URL pública: /public/feed/:chave.xml
+   * Não adivinhável, revogável, e o slug continua funcionando para quem já cadastrou.
+   */
+  feedChave          String?   @unique @map("feed_chave")
   ativo               Boolean         @default(true)
   /**
    * QUANDO o acesso foi cortado — e é daqui que o prazo de remoção conta.

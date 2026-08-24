@@ -293,6 +293,55 @@ captacaoPublicaRouter.post("/:chave", async (req, res) => {
   }
 });
 
+/* ────────────────────────────────────────────────────────────────────────────
+   O CORPO QUE NEM CHEGA A SER JSON.
+
+   `express.json()` lança antes de qualquer rota quando o corpo vem truncado,
+   com JSON quebrado, ou com um valor solto no topo (o modo estrito recusa
+   `"texto"` e `42`). O erro sobe direto para o tratador geral do `server.js`, e
+   por isso ESTA ROTA NUNCA RODAVA: o portal recebia 500 e desativava a
+   integração por conta própria, enquanto a tela de diagnóstico da imobiliária
+   ficava vazia — sem nem a linha vermelha que explicaria o silêncio. Era o
+   desfecho exato que as três regras de ouro lá em cima existem para evitar.
+
+   Montado como tratador de erro DEPOIS do router, em `/api/captacao/:chave`
+   (ver `server.js`). Duas coisas o tornam possível, e as duas são detalhes do
+   body-parser que vale registrar:
+
+     · `req.rawBody` JÁ ESTÁ PREENCHIDO. O `verify` roda antes do `JSON.parse`,
+       então o corpo original sobrevive à falha de interpretação — e é ele que
+       responde "por que o portal parou", que é a razão de a regra 2 existir.
+     · `req.params.chave` continua valendo, porque o caminho está no `app.use`.
+
+   Só trata falha de PARSE. Corpo grande demais (`entity.too.large`) e qualquer
+   outra coisa seguem para o tratador geral: engolir tudo aqui esconderia
+   defeito nosso atrás de um 200.
+   ──────────────────────────────────────────────────────────────────────────── */
+export async function captacaoCorpoInvalido(err, req, res, next) {
+  if (err?.type !== "entity.parse.failed") return next(err);
+
+  try {
+    const fonte = await prisma.fonteCaptacao.findUnique({
+      where: { chave: req.params.chave },
+      include: { tenant: true },
+    });
+    /* Mesma regra do POST: 404 não confirma a chave para quem está adivinhando. */
+    if (!fonte) return res.status(404).json({ error: "Fonte não encontrada." });
+
+    /* O corpo cru, como texto. É a única forma que ele tem — não passou pelo
+       parser, então não há objeto para guardar. É exatamente para isto que o
+       `registrarEvento` embrulha em `{ bruto }`. */
+    await registrarEvento(fonte, req.rawBody ?? "", "ERRO", `Corpo ilegível: ${err.message}`.slice(0, 1000));
+  } catch (interno) {
+    console.error("[captacao] falha ao registrar corpo inválido:", interno);
+  }
+
+  /* 200, como manda a regra 1. O corpo veio quebrado, mas quem mandou É quem
+     diz ser — a chave confere. Fazer o portal desligar a integração por causa
+     de um corpo perderia todos os leads seguintes, e não só este. */
+  return res.json({ recebido: false, motivo: "corpo-invalido" });
+}
+
 /** Sempre grava, e nunca derruba a resposta. O diagnóstico é importante; ele
  *  não é mais importante que o lead. */
 async function registrarEvento(fonte, payload, status, erro = null, extra = {}) {

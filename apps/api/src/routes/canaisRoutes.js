@@ -86,6 +86,19 @@ canaisRouter.get("/", requirePermissao("editarPagina", "verConfiguracoes", "gere
     ]);
     const porCanal = Object.fromEntries(publicados.map((p) => [p.channel, p._count._all]));
 
+    /* Gera/rota a chave do feed se não existir. */
+    if (!t.feedChave) {
+      const { randomBytes } = await import("crypto");
+      const chave = randomBytes(16).toString("hex");
+      await prisma.tenant.update({
+        where: { id: t.id },
+        data: { feedChave: chave },
+      });
+      t.feedChave = chave;
+    }
+
+    const feedUrl = `${api}/public/feed/${t.feedChave}.xml`;
+
     return res.json({
       canais: [
         {
@@ -95,11 +108,28 @@ canaisRouter.get("/", requirePermissao("editarPagina", "verConfiguracoes", "gere
           conectado: noFeed > 0,
           /* "Conectado" aqui não é uma conexão: é ter o que entregar. O feed
              existe sempre; o que muda é haver imóvel marcado para publicar. */
-          feedUrl: `${api}/public/${t.slug}/feed.xml`,
+          feedUrl,
           imoveis: noFeed,
           ultimaLeitura: t.feedLidoEm,
+          /* ── UM CADASTRO, TRÊS PORTAIS ─────────────────────────────────────
+             ZAP, VivaReal e OLX Imóveis são todos do Grupo OLX e se integram
+             pelo MESMO painel, o Canal Pro. O texto antigo dizia "cadastre no
+             painel do portal", no singular e no genérico, e mandava a pessoa
+             procurar três lugares que não existem — ela abria o site do ZAP
+             atrás de um campo de XML e não achava.
+
+             Quais dos três de fato recebem os anúncios não é decisão nossa nem
+             do feed: depende do plano que a imobiliária contratou com eles. Por
+             isso a frase separa o que a gente controla (entregar o XML) do que
+             não controla (a distribuição). */
           instrucao:
-            "Cadastre este endereço no painel do portal, em integração por XML/VRSync. Eles vêm buscar sozinhos, algumas vezes por dia.",
+            "Um cadastro só cobre os três: ZAP, VivaReal e OLX Imóveis pertencem ao Grupo OLX e a integração é feita uma vez, no Canal Pro. Para quais deles seus imóveis vão depende do plano que você contratou com eles, não do feed.",
+          passos: [
+            "No Canal Pro, abra Configurações da conta → Integração de anúncios.",
+            "Em software/integrador, escolha “Desenvolvedor Próprio”. A Omnimob ainda não aparece na lista de integradores homologados do Grupo OLX.",
+            "Cole o endereço abaixo e confirme. Eles vêm buscar sozinhos, e a primeira carga costuma levar algumas horas.",
+            "OLX Imóveis: se o seu plano no Canal Pro não incluir a OLX, envie este mesmo endereço ao suporte de integrações deles (suporteintegrador@olxbr.com) pedindo a ativação.",
+          ],
         },
         {
           id: "facebook",
@@ -257,6 +287,24 @@ canaisRouter.put("/automacao", requirePermissao("verConfiguracoes"), async (req,
   } catch (erro) {
     console.error("[canais] automacao:", erro);
     return res.status(500).json({ error: "Erro ao salvar a publicação automática." });
+  }
+});
+
+/* ── Regenerar chave do feed ─────────────────────────────────────────────────
+   Invalida a chave antiga e gera uma nova. O endereço antigo para de funcionar
+   imediatamente — quem já cadastrou no Canal Pro precisa atualizar. */
+canaisRouter.post("/feed/regenerar-chave", requirePermissao("verConfiguracoes"), async (req, res) => {
+  try {
+    const { randomBytes } = await import("crypto");
+    const chave = randomBytes(16).toString("hex");
+    await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: { feedChave: chave },
+    });
+    return res.json({ ok: true, chave });
+  } catch (erro) {
+    console.error("[canais] regenerar chave:", erro);
+    return res.status(500).json({ error: "Erro ao gerar nova chave." });
   }
 });
 

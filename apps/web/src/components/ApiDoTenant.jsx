@@ -213,11 +213,14 @@ export function ApiDoTenant({ session }) {
     }
   }
 
-  async function baixarTudo() {
+  /* Um estado só para os dois botões: quem clicou não pode disparar a outra
+     exportação enquanto a primeira monta o arquivo — são a MESMA consulta ao
+     banco, e duas de uma vez dobram o pico de memória por nada. */
+  async function baixarTudo(formato = "json") {
     setBaixando(true);
     setErro("");
     try {
-      const bytes = await api.exportarTudo(tenantSlug);
+      const bytes = await api.exportarTudo(tenantSlug, formato);
       showToast?.(`Arquivo gerado (${(bytes / 1024 / 1024).toFixed(1)} MB).`);
     } catch (err) {
       setErro(err.message);
@@ -591,9 +594,30 @@ export function ApiDoTenant({ session }) {
           configuração da vitrine. Sem chave, sem paginação. Senhas e credenciais de redes sociais
           ficam de fora, e as fotos vão como endereço.
         </p>
-        <button type="button" onClick={baixarTudo} disabled={baixando} style={{ width: "auto", padding: "10px 20px" }}>
-          {baixando ? "Gerando…" : "Baixar meus dados"}
-        </button>
+        {/* ── DOIS FORMATOS, DUAS PESSOAS ────────────────────────────────
+            O JSON é para quem vai programar em cima do arquivo. O XML é para
+            quem vai MIGRAR: é o que o sistema imobiliário do outro lado sabe
+            ler. Lado a lado e com peso visual diferente porque o JSON segue
+            sendo o padrão, e o XML é a resposta a uma pergunta específica. */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => baixarTudo("json")}
+            disabled={baixando}
+            style={{ width: "auto", padding: "10px 20px" }}
+          >
+            {baixando ? "Gerando…" : "Baixar meus dados (JSON)"}
+          </button>
+          <button
+            type="button"
+            className="is-secundario"
+            onClick={() => baixarTudo("xml")}
+            disabled={baixando}
+            style={{ width: "auto", padding: "10px 20px" }}
+          >
+            Baixar em XML
+          </button>
+        </div>
       </div>
     </div>
   );

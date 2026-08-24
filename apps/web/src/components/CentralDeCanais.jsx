@@ -7,6 +7,7 @@ import { IconeCheck } from "./Icones.jsx";
 import { RssSimple, Storefront } from "@phosphor-icons/react";
 // O glifo OFICIAL, e não o desenho da família Phosphor — ver `marcasDeRede`.
 import { WhatsappMarca } from "../utils/marcasDeRede.jsx";
+import { RotateCcw } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Onde meus imóveis aparecem.
@@ -378,6 +379,15 @@ export function CentralDeCanais({ session }) {
 
           {c.instrucao ? <p className="api-ajuda" style={{ margin: "8px 0 0" }}>{c.instrucao}</p> : null}
 
+          {/* O passo a passo, quando o canal tem um. Lista numerada e não um
+              parágrafo só: são instruções para seguir com o painel do portal
+              aberto ao lado, e prosa corrida faz a pessoa perder o lugar. */}
+          {c.passos?.length ? (
+            <ol className="canal__passos">
+              {c.passos.map((p, i) => <li key={i}>{p}</li>)}
+            </ol>
+          ) : null}
+
           {/* O endereço do feed — a informação que faltava. Sem ela, a
               imobiliária não tinha o que cadastrar no painel do portal. */}
           {c.feedUrl ? (
@@ -386,6 +396,33 @@ export function CentralDeCanais({ session }) {
                 <code>{c.feedUrl}</code>
                 <BotaoCopiar texto={c.feedUrl} />
               </div>
+              {c.id === "portais" ? (
+                <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="is-perigo"
+                    style={{ width: "auto", padding: "8px 16px", fontSize: "12px" }}
+                    onClick={async () => {
+                      const ok = await confirm(
+                        "Gerar um novo endereço do feed? O endereço atual PARA DE FUNCIONAR imediatamente. Quem já cadastrou no Canal Pro precisa atualizar lá.",
+                        "Gerar novo endereço",
+                        "danger",
+                      );
+                      if (!ok) return;
+                      try {
+                        const { chave } = await api.regenerarChaveFeed(tenantSlug);
+                        showToast?.("Novo endereço gerado. Atualize no Canal Pro.");
+                        carregar();
+                      } catch (e) {
+                        showToast?.(e.message, "error");
+                      }
+                    }}
+                  >
+                    <RotateCcw size={14} style={{ marginRight: "4px" }} />
+                    Gerar novo endereço
+                  </button>
+                </div>
+              ) : null}
               <p className="api-ajuda" style={{ margin: "8px 0 0" }}>
                 {c.ultimaLeitura
                   ? `Um portal veio buscar ${quando(c.ultimaLeitura)}.`

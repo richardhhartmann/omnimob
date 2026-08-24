@@ -17,7 +17,7 @@ import { chavesApiRouter } from "./routes/chavesApiRoutes.js";
 import { webhookRouter } from "./routes/webhookRoutes.js";
 import { canaisRouter } from "./routes/canaisRoutes.js";
 import { flowRouter } from "./routes/flowRoutes.js";
-import { captacaoPublicaRouter } from "./routes/captacaoPublicaRoutes.js";
+import { captacaoPublicaRouter, captacaoCorpoInvalido } from "./routes/captacaoPublicaRoutes.js";
 import { agendarSincronizacoes } from "./services/sincronizacao.js";
 import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
@@ -259,6 +259,10 @@ app.use("/api/canais", canaisRouter);
 
    Também lê melhor no painel do portal, que é onde a URL é colada. */
 app.use("/api/captacao", captacaoPublicaRouter);
+/* Tratador de erro da captação, logo depois do router e ANTES do geral: corpo
+   ilegível vira 200 com o corpo cru registrado, em vez de 500 sem rastro.
+   Ver o cabeçalho de `captacaoCorpoInvalido`. */
+app.use("/api/captacao/:chave", captacaoCorpoInvalido);
 app.use("/api/flow", flowRouter);
 /* A API pública da imobiliária.
 
@@ -283,6 +287,16 @@ app.use("/previa", previaRouter);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
+  /* ── 500 É PARA DEFEITO NOSSO ─────────────────────────────────────────────
+     O `express.json()` lança com `status: 400` quando o CLIENTE manda um corpo
+     ilegível, e devolver 500 nesse caso mente duas vezes: diz ao cliente que o
+     problema é nosso, e some com o caso de dentro de qualquer investigação de
+     erro de servidor. Só 4xx é repassado — qualquer outra coisa continua 500,
+     porque erro sem status é erro que ninguém previu. */
+  const status = error?.status || error?.statusCode;
+  if (Number.isInteger(status) && status >= 400 && status < 500) {
+    return res.status(status).json({ error: "Requisição inválida." });
+  }
   res.status(500).json({ error: "Erro interno no servidor." });
 });
 
