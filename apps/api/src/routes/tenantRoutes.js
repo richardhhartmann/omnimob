@@ -33,6 +33,7 @@ import {
 } from "../services/emailTemplates.js";
 import { montarRelatorioMensal, mesFechadoAnterior } from "../services/relatorioService.js";
 import { montarPainelGestor } from "../services/painelGestor.js";
+import { analisarPainelGestor, isAiEnabled } from "../services/aiService.js";
 import { normalizarAtalhos } from "../services/atalhos.js";
 import {
   enderecoDaVitrine,
@@ -483,6 +484,53 @@ tenantRouter.get(
     } catch (err) {
       console.error("[GET /tenants/me/painel-gestor]", err);
       return res.status(500).json({ error: "Erro ao montar o painel." });
+    }
+  },
+);
+
+/* ── A leitura do painel pela IA (Profissional+) ─────────────────────────────
+
+   ROTA SEPARADA do painel, e não um campo a mais na resposta dele. Três razões,
+   e a primeira sozinha já decide:
+
+   1. O painel abre em ~300 ms; a chamada ao Gemini leva de 2 a 6 segundos.
+      Juntos, a tela inteira passaria a esperar o modelo — e catorze números que
+      já estão prontos ficariam escondidos atrás de uma frase opcional.
+
+   2. O modelo pode estar fora do ar, sem chave, ou recusar. Nenhuma dessas
+      coisas pode derrubar o painel de quem dirige a imobiliária.
+
+   3. A análise custa por chamada. Rota própria deixa a tela pedi-la uma vez e
+      só quando alguém está de fato olhando.
+
+   `requirePlano(1)` e não o `requirePlanoIA` (que é nível 2, Premium): a
+   geração de conteúdo de imóvel é Premium porque escreve peça de venda em
+   volume; isto é uma leitura curta do próprio painel, uma vez por sessão. Foi o
+   nível que o cliente pediu — Profissional. */
+tenantRouter.get(
+  "/me/painel-gestor/analise",
+  requireAuth,
+  requireTenant,
+  requirePermissao("verPainelGestor"),
+  requirePlano(1, "Profissional"),
+  async (req, res) => {
+    if (!isAiEnabled()) {
+      /* 200 e não erro: a ausência de chave é uma condição do AMBIENTE, não uma
+         falha do pedido. A tela precisa saber para não desenhar o bloco — e um
+         500 aqui viraria uma faixa vermelha de erro numa página que está
+         perfeitamente saudável. */
+      return res.json({ disponivel: false, motivo: "IA não configurada nesta instalação." });
+    }
+
+    try {
+      const painel = await montarPainelGestor(req.tenant.id);
+      const analise = await analisarPainelGestor(painel, req.tenant.name);
+      return res.json({ disponivel: true, ...analise });
+    } catch (err) {
+      console.error("[GET /tenants/me/painel-gestor/analise]", err.message);
+      /* Também 200: a análise é um extra. Se o modelo falhou, a tela some com o
+         bloco e o resto do painel segue como se ele nunca tivesse existido. */
+      return res.json({ disponivel: false, motivo: "Não consegui ler os números agora." });
     }
   },
 );

@@ -293,6 +293,23 @@ export async function limparTrials({ aplicar = false, somenteIds = null } = {}) 
   const prisma = getGlobalPrisma();
   const agora = new Date();
 
+  /* ── As sessões encerradas que já venceram ─────────────────────────────────
+
+     Cada logout grava uma linha em `SessaoRevogada` para invalidar o token
+     antes da hora dele. Passado o vencimento do token, a linha não serve mais
+     para nada — ele já não vale por conta própria.
+
+     Sem esta limpeza a tabela cresceria para sempre, e ela é consultada em TODA
+     requisição autenticada (ver `authMiddleware`).
+
+     Fora do `aplicar`: apagar linha vencida não é decisão de negócio como
+     desativar uma imobiliária é, e o ensaio da faxina não precisa "propor"
+     recolher lixo. Falha aqui não pode derrubar o resto da faxina. */
+  await prisma.sessaoRevogada
+    .deleteMany({ where: { expiraEm: { lt: agora } } })
+    .then((r) => { if (r.count) console.log(`[faxina] ${r.count} sessão(ões) encerrada(s) já vencida(s) removida(s).`); })
+    .catch((e) => console.warn("[faxina] não limpei as sessões revogadas:", e.message));
+
   /* Recorte opcional. A faxina de verdade nunca passa `somenteIds` — ela varre
      tudo, que é o trabalho dela.
 

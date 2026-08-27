@@ -47,6 +47,43 @@ function limpar(grupos) {
    HUB — acervo, vitrine e relacionamento
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ── CONFIGURAÇÕES É UM ITEM SÓ, NOS DOIS MÓDULOS ────────────────────────────
+
+   Mesma chave, mesmo destino, mesmos subitens — e é isso que "compartilhada"
+   quer dizer: quem clica em Configurações no Flow chega EXATAMENTE onde chega
+   quem clica no Hub, em `/configuracoes`, sem parâmetro nenhum.
+
+   A versão anterior mandava o Flow para `/configuracoes?ver=flow`. O destino
+   já era o mesmo arquivo, mas a entrada não: o Flow caía direto numa aba
+   interna, e a pessoa que trocava de módulo via a mesma tela abrir em lugares
+   diferentes conforme de onde veio. A aba do Flow continua existindo lá dentro
+   — ela só deixou de ser a porta.
+
+   Uma função e não duas cópias do objeto: dois menus que apontam para a mesma
+   tela divergem no primeiro subitem novo, e é a forma exata como as listas
+   duplicadas deste projeto começaram todas as vezes. */
+function itemDeConfiguracoes(ctx) {
+  /* `podeImportar` NÃO sai do ctx: é a função importada de `ImportadorDados`,
+     e destruturá-la daqui a sombreava com `undefined` — `abasVisiveis` a chama.
+     Foi o que quebrou o menu inteiro na primeira tentativa. */
+  const { cargo, plano, navigate, flags, ver } = ctx;
+  if (!cargo?.verConfiguracoes) return null;
+
+  return {
+    key: "config", Icon: GearSix, label: "Configurações",
+    active: flags.isConfiguracoes, onClick: () => navigate("/configuracoes"),
+    /* Os subitens saem da MESMA lista que desenha os cartões da tela
+       (`utils/abasConfiguracoes.js`), inclusive a regra de permissão da seção
+       de Dados. Uma cópia aqui daria um menu que promete uma seção que a tela
+       não abre. */
+    subitens: abasVisiveis(cargo, plano, { podeImportar, temFlow: ctx.temFlow }).map((a) => ({
+      key: `config-${a.key}`, Icon: a.Icon, label: a.label,
+      active: flags.isConfiguracoes && ver === a.key,
+      onClick: () => navigate(`/configuracoes?ver=${a.key}`),
+    })),
+  };
+}
+
 export function gruposDoHub(ctx) {
   const { cargo, plano, navigate, rota: p, ver, leadsBadge, showcaseLink, showcaseEditorLink, flags } = ctx;
 
@@ -114,19 +151,7 @@ export function gruposDoHub(ctx) {
     {
       label: "VITRINE",
       itens: [
-        cargo?.verConfiguracoes && {
-          key: "config", Icon: GearSix, label: "Configurações",
-          active: flags.isConfiguracoes, onClick: () => navigate("/configuracoes"),
-          /* Os subitens saem da MESMA lista que desenha os cartões da tela
-             (`utils/abasConfiguracoes.js`), inclusive a regra de permissão da
-             seção de Dados. Uma cópia aqui daria um menu que promete uma seção
-             que a tela não abre. */
-          subitens: abasVisiveis(cargo, plano, { podeImportar, temFlow: ctx.temFlow }).map((a) => ({
-            key: `config-${a.key}`, Icon: a.Icon, label: a.label,
-            active: flags.isConfiguracoes && ver === a.key,
-            onClick: () => navigate(`/configuracoes?ver=${a.key}`),
-          })),
-        },
+        itemDeConfiguracoes(ctx),
         cargo?.editarPagina && { key: "editar-pagina", Icon: PencilSimple, label: "Editar Página", active: flags.isShowcaseEditor, href: showcaseEditorLink, beta: true },
         { key: "ver-pagina", Icon: ArrowSquareOut, label: "Ver Página", href: showcaseLink, external: true },
       ],
@@ -158,7 +183,12 @@ export function gruposDoFlow(ctx) {
   return limpar([
     {
       itens: [
-        { key: "flow-inicio", Icon: ChartPieSlice, label: "Visão do Flow", active: p === "/flow", onClick: () => navigate("/flow") },
+        /* "Dashboard", o mesmo rótulo do Hub. Chamava-se "Visão do Flow", e a
+           diferença não era estética: quem troca de módulo procura a tela
+           inicial pelo NOME que aprendeu no outro lado, e não achava. Dois
+           nomes para a mesma função em dois módulos da mesma moldura obrigam a
+           reaprender o mapa a cada troca. */
+        { key: "flow-inicio", Icon: ChartPieSlice, label: "Dashboard", active: p === "/flow", onClick: () => navigate("/flow") },
       ],
     },
     {
@@ -221,15 +251,10 @@ export function gruposDoFlow(ctx) {
     {
       label: "CONFIGURAÇÃO",
       itens: [
-        /* O MESMO destino de Configurações do Hub, com o parâmetro do Flow. Uma
-           segunda tela de configuração — com plano, cobrança e domínio
-           duplicados — é exatamente a divergência que este projeto já pagou
-           duas vezes. O que o Flow acrescenta é uma ABA lá dentro. */
-        cargo?.verConfiguracoes && {
-          key: "flow-config", Icon: GearSix, label: "Configurações",
-          active: p === "/configuracoes" && ver === "flow",
-          onClick: () => navigate("/configuracoes?ver=flow"),
-        },
+        /* O MESMÍSSIMO item do Hub — ver `itemDeConfiguracoes`. Uma segunda
+           tela de configuração, com plano, cobrança e domínio duplicados, é a
+           divergência que este projeto já pagou duas vezes. */
+        itemDeConfiguracoes(ctx),
       ],
     },
   ]);

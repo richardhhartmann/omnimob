@@ -1,0 +1,50 @@
+{
+  "versao": "Omnimob ilustrações v2 — direção Open Doodles",
+  "arquivos": {
+    "desafio-bagunca.png": {
+      "largura": 640,
+      "altura": 420
+    },
+    "flow-funil.png": {
+      "largura": 480,
+      "altura": 480
+    },
+    "flow-assinatura.png": {
+      "largura": 560,
+      "altura": 400
+    },
+    "app-no-bolso.png": {
+      "largura": 760,
+      "altura": 570
+    },
+    "vitrine-montando.png": {
+      "largura": 600,
+      "altura": 400
+    },
+    "erro-404.png": {
+      "largura": 520,
+      "altura": 340
+    },
+    "contato-atendimento.png": {
+      "largura": 480,
+      "altura": 300
+    },
+    "vazio-imoveis.png": {
+      "largura": 360,
+      "altura": 360
+    },
+    "vazio-leads.png": {
+      "largura": 360,
+      "altura": 360
+    },
+    "forma-arco.png": {
+      "largura": 240,
+      "altura": 240
+    },
+    "predio-omnimob.png": {
+      "largura": 300,
+      "altura": 420
+    }
+  },
+  "observacao": "PNG individual. Fundo transparente nas peças para seção escura; flow-funil preservado em fundo branco conforme a ficha detalhada do briefing."
+}

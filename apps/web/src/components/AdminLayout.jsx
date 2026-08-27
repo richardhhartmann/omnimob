@@ -492,6 +492,75 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      `:hover` da barra não o alcança. */
   const [seletorAberto, setSeletorAberto] = useState(false);
 
+  /* ── A BARRA FICA PRESA DEPOIS DE TROCAR DE MÓDULO ────────────────────────
+
+     A barra abre por `:hover`. O balão do seletor vive num PORTAL, no `body`,
+     e é justamente por isso que `is-mod-aberto` existe — enquanto ele está no
+     ar, a barra conta como aberta mesmo com o ponteiro fora dela.
+
+     O problema aparecia no instante do CLIQUE. Escolher um módulo fecha o
+     balão, e nesse quadro o ponteiro está sobre o lugar onde o balão estava —
+     que não é a `.ds-side`. Sem `:hover` e sem `is-mod-aberto`, a barra
+     recolhia sozinha no meio do gesto, e a pessoa acabava de trocar de módulo
+     olhando para uma tira de 64px de ícones.
+
+     `presa` é o que segura: entra na troca e só sai quando o ponteiro DEIXA a
+     barra de verdade. Nada de temporizador — quem decide é o gesto, e um
+     `setTimeout` de meio segundo acertaria umas vezes e erraria outras. */
+  const [presa, setPresa] = useState(false);
+  const barraRef = useRef(null);
+
+  /* ── A REDE DE SEGURANÇA DO "PRESA" ───────────────────────────────────────
+
+     `onMouseLeave` sozinho não basta, e a brecha é sutil: ele só dispara se o
+     ponteiro tiver ENTRADO no elemento. Quando a troca acontece por um clique
+     no balão — que vive no `body`, ao lado da barra e não dentro dela —, o
+     ponteiro pode nunca ter pisado na `.ds-side`. Aí não há `mouseleave` para
+     acontecer, e a barra ficaria aberta para sempre, até alguém passar o mouse
+     por cima e tirar.
+
+     Este efeito responde a pergunta certa — "o ponteiro está sobre a barra
+     AGORA?" — pela geometria, e não pelo histórico de eventos. Só existe
+     enquanto `presa` está ligado; no resto do tempo não há ouvinte nenhum. */
+  useEffect(() => {
+    if (!presa) return undefined;
+
+    function conferir(e) {
+      const caixa = barraRef.current?.getBoundingClientRect();
+      if (!caixa) return;
+
+      /* ── A REGIÃO INCLUI ONDE O BALÃO ESTAVA ────────────────────────────
+
+         A primeira versão conferia só a caixa da barra, com 8px de folga, e
+         não funcionava — o que era invisível na sondagem porque ela clicava e
+         NÃO mexia mais o mouse.
+
+         No uso real o gesto termina com o ponteiro em cima da opção clicada, e
+         a opção vive no balão, que abre À DIREITA da barra. Ou seja: no
+         instante seguinte à troca o ponteiro está legitimamente fora da barra.
+         Bastava um tremor de dois pixels para o `pointermove` disparar, ver
+         "fora" e recolher tudo — exatamente o defeito que este estado existe
+         para corrigir, reaparecendo por outro caminho.
+
+         `FOLGA_DO_BALAO` estica a região para a direita o bastante para cobrir
+         o balão (que nasce em `barra.right + 12` e tem ~260px). Não precisa ser
+         exato: ela só vale enquanto `presa` está ligado, e o único efeito de
+         sobrar espaço é a barra continuar aberta por mais alguns pixels de
+         movimento — que é o comportamento pedido, não um defeito.
+
+         Na vertical a folga é a mesma dos 8px: mover para cima ou para baixo
+         saindo da barra é sair de verdade. */
+      const FOLGA_DO_BALAO = 380;
+      const dentro =
+        e.clientX >= caixa.left - 8 && e.clientX <= caixa.right + FOLGA_DO_BALAO
+        && e.clientY >= caixa.top - 8 && e.clientY <= caixa.bottom + 8;
+      if (!dentro) setPresa(false);
+    }
+
+    document.addEventListener("pointermove", conferir);
+    return () => document.removeEventListener("pointermove", conferir);
+  }, [presa]);
+
   /* Trocar de módulo NAVEGA. Só mudar a barra deixaria a pessoa no Dashboard do
      Hub com o menu do Flow em volta — e o primeiro clique dela seria num item
      que não tem nada a ver com o que está na tela. O destino de cada módulo
@@ -502,6 +571,9 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       gravarNoUsuario(CHAVES.moduloAtivo, tenantId, session.usuario.id, proximo);
     }
     setModuloPreferido(proximo);
+    /* Antes de navegar: a barra tem de já estar presa quando a árvore nova
+       montar, senão há um quadro com ela recolhida. */
+    setPresa(true);
     navigate(destino);
   }, [cargo, navigate, tenantId, session?.usuario?.id]);
 
@@ -776,7 +848,24 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         {/* `ds-side` reserva os 64px no fluxo; `ds-side__interno` é quem cresce,
             por cima do conteúdo. Fosse a própria `aside` a crescer, cada passada
             de mouse empurraria a página inteira para o lado. */}
-        <aside className={`ds-side${seletorAberto ? " is-mod-aberto" : ""}`} data-tour="sidebar">
+        <aside
+          ref={barraRef}
+          className={`ds-side${seletorAberto || presa ? " is-mod-aberto" : ""}`}
+          data-tour="sidebar"
+          /* Solta a barra quando o ponteiro sai DE VERDADE. `mouseleave` no
+             `<aside>` já ignora a viagem entre os filhos dele — é `mouseout`
+             que dispararia a cada troca de elemento lá dentro.
+
+             O balão do seletor não é filho daqui (vive no `body`), mas isso não
+             atrapalha: enquanto ele está aberto, `seletorAberto` segura a
+             barra sozinho. */
+          onMouseLeave={() => setPresa(false)}
+          /* Teclado: sair da barra com Tab também solta. Sem isto, quem trocasse
+             de módulo pelo teclado deixaria a barra presa até mexer o mouse. */
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setPresa(false);
+          }}
+        >
           <div className="ds-side__interno">
 
           {/* ── O seletor de módulo ────────────────────────────────────────

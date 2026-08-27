@@ -210,6 +210,38 @@ test("a conta SEM o módulo não alcança rota nenhuma do Flow", async () => {
   await prisma.tenant.update({ where: { id: B.tenant.id }, data: { modulos: ["HUB", "FLOW"] } });
 });
 
+test("o cargo SEM `acessarFlow` não alcança rota nenhuma do Flow", async () => {
+  /* ── A TRANCA QUE ERA SÓ DECORAÇÃO ──────────────────────────────────────
+
+     `acessarFlow` vivia inteiramente na TELA: o menu escondia o módulo, o
+     seletor não desenhava o chevron e as rotas do React redirecionavam. Nada
+     disso impede um POST.
+
+     E não impedia mesmo. `GET /api/flow/painel` devolvia 200 para um Corretor
+     com `acessarFlow: false` — é a única rota do Flow sem `requirePermissao`,
+     e as outras só escapavam por acidente, exigindo uma permissão que aquele
+     cargo por acaso também não tinha. Bastava um cargo com "Gerenciar
+     Negócios" marcado e "Acessar o Flow" desmarcado — combinação que a tela de
+     cargos deixa montar — para a API de negócios inteira ficar aberta.
+
+     `/painel` é o caso nomeado porque foi o que vazou de fato; `/negocios`
+     está aqui porque prova a outra metade: a recusa vem da PORTA DO MÓDULO, e
+     não de faltar a permissão da rota (o cargo tem `gerenciarNegocios`). */
+  await prisma.cargo.update({ where: { id: A.cargoAdmin.id }, data: { acessarFlow: false } });
+
+  for (const rota of ["/api/flow/painel", "/api/flow/negocios", "/api/flow/comissoes"]) {
+    const r = await api.comoTenant(A).get(rota);
+    assert.equal(r.status, 403, `${rota} deveria recusar`);
+    assert.equal(r.json.cargoSemModulo, "FLOW", `${rota}: falta a marca do cargo`);
+    /* Marca PRÓPRIA, e não a de módulo não contratado: são conversas
+       diferentes — "peça ao administrador" contra "fale com o comercial". */
+    assert.equal(r.json.moduloNaoContratado, undefined, `${rota}: marca trocada`);
+  }
+
+  await prisma.cargo.update({ where: { id: A.cargoAdmin.id }, data: { acessarFlow: true } });
+  assert.equal((await api.comoTenant(A).get("/api/flow/painel")).status, 200, "voltou a alcançar");
+});
+
 test("mover para GANHO é recusado com a lista do que falta", async () => {
   const negocio = await negocioNovo(A);
   const r = await api.comoTenant(A).post(`/api/flow/negocios/${negocio.id}/estagio`, {

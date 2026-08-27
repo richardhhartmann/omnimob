@@ -3,7 +3,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
-import { PERMISSOES } from "../services/cargosPadrao.js";
+import { PERMISSOES, alcancaOHub } from "../services/cargosPadrao.js";
 
 export const cargoRouter = Router();
 cargoRouter.use(requireAuth);
@@ -39,6 +39,12 @@ cargoRouter.use(requirePermissao("gerenciarUsuarios", "gerenciarCargos"));
    linha que tenha ficado torta. */
 const CARGO_ADMIN = "Administrador";
 const ehAdministrador = (cargo) => cargo?.descricao === CARGO_ADMIN;
+
+/* `acessarPainel` é derivada, e a regra mora em `cargosPadrao.js` — junto do
+   catálogo, porque cargo nasce por DOIS caminhos: por esta tela e pelo
+   provisionamento de uma imobiliária nova. Uma cópia aqui já custou uma
+   regressão em que todo tenant novo nascia sem a porta do Hub. Ver
+   `alcancaOHub`. */
 
 /* Permissões que ninguém tira do PRÓPRIO cargo — seria se trancar do lado de
    fora, e sem ninguém com acesso para reabrir. */
@@ -76,7 +82,7 @@ cargoRouter.post("/", async (req, res) => {
        `ehAdministrador`); `acessarPainel` é sempre true — existir como cargo já
        significa entrar no painel. */
     data.verConfiguracoes = ehAdministrador({ descricao });
-    data.acessarPainel = true;
+    data.acessarPainel = alcancaOHub(data);
 
     const cargo = await prisma.cargo.create({ data });
     return res.status(201).json({ ...cargo, ehAdministrador: ehAdministrador(cargo) });
@@ -121,9 +127,12 @@ cargoRouter.put("/:id", async (req, res) => {
        DEFININDO (renomear um cargo para "Administrador" o promove; renomear o
        Administrador para outra coisa o rebaixa), e não o nome antigo. */
     data.verConfiguracoes = ehAdministrador({ descricao: data.descricao ?? cargo.descricao });
-    /* Sempre true: um PUT feito à mão não pode trancar um cargo para fora do
-       painel, e a tela não oferece essa caixa. */
-    data.acessarPainel = true;
+    /* Derivada, e sobre o cargo INTEIRO — não só sobre o que veio no corpo.
+       O PUT desta tela é parcial (um clique manda uma permissão), e olhar só o
+       `data` faria um cargo perder o Hub ao desmarcar uma caixa qualquer,
+       porque as outras permissões dele não estariam ali para contar.
+       Ver `alcancaOHub`. */
+    data.acessarPainel = alcancaOHub({ ...cargo, ...data });
 
     const updated = await prisma.cargo.update({ where: { id: cargoId }, data });
     return res.json({ ...updated, ehAdministrador: ehAdministrador(updated) });

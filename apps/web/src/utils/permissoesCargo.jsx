@@ -50,8 +50,19 @@ export const PERMISSOES = [
    diferença é real: entrar no Hub é consequência de existir como cargo (o
    servidor força em toda gravação); entrar no Flow é uma DECISÃO, e é
    exatamente a decisão que o cliente pediu para poder tomar pessoa a pessoa. */
+/* A porta do módulo. Continua dentro de `PERMISSOES_FLOW` — é ela que diz quais
+   colunas existem, e quem percorre a lista para zerar um cargo em branco
+   (`cargoVazio`) precisa dela ali. O que muda é só o DESENHO: `gruposDePermissao`
+   a separa das outras para virar o interruptor do grupo. */
+export const PORTA_DO_FLOW = {
+  key: "acessarFlow",
+  label: "Acessar o Omnimob Flow",
+  descricao: "Sem isto, o módulo não aparece no seletor da barra lateral.",
+  Icon: SignIn,
+};
+
 export const PERMISSOES_FLOW = [
-  { key: "acessarFlow",        label: "Acessar o Flow",       Icon: SignIn },
+  PORTA_DO_FLOW,
   { key: "gerenciarNegocios",  label: "Gerenciar Negócios",   Icon: Kanban },
   { key: "gerenciarContratos", label: "Gerenciar Contratos",  Icon: FileText },
   { key: "gerenciarCaptacao",  label: "Configurar Captação",  Icon: Broadcast },
@@ -95,10 +106,31 @@ export function permissoesDoPlano(plano) {
    (`GradeDePermissoes`) não deve precisar saber que existe módulo, nem cruzar
    `tenant.modulos` por conta própria. Ele recebe grupos e desenha grupos; a
    regra de quais existem mora aqui, num lugar só. */
+/* ── `acessarFlow` DEIXOU DE SER UMA CAIXA ENTRE AS OUTRAS ───────────────────
+
+   Ela é a PORTA do módulo, não uma permissão irmã das outras seis — e desenhá-la
+   como mais um quadradinho na mesma grade produzia dois estados incoerentes que
+   a tela oferecia de bandeja:
+
+     · "Gerenciar Negócios" marcado com "Acessar o Flow" desmarcado — o cargo
+       tem poder sobre uma coisa que não alcança;
+     · e o contrário, que não faz mal, mas também não faz sentido.
+
+   Como INTERRUPTOR do grupo, a hierarquia fica dita pelo desenho: liga o
+   módulo, e só então há o que escolher lá dentro. Desligado, as seis abaixo
+   ficam desabilitadas — os valores permanecem, então religar devolve o arranjo
+   anterior em vez de obrigar a remarcar tudo.
+
+   `porta` viaja com o grupo para `GradeDePermissoes` não precisar saber o nome
+   dessa permissão. Ele desenha grupos; quem sabe o que é o Flow é este arquivo. */
 export function gruposDePermissao(plano, { temFlow = false } = {}) {
   const grupos = [{ titulo: null, itens: permissoesDoPlano(plano) }];
   if (temFlow) {
-    grupos.push({ titulo: "No Omnimob Flow", itens: PERMISSOES_FLOW });
+    grupos.push({
+      titulo: "No Omnimob Flow",
+      porta: PORTA_DO_FLOW,
+      itens: PERMISSOES_FLOW.filter((p) => p.key !== PORTA_DO_FLOW.key),
+    });
   }
   return grupos;
 }
@@ -108,9 +140,29 @@ export function gruposDePermissao(plano, { temFlow = false } = {}) {
  *  servidor as gravaria como `false` de qualquer jeito; o problema seria na
  *  TELA, onde uma caixa controlada que começa `undefined` vira não-controlada e
  *  o React reclama no console a cada clique. */
+/* ── TODAS as permissões, numa lista só ──────────────────────────────────────
+
+   `PERMISSOES` é a lista do HUB e `PERMISSOES_FLOW` a do módulo. Quem precisa
+   percorrer "tudo que um cargo guarda" tem de usar esta, e não uma das duas.
+
+   Existe porque a distração foi cometida duas vezes seguidas, com sintomas
+   diferentes e a mesma causa:
+
+     · os selos da lista de cargos percorriam só o Hub — o Administrador
+       aparecia com 8 permissões em vez de 14, e um cargo só-Flow saía rotulado
+       "Sem permissões";
+     · e o FORMULÁRIO de edição também — reabrir um cargo mostrava todas as
+       caixas do Flow desmarcadas, porque os valores nunca eram copiados para o
+       `form`. Salvar em seguida apagava de verdade o que a tela mentiu ter.
+
+   O segundo é o pior dos dois: ele não só mostra errado, ele DESTRÓI. Uma lista
+   nomeada é mais difícil de esquecer do que um spread escrito à mão em cada
+   lugar. */
+export const TODAS_AS_PERMISSOES = [...PERMISSOES, ...PERMISSOES_FLOW];
+
 export function cargoVazio() {
   const f = { descricao: "" };
-  for (const p of [...PERMISSOES, ...PERMISSOES_FLOW]) f[p.key] = false;
+  for (const p of TODAS_AS_PERMISSOES) f[p.key] = false;
   return f;
 }
 

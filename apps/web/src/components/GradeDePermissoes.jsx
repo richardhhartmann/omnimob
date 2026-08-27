@@ -66,25 +66,89 @@ export function GradeDePermissoes({
 
   return (
     <>
-      {grupos.map((grupo) => (
-        <div key={grupo.titulo || "hub"} className="perm-secao">
-          {/* Título só no segundo grupo. O primeiro é "as permissões", e dar
-              nome a ele numa conta sem Flow criaria uma divisão onde não há
-              nada do outro lado. */}
-          {grupo.titulo ? <span className="perm-secao__titulo">{grupo.titulo}</span> : null}
-          <GradeDeUmGrupo
-            itens={grupo.itens}
-            valores={valores}
-            aoAlternar={aoAlternar}
-            desabilitado={desabilitado}
-            travadas={travadas}
-            motivoTravada={motivoTravada}
-            somenteLeitura={somenteLeitura}
-            dataTour={grupo.titulo ? undefined : dataTour}
-          />
-        </div>
-      ))}
+      {grupos.map((grupo) => {
+        /* A porta do grupo, quando ele tem uma. Hoje só o Flow — ver
+           `gruposDePermissao`. Desligada, as permissões de dentro ficam
+           desabilitadas: o cargo não alcança o módulo, então não há o que
+           escolher lá dentro. */
+        const porta = grupo.porta || null;
+        const portaAberta = porta ? Boolean(valores[porta.key]) : true;
+
+        return (
+          <div key={grupo.titulo || "hub"} className="perm-secao">
+            {/* Título só no segundo grupo. O primeiro é "as permissões", e dar
+                nome a ele numa conta sem Flow criaria uma divisão onde não há
+                nada do outro lado. */}
+            {grupo.titulo ? <span className="perm-secao__titulo">{grupo.titulo}</span> : null}
+
+            {porta ? (
+              <PortaDoGrupo
+                porta={porta}
+                ligada={portaAberta}
+                aoAlternar={aoAlternar}
+                desabilitado={desabilitado}
+                somenteLeitura={somenteLeitura}
+              />
+            ) : null}
+
+            <GradeDeUmGrupo
+              itens={grupo.itens}
+              valores={valores}
+              aoAlternar={aoAlternar}
+              /* Porta fechada trava o que está atrás dela. Não apaga: os
+                 valores continuam no formulário, então religar devolve o
+                 arranjo anterior em vez de obrigar a remarcar tudo. */
+              desabilitado={desabilitado || !portaAberta}
+              travadas={travadas}
+              motivoTravada={
+                portaAberta ? motivoTravada : "Ligue o acesso ao Flow para escolher isto"
+              }
+              somenteLeitura={somenteLeitura}
+              dataTour={grupo.titulo ? undefined : dataTour}
+            />
+          </div>
+        );
+      })}
     </>
+  );
+}
+
+/* ── O INTERRUPTOR DO GRUPO ──────────────────────────────────────────────────
+
+   Reaproveita `.sw`, o switch que o painel inteiro já usa — e não um controle
+   novo. O acento é o rosa do Flow, pela variável que a caixa define.
+
+   Na PRÉVIA (cadastro de usuário) ele vira texto com ✓/✕, pela mesma razão que
+   o resto da grade: rótulo sem controle é rótulo apontando para nada. */
+function PortaDoGrupo({ porta, ligada, aoAlternar, desabilitado, somenteLeitura }) {
+  const { key, label, descricao, Icon } = porta;
+
+  if (somenteLeitura) {
+    return (
+      <div className={`perm-porta is-previa${ligada ? " is-on" : ""}`}>
+        <span className="perm-marca" aria-hidden="true">{ligada ? "✓" : "✕"}</span>
+        {Icon ? <Icon size={16} weight={ligada ? "fill" : "regular"} /> : null}
+        <span className="perm-porta__texto"><strong>{label}</strong></span>
+        <span className="sr-only">{ligada ? ": tem acesso" : ": sem acesso"}</span>
+      </div>
+    );
+  }
+
+  return (
+    <label className={`perm-porta${ligada ? " is-on" : ""}`}>
+      <span className="perm-porta__icone">{Icon ? <Icon size={17} weight="fill" /> : null}</span>
+      <span className="perm-porta__texto">
+        <strong>{label}</strong>
+        {descricao ? <small>{descricao}</small> : null}
+      </span>
+      <input
+        type="checkbox"
+        className="sw"
+        checked={ligada}
+        disabled={desabilitado}
+        onChange={(e) => aoAlternar(key, e.target.checked)}
+      />
+    </label>
   );
 }
 

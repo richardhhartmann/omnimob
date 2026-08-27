@@ -13,7 +13,7 @@ import {
 import { interesseSchema, trialSchema } from "../validators/interesseValidators.js";
 import { precosDosPlanos } from "../services/pagamentoService.js";
 import { tenantPorDominio, enderecoDaVitrine } from "../services/dominioService.js";
-import { montarFeedVRSync } from "../services/feedPortais.js";
+import { montarFeedVRSync, anuncioPublicavel } from "../services/feedPortais.js";
 import { portalPorCaminho, portaisDoImovel } from "../services/portais.js";
 import { proximoResponsavel } from "../services/distribuicaoLeads.js";
 import { dadosDaVitrine } from "../services/dadosDaVitrine.js";
@@ -782,7 +782,15 @@ async function servirFeed(req, res) {
     const where = chave ? { feedChave: chave } : { slug };
     const tenant = await prisma.tenant.findUnique({
       where,
-      select: { id: true, name: true, slug: true, email: true, ativo: true, statusPagamento: true, dominioProprio: true, dominioStatus: true },
+      /* `telefone`, `whatsapp` e `logoUrl` entram por causa do `<ContactInfo>`:
+         é o bloco que vira o "falar com o anunciante" do portal. Sem eles o
+         anúncio sai sem telefone, e a imobiliária recebe zero contato de uma
+         carga que aparentemente funcionou. */
+      select: {
+        id: true, name: true, slug: true, email: true, telefone: true,
+        whatsapp: true, logoUrl: true, ativo: true, statusPagamento: true,
+        dominioProprio: true, dominioStatus: true,
+      },
     });
 
     /* Conta desligada ou cancelada não alimenta portal. Não é rigor: anúncio
@@ -811,10 +819,13 @@ async function servirFeed(req, res) {
       },
     });
 
-    /* Sem foto, fora. O portal recusa o anúncio na importação e conta como
-       erro no relatório de carga da imobiliária — ficar de fora é mais limpo. */
+    /* O que o portal recusaria fica de fora. A regra inteira mora em
+       `conferirAnuncio` (título, 5 fotos, preço, cidade, UF, descrição) e é a
+       MESMA que o painel usa para dizer o que falta — ver
+       `GET /api/properties/portais/pendencias`. Mandar um anúncio que o portal
+       recusa conta como erro no relatório de carga da imobiliária. */
     const publicaveis = imoveis
-      .filter((i) => i.images.length > 0)
+      .filter(anuncioPublicavel)
       /* Endereço de um portal leva só quem marcou aquele portal. `portaisDoImovel`
          trata o acervo antigo (lista vazia = os três), senão a separação
          esvaziaria os feeds de quem cadastrou imóvel antes dela existir. */
@@ -823,7 +834,9 @@ async function servirFeed(req, res) {
     const base = (baseDoApp(req) || "https://omnimob.app").replace(/\/+$/, "");
     const vitrine = enderecoDaVitrine(tenant, base).replace(/\/+$/, "");
 
-    const corpo = montarFeedVRSync(tenant, publicaveis, (i) => `${vitrine}/imovel/${i.id}`);
+    const corpo = montarFeedVRSync(tenant, publicaveis, (i) => `${vitrine}/imovel/${i.id}`, {
+      site: vitrine,
+    });
 
     res.type("application/xml");
     /* Meia hora. O robô do portal passa algumas vezes por dia; sem cache, uma

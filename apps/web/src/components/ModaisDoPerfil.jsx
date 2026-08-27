@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { IdentificationBadge, Keyboard, Palette, Compass, Sun, Moon, CircleHalf, GoogleLogo, Buildings } from "@phosphor-icons/react";
 import { EditorDeAtalhos } from "./EditorDeAtalhos.jsx";
 import { apenasMudancas } from "../utils/atalhos";
+import { TODAS_AS_PERMISSOES } from "../utils/permissoesCargo.jsx";
 
 /* O ícone de cada tema. Estava no AdminLayout, junto do atalho da barra; veio
    com ele quando a escolha virou uma linha só, aqui. */
@@ -230,21 +231,20 @@ export function ModalMeusDados({ onClose, session, onSessionUpdate }) {
     }
   }
 
-  /* As permissões que o cargo dá, em português. Vem do MESMO objeto que o
-     painel usa para decidir o que mostrar, então esta lista nunca promete um
-     acesso que a tela nega. */
-  const PERMISSOES = [
-    ["acessarPainel", "Acessar o painel"],
-    ["gerenciarImoveis", "Gerenciar imóveis"],
-    ["gerenciarClientes", "Gerenciar clientes"],
-    ["gerenciarUsuarios", "Gerenciar usuários"],
-    ["gerenciarCargos", "Gerenciar cargos"],
-    ["verRelatorios", "Ver relatórios"],
-    ["verAuditoria", "Ver registro de atividade"],
-    ["verConfiguracoes", "Ver configurações"],
-    ["editarPagina", "Editar a vitrine"],
-    ["publicarRedes", "Publicar nas redes"],
-  ].filter(([k]) => cargo[k]);
+  /* ── As permissões do cargo, do CATÁLOGO ───────────────────────────────────
+
+     Era uma lista escrita à mão aqui dentro, com rótulos próprios — e o
+     comentário dela dizia vir "do mesmo objeto que o painel usa", o que nunca
+     foi verdade. Era a terceira cópia da mesma lista no projeto.
+
+     O preço apareceu com o Flow: as sete permissões do módulo não estavam
+     nela, então "O que o seu cargo permite" simplesmente não mencionava o Flow.
+     Quem tinha o módulo lia a própria ficha e concluía que não tinha.
+
+     Agora sai de `TODAS_AS_PERMISSOES`, a mesma lista que desenha a tela de
+     cargos: permissão nova aparece aqui sozinha, e os dois lugares usam as
+     mesmas palavras para a mesma coisa. */
+  const permissoesDoCargo = TODAS_AS_PERMISSOES.filter((p) => cargo[p.key]);
 
   return (
     <Modal titulo="Meus dados" subtitulo="O que o sistema sabe sobre o seu acesso." onClose={onClose}>
@@ -316,9 +316,9 @@ export function ModalMeusDados({ onClose, session, onSessionUpdate }) {
       </Secao>
 
       <Secao Icone={Compass} titulo="O que o seu cargo permite" descricao="Definido por quem administra a conta.">
-        {PERMISSOES.length ? (
+        {permissoesDoCargo.length ? (
           <ul className="mp-permissoes">
-            {PERMISSOES.map(([k, rotulo]) => <li key={k}>{rotulo}</li>)}
+            {permissoesDoCargo.map((p) => <li key={p.key}>{p.label}</li>)}
           </ul>
         ) : (
           <p className="mp-nota">Nenhuma permissão marcada neste cargo.</p>

@@ -4,11 +4,13 @@ import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { prisma } from "../db.js";
 import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
-import { provisionTenant } from "../services/provisioningService.js";
+import { provisionTenant, senhaTemporaria } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
 import { cancelarAssinaturasDoSlug, diagnosticarPagamento } from "../services/pagamentoService.js";
 import { verificarEmail } from "../services/notificationService.js";
 import { diagnosticarBanco } from "../services/healthService.js";
+import { montarSessao } from "./authRoutes.js";
+import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
@@ -408,6 +410,225 @@ adminRouter.get("/tutoriais", async (_req, res) => {
 
 // Converte um teste em cliente pagante. Nenhum dado se move: o tenant já vive
 // no lugar definitivo desde que nasceu.
+/* ────────────────────────────────────────────────────────────────────────────
+   ENTRAR NUMA IMOBILIÁRIA COMO O ADMINISTRADOR DELA.
+
+   O suporte precisa disto: "não consigo publicar" é impossível de responder
+   sem ver a tela que a pessoa está vendo, e pedir a senha do cliente é a
+   alternativa que existia — a pior possível, porque a senha depois continua
+   com quem pediu.
+
+   ── AS TRÊS TRAVAS ──
+
+   1. SÓ SUPER-ADMIN. `adminRouter.use(requireSuperAdmin)` cobre esta rota como
+      cobre as outras. Não há caminho para um usuário comum chegar aqui.
+
+   2. SESSÃO CURTA. Duas horas, e não os sete dias de um login normal. Entrar
+      na conta de um cliente é uma visita, não uma mudança: um token de sete
+      dias vira acesso permanente esquecido num navegador.
+
+   3. FICA REGISTRADO NA TRILHA DA IMOBILIÁRIA — e é a trava que mais importa.
+      Quem administra a conta vê, em Registro de Atividade, que a Omnimob
+      entrou, quando e quem. Sem isso o recurso é uma porta dos fundos; com
+      isso é uma visita anunciada.
+
+      A escrita é EXPLÍCITA e não pela extensão do Prisma: a extensão registra
+      quem a requisição diz ser, e aqui não há usuário do tenant fazendo nada —
+      o ator é externo à imobiliária. A trilha precisa dizer isso com todas as
+      letras.
+
+   ── O QUE ELA NÃO FAZ ──
+
+   Não cria usuário, não muda senha, não altera permissão. Devolve uma sessão
+   para um Administrador que JÁ existe e está ativo. Se não houver nenhum, o
+   pedido falha em vez de inventar um — criar um administrador escondido numa
+   conta de cliente é exatamente o tipo de coisa que ninguém deveria conseguir
+   fazer a partir de um botão.
+   ──────────────────────────────────────────────────────────────────────────── */
+adminRouter.post("/tenants/:id/entrar", async (req, res) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, name: true, slug: true, ativo: true },
+    });
+    if (!tenant) return res.status(404).json({ error: "Imobiliária não encontrada." });
+
+    /* Conta desativada não abre. O painel de uma conta desligada não é uma
+       tela de suporte: metade dele responde erro, e o que se aprende ali sobre
+       o problema do cliente é nada. */
+    if (!tenant.ativo) {
+      return res.status(400).json({ error: "Esta imobiliária está desativada. Reative antes de entrar." });
+    }
+
+    /* O Administrador ATIVO da casa. `findFirst` com o tenant junto — a mesma
+       regra de todo o resto: id sozinho alcança linha de outra imobiliária. */
+    const usuario = await prisma.usuario.findFirst({
+      where: { tenantId: tenant.id, ativo: true, cargo: { descricao: CARGO_ADMIN } },
+      orderBy: { createdAt: "asc" },
+      include: { tenant: true, cargo: true },
+    });
+
+    if (!usuario) {
+      return res.status(409).json({
+        error: `${tenant.name} não tem nenhum Administrador ativo. Ative um usuário com esse cargo antes de entrar.`,
+      });
+    }
+
+    /* ── O ADMINISTRADOR QUE AINDA NÃO TEM SENHA ────────────────────────────
+
+       Imobiliária recém-provisionada nasce com uma senha TEMPORÁRIA e
+       `forcaAlterarSenha`. O login normal recusa entrar nesse estado: devolve
+       403 com `forcaAlterarSenha` e manda definir a senha antes.
+
+       Este atalho não passava por lá, e o estrago era duplo:
+
+       1. SEGURANÇA. A exigência de trocar a senha temporária existe justamente
+          porque ela viajou por e-mail e apareceu num modal. Entrar por aqui
+          pulava a exigência inteira e deixava a conta rodando com ela.
+
+       2. A SENHA SE PERDIA. Ela é mostrada UMA vez, na criação. Quem fechasse
+          aquele modal e clicasse em "Entrar" ficava dentro da conta e sem a
+          senha — e o cliente, do lado de fora, sem nenhuma forma de entrar.
+
+       A resposta não é uma sessão: é o recado de que falta definir a senha.
+       Quem chamou leva a pessoa para a tela que define — que é o mesmo lugar
+       onde o login normal a colocaria. Sem sessão nenhuma emitida aqui: uma
+       sessão "só para definir senha" seria uma quarta forma de entrar, e as
+       três que existem já dão trabalho suficiente. */
+    if (!usuario.senha || usuario.forcaAlterarSenha) {
+      return res.status(409).json({
+        error:
+          `${tenant.name} ainda não definiu a senha do Administrador. ` +
+          "Abra a tela de acesso para criá-la — a senha temporária vale só até isso acontecer.",
+        precisaDefinirSenha: true,
+        login: usuario.login,
+        tenantSlug: tenant.slug,
+      });
+    }
+
+    const quem = req.superAdmin?.email || req.superAdmin?.nome || "super-admin";
+
+    /* Antes de devolver a sessão, e não depois: se a gravação da trilha falhar,
+       o acesso NÃO acontece. É o oposto do padrão do resto do sistema (onde a
+       auditoria nunca derruba a operação), e a inversão é deliberada — aqui a
+       trilha não é o registro de uma ação, ela é a condição que torna a ação
+       aceitável. */
+    await prisma.auditoria.create({
+      data: {
+        tenantId: tenant.id,
+        usuarioId: usuario.id,
+        usuarioNome: `Omnimob (${quem})`,
+        acao: "ACESSO_SUPORTE",
+        entidade: "Sessao",
+        entidadeId: usuario.id,
+        resumo: `A equipe da Omnimob entrou nesta conta como ${usuario.nome}.`,
+        dados: { superAdmin: quem, usuario: usuario.login },
+        ip: req.ip,
+        rota: req.originalUrl,
+      },
+    });
+
+    console.warn(`[suporte] ${quem} entrou em ${tenant.slug} como ${usuario.login}`);
+
+    /* A MESMA `montarSessao` do login. Uma segunda montagem aqui divergiria da
+       de lá na primeira coisa que a tela passasse a ler. */
+    return res.json({
+      ...montarSessao(usuario, { validade: "2h" }),
+      /* A tela usa para avisar quem está dentro. Ver `SuperAdminPage`. */
+      acessoDeSuporte: { por: quem, imobiliaria: tenant.name },
+    });
+  } catch (err) {
+    console.error("[POST /admin/tenants/:id/entrar]", err);
+    return res.status(500).json({ error: "Erro ao entrar na imobiliária." });
+  }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   REEMITIR A SENHA TEMPORÁRIA DO ADMINISTRADOR.
+
+   ── O BURACO QUE ISTO FECHA ──
+
+   A senha temporária de uma imobiliária nova aparece UMA vez, no modal da
+   criação. Fechar aquele modal sem copiá-la deixava a conta num beco: o
+   cliente não tinha como entrar, e não havia tela nenhuma para reemiti-la. A
+   única saída era apagar a imobiliária e criar de novo.
+
+   ── POR QUE REEMITIR, E NÃO DEIXAR O SUPER-ADMIN ESCOLHER A SENHA ──
+
+   Escrever a senha do cliente faria a Omnimob CONHECER a senha dele — e ela
+   costuma ser reaproveitada noutros lugares. Uma temporária aleatória, que a
+   pessoa é obrigada a trocar no primeiro acesso, entrega o mesmo resultado sem
+   que ninguém daqui saiba a senha real de ninguém.
+
+   `forcaAlterarSenha` volta a `true` de propósito: a senha nova viaja por
+   WhatsApp ou e-mail para chegar ao cliente, e senha que viajou não pode ser a
+   definitiva.
+
+   Vale para QUALQUER estado, não só para quem nunca definiu senha: "o cliente
+   perdeu o acesso e não recebe o e-mail de recuperação" é o chamado mais comum
+   de todos, e até aqui ele não tinha resposta.
+   ──────────────────────────────────────────────────────────────────────────── */
+adminRouter.post("/tenants/:id/senha-admin", async (req, res) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, name: true, slug: true },
+    });
+    if (!tenant) return res.status(404).json({ error: "Imobiliária não encontrada." });
+
+    const usuario = await prisma.usuario.findFirst({
+      where: { tenantId: tenant.id, ativo: true, cargo: { descricao: CARGO_ADMIN } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, nome: true, login: true },
+    });
+    if (!usuario) {
+      return res.status(409).json({ error: `${tenant.name} não tem nenhum Administrador ativo.` });
+    }
+
+    const nova = senhaTemporaria();
+    const quem = req.superAdmin?.email || "super-admin";
+
+    await prisma.usuario.update({
+      where: { id: usuario.id },
+      data: {
+        senha: await bcrypt.hash(nova, 10),
+        forcaAlterarSenha: true,
+        /* Zera a trava de força bruta: a conta que estava bloqueada por
+           tentativas erradas volta a aceitar login com a senha nova. Sem isto,
+           reemitir a senha não resolveria o chamado. */
+        tentativasFalhas: 0,
+        bloqueadoAte: null,
+      },
+    });
+
+    /* Trocar a senha de alguém é mais grave do que entrar na conta: fica na
+       trilha da imobiliária, como o acesso de suporte. */
+    await prisma.auditoria.create({
+      data: {
+        tenantId: tenant.id,
+        usuarioId: usuario.id,
+        usuarioNome: `Omnimob (${quem})`,
+        acao: "SENHA_REEMITIDA",
+        entidade: "Usuario",
+        entidadeId: usuario.id,
+        resumo: `A equipe da Omnimob gerou uma nova senha temporária para ${usuario.nome}.`,
+        dados: { superAdmin: quem, usuario: usuario.login },
+        ip: req.ip,
+        rota: req.originalUrl,
+      },
+    });
+
+    console.warn(`[suporte] ${quem} reemitiu a senha de ${usuario.login} (${tenant.slug})`);
+
+    /* O texto sai UMA vez, como na criação. Não é guardado em lugar nenhum
+       além do hash. */
+    return res.json({ login: usuario.login, senha: nova, nome: usuario.nome });
+  } catch (err) {
+    console.error("[POST /admin/tenants/:id/senha-admin]", err);
+    return res.status(500).json({ error: "Erro ao gerar a senha." });
+  }
+});
+
 adminRouter.post("/tenants/:id/fidelizar", async (req, res) => {
   try {
     const { plano, valorMensal, proximoVencimento } = req.body || {};

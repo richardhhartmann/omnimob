@@ -57,6 +57,55 @@ function variacao(agora, antes) {
   return Math.round(((agora - antes) / antes) * 100);
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   AS SÉRIES
+
+   ── POR QUE SQL CRU AQUI ──
+
+   O Prisma não agrupa por dia: `groupBy` agrupa por VALOR de coluna, e
+   `createdAt` é um instante — trinta visitas num dia viram trinta grupos. Dava
+   para trazer as linhas e agrupar em JavaScript, e é o que se faz quando são
+   dezenas; numa imobiliária com movimento a série de 30 dias são milhares de
+   eventos atravessando a rede para virar 30 números.
+
+   `date_trunc` resolve no banco e devolve exatamente as 30 linhas.
+
+   ── E POR QUE O ZERO-FILL É OBRIGATÓRIO ──
+
+   O banco só devolve os dias em que ALGO aconteceu. Um gráfico desenhado
+   direto desse resultado une sexta a segunda com uma reta e esconde que o fim
+   de semana foi vazio — a linha sobe suave onde na verdade houve dois dias
+   sem ninguém. É o oposto da regra desta tela: aqui o zero é um fato medido
+   (o dia existiu e não teve visita), diferente do `null` de "não há como
+   calcular" que o resto do arquivo usa. */
+function moldeDeDias(quantos) {
+  const dias = [];
+  for (let i = quantos - 1; i >= 0; i -= 1) {
+    const d = diasAtras(i);
+    dias.push({ dia: d.toISOString().slice(0, 10), visitas: 0, leads: 0 });
+  }
+  return dias;
+}
+
+function moldeDeMeses(quantos) {
+  const agora = new Date();
+  const meses = [];
+  for (let i = quantos - 1; i >= 0; i -= 1) {
+    const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+    meses.push({
+      mes: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      faturamento: 0,
+      vendas: 0,
+      leads: 0,
+    });
+  }
+  return meses;
+}
+
+/* Os seis estágios SEMPRE saem, mesmo zerados — um funil com três barras
+   porque três estágios estão vazios não é um funil, é um recorte. */
+const ESTAGIOS_LEAD = ["NOVO", "EM_ATENDIMENTO", "VISITA", "PROPOSTA", "GANHO", "PERDIDO"];
+
 export async function montarPainelGestor(tenantId) {
   const hoje = inicioDoDia();
   const ontem = diasAtras(1);
@@ -65,6 +114,12 @@ export async function montarPainelGestor(tenantId) {
   const agora = new Date();
   const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
   const inicioMesAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
+
+  // Janelas das séries. 30 dias desenha um mês de movimento; 6 meses mostra
+  // sazonalidade sem virar uma linha ilegível de doze pontos espremidos.
+  const trintaDias = diasAtras(29);
+  const noventaDias = diasAtras(90);
+  const seisMeses = new Date(agora.getFullYear(), agora.getMonth() - 5, 1);
 
   const [
     leadsHoje, leadsOntem,
@@ -133,6 +188,88 @@ export async function montarPainelGestor(tenantId) {
       by: ["responsavelId"],
       where: { tenantId, createdAt: { gte: inicioMes }, responsavelId: { not: null } },
       _count: { _all: true },
+    }),
+  ]);
+
+  /* ── SEGUNDO LOTE, e a razão é o POOL ───────────────────────────────────────
+
+     Estas seis consultas nasceram dentro do `Promise.all` de cima. Com elas o
+     painel disparava 21 consultas simultâneas, e o pooler do Supabase em modo
+     sessão aceita 15: a resposta virava
+     `FATAL: (EMAXCONNSESSION) max clients reached`, e não só nesta rota — as
+     conexões estouradas derrubavam tudo que estivesse rodando junto, o que fez
+     doze testes de arquivos diferentes falharem de uma vez.
+
+     Um `await` a mais custa uma ida ao banco (~40 ms). Vale: o painel é a
+     primeira tela depois do login, e não pode ser a que consome o pool inteiro
+     da instalação. E o teto do pool é do AMBIENTE — mesmo com o pooler de
+     transação bem configurado, uma rota que precisa de 21 conexões ao mesmo
+     tempo é uma rota que vai estourar em algum lugar.
+
+     ── As séries ──────────────────────────────────────────────────────────
+       `$queryRaw` com template tag: os valores viajam como PARÂMETRO, não
+       concatenados no texto do SQL. `tenantId` vem do middleware e não da URL,
+       mas a regra não abre exceção — foi assim que os três vazamentos deste
+       projeto começaram, cada um por um caminho que parecia seguro.
+
+     `::date` no lugar de `date_trunc('day', …)`: o resultado é o mesmo e sai
+     como data pura, sem fuso pendurado para o JavaScript reinterpretar. */
+  const [
+    visitasPorDia,
+    leadsPorDia,
+    vendasPorMes,
+    leadsPorMes,
+    leadsPorEstagio,
+    leadsPorOrigem,
+  ] = await Promise.all([
+    prisma.$queryRaw`
+      SELECT "createdAt"::date AS dia, COUNT(*)::int AS total
+      FROM "PropertyMetricEvent"
+      WHERE "tenantId" = ${tenantId} AND "type" = 'VIEW' AND "createdAt" >= ${trintaDias}
+      GROUP BY 1 ORDER BY 1`,
+    prisma.$queryRaw`
+      SELECT "createdAt"::date AS dia, COUNT(*)::int AS total
+      FROM "PropertyLead"
+      WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${trintaDias}
+      GROUP BY 1 ORDER BY 1`,
+
+    /* ── A venda NÃO passa por SQL cru, e a razão é uma cicatriz ───────────
+       `Venda` mora em `tb_venda` e o campo `data` na coluna `ven_data`
+       (`@@map`/`@map` no schema). Escrito como as outras — `FROM "Venda"` —,
+       o Postgres respondeu `relation "Venda" does not exist` e o painel
+       inteiro virou "Erro ao montar o painel". A tabela de mapeamento não
+       aparece em lugar nenhum de quem escreve a query; ela é invisível até
+       quebrar.
+
+       Aqui não custa nada evitar: venda é o registro de MENOR volume do
+       sistema — seis meses são dezenas de linhas, não milhares —, então
+       buscar e agrupar em JavaScript vale o seguro. O SQL cru fica só onde o
+       volume justifica (visitas), e nas tabelas cujo nome não é mapeado. */
+    prisma.venda.findMany({
+      where: { tenantId, data: { gte: seisMeses } },
+      select: { data: true, valor: true },
+    }),
+    prisma.$queryRaw`
+      SELECT to_char("createdAt", 'YYYY-MM') AS mes, COUNT(*)::int AS total
+      FROM "PropertyLead"
+      WHERE "tenantId" = ${tenantId} AND "createdAt" >= ${seisMeses}
+      GROUP BY 1 ORDER BY 1`,
+
+    prisma.propertyLead.groupBy({
+      by: ["estagio"],
+      where: { tenantId },
+      _count: { _all: true },
+    }),
+
+    /* De onde o interessado veio. `source` é texto livre com padrão
+       "showcase", e hoje recebe também o nome do portal na captação do Flow —
+       por isso a leitura é tolerante e o desconhecido não é descartado. */
+    prisma.propertyLead.groupBy({
+      by: ["source"],
+      where: { tenantId, createdAt: { gte: noventaDias } },
+      _count: { _all: true },
+      orderBy: { _count: { source: "desc" } },
+      take: 6,
     }),
   ]);
 
@@ -209,6 +346,37 @@ export async function montarPainelGestor(tenantId) {
   const faturamentoAnterior = num(vendasMesAnterior._sum.valor);
   const qtdVendas = vendasMes._count._all;
 
+  /* ── As séries, do resultado cru ao molde zero-filled ────────────────────
+     O banco devolve só os dias com movimento; o molde tem todos. Casar os dois
+     por chave preenche o resto com zero — ver `moldeDeDias`. */
+  const porDia = new Map(moldeDeDias(30).map((d) => [d.dia, d]));
+  const chaveDeDia = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10));
+  for (const linha of visitasPorDia) {
+    const alvo = porDia.get(chaveDeDia(linha.dia));
+    if (alvo) alvo.visitas = Number(linha.total) || 0;
+  }
+  for (const linha of leadsPorDia) {
+    const alvo = porDia.get(chaveDeDia(linha.dia));
+    if (alvo) alvo.leads = Number(linha.total) || 0;
+  }
+
+  const porMes = new Map(moldeDeMeses(6).map((m) => [m.mes, m]));
+  for (const venda of vendasPorMes) {
+    const d = new Date(venda.data);
+    const alvo = porMes.get(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    if (!alvo) continue;
+    alvo.faturamento += num(venda.valor);
+    alvo.vendas += 1;
+  }
+  for (const linha of leadsPorMes) {
+    const alvo = porMes.get(linha.mes);
+    if (alvo) alvo.leads = Number(linha.total) || 0;
+  }
+
+  const contagemPorEstagio = new Map(
+    leadsPorEstagio.map((l) => [l.estagio, l._count._all]),
+  );
+
   return {
     hoje: {
       interessados: leadsHoje,
@@ -243,5 +411,21 @@ export async function montarPainelGestor(tenantId) {
       inativos: doStatus("INACTIVE")?._count?._all || 0,
       valorEmCarteira,
     },
+
+    /* ── O que os gráficos leem ─────────────────────────────────────────────
+       Sempre completos e sempre na mesma forma, com ou sem movimento: um
+       gráfico que às vezes vem com 30 pontos e às vezes com 4 obrigaria a tela
+       a adivinhar a escala do eixo, e o desenho mudaria de significado sem
+       avisar. */
+    serie: [...porDia.values()],
+    meses: [...porMes.values()],
+    funil: ESTAGIOS_LEAD.map((estagio) => ({
+      estagio,
+      total: contagemPorEstagio.get(estagio) || 0,
+    })),
+    origens: leadsPorOrigem.map((o) => ({
+      origem: o.source || "desconhecida",
+      total: o._count._all,
+    })),
   };
 }

@@ -3,10 +3,14 @@ import { useNavigate } from "react-router-dom";
 import {
   Users, Eye, CurrencyCircleDollar, Handshake, TrendUp, TrendDown,
   Warning, Buildings, ImageSquare, Trophy, ArrowRight, FileDashed,
+  Sparkle, ChartLineUp, Funnel, Broadcast, Target, Lightning,
 } from "@phosphor-icons/react";
 import { api } from "../api";
 import { SkeletonStats, Skeleton } from "../components/Skeleton";
 import { planoLiberaPortais } from "../utils/planos";
+import {
+  GraficoDeMovimento, GraficoDeFaturamento, GraficoDeFunil, GraficoDeOrigens,
+} from "../components/Graficos.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Início — o painel de quem DIRIGE a imobiliária.
@@ -73,9 +77,57 @@ function contraOntem(hoje, ontem) {
   };
 }
 
+/* ── A LEITURA DA IA ─────────────────────────────────────────────────────────
+
+   Ela chega DEPOIS do painel, numa requisição própria — o painel abre em
+   milissegundos e o modelo leva segundos, e prender catorze números prontos
+   atrás de uma frase opcional seria trocar o essencial pelo acessório.
+
+   Enquanto não chega, o bloco não existe. Nada de esqueleto pulsando: a análise
+   é um extra, e reservar espaço para ela empurraria as pendências — que são a
+   parte cara desta tela — para baixo da dobra por três segundos.
+
+   O humor tinge a borda e o ícone, e só. Um cartão inteiro vermelho no topo do
+   painel toda manhã em que o mês está fraco vira ruído que se aprende a
+   ignorar. */
+const HUMOR = {
+  BOM:      { cor: "#10b981", Icone: TrendUp },
+  ATENCAO:  { cor: "#f59e0b", Icone: Target },
+  RUIM:     { cor: "#ef4444", Icone: TrendDown },
+  NEUTRO:   { cor: "#6366f1", Icone: Sparkle },
+};
+
+function LeituraDaIA({ analise }) {
+  if (!analise?.disponivel) return null;
+  const { cor, Icone } = HUMOR[analise.humor] || HUMOR.NEUTRO;
+
+  return (
+    <section className="glass-panel ig-ia" style={{ "--ia-cor": cor }} data-tour="gestor-ia">
+      <span className="ig-ia__selo"><Icone size={18} weight="fill" /></span>
+      <div className="ig-ia__corpo">
+        <header>
+          <strong>{analise.titulo}</strong>
+          {/* Dizer que foi a IA não é enfeite: o texto faz afirmações sobre o
+              negócio da pessoa, e ela tem o direito de saber quem as fez para
+              calibrar o quanto confia. */}
+          <span className="ig-ia__marca"><Sparkle size={11} weight="fill" /> leitura por IA</span>
+        </header>
+        {analise.leitura ? <p className="ig-ia__leitura">{analise.leitura}</p> : null}
+        {analise.destaque ? (
+          <p className="ig-ia__destaque"><Trophy size={13} weight="fill" /> {analise.destaque}</p>
+        ) : null}
+        {analise.acao ? (
+          <p className="ig-ia__acao"><Lightning size={13} weight="fill" /> {analise.acao}</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 export function InicioPage({ session }) {
   const navigate = useNavigate();
   const [dados, setDados] = useState(null);
+  const [analise, setAnalise] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
 
@@ -91,6 +143,16 @@ export function InicioPage({ session }) {
       .then((r) => vivo && setDados(r))
       .catch((e) => vivo && setErro(e.message))
       .finally(() => vivo && setCarregando(false));
+
+    /* Em paralelo, e sem `catch` que apareça na tela. A análise é um extra:
+       plano insuficiente responde 403, IA fora do ar responde `disponivel:
+       false`, e os dois desfechos são o mesmo para quem olha — o bloco não
+       aparece. Uma faixa de erro por causa dela seria alarme falso num painel
+       saudável. */
+    api.painelGestorAnalise(tenantSlug)
+      .then((r) => vivo && setAnalise(r))
+      .catch(() => vivo && setAnalise(null));
+
     return () => { vivo = false; };
   }, [tenantSlug]);
 
@@ -137,7 +199,11 @@ export function InicioPage({ session }) {
   ].filter(Boolean);
 
   return (
-    <div className="main-content ig-pagina" style={{ maxWidth: "1100px" }}>
+    /* 1100 -> 1240: a página passou de cinco blocos para oito, e dois deles são
+       gráficos lado a lado. A 1100px o de faturamento ficava com seis barras em
+       340px de largura útil, que é estreito demais para o rótulo do mês caber
+       sem girar. */
+    <div className="main-content ig-pagina" style={{ maxWidth: "1240px" }}>
       <header data-tour="gestor-saudacao" style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "28px", marginBottom: "6px" }}>
           {saudacao}{primeiroNome ? `, ${primeiroNome}` : ""}
@@ -180,6 +246,12 @@ export function InicioPage({ session }) {
         </div>
       ) : null}
 
+      {/* ── 1.5 A leitura da IA ─────────────────────────────────────────
+          Entre os números e as pendências, e o lugar é o argumento: ela LÊ os
+          números de cima e costuma APONTAR para uma das pendências de baixo.
+          No rodapé seria um comentário sobre algo que já saiu da tela. */}
+      {!carregando ? <LeituraDaIA analise={analise} /> : null}
+
       {/* ── 2. O que pede ação ──────────────────────────────────────────── */}
       {!carregando && pendencias.length ? (
         <section className="glass-panel ig-bloco" data-tour="gestor-pendencias">
@@ -206,8 +278,58 @@ export function InicioPage({ session }) {
         </section>
       ) : null}
 
+      {/* ── 3. O movimento dos últimos 30 dias ───────────────────────────
+          Largura inteira, e sozinho na linha: é uma série temporal, e espremer
+          trinta pontos em meia tela transforma a tendência — a única coisa que
+          este gráfico existe para mostrar — numa serrilha ilegível. */}
+      <section className="glass-panel ig-bloco">
+        <h2 className="ig-titulo">
+          <ChartLineUp size={17} weight="bold" /> Movimento dos últimos 30 dias
+        </h2>
+        {carregando ? <Skeleton height={170} radius={12} /> : (
+          <GraficoDeMovimento serie={dados?.serie} />
+        )}
+      </section>
+
+      {/* ── 4. Faturamento e funil, lado a lado ──────────────────────────
+          As duas metades da mesma pergunta: o dinheiro que ENTROU (seis meses,
+          fato consumado) e o que está a caminho (onde os interessados estão
+          parados agora). Juntas elas dizem se o mês fraco foi acaso ou se o
+          funil já avisava. */}
       <div className="ig-duas">
-        {/* ── 3. O mês ──────────────────────────────────────────────────── */}
+        <section className="glass-panel ig-bloco">
+          <h2 className="ig-titulo"><CurrencyCircleDollar size={17} weight="fill" /> Faturamento por mês</h2>
+          {carregando ? <Skeleton height={170} radius={12} /> : (
+            <GraficoDeFaturamento meses={dados?.meses} />
+          )}
+        </section>
+
+        <section className="glass-panel ig-bloco">
+          <h2 className="ig-titulo"><Funnel size={17} weight="fill" /> Onde os interessados estão</h2>
+          {carregando ? <Skeleton height={170} radius={12} /> : (
+            <GraficoDeFunil
+              funil={dados?.funil}
+              /* Cada faixa leva à lista já filtrada. Um número sem para onde
+                 clicar é uma constatação; com destino, vira trabalho. */
+              aoClicar={(estagio) => navigate(`/relatorios?ver=leads&estagio=${estagio}`)}
+            />
+          )}
+        </section>
+      </div>
+
+      {/* ── 5. De onde vêm ───────────────────────────────────────────────
+          Noventa dias, e não trinta: origem de lead é dado de volume baixo, e
+          num mês uma imobiliária pequena teria três contatos por canal — o
+          gráfico diria mais sobre o acaso do que sobre os canais. */}
+      <section className="glass-panel ig-bloco">
+        <h2 className="ig-titulo"><Broadcast size={17} weight="fill" /> De onde vêm os interessados</h2>
+        {carregando ? <Skeleton height={120} radius={12} /> : (
+          <GraficoDeOrigens origens={dados?.origens} />
+        )}
+      </section>
+
+      <div className="ig-duas">
+        {/* ── 6. O mês ──────────────────────────────────────────────────── */}
         <section className="glass-panel ig-bloco">
           <h2 className="ig-titulo"><TrendUp size={17} weight="bold" /> O mês até agora</h2>
           {carregando ? (
@@ -236,7 +358,7 @@ export function InicioPage({ session }) {
           ) : null}
         </section>
 
-        {/* ── 4. O imóvel em destaque ───────────────────────────────────── */}
+        {/* ── 7. O imóvel em destaque ───────────────────────────────────── */}
         <section className="glass-panel ig-bloco">
           <h2 className="ig-titulo"><Eye size={17} weight="fill" /> Imóvel em destaque</h2>
           {carregando ? (
@@ -264,7 +386,7 @@ export function InicioPage({ session }) {
         </section>
       </div>
 
-      {/* ── 5. A equipe ─────────────────────────────────────────────────── */}
+      {/* ── 8. A equipe ─────────────────────────────────────────────────── */}
       <section className="glass-panel ig-bloco" data-tour="gestor-equipe">
         <h2 className="ig-titulo"><Trophy size={17} weight="fill" /> Equipe no mês</h2>
         {carregando ? (

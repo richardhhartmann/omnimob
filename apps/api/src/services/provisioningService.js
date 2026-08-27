@@ -127,7 +127,14 @@ export async function provisionTenant(input = {}) {
      Cada um trata a própria falha abaixo. */
   let cargo = null;
   const [resCargos, resTipos] = await Promise.allSettled([
-    criarCargosPadrao(prisma, tenant.id),
+    /* O catálogo respeita o que a conta contratou: sem Flow, os três cargos
+       que só existem por causa dele ficam de fora. Ver `cargosDoCatalogo` —
+       "Corretor Flow" numa conta sem o módulo é um cargo que promete um
+       produto inexistente, e Jurídico/Financeiro seriam cargos que não
+       alcançam tela nenhuma. */
+    criarCargosPadrao(prisma, tenant.id, {
+      temFlow: (tenant.modulos || []).includes("FLOW"),
+    }),
     criarTiposPadrao(prisma, tenant.id),
   ]);
 

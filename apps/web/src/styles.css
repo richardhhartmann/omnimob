@@ -8842,3 +8842,419 @@ main[data-tema="claro"] .ea-tecla.is-conflito { color: #b91c1c; }
   content: ""; position: absolute; left: 0; top: 9px;
   width: 11px; height: 2px; border-radius: 2px; background: #ec0b5b;
 }
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+   A BARRA DE PROGRESSO DO TOPO  (components/BarraDeProgresso.jsx)
+
+   Dois pixels na borda de cima da janela, enchendo da esquerda para a direita
+   enquanto a proxima tela vem. Metade das telas do app desce sob demanda
+   (`lazy` no App.jsx), e durante essa espera o Suspense desenha uma tela preta
+   lisa — que e indistinguivel de app travado. A barra e o que separa as duas.
+
+   ── O DESENHO VEIO EM UTILITARIAS DO TAILWIND ──
+
+   O pedido chegou como `fixed inset-x-0 top-0 z-[9999] h-0.5`,
+   `bg-gradient-to-r from-primary via-accent to-primary` e
+   `transition-[width,opacity] duration-200 ease-out`. O Tailwind esta ligado
+   no projeto e elas funcionariam; a barra mora aqui por vizinhanca — e porque
+   `from-primary` e `via-accent` apontam para tokens que este projeto nao
+   define. Ver o cabecalho de `BarraDeProgresso.jsx`. Abaixo, os mesmos valores.
+
+   ── FORA DA ARVORE DO SUSPENSE ──
+
+   A barra e irma do Suspense no App.jsx, nunca filha: dentro dele seria
+   desmontada junto com o fallback no instante em que a tela nova aparece, e o
+   fecho — o traco chegando a 100% — nunca chegaria a ser desenhado.
+   ──────────────────────────────────────────────────────────────────────────── */
+.brp {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  z-index: 9999;
+  /* A barra atravessa a largura inteira da janela, por cima de cabecalho, menu
+     e modal. Sem isto ela engoliria o clique na primeira linha de pixels de
+     tudo que passa por baixo — inclusive do botao de fechar de um modal
+     encostado no topo. */
+  pointer-events: none;
+}
+
+.brp__traco {
+  height: 100%;
+  width: 0;
+  transform-origin: left;
+  /* O acento repetido nas pontas e o que faz o gradiente ficar legivel em
+     qualquer largura: com duas cores so, a barra em 12% mostraria apenas a
+     primeira e pareceria lisa. */
+  background: linear-gradient(
+    to right,
+    var(--brp-primaria, #6366f1),
+    var(--brp-acento, #e54d5e),
+    var(--brp-primaria, #6366f1)
+  );
+  /* Duas camadas: a de fora espalha a luz indigo, a de dentro adensa o coral
+     junto do traco. Uma sombra so nao da o brilho de neon. */
+  box-shadow:
+    0 0 10px rgba(99, 102, 241, 0.6),
+    0 0 4px rgba(229, 77, 94, 0.4);
+  transition: width 200ms ease-out, opacity 200ms ease-out;
+}
+
+/* Quem pediu menos movimento continua vendo o estado — a barra aparece e some,
+   sem a corrida. Esconde-la de vez tiraria a unica indicacao de que a tela
+   esta vindo. */
+@media (prefers-reduced-motion: reduce) {
+  .brp__traco { transition: opacity 120ms linear; }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   OS GRAFICOS DO PAINEL  (components/Graficos.jsx)
+
+   SVG proprio, sem biblioteca. As regras do desenho estao no cabecalho do JSX;
+   aqui ficam so as medidas.
+
+   Uma nota que vale por todas: NADA neste bloco usa cor fixa de texto. O painel
+   tem tema claro e escuro por imobiliaria e por pessoa, e um cinza escolhido a
+   mao some num dos dois. Tudo sai de --text-muted / --strong / --border.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.gr { width: 100%; }
+
+.gr-legenda {
+  display: flex; align-items: center; gap: 14px;
+  flex-wrap: wrap; margin-bottom: 12px;
+}
+.gr-legenda__titulo {
+  font-size: 12.5px; font-weight: 700; color: var(--text-muted);
+  letter-spacing: .02em; margin-right: auto;
+}
+.gr-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-muted); white-space: nowrap;
+}
+.gr-chip i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* Altura fixa com viewBox esticado: o SVG nasce no tamanho certo e nao depende
+   de medir o container — ver a regra 1 no cabecalho do componente. */
+.gr-svg {
+  width: 100%; height: 150px; display: block;
+  overflow: visible;
+}
+.gr-guia {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: .5;
+}
+.gr-linha {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Mantem a espessura em 2px reais mesmo com o viewBox esticado na
+     horizontal. Sem isto a linha afina ou engorda conforme a largura da tela, e
+     o mesmo grafico parece dois desenhos diferentes no laptop e no monitor. */
+  vector-effect: non-scaling-stroke;
+}
+.gr-eixo {
+  display: flex; justify-content: space-between;
+  margin-top: 6px; font-size: 11px; color: var(--text-muted);
+}
+
+/* ── Barras verticais (faturamento) ──────────────────────────────────────── */
+.gr-barras {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  gap: 10px; align-items: end; min-height: 190px;
+}
+.gr-barra { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.gr-barra__valor {
+  font-size: 11.5px; font-weight: 700; color: var(--strong);
+  height: 15px; white-space: nowrap;
+}
+/* O trilho tem altura fixa para as barras compartilharem a MESMA escala. Sem
+   ele cada coluna se dimensionaria pelo proprio conteudo, e a barra de 900 mil
+   sairia do mesmo tamanho da de 3 milhoes. */
+.gr-barra__trilho {
+  width: 100%; height: 120px;
+  display: flex; align-items: flex-end;
+  background: color-mix(in srgb, var(--strong) 4%, transparent);
+  border-radius: 7px; overflow: hidden;
+}
+.gr-barra__preenchida {
+  width: 100%;
+  background: linear-gradient(to top, #6366f1, #818cf8);
+  border-radius: 7px 7px 0 0;
+  transition: height .4s cubic-bezier(.22,.61,.36,1);
+}
+/* O mes corrente ainda esta em curso: colori-lo igual aos fechados sugere que a
+   comparacao e justa, e ela nao e. */
+.gr-barra__preenchida.is-atual {
+  background: linear-gradient(to top, #10b981, #34d399);
+}
+.gr-barra__rotulo { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.gr-barra__apoio { font-size: 10.5px; color: var(--text-muted); opacity: .75; height: 13px; white-space: nowrap; }
+
+/* ── Funil (barras horizontais) ──────────────────────────────────────────── */
+.gr-funil { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.gr-funil__linha {
+  display: grid;
+  grid-template-columns: 108px 1fr 34px 38px;
+  align-items: center; gap: 10px;
+  width: 100%; padding: 5px 6px;
+  background: none; border: 0; border-radius: 8px;
+  color: inherit; font: inherit; text-align: left;
+}
+button.gr-funil__linha { cursor: pointer; }
+button.gr-funil__linha:hover { background: color-mix(in srgb, var(--strong) 6%, transparent); }
+.gr-funil__rotulo { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gr-funil__trilho {
+  height: 9px; border-radius: 5px; overflow: hidden;
+  background: color-mix(in srgb, var(--strong) 6%, transparent);
+}
+.gr-funil__preenchida {
+  display: block; height: 100%; border-radius: 5px;
+  transition: width .4s cubic-bezier(.22,.61,.36,1);
+}
+.gr-funil__num { font-size: 13px; font-weight: 700; color: var(--strong); text-align: right; }
+.gr-funil__pct { font-size: 11px; color: var(--text-muted); text-align: right; }
+
+/* ── Origens (barra empilhada + lista) ───────────────────────────────────── */
+.gr-pilha {
+  display: flex; height: 12px; border-radius: 6px; overflow: hidden;
+  background: color-mix(in srgb, var(--strong) 6%, transparent);
+  margin-bottom: 14px;
+}
+.gr-pilha__fatia { height: 100%; transition: width .4s cubic-bezier(.22,.61,.36,1); }
+.gr-origens {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px 20px;
+}
+.gr-origens li { display: grid; grid-template-columns: 9px 1fr auto auto; align-items: center; gap: 9px; }
+.gr-origens i { width: 9px; height: 9px; border-radius: 50%; }
+.gr-origens__nome { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-origens__num { font-size: 13px; font-weight: 700; color: var(--strong); }
+.gr-origens__pct { font-size: 11px; color: var(--text-muted); min-width: 32px; text-align: right; }
+
+/* ── O vazio ─────────────────────────────────────────────────────────────────
+   Uma FRASE, e nao um grafico rasteiro. Serie toda zerada desenhada como linha
+   no fundo do quadro parece dado — e e o dado que nao existe. Mesma regra do
+   `null` no servidor: ausencia nao e zero. */
+.gr-vazio {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; min-height: 130px; text-align: center; padding: 18px;
+}
+.gr-vazio p { margin: 0; font-size: 13.5px; color: var(--text-muted); }
+.gr-vazio small { font-size: 12px; color: var(--text-muted); opacity: .7; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   A LEITURA DA IA  (InicioPage)
+
+   O humor tinge a borda esquerda e o selo, e so. Um cartao inteiro vermelho no
+   topo do painel toda manha em que o mes esta fraco vira ruido que se aprende a
+   ignorar — e ai ele deixa de avisar quando importa.
+   ════════════════════════════════════════════════════════════════════════════ */
+.ig-ia {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 16px 18px; margin-bottom: 16px;
+  border-left: 3px solid var(--ia-cor, #6366f1);
+}
+.ig-ia__selo {
+  flex: none; width: 34px; height: 34px; border-radius: 10px;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--ia-cor, #6366f1) 14%, transparent);
+  color: var(--ia-cor, #6366f1);
+}
+.ig-ia__corpo { min-width: 0; flex: 1; }
+.ig-ia__corpo header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.ig-ia__corpo header strong { font-size: 15px; color: var(--strong); line-height: 1.35; }
+.ig-ia__marca {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); opacity: .8; white-space: nowrap;
+}
+.ig-ia__leitura { margin: 0 0 8px; font-size: 13.5px; line-height: 1.6; color: var(--text-muted); }
+.ig-ia__destaque,
+.ig-ia__acao {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin: 0; font-size: 12.5px; line-height: 1.55;
+}
+.ig-ia__destaque { color: #10b981; }
+.ig-ia__destaque svg, .ig-ia__acao svg { flex: none; margin-top: 3px; }
+/* A acao e a unica linha que pede movimento — ganha o peso que o resto nao tem. */
+.ig-ia__acao {
+  margin-top: 6px; padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--strong); font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .gr-funil__linha { grid-template-columns: 84px 1fr 30px 34px; gap: 7px; }
+  .gr-barras { gap: 6px; }
+  .gr-barra__apoio { display: none; }
+}
+
+/* O marcador da legenda copia a FORMA da serie no grafico: bolinha para a
+   area continua, barrinha para as barras. Dois marcadores iguais fariam a
+   pessoa procurar duas linhas onde so existe uma. */
+.gr-chip i.is-barra { width: 4px; height: 11px; border-radius: 2px; }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   O INTERRUPTOR DE ACESSO AO FLOW  (GradeDePermissoes)
+
+   `acessarFlow` era uma caixa entre as outras seis, e isso permitia montar um
+   cargo com "Gerenciar Negócios" ligado e o acesso ao módulo desligado — poder
+   sobre uma coisa que a pessoa não alcança. Como interruptor do grupo, a
+   hierarquia fica dita pelo desenho.
+
+   Reaproveita `.sw`, o switch que o painel ja usa, tingido de rosa pela mesma
+   variavel que o ToggleDoFlow usa. Nada de um controle novo.
+   ════════════════════════════════════════════════════════════════════════════ */
+.perm-porta {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: color-mix(in srgb, var(--strong) 3%, transparent);
+  cursor: pointer;
+  transition: border-color .18s, background .18s;
+}
+.perm-porta.is-on {
+  border-color: color-mix(in srgb, #ec0b5b 34%, transparent);
+  background: rgba(236, 11, 91, 0.06);
+}
+.perm-porta__icone {
+  flex: none; width: 30px; height: 30px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--strong) 7%, transparent);
+  color: var(--text-muted);
+  transition: background .18s, color .18s;
+}
+.perm-porta.is-on .perm-porta__icone {
+  background: rgba(236, 11, 91, 0.16); color: #ec0b5b;
+}
+.perm-porta__texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.perm-porta__texto strong { font-size: 13px; color: var(--strong); font-weight: 650; }
+.perm-porta__texto small { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+/* O switch herda o acento do Flow. `--sw-aceso` e a mesma variavel que o
+   interruptor das telas de pagamento usa — um vocabulario so para o rosa. */
+.perm-porta input.sw { flex: none; --sw-aceso: #ec0b5b; }
+
+/* Porta fechada apaga o que esta atras dela. Nao esconde: o cargo continua
+   tendo aquelas escolhas guardadas, e religar devolve o arranjo anterior. */
+.perm-porta:not(.is-on) + .perm-grade { opacity: .45; }
+
+/* Na previa (cadastro de usuario) nao ha o que clicar — ver o cabecalho de
+   GradeDePermissoes. */
+.perm-porta.is-previa { cursor: default; padding: 9px 12px; }
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MENU FLUIDO — as opcoes do seletor de modulo  (components/MenuFluido.jsx)
+
+   Porte do FlowingMenu do React Bits. O que muda em relacao ao original esta
+   documentado no cabecalho do JSX; aqui ficam so as medidas.
+
+   ── ATENCAO AO SELETOR ──
+
+   Estas regras precisam do par ".ds-shell X, X" pelo mesmo motivo que
+   .ds-mod__opcao precisava: o balao vai para o document.body por portal, entao
+   nao esta dentro do .ds-shell — e o botao cai no reset global do painel, que
+   pinta fundo indigo e sombra. Foi exatamente o que aconteceu com as opcoes
+   antigas antes de alguem descobrir.
+   ════════════════════════════════════════════════════════════════════════════ */
+.ds-shell .mf-item, .mf-item {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: #cbd5e1;
+  transition: border-color .13s ease, background .13s ease;
+}
+.ds-shell .mf-item:hover, .mf-item:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  border-color: color-mix(in srgb, var(--acento) 34%, transparent);
+}
+.ds-shell .mf-item.is-atual, .mf-item.is-atual {
+  background: var(--acento-suave);
+  border-color: color-mix(in srgb, var(--acento) 30%, transparent);
+  cursor: default;
+}
+
+/* A face parada: e a lista de antes, intacta, por baixo da faixa. */
+.mf-face {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 11px 12px;
+}
+
+/* ── A faixa que entra pela borda ──────────────────────────────────────────
+   Comeca fora, embaixo. Quem a traz para dentro e o gsap, pela borda mais
+   proxima do ponteiro. `pointer-events: none` para ela nao roubar o clique do
+   botao que a contem. */
+.mf-faixa {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--acento);
+  transform: translate3d(0, 101%, 0);
+}
+.mf-trilho {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  width: max-content;
+  will-change: transform;
+}
+.mf-parte {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+/* 15px, e nao os 4vh do original: o balao tem altura propria e nao acompanha a
+   janela — em 4vh a mesma lista sairia com letras de 30px num laptop e 50px num
+   monitor grande, dentro de uma caixa que nao muda de tamanho. */
+.mf-texto {
+  white-space: nowrap;
+  text-transform: uppercase;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1;
+  padding: 0 10px;
+  /* Sobre o acento cheio: preto le melhor que branco no rosa e no indigo. */
+  color: #0b0d12;
+}
+/* 26px contra os 200px do original — que ocupariam sozinhos a largura util do
+   balao inteiro. */
+.mf-img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  margin: 0 8px;
+  opacity: .85;
+}
+
+/* Sem movimento: a faixa nao corre e nao entra por gsap. O realce fica so na
+   borda, que ja diz que o item esta sob o ponteiro. */
+@media (prefers-reduced-motion: reduce) {
+  .mf-faixa { display: none; }
+}

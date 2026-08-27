@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireApi } from "../middlewares/apiKeyMiddleware.js";
 import { montarXmlOmnimob } from "../services/xmlDaApi.js";
 import { montarFeedVRSync } from "../services/feedPortais.js";
+import { enderecoDaVitrine } from "../services/dominioService.js";
 import { lerFonte, ErroDeFormato } from "../services/formatosImportacao.js";
 import { copiarFotosDasLinhas } from "../services/copiaDeFotos.js";
 import { proximoResponsavel } from "../services/distribuicaoLeads.js";
@@ -219,8 +220,29 @@ apiPublicaRouter.get("/imoveis/feed.xml", requireApi("imoveis:ler"), async (req,
       orderBy: { updatedAt: "desc" },
       take: POR_PAGINA_MAXIMO,
     });
+    /* `DetailViewUrl` ia NULO, e o elemento simplesmente não saía. Quem
+       consome este XML — um CRM, um agregador, o próprio portal quando alguém
+       cola o arquivo à mão — fica sem o link do anúncio, que é o único caminho
+       de volta para a página do imóvel.
+
+       O endereço é o MESMO que o feed público usa (`enderecoDaVitrine`), e
+       precisa ser: dois links diferentes para o mesmo imóvel dividem as
+       visitas entre dois endereços e estragam a métrica do imóvel.
+
+       Sem filtrar por `conferirAnuncio` aqui, ao contrário do feed público:
+       este endereço é exportação AUTENTICADA (enxerga rascunho, aceita
+       `?status=`), e esconder registros de quem pediu o próprio acervo seria
+       responder outra pergunta. A especificação já manda cadastrar o endereço
+       público nos portais. */
+    const vitrine = enderecoDaVitrine(
+      req.tenant,
+      (process.env.APP_URL || "https://omnimob.app").replace(/\/+$/, ""),
+    ).replace(/\/+$/, "");
+
     res.type("application/xml");
-    return res.send(montarFeedVRSync(req.tenant, imoveis, null));
+    return res.send(
+      montarFeedVRSync(req.tenant, imoveis, (i) => `${vitrine}/imovel/${i.id}`, { site: vitrine }),
+    );
   } catch (erro) {
     console.error("[api/v1 feed]", erro);
     return res.status(500).json({ error: "Erro ao gerar o feed." });

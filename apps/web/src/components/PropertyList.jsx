@@ -354,6 +354,10 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
             : "Nenhum imóvel encontrado com estes filtros."}
           acaoLabel={properties.length === 0 ? "Cadastrar o primeiro imóvel" : undefined}
           onAcao={properties.length === 0 ? () => navigate("/imoveis/novo") : undefined}
+          {...(properties.length === 0 ? {
+            desenho: "/ilustracoes/vazio-imoveis.png",
+            desenhoAlt: "Pessoa colocando a primeira foto numa moldura vazia",
+          } : {})}
         />
       ) : null}
 

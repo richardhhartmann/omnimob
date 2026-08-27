@@ -518,7 +518,18 @@ model Cargo {
   descricao String @map("crg_descricao")
 
   // Permissões de acesso
-  acessarPainel     Boolean @default(false) @map("acessar_painel")
+  /* A PORTA do Hub, par de `acessarFlow`. Não é escolha de ninguém: nenhuma
+   * tela a oferece, e `alcancaOHub` (services/cargosPadrao.js) a deriva a cada
+   * gravação — por rota e por provisionamento.
+   *
+   * O padrão é `true`, e mudou de `false` por segurança. Linha criada fora
+   * dos dois caminhos (um seed, um script, um teste) pegava o padrão, e com
+   * `false` isso significava um cargo trancado para fora do painel — que foi
+   * exatamente o estrago quando a sessão passou a ler esta coluna: metade dos
+   * cargos do banco estava assim, e criar imobiliária virou "entrei e caí na
+   * vitrine". O padrão de uma coluna tem de ser o desfecho inofensivo; quem
+   * restringe é a regra, explicitamente. */
+  acessarPainel     Boolean @default(true) @map("acessar_painel")
   editarPagina      Boolean @default(false) @map("editar_pagina")
   gerenciarImoveis  Boolean @default(false) @map("gerenciar_imoveis")
   gerenciarLeads    Boolean @default(false) @map("gerenciar_leads")
@@ -641,6 +652,15 @@ model Usuario {
   googleNome        String?  @map("usu_google_nome")
   googleVinculadoEm DateTime? @map("usu_google_vinculado_em")
   senha             String   @map("usu_senha")
+  /* ── FORÇA BRUTA: o que segura a conta, e não só o IP ────────────────────
+   * O limite por IP (`authLimiter`, em `server.js`) não alcança o ataque que
+   * importa: mil máquinas tentando a MESMA conta passam por ele sem esforço,
+   * porque cada uma faz poucas tentativas.
+   *
+   * Estas duas colunas travam por CONTA, independentemente de onde a tentativa
+   * vem. Zeram no primeiro acerto — quem sabe a senha nunca encosta nelas. */
+  tentativasFalhas  Int       @default(0) @map("usu_tentativas_falhas")
+  bloqueadoAte      DateTime? @map("usu_bloqueado_ate")
   forcaAlterarSenha Boolean  @default(false) @map("usu_forca_alterar_senha")
   ativo             Boolean  @default(true) @map("usu_ativo")
   /**
@@ -713,6 +733,8 @@ model Usuario {
      propunha derrubá-lo em toda migração nova. Declarado, ele para de sumir. */
   @@index([email])
   @@map("tb_usuario")
+
+  sessoesRevogadas SessaoRevogada[]
 }
 
 /**
@@ -1108,7 +1130,7 @@ model Property {
    * lê-lo como "nenhum" tiraria o acervo inteiro do ar em silêncio.
    *
    * Ver `services/portais.js`. */
-  portais         String[]         @map("prp_portais")
+  portais         String[]         @default([]) @map("prp_portais")
   /**
    * Mostrar a RUA E O NÚMERO na página pública do imóvel.
    * Desligado por padrão, e o padrão é a parte que importa: bairro e cidade
@@ -1308,6 +1330,48 @@ model LeadEvento {
  * pergunta pela qual ele foi criado. Com o tenant é o contrário: se a
  * imobiliária sai, o histórico dela sai junto.
  */
+/* ────────────────────────────────────────────────────────────────────────────
+   SESSÃO ENCERRADA À MÃO.
+
+   JWT é sem estado por desenho: uma vez emitido, ele vale até expirar, e o
+   "sair" do painel só apagava o token do `localStorage`. Quem tivesse copiado
+   aquele texto — de um navegador compartilhado, de um log, de um dump de
+   memória — continuava dentro por até sete dias, e não havia como impedir.
+
+   Esta tabela é a lista do que NÃO vale mais. O `jti` é o identificador único
+   que cada token carrega desde a emissão.
+
+   ── POR QUE NÃO UM CARIMBO NO USUÁRIO ──
+
+   Um `tokensValidosDesde` no `Usuario` seria mais simples e não custaria tabela
+   nenhuma. Só que ele derruba TODAS as sessões da pessoa: sair no celular
+   mataria o painel aberto no computador, no meio do trabalho. Por sessão é
+   mais trabalho e é o comportamento que não surpreende ninguém.
+
+   ── E POR QUE ISSO NÃO CUSTA UMA CONSULTA A MAIS ──
+
+   `requireAuth` já lê o usuário do banco a cada requisição. A revogação entra
+   no MESMO `select`, como relação filtrada pelo `jti` — uma ida ao banco, como
+   antes. Uma segunda consulta por requisição seria caro demais para uma trava
+   que quase nunca tem o que dizer.
+
+   Linha morre com o token: `expiraEm` é o vencimento dele, e a faxina limpa o
+   que já passou. A tabela não cresce para sempre.
+   ──────────────────────────────────────────────────────────────────────────── */
+model SessaoRevogada {
+  id        String   @id @default(cuid()) @map("ses_id")
+  usuarioId String   @map("usu_id")
+  jti       String   @map("ses_jti")
+  expiraEm  DateTime @map("ses_expira_em")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, jti])
+  @@index([expiraEm])
+  @@map("tb_sessao_revogada")
+}
+
 model Auditoria {
   id          String   @id @default(cuid()) @map("aud_id")
   tenantId    String   @map("tenant_id")

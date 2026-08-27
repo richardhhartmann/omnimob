@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api } from "../api";
 import { LeadAtendimento, ESTAGIOS, corDoEstagio, rotuloDoEstagio } from "../components/LeadAtendimento.jsx";
-import { Avatar } from "../components/adminUi";
+import { Avatar, EmptyState } from "../components/adminUi";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
 import { SkeletonListRows } from "../components/Skeleton";
@@ -373,11 +373,15 @@ export function LeadsPage({ session }) {
 
       {/* Estados vazios */}
       {!loading && allLeads.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: "center", padding: "56px 24px" }}>
-          <p style={{ color: "var(--text-muted)", fontSize: "16px", margin: 0 }}>
-            Nenhum lead registrado ainda.
-          </p>
-        </div>
+        /* Lead vazio nao e perda: a vitrine acabou de subir. O desenho e um
+           envelope CHEGANDO numa caixa aberta, e nao uma caixa vazia — a
+           diferenca entre "esta ligado e esperando" e "ninguem apareceu". */
+        <EmptyState
+          padding="56px 24px"
+          mensagem="Nenhum lead registrado ainda."
+          desenho="/ilustracoes/vazio-leads.png"
+          desenhoAlt="Caixa de correio aberta recebendo o primeiro envelope"
+        />
       ) : !loading && filtered.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "15px", marginBottom: "16px" }}>Nenhum lead encontrado com estes filtros.</p>

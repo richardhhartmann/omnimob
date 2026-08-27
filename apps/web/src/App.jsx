@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, setApiToken, setAdminToken } from "./api";
 import { initPointerGradient } from "./utils/pointerGradient";
@@ -25,7 +25,13 @@ import { ehDominioDaOmnimob, slugDoDominioAtual } from "./utils/dominioVitrine";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
 import { LimiteDeErro } from "./components/LimiteDeErro.jsx";
-import { FLOW, modulosDoUsuario } from "./utils/modulos";
+/* `telaTardia` e o `lazy()` com a barra do topo em volta: a espera abre quando
+   o `import()` comeca e fecha quando ele termina. Ver o cabecalho de
+   `BarraDeProgresso.jsx` — medir o download e a UNICA forma que funciona, porque
+   o React Router navega dentro de um `startTransition` e o fallback do Suspense
+   nao chega a aparecer numa navegacao interna. */
+import { BarraDeProgresso, useEsperaDeTela, telaTardia } from "./components/BarraDeProgresso.jsx";
+import { FLOW, HUB, modulosDoUsuario } from "./utils/modulos";
 
 /* ── Divisão por rota ────────────────────────────────────────────────────────
    Tudo vivia num pacote só: quem abria a landing baixava o formulário de
@@ -41,11 +47,11 @@ import { FLOW, modulosDoUsuario } from "./utils/modulos";
    O resto do painel fica junto de propósito: são telas que a mesma pessoa
    percorre na mesma sessão, e fatiá-las trocaria um download grande por doze
    esperas pequenas no meio da navegação. */
-const OmnimobLandingPage = lazy(() =>
+const OmnimobLandingPage = telaTardia(() =>
   import("./pages/OmnimobLandingPage").then((m) => ({ default: m.OmnimobLandingPage })));
-const ShowcaseEditorPage = lazy(() =>
+const ShowcaseEditorPage = telaTardia(() =>
   import("./pages/ShowcaseEditorPage").then((m) => ({ default: m.ShowcaseEditorPage })));
-const SuperAdminPage = lazy(() =>
+const SuperAdminPage = telaTardia(() =>
   import("./pages/SuperAdminPage").then((m) => ({ default: m.SuperAdminPage })));
 
 /* ── O Omnimob Flow é uma QUARTA família ─────────────────────────────────────
@@ -59,46 +65,55 @@ const SuperAdminPage = lazy(() =>
    regra que mantém o painel do Hub inteiro: são telas que a mesma pessoa
    percorre na mesma sessão — funil, negócio, validação, contrato —, e fatiá-las
    trocaria um download por seis esperas no meio do trabalho. */
-const FlowInicioPage = lazy(() =>
+const FlowInicioPage = telaTardia(() =>
   import("./pages/flow/FlowInicioPage").then((m) => ({ default: m.FlowInicioPage })));
-const FunilPage = lazy(() =>
+const FunilPage = telaTardia(() =>
   import("./pages/flow/FunilPage").then((m) => ({ default: m.FunilPage })));
-const NegociosPage = lazy(() =>
+const NegociosPage = telaTardia(() =>
   import("./pages/flow/NegociosPage").then((m) => ({ default: m.NegociosPage })));
-const NegocioPage = lazy(() =>
+const NegocioPage = telaTardia(() =>
   import("./pages/flow/NegocioPage").then((m) => ({ default: m.NegocioPage })));
-const NegocioNovoPage = lazy(() =>
+const NegocioNovoPage = telaTardia(() =>
   import("./pages/flow/NegocioNovoPage").then((m) => ({ default: m.NegocioNovoPage })));
-const ValidacaoPage = lazy(() =>
+const ValidacaoPage = telaTardia(() =>
   import("./pages/flow/ValidacaoPage").then((m) => ({ default: m.ValidacaoPage })));
-const ComissoesPage = lazy(() =>
+const ComissoesPage = telaTardia(() =>
   import("./pages/flow/ComissoesPage").then((m) => ({ default: m.ComissoesPage })));
-const CaptacaoPage = lazy(() =>
+const CaptacaoPage = telaTardia(() =>
   import("./pages/flow/CaptacaoPage").then((m) => ({ default: m.CaptacaoPage })));
-const ContratosPage = lazy(() =>
+const ContratosPage = telaTardia(() =>
   import("./pages/flow/ContratosPage").then((m) => ({ default: m.ContratosPage })));
-const ModelosPage = lazy(() =>
+const ModelosPage = telaTardia(() =>
   import("./pages/flow/ModelosPage").then((m) => ({ default: m.ModelosPage })));
 
 /* As páginas públicas fora da landing: termos, privacidade, sobre, contato e a
    galeria de vitrines. Carregadas sob demanda e SEPARADAS da landing — quem
    abre a Política de Privacidade não deve baixar a página de vendas inteira
    para ler um texto. Ver `components/PaginaPublica.jsx`. */
-const TermosPage = lazy(() =>
+const TermosPage = telaTardia(() =>
   import("./pages/publicas/TermosPage.jsx").then((m) => ({ default: m.TermosPage })));
-const PrivacidadePage = lazy(() =>
+const PrivacidadePage = telaTardia(() =>
   import("./pages/publicas/PrivacidadePage.jsx").then((m) => ({ default: m.PrivacidadePage })));
-const SobrePage = lazy(() =>
+const SobrePage = telaTardia(() =>
   import("./pages/publicas/SobrePage.jsx").then((m) => ({ default: m.SobrePage })));
-const ContatoPage = lazy(() =>
+const ContatoPage = telaTardia(() =>
   import("./pages/publicas/ContatoPage.jsx").then((m) => ({ default: m.ContatoPage })));
-const VitrinesPage = lazy(() =>
+const VitrinesPage = telaTardia(() =>
   import("./pages/publicas/VitrinesPage.jsx").then((m) => ({ default: m.VitrinesPage })));
+const NaoEncontradaPage = telaTardia(() =>
+  import("./pages/publicas/NaoEncontradaPage.jsx").then((m) => ({ default: m.NaoEncontradaPage })));
 
 /* Enquanto o pedaço desce. Fundo sólido e nada mais: a landing tem tela de
    abertura própria (`OmnimobSplash`), e um segundo indicador antes dela seria
-   duas esperas encavaladas para o mesmo carregamento. */
+   duas esperas encavaladas para o mesmo carregamento.
+
+   O que ele acrescenta é invisível daqui: `useEsperaDeTela` avisa a barra do
+   topo enquanto este fallback estiver montado. O intervalo entre montar e
+   desmontar É a espera, medida e não estimada — e este é o único ponto da
+   árvore que a atravessa. Um `useEffect` observando a rota rodaria só depois
+   de a tela nova entrar, ou seja, depois de a espera ter acabado. */
 function Carregando() {
+  useEsperaDeTela();
   return <div style={{ minHeight: "100vh", background: "#0a0a0b" }} aria-busy="true" />;
 }
 
@@ -313,6 +328,21 @@ export default function App() {
        `replace` para o botão Voltar não devolver ao painel já deslogado, que
        só quicaria de volta. O `motivo` é lido uma vez pela tela de login e
        descartado — ver `LoginPage`. */
+    /* ── ENCERRA A SESSÃO NO SERVIDOR TAMBÉM ────────────────────────────────
+
+       Limpar o `localStorage` esconde a chave; não a invalida. O token continua
+       valendo por até sete dias, e quem tiver copiado aquele texto entra sem
+       obstáculo — num computador compartilhado, é o cenário inteiro.
+
+       SEM `await`, e de propósito: a saída não pode esperar a rede. Se a
+       requisição falhar, o pior desfecho é o token seguir válido até vencer —
+       exatamente o que acontecia antes desta linha existir. O que não pode é a
+       pessoa ficar presa numa tela porque a API não respondeu.
+
+       Disparado ANTES de `clearSession`, senão o cliente HTTP já não teria o
+       token para mandar. */
+    api.logout().catch(() => {});
+
     clearSession();
     setSession(null);
     navegarParaLogin("sessao-encerrada");
@@ -329,7 +359,15 @@ export default function App() {
   /* ── A porta do Flow ──────────────────────────────────────────────────────
      Contratado pela conta E aberto pelo cargo. As duas perguntas, e as duas
      precisam ser sim — ver `utils/modulos.js`. */
-  const podeFlow = modulosDoUsuario(session?.tenant, cargo).includes(FLOW);
+  const modulosDaPessoa = modulosDoUsuario(session?.tenant, cargo);
+  const podeFlow = modulosDaPessoa.includes(FLOW);
+  /* ── A porta do HUB, simétrica à do Flow ──────────────────────────────────
+     `acessarPainel` deixou de ser sempre verdadeira (ver `cargoRoutes`), e com
+     isso o Hub passou a ter porta como o Flow tem. Sem esta linha, um cargo
+     só-Flow não via o módulo no seletor e mesmo assim entrava no Dashboard do
+     Hub digitando `/` — a mesma assimetria que o Flow tinha antes, agora do
+     outro lado. */
+  const podeHub = modulosDaPessoa.includes(HUB);
   /* `acessarFlow` entra aqui junto de `acessarPainel`: existe usuário SÓ-FLOW
      (o Jurídico e o Financeiro do catálogo de cargos nascem assim), e sem esta
      linha ele seria despejado na vitrine pública no login — com a permissão do
@@ -377,6 +415,8 @@ export default function App() {
      login que não faz sentido nenhum para ele. */
   if (slugDoDominio) {
     return (
+      <>
+      <BarraDeProgresso />
       <Routes location={location}>
         <Route path="/" element={<ShowcasePage slugFixo={slugDoDominio} />} />
         <Route path="/imovel/:propertyId" element={<ShowcasePropertyPage slugFixo={slugDoDominio} />} />
@@ -391,6 +431,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </>
     );
   }
 
@@ -402,6 +443,11 @@ export default function App() {
        DOWNLOAD do pedaço, e essa falha chega como promessa rejeitada — o
        Suspense não a captura, ele só espera. Sem a barreira por fora, o erro
        sobe e desmonta a árvore inteira: tela branca sem saída. */
+    <>
+    {/* Irmã do Suspense, nunca filha: dentro dele a barra seria desmontada
+        junto com o fallback no instante em que a tela nova aparece, e o fecho
+        — o traço chegando a 100% — nunca chegaria a ser desenhado. */}
+    <BarraDeProgresso />
     <LimiteDeErro>
     <Suspense fallback={<Carregando />}>
     <Routes location={location}>
@@ -470,7 +516,14 @@ export default function App() {
           )
         }
       >
-        <Route path="/" element={<DashboardPage session={session} />} />
+        {/* A raiz é o Dashboard do Hub. Quem não alcança o módulo vai para o
+            Flow, se tiver; senão, para a vitrine. Nunca uma parede: quem chegou
+            aqui por um link antigo precisa de uma tela que funcione. */}
+        <Route path="/" element={
+          podeHub
+            ? <DashboardPage session={session} />
+            : <Navigate to={podeFlow ? "/flow" : defaultPublicPath} replace />
+        } />
         {/* ── O Painel do Gestor tem endereço próprio ─────────────────────
             São dois trabalhos diferentes: dirigir a imobiliária (faturamento,
             equipe, o que pede ação) e cuidar do acervo. Chega-se a ele pelo
@@ -479,9 +532,9 @@ export default function App() {
             Sem a permissão, cai no painel de imóveis — que é onde a pessoa
             trabalha, e não numa parede de "sem acesso". */}
         <Route path="/inicio" element={
-          cargo?.verPainelGestor
+          podeHub && cargo?.verPainelGestor
             ? <InicioPage session={session} />
-            : <Navigate to="/" replace />
+            : <Navigate to={podeHub ? "/" : podeFlow ? "/flow" : defaultPublicPath} replace />
         } />
         {/* ── Imóveis ───────────────────────────────────────────────────────
             Cada endereço diz o que a tela é, e é isso que mudou aqui.
@@ -655,9 +708,22 @@ export default function App() {
         } />
       </Route>
 
-      <Route path="*" element={<Navigate to={defaultPublicPath} replace />} />
+      {/* 404 DE VERDADE, e não um desvio para a home.
+
+          Era `<Navigate to={defaultPublicPath} replace />`: quem abrisse um
+          link velho, um resultado de busca envelhecido ou um endereço com um
+          caractere trocado aterrissava na home sem explicação nenhuma — e a
+          leitura natural disso é "o site perdeu a minha página". O `replace`
+          ainda apagava o endereço torto do histórico, então nem o botão voltar
+          desfazia.
+
+          Também custava SEO: buscador que recebe 200 e conteúdo de home para
+          mil endereços inexistentes trata todos como páginas legítimas
+          duplicadas. */}
+      <Route path="*" element={<NaoEncontradaPage />} />
     </Routes>
     </Suspense>
     </LimiteDeErro>
+    </>
   );
 }

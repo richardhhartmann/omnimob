@@ -213,8 +213,56 @@ const DriftWall = ({
     const unidade = tileHeight + gap;
     const porColuna = Math.min(acervo.length, 3);
 
-    const cols = Array.from({ length: colunasEfetivas }, (_, c) =>
-      embaralhar(acervo, c * 2654435761 + 0x9e3779b9).slice(0, porColuna));
+    /* ── A COLUNA RECEBE CARTA DISTRIBUÍDA, E NÃO UM RECORTE PRÓPRIO ─────────
+
+       Era `embaralhar(acervo, semente da coluna).slice(0, porColuna)`: cada
+       coluna sorteava o acervo inteiro e ficava com as três primeiras. Parece
+       justo e não é — são N embaralhamentos INDEPENDENTES, e independência não
+       promete cobertura nenhuma. Uma peça podia não sair em nenhuma das três
+       primeiras posições de nenhuma coluna, e então ela simplesmente não
+       existia na parede. Nada no código dizia que ela sumiu.
+
+       Medido com o acervo real: com doze peças e uma tela de 3440px não faltava
+       nenhuma, e por isso o defeito viveu escondido. Ao subir para dezoito, a
+       peça de índice 1 deixou de aparecer em TODAS as larguras — sempre a
+       mesma, porque as sementes são determinísticas: não era azar, era um ponto
+       cego fixo. Aquecer o gerador antes de usar só muda o ponto cego de lugar;
+       o problema não é a qualidade do sorteio, é a ausência de cobertura.
+
+       Distribuindo como se distribui carta, a cobertura vale por construção:
+       um baralho embaralhado é consumido em ordem, e só se embaralha outro
+       quando o primeiro acaba. Nenhuma peça repete antes de todas terem saído,
+       e a diferença entre a mais e a menos vista fica em uma aparição.
+
+       Quando não há vaga para todo mundo (cinco colunas de três para dezoito
+       peças são quinze lugares), sobra peça de fora — isso é aritmética, e o
+       que a distribuição garante é que a escolha seja rotativa, e não sempre a
+       mesma vítima. */
+    let baralho = [];
+    let volta = 0;
+    const proximaPeca = () => {
+      if (!baralho.length) {
+        baralho = embaralhar(acervo, volta * 2654435761 + 0x9e3779b9);
+        volta += 1;
+      }
+      return baralho.shift();
+    };
+
+    const cols = Array.from({ length: colunasEfetivas }, () => {
+      const col = [];
+      /* O teto existe só para o caso de o baralho virar no meio de uma coluna e
+         devolver uma peça que ela já tem: a repetida vai para o fim da pilha e
+         a coluna pede a próxima. Sem o teto, um acervo menor que `porColuna`
+         daria laço infinito. */
+      let tentativas = 0;
+      while (col.length < porColuna && tentativas < acervo.length * 2) {
+        const peca = proximaPeca();
+        tentativas += 1;
+        if (col.includes(peca)) { baralho.push(peca); continue; }
+        col.push(peca);
+      }
+      return col;
+    });
 
     /* Retoque final: se duas colunas vizinhas começam pela mesma peça, elas
        entram na tela lado a lado com o mesmo cartão. Uma rotação de um item
@@ -272,7 +320,28 @@ const DriftWall = ({
       const distancia = Math.abs(c - meio) / meio;
       const precisa = alturaACobrir * (1 + 0.5 * distancia);
       const copyHeight = Math.max(unit, col.length * unit);
-      const copies = Math.max(2, Math.ceil(alturaACobrir / copyHeight));
+      /* DOIS enganos moravam nesta linha, e os dois davam o mesmo sintoma: peça
+         sumindo e reaparecendo nas colunas das pontas.
+
+         1. `precisa` era calculado e jogado fora — a conta usava
+            `alturaACobrir`. Toda a correção por coluna descrita acima existia no
+            código e não chegava ao resultado: as pontas, que a perspectiva
+            estica, recebiam a mesma cobertura do meio.
+
+         2. Faltava a cópia do laço. O trilho é centrado e o deslocamento anda
+            meio ciclo para cada lado, então a borda mais desfavorável fica em
+            `total/2 - ciclo/2`, e ela precisa passar de `precisa/2`:
+
+                total >= precisa + ciclo
+
+            `ceil(precisa / ciclo)` cobre só `precisa`. O `+ 1` é o ciclo que a
+            desigualdade pede, e com ele ela vale por construção — não por
+            folga escolhida a olho.
+
+         Medido em 3440×1440: doze colunas, ciclo de 588px, faixa de ~769px. O
+         meio pedia 1357px e recebia 1176; a ponta pedia 1741px e recebia os
+         mesmos 1176. Daí o buraco aparecer primeiro nas extremidades. */
+      const copies = Math.max(2, Math.ceil(precisa / copyHeight) + 1);
       return { copyHeight, copies };
     });
   }, [columnItems, tileHeight, gap, alturaACobrir]);

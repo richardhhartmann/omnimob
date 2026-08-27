@@ -1,0 +1,15 @@
+-- O DEFAULT de `prp_portais` sumiu do banco.
+--
+-- A migração que criou a coluna (20260821120000_portais_por_imovel) declarou
+-- `NOT NULL DEFAULT ARRAY[]::TEXT[]`, e o banco de desenvolvimento estava com
+-- `column_default: null` — um `db push` posterior o removeu, porque o schema
+-- do Prisma não declarava `@default([])` e o push reconcilia o banco com o
+-- schema.
+--
+-- O sintoma: criar imóvel SEM passar `portais` explicitamente falhava com
+-- "Null constraint violation on the fields: (prp_portais)". Isso é o cadastro
+-- de imóvel pela tela — o campo não aparece no formulário de criação.
+--
+-- `prisma migrate status` dizia "up to date" o tempo todo: ele confere quais
+-- migrações rodaram, não se o banco ainda se parece com elas.
+ALTER TABLE "Property" ALTER COLUMN "prp_portais" SET DEFAULT ARRAY[]::TEXT[];

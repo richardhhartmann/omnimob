@@ -6,7 +6,9 @@ import { Avatar, EmptyState, SearchInput, StatCard, StatGrid } from "../componen
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { useConfirm } from "../components/ConfirmModal";
 import { ModalCiencia } from "../components/ModalCiencia";
-import { PERMISSOES, PERMISSOES_DE_RISCO, permissoesDoPlano, cargoVazio } from "../utils/permissoesCargo.jsx";
+import {
+  TODAS_AS_PERMISSOES, PERMISSOES_DE_RISCO, gruposDePermissao, cargoVazio,
+} from "../utils/permissoesCargo.jsx";
 import { GradeDePermissoes } from "../components/GradeDePermissoes.jsx";
 import { FLOW, modulosDoTenant } from "../utils/modulos";
 
@@ -39,11 +41,27 @@ export function CargosPage({ session, onSessionUpdate }) {
      silêncio deixa a dúvida de sempre: gravou? */
   const showToast = useOutletContext()?.showToast;
   const tenantSlug = session?.tenant?.slug;
-  /* Uma lista só para a tela inteira: formulário, selos e a contagem de
-     "sem permissões" precisam concordar sobre o que existe neste plano. */
+  const temFlow = modulosDoTenant(session?.tenant).includes(FLOW);
+
+  /* ── A LISTA PRECISA INCLUIR O FLOW ────────────────────────────────────────
+
+     Uma lista só para a tela inteira: os selos, a contagem de permissões e o
+     aviso de "sem permissões" precisam concordar sobre o que existe nesta
+     conta.
+
+     Ela vinha de `permissoesDoPlano()`, que filtra apenas o array do HUB — as
+     sete do Flow moram num array separado, e ficavam de fora das três coisas
+     ao mesmo tempo. O sintoma era o pior possível porque parecia outro
+     defeito: marcar "Validar (Financeiro)" gravava no banco e o selo nunca
+     aparecia, então a leitura natural era "a permissão não está sendo salva".
+     E um cargo SÓ de Flow — o Jurídico e o Financeiro do catálogo nascem
+     assim — era exibido como "Sem permissões", que é o contrário do que ele é.
+
+     `gruposDePermissao` já resolve o plano e a presença do módulo; achatar os
+     grupos dá a lista completa sem uma segunda regra para divergir. */
   const permissoesVisiveis = useMemo(
-    () => permissoesDoPlano(session?.tenant?.plano),
-    [session?.tenant?.plano],
+    () => gruposDePermissao(session?.tenant?.plano, { temFlow }).flatMap((g) => g.itens),
+    [session?.tenant?.plano, temFlow],
   );
   const { confirm, modal: confirmModal } = useConfirm();
   const [cargos, setCargos] = useState([]);
@@ -98,14 +116,22 @@ export function CargosPage({ session, onSessionUpdate }) {
   function abrirEditar(c) {
     setEditando(c);
     const f = { descricao: c.descricao };
-    /* `PERMISSOES` (a lista COMPLETA), não `permissoesVisiveis`.
+    /* `TODAS_AS_PERMISSOES`, e não `permissoesVisiveis` nem `PERMISSOES`.
 
-       O auto-save manda o form inteiro a cada clique. Carregando só o que está
-       à vista, uma permissão escondida pelo plano viria ausente do form e o
-       servidor a gravaria como false — apagando, ao mexer em qualquer outra
-       caixa, algo que a pessoa nem sabia que estava lá. Assim ela viaja intacta
-       e volta a aparecer marcada quando o plano subir. */
-    for (const p of PERMISSOES) f[p.key] = Boolean(c[p.key]);
+       Duas razões, e as duas já produziram estrago:
+
+       1. Não `permissoesVisiveis`: o auto-save manda o form INTEIRO a cada
+          clique. Carregando só o que está à vista, uma permissão escondida pelo
+          plano viria ausente do form e o servidor a gravaria como false —
+          apagando, ao mexer em qualquer outra caixa, algo que a pessoa nem
+          sabia que estava lá.
+
+       2. Não `PERMISSOES`: essa é a lista do HUB. As sete do Flow moram em
+          `PERMISSOES_FLOW`, e ficavam de fora daqui — reabrir um cargo mostrava
+          todas as caixas do Flow desmarcadas, mesmo com elas gravadas no banco.
+          E como o auto-save manda o form inteiro, o próximo clique em qualquer
+          caixa APAGAVA de verdade o que a tela tinha mentido não existir. */
+    for (const p of TODAS_AS_PERMISSOES) f[p.key] = Boolean(c[p.key]);
     setForm(f);
     setError("");
     setView("form");
@@ -270,7 +296,7 @@ export function CargosPage({ session, onSessionUpdate }) {
                  módulo. Oferecer caixas de um produto que a conta não tem
                  produz a pior conversa possível com o suporte — "marquei e não
                  funciona". Ver `gruposDePermissao`. */
-              temFlow={modulosDoTenant(session?.tenant).includes(FLOW)}
+              temFlow={temFlow}
               valores={form}
               desabilitado={loading || saving}
               travadas={ehProprioCargoDoUsuario ? LOCKED_NO_PROPRIO_CARGO : []}

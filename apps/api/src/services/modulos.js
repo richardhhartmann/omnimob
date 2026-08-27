@@ -49,6 +49,28 @@ export function tenantTemModulo(tenant, modulo) {
   return modulosDoTenant(tenant).includes(modulo);
 }
 
+/* ── A PORTA DE CADA MÓDULO NO CARGO ─────────────────────────────────────────
+
+   Qual permissão do cargo abre cada módulo. Espelha `porta` em
+   `apps/web/src/utils/modulos.js`, e as duas precisam dizer o mesmo — a tela
+   esconde o seletor por esta regra, e é este arquivo que RECUSA.
+
+   O Hub não tem porta: existir como cargo já significa entrar no painel
+   (`acessarPainel` é forçada `true` em toda gravação, ver `cargoRoutes`). O
+   Flow tem, e é justamente a decisão que o cliente pediu para tomar pessoa a
+   pessoa. */
+const PORTA_DO_MODULO = {
+  [HUB]: null,
+  [FLOW]: "acessarFlow",
+};
+
+/** Este cargo alcança o módulo? Sem porta definida, alcança. */
+export function cargoAlcancaModulo(cargo, modulo) {
+  const porta = PORTA_DO_MODULO[modulo];
+  if (!porta) return true;
+  return Boolean(cargo?.[porta]);
+}
+
 /* ── O que o plano libera dentro do Flow ──────────────────────────────────────
 
    Nível mínimo por recurso: 0 = Básico, 1 = Profissional, 2 = Premium. Os

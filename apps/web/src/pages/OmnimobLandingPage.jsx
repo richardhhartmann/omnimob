@@ -1,12 +1,16 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 // A marca do WhatsApp — a cópia local virou `utils/marcasDeRede`.
 import { WhatsappMarca } from "../utils/marcasDeRede.jsx";
 import { Link } from "react-router-dom";
 import { useSeo } from "../utils/seo";
 import { EfeitosProvider, SeletorDeEfeitos, useEfeitos } from "../components/Efeitos.jsx";
+import { Iridescencia } from "../components/Iridescencia.jsx";
 import { StaggeredMenu } from "../components/StaggeredMenu.jsx";
 import {
   Buildings,
+  HouseLine,
+  MapPin,
+  Signature,
   Crown,
   PaintBrushBroad,
   ChartLineUp,
@@ -30,7 +34,6 @@ import { api } from "../api";
 import { OmnimobSplash } from "../components/OmnimobSplash";
 import DriftWall from "../components/DriftWall";
 import ElectricBorder from "../components/ElectricBorder";
-import BounceCards from "../components/BounceCards";
 import LineSidebar from "../components/LineSidebar";
 import Counter from "../components/Counter";
 import SpecularButton from "../components/SpecularButton";
@@ -57,6 +60,7 @@ import {
   LogoLockup,
   Reveal,
   Scallop,
+  FormaDeFundo,
   parseStat,
   reduzirMovimento,
   useReveal,
@@ -92,12 +96,6 @@ import {
    A promessa é guardada porque as duas seções pedem o mesmo pacote: sem o
    cache, entrar na página com as duas visíveis dispararia dois downloads da
    mesma coisa. */
-/* O cursor fantasma também é WebGL — e importava o three e quatro passes de
-   pós-processamento no topo do módulo, o que sozinho segurava o three inteiro
-   dentro do pacote principal. Carregado assim, ele só desce para quem vai vê-lo
-   de fato. Sem `Suspense` visível: o que aparece é fumaça sobre um fundo que já
-   está lá, e um "carregando…" no lugar dela seria pior que a espera. */
-const GhostCursor = lazy(() => import("../components/GhostCursor"));
 
 let promessaDoVanta = null;
 
@@ -629,6 +627,19 @@ const INTEGRACOES = [
   { type: "PORTAL", name: "Mercado Livre", curto: "Mercado Livre", Icon: Storefront, cor: "#ffe600", texto: "#2d3277" },
   { type: "PORTAL", name: "OLX Imóveis", curto: "OLX", Icon: Tag, cor: "#6e0ad6" },
   { type: "PORTAL", name: "ZAP Imóveis", curto: "ZAP Imóveis", Icon: Buildings, cor: "#ff6600", texto: "#0a0a0b" },
+  /* VivaReal e Imovelweb leem o MESMO feed que o ZAP e a OLX — o VRSync é o
+     esquema do Grupo OLX, e o XML que servimos declara o namespace deles
+     (ver feedPortais.js). Não é integração nova: é a mesma porta, e estavam
+     faltando na lista de quem entra por ela.
+
+     #0092FF do VivaReal foi conferido. O vermelho do Imovelweb é ESTIMATIVA —
+     não achei o hex publicado em fonte de marca confiável. Trocar aqui basta. */
+  { type: "PORTAL", name: "VivaReal", curto: "VivaReal", Icon: HouseLine, cor: "#0092ff" },
+  { type: "PORTAL", name: "Imovelweb", curto: "Imovelweb", Icon: MapPin, cor: "#e6332a" },
+  /* #4C00FF é o cobalto do guia de marca oficial da DocuSign. O adaptador de
+     assinatura fala com ela e com a Clicksign; a Clicksign ficou de fora da
+     faixa só porque não confirmei a cor dela. */
+  { type: "ASSINATURA", name: "DocuSign", curto: "DocuSign", Icon: Signature, cor: "#4c00ff" },
   { type: "DOMÍNIO", name: "Domínio próprio", curto: "Domínio", Icon: LinkSimple, cor: "#111827" },
 ];
 
@@ -712,6 +723,57 @@ const FAIXA_EXTRA = [
     title: "Sua operação cresce junto",
     desc: "A Omnimob foi construída para atender várias imobiliárias sem misturar nenhuma delas.",
     detalhe: "Cada imobiliária possui seu próprio contexto de usuários, imóveis, leads, configurações e vitrine. A arquitetura multi-tenant permite que a plataforma cresça mantendo cada operação logicamente isolada.",
+  },
+
+  /* ── O OMNIMOB FLOW ────────────────────────────────────────────────────────
+     Os cartões acima falam do que a imobiliária TEM: acervo, vitrine, leads,
+     equipe. Estes falam do que ela está FECHANDO — é a divisão dos dois módulos,
+     e a parede é o lugar onde ela aparece sem precisar de uma seção própria.
+
+     Ficam no fim e juntos de propósito. Na parede a ordem some (cada coluna
+     recebe um recorte embaralhado do acervo), mas a lista de acessibilidade
+     logo abaixo lê na ordem escrita, e ali eles formam um bloco com assunto
+     único em vez de aparecerem intercalados sem contexto.
+
+     O tom `rose` existe só aqui: é o rosa da palavra "flow" na arte, o mesmo
+     acento que o módulo usa no painel. Um cartão de estatística do Flow com o
+     índigo do Hub diria a coisa errada de relance. */
+  {
+    kind: "stat",
+    value: "7",
+    label: "Estágios até o negócio fechar",
+    tone: "rose",
+    detalhe: "O funil do Flow vai de Lead a Ganho passando por Contato, Visita, Proposta, Negociação e Aprovação. Perdido fica fora dessa sequência de propósito: um negócio perdido não é uma etapa a caminho da seguinte, e tratá-lo como tal distorceria qualquer leitura do funil.",
+  },
+  {
+    kind: "text",
+    title: "Do portal direto ao funil",
+    desc: "O interessado que chega pelo ZAP, VivaReal ou OLX entra como negócio, sem ninguém copiar e colar.",
+    detalhe: "Cada canal de captação recebe um endereço próprio, e é ele que a imobiliária cola no integrador do portal. O Flow entende os formatos conhecidos e ainda assim guarda o corpo original de cada chamada por noventa dias — é o que permite descobrir por que uma integração parou, em vez de apenas constatar que parou.",
+  },
+  {
+    kind: "text",
+    title: "O contrato não sai pela metade",
+    desc: "Campo sem dado vira pendência, e não um espaço em branco no documento assinado.",
+    detalhe: "As minutas são modelos com marcadores que o Flow preenche a partir do negócio. Quando falta a informação de um marcador, o contrato não é gerado: o sistema lista o que falta. Um documento com lacuna é pior que documento nenhum, porque parece pronto.",
+  },
+  {
+    kind: "text",
+    title: "Fechar exige mais de um sim",
+    desc: "Jurídico e financeiro validam antes de o negócio virar ganho — e o painel diz exatamente o que falta.",
+    detalhe: "A trava de fechamento é conferida num lugar só e devolve os motivos, nunca um simples bloqueio. Quem olha a tela sabe se o que falta é a validação jurídica, a financeira ou o contrato assinado, em vez de descobrir por tentativa.",
+  },
+  {
+    kind: "text",
+    title: "Comissão dividida na hora",
+    desc: "O split é calculado no fechamento e congelado ali, com a parte da imobiliária saindo como resto.",
+    detalhe: "Os valores ficam gravados no próprio negócio: mudar a política de comissão depois não reescreve o que já foi fechado. O cálculo usa aritmética decimal do começo ao fim e arredonda uma vez só — em ponto flutuante, uma comissão de 6% sobre R$ 847.300 não fecha a conta.",
+  },
+  {
+    kind: "text",
+    title: "Assinatura sem sair do fluxo",
+    desc: "O contrato gerado segue para assinatura digital e o negócio acompanha o retorno.",
+    detalhe: "O Flow conversa com Clicksign e DocuSign por um adaptador único, com quatro verbos: enviar, consultar, cancelar e ler o retorno. O resto do sistema nunca fala com o fornecedor diretamente, então trocar de provedor é trabalho de um arquivo — e não de todas as telas que mencionam contrato.",
   },
 ];
 
@@ -1102,75 +1164,242 @@ function CabecalhoDaLanding() {
    Sem ilustração e sem animação: esta seção existe entre duas que já têm
    (o baralho de canais acima, o fundo em ondas dos planos abaixo), e uma
    terceira no meio cansa a rolagem. */
-function DoisModulos() {
-  const [caixaRef, visivel] = useReveal();
+/* ── O MANIFESTO DO FLOW ─────────────────────────────────────────────────────
 
-  /* ── A IDENTIDADE VEM DE `utils/modulos.js`, e não daqui ───────────────────
-     Nome, cor e tagline saem de `MODULOS` — a mesma fonte que o seletor da
-     barra lateral lê. Escritos à mão nesta seção, eles já divergiram na
-     primeira meia hora: o Flow nasceu verde-azulado antes de a arte existir, a
-     logo chegou rosa, o painel foi corrigido e a landing continuou anunciando
-     o teal. Duas cores para a mesma marca na mesma sessão de trabalho.
+   Substitui os dois cartoes lado a lado (Hub | Flow). O motivo nao e estetico:
+   aqueles cartoes pediam que a pessoa COMPARASSE dois produtos no meio de uma
+   pagina que ainda estava explicando o primeiro. Quem chega na landing nao sabe
+   o que e o Hub — e a resposta e que o Hub e a pagina inteira. Tudo acima e
+   abaixo daqui fala dele: acervo, vitrine, portais, leads, equipe.
 
-     O que fica AQUI é só o que é de venda: o parágrafo e as quatro linhas. Isso
-     é texto de landing, não identidade — e não tem nada a fazer dentro de um
-     módulo que o painel importa. */
-  const COPY = {
-    HUB: {
-      texto:
-        "Cadastre os imóveis uma vez e eles aparecem na sua vitrine, nos portais e nas redes. " +
-        "Os interessados chegam organizados, com a equipe e as permissões sob controle.",
-      itens: [
-        "Cadastro de imóveis com fotos, tour 360° e marca d'água",
-        "Vitrine pública com editor de arrastar e soltar",
-        "Envio aos portais e às redes sociais",
-        "Leads, clientes, equipe, cargos e relatórios",
-      ],
-    },
-    FLOW: {
-      novo: true,
-      texto:
-        "Do lead ao contrato assinado. O interessado entra sozinho pelos portais, cai na fila " +
-        "de um corretor e anda por um funil que só deixa fechar quando a documentação está de pé.",
-      itens: [
-        "Captação automática por webhook e fila de corretores",
-        "Funil visual de sete etapas, do lead ao ganho",
-        "Minuta contratual preenchida e assinatura digital",
-        "Trava do jurídico e do financeiro, e comissão calculada",
-      ],
-    },
-  };
+   Entao o Flow ganha o palco sozinho, e ganha a unica secao CLARA do site. O
+   contraste faz o trabalho que a comparacao fazia, e faz melhor: numa pagina
+   preta de ponta a ponta, uma secao branca nao e mais uma secao — e uma
+   interrupcao, que e exatamente o que um modulo novo precisa ser.
 
-  const modulos = MODULOS_DO_PRODUTO.map((m) => ({
-    key: m.key,
-    nome: m.nomeCompleto,
-    cor: m.acento,
-    chamada: m.tagline,
-    ...COPY[m.key],
-  }));
+   A estrutura vem do manifesto da Kenlo, e a divida esta declarada: sobrancelha
+   com ponto, uma frase de duas linhas com UM trecho em cor, dois blocos de
+   texto lado a lado, um fio, e um fecho de duas linhas onde a segunda e a que
+   fica. O que nao veio foi a cor: onde eles usam o azul da marca, aqui e o rosa
+   #ec0b5b do wordmark "flow" — e ele sai de `utils/modulos.js`, nao escrito a
+   mao, pelo mesmo motivo que os cartoes antigos liam de la. */
+function ManifestoDoFlow() {
+  const flow = MODULOS_DO_PRODUTO.find((m) => m.key === "FLOW");
 
   return (
-    <div className={`dl-modulos${visivel ? " is-in" : ""}`} ref={caixaRef}>
-      {modulos.map((m, i) => (
-        <article key={m.key} className="dl-modulo" style={{ "--cor": m.cor, "--i": i }}>
-          <header>
-            <span className="dl-modulo__marca" aria-hidden="true">
-              <img src={LOGO_ALT} alt="" />
-            </span>
-            <div>
-              <h3>
-                {m.nome}
-                {m.novo ? <span className="dl-modulo__novo">novo</span> : null}
-              </h3>
-              <span className="dl-modulo__chamada">{m.chamada}</span>
+    <div className="dl-manifesto" style={{ "--flow": flow?.acento || "#ec0b5b" }}>
+      {/* As duas formas giratorias. Sao a assinatura visual da secao e o unico
+          lugar da pagina onde elas aparecem — ver a nota no CSS. */}
+      {/* As duas formas do vocabulário da marca. Vieram inline daqui e foram
+          para `styles/omnimobKit.jsx` quando o mesmo par passou a aparecer no
+          herói e no rodapé: três cópias do mesmo caminho SVG divergem, e o
+          projeto já pagou esse preço no editor de vitrine. Aqui ficam só a
+          posição e o tamanho, que são decisão desta seção. */}
+      <FormaDeFundo
+        forma="flor"
+        cor="color-mix(in srgb, var(--flow) 13%, transparent)"
+        gira={60}
+        className="dl-manifesto__forma dl-manifesto__forma--a"
+      />
+      <FormaDeFundo
+        forma="luas"
+        cor="color-mix(in srgb, var(--flow) 9%, transparent)"
+        gira={80}
+        inverso
+        className="dl-manifesto__forma dl-manifesto__forma--b"
+      />
+
+      <div className="dl-manifesto__wrap">
+        <span className="dl-manifesto__olho">
+          <i aria-hidden="true" />
+          O Omnimob Flow
+        </span>
+
+        <div className="dl-manifesto__cabeca">
+          <h2 className="dl-manifesto__titulo">
+            Anunciar imóvel é metade do trabalho.
+            <br />
+            <em>Fechar negócio</em> é a outra.
+          </h2>
+          {/* A unica ilustracao da pagina em fundo BRANCO, e a unica secao clara
+              — as duas coisas foram decididas juntas, e o briefing pediu esta
+              peca ja pensada para esse fundo. */}
+          <img
+            className="dl-manifesto__desenho"
+            src="/ilustracoes/flow-funil.png"
+            alt="Corretor deslizando um negócio de uma coluna do funil para a seguinte"
+            width={480}
+            height={480}
+            loading="lazy"
+          />
+        </div>
+
+        <div className="dl-manifesto__corpo">
+          <p>
+            O imóvel entra, aparece na vitrine, vai para os portais e traz interessado. Aí começa a
+            parte que nenhum sistema acompanha: o retorno que ninguém deu, a proposta combinada por
+            áudio, a documentação cobrada três vezes, o contrato colado no Word, a comissão
+            conferida na planilha.
+          </p>
+          <div>
+            <p>
+              O Flow é essa metade. Ele não é uma aba a mais no painel: é o caminho que o negócio
+              percorre depois que o lead chega.
+            </p>
+            <p>
+              O interessado entra sozinho pelo portal, cai na fila de um corretor e anda por um
+              funil de sete estágios. A minuta se preenche com os dados do negócio, vai para
+              assinatura e volta assinada. E o negócio só vira{" "}
+              <strong>ganho quando a documentação está de pé</strong> — com o jurídico e o
+              financeiro tendo dito sim, e a comissão já repartida.
+            </p>
+          </div>
+        </div>
+
+        <div className="dl-manifesto__remate">
+          <p className="dl-manifesto__fecho">
+            O Hub cuida do que a sua imobiliária tem.
+            <br />
+            <em>O Flow cuida do que ela está fechando.</em>
+          </p>
+          {/* A frase que fecha a secao, ao lado da imagem do negocio fechando.
+              E o unico ponto da pagina inteira que mostra alguem CONSEGUINDO —
+              todo o resto mostra trabalho sendo feito. */}
+          <img
+            className="dl-manifesto__remate-img"
+            src="/ilustracoes/flow-assinatura.png"
+            alt="Duas pessoas trocando a chave do imóvel sobre um contrato assinado"
+            width={560}
+            height={400}
+            loading="lazy"
+          />
+        </div>
+
+        <TelasDoFlow />
+      </div>
+    </div>
+  );
+}
+
+/* ── AS TRÊS TELAS DO FLOW ───────────────────────────────────────────────────
+
+   Mockups em DOM, e não imagem. É a decisão que mais importa neste bloco:
+   captura de tela envelhece no dia seguinte ao primeiro retoque de interface,
+   pesa centenas de kB, borra em tela retina e não muda de tema. Escrito em
+   marcação, um preço novo é uma edição de texto.
+
+   ── POR QUE ESTAS TRÊS, E POR QUE COM TEXTO DE VERDADE ──
+
+   As telas que a página já tinha (o painel, o editor, as métricas) são de
+   propósito SILHUETAS: blocos cinzas sem conteúdo, porque ali o objetivo é
+   reconhecer a ferramenta de relance. Aqui é o contrário, e a razão é que o
+   Flow é o módulo que ninguém conhece: um funil em silhueta é um retângulo com
+   quatro colunas cinzas — igual ao de qualquer software do mundo. O que vende o
+   Flow é ver o negócio #77 parado em VISITA, a minuta recusando sair com duas
+   pendências e a comissão já repartida em quatro.
+
+   Os números não são enfeite. O split usa 6% sobre R$ 847.300 porque é
+   exatamente a conta que `services/flow/comissoes.js` cita como o motivo de a
+   aritmética ser decimal — e os valores abaixo fecham na soma, o que uma tela
+   inventada quase nunca faz. Cliente que confere, confere isso.
+
+   Decorativas para leitor de tela: cada cartão tem título e descrição em texto
+   real logo abaixo, e é isso que precisa ser lido. A tela em si é ilustração e
+   sai da árvore de acessibilidade inteira. */
+function TelasDoFlow() {
+  return (
+    <div className="dl-flowtelas">
+      <article className="dl-flowtela dl-flowtela--funil">
+        <span className="dl-flowtela__tag"><i aria-hidden="true" />Flow · Funil</span>
+
+        <div className="dl-flowtela__quadro" aria-hidden="true">
+          <div className="dl-fkanban">
+            {[
+              { etapa: "Lead", qtd: 12, negocios: [{ n: "#84", t: "Apto 2 quartos", b: "Vila Mariana", v: "R$ 420.000" }] },
+              { etapa: "Contato", qtd: 7, negocios: [{ n: "#81", t: "Casa térrea", b: "Santo Amaro", v: "R$ 890.000" }] },
+              { etapa: "Visita", qtd: 4, negocios: [{ n: "#77", t: "Sala comercial", b: "Itaim Bibi", v: "R$ 310.000" }] },
+              { etapa: "Proposta", qtd: 2, destaque: true, negocios: [{ n: "#72", t: "Cobertura", b: "Moema", v: "R$ 1.240.000" }] },
+            ].map((col) => (
+              <div key={col.etapa} className={`dl-fkanban__col${col.destaque ? " is-alvo" : ""}`}>
+                <span className="dl-fkanban__topo">
+                  {col.etapa}
+                  <b>{col.qtd}</b>
+                </span>
+                {col.negocios.map((g) => (
+                  <div key={g.n} className="dl-fkanban__card">
+                    <span className="dl-fkanban__cod">{g.n}</span>
+                    <strong>{g.t}</strong>
+                    <span className="dl-fkanban__bairro">{g.b}</span>
+                    <span className="dl-fkanban__valor">{g.v}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <span className="dl-fkanban__resto">Negociação · Aprovação · Ganho</span>
+        </div>
+
+        <h3>Funil de sete estágios</h3>
+        <p>
+          Cada negócio tem um código curto que a equipe diz em voz alta, e uma coluna que mostra
+          onde ele parou. Perdido fica fora da fila, e não no fim dela.
+        </p>
+      </article>
+
+      <article className="dl-flowtela dl-flowtela--minuta">
+        <span className="dl-flowtela__tag"><i aria-hidden="true" />Flow · Contrato</span>
+
+        <div className="dl-flowtela__quadro" aria-hidden="true">
+          <div className="dl-fminuta">
+            <span className="dl-fminuta__titulo">Compra e venda · negócio #72</span>
+            <ul>
+              <li className="is-ok"><i />Vendedor<b>Marcos Ribeiro</b></li>
+              <li className="is-ok"><i />Imóvel<b>Cobertura · Moema</b></li>
+              <li className="is-ok"><i />Valor<b>R$ 1.240.000,00</b></li>
+              <li className="is-falta"><i />CPF do comprador<b>faltando</b></li>
+              <li className="is-falta"><i />Matrícula do imóvel<b>faltando</b></li>
+            </ul>
+            <div className="dl-fminuta__pe">
+              <span className="dl-fminuta__botao">Gerar contrato</span>
+              <span className="dl-fminuta__aviso">2 pendências</span>
             </div>
-          </header>
-          <p>{m.texto}</p>
-          <ul>
-            {m.itens.map((t) => <li key={t}>{t}</li>)}
-          </ul>
-        </article>
-      ))}
+          </div>
+        </div>
+
+        <h3>A minuta que se recusa a sair</h3>
+        <p>
+          Marcador sem dado não vira espaço em branco: vira pendência, com nome. O contrato só é
+          gerado quando não falta nenhum — documento com lacuna parece pronto, e é pior que nenhum.
+        </p>
+      </article>
+
+      <article className="dl-flowtela dl-flowtela--comissao">
+        <span className="dl-flowtela__tag"><i aria-hidden="true" />Flow · Comissão</span>
+
+        <div className="dl-flowtela__quadro" aria-hidden="true">
+          <div className="dl-fsplit">
+            <div className="dl-fsplit__topo">
+              <span>Venda</span>
+              <b>R$ 847.300,00</b>
+            </div>
+            <div className="dl-fsplit__taxa">
+              <span>Comissão 6%</span>
+              <b>R$ 50.838,00</b>
+            </div>
+            <ul>
+              <li><span>Corretor · 40%</span><b>R$ 20.335,20</b></li>
+              <li><span>Captador · 15%</span><b>R$ 7.625,70</b></li>
+              <li className="is-resto"><span>Imobiliária · resto</span><b>R$ 22.877,10</b></li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>Comissão repartida e congelada</h3>
+        <p>
+          A parte da imobiliária é o resto da conta, nunca um segundo arredondamento. Os valores
+          ficam gravados no negócio: mudar a política depois não reescreve o que já fechou.
+        </p>
+      </article>
     </div>
   );
 }
@@ -1772,7 +2001,20 @@ function GhostWord({ children }) {
 
     // O listener é no window (e não no elemento) para o foco também "sair"
     // quando o cursor deixa a seção, em vez de congelar na última posição.
-    const onMove = (e) => {
+    //
+    // Coalescido num quadro. O mousemove dispara bem mais que 60 vezes por
+    // segundo, e o corpo aqui faz um getBoundingClientRect — leitura de layout,
+    // que força o navegador a recalcular tudo que estiver pendente. Escrever a
+    // variável logo em seguida sujava o layout de novo, e o evento seguinte
+    // pagava a conta: era um vaivém de ler e invalidar dezenas de vezes por
+    // quadro, para produzir uma única posição que só é usada ao desenhar.
+    let quadro = 0;
+    let ultimo = null;
+
+    const aplicar = () => {
+      quadro = 0;
+      const e = ultimo;
+      if (!e) return;
       const r = el.getBoundingClientRect();
       const dentro =
         e.clientX >= r.left && e.clientX <= r.right &&
@@ -1781,8 +2023,16 @@ function GhostWord({ children }) {
       el.style.setProperty("--my", dentro ? `${e.clientY - r.top}px` : "-600px");
     };
 
+    const onMove = (e) => {
+      ultimo = e;
+      if (!quadro) quadro = requestAnimationFrame(aplicar);
+    };
+
     window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      if (quadro) cancelAnimationFrame(quadro);
+    };
   }, []);
 
   return (
@@ -2028,10 +2278,6 @@ const CARROSSEL = "(max-width: 640px)";
    dois monitores em que o cartão de plano completo passava da dobra.
    É `max-height` e não `max-width` de propósito: o problema é vertical. */
 const TELA_BAIXA = "(max-height: 820px)";
-/* Onde o leque de canais deixa de caber na tela — ver BaralhoDeCanais. Bate com
-   o ponto em que o próprio BounceCards.css já encolhe a peça, que era o sinal
-   de que ali o arranjo já estava no limite. */
-const LEQUE_APERTADO = "(max-width: 900px)";
 const INTERVALO_PLANO = 5000;
 
 /* Cor de cada plano no carrossel. Uma escala que sobe junto com os planos: azul
@@ -2627,149 +2873,227 @@ function cartaoDaFaixa(c) {
 
    No celular a parede encolhe em vez de sumir: menos colunas, peças menores e
    menos inclinação — a mesma cena, num palco estreito. */
-/* A fumaça só é montada perto da seção dela.
+/* ── A GRADE DE CANAIS ───────────────────────────────────────────────────────
 
-   Sem porteiro ela é um contexto WebGL com bloom e grão desenhando o tempo
-   todo, mesmo com a seção a três telas de distância. O componente para o
-   próprio laço quando o rastro apaga, mas o contexto continua ocupando memória
-   de vídeo — e a página tem outros dois (as duas cenas do Vanta).
+   Substitui o baralho em leque (BounceCards). O leque tinha um problema de
+   leitura: peças giradas e sobrepostas escondem umas às outras, e quem chega
+   nesta seção está fazendo exatamente uma pergunta — "o sistema fala com os
+   canais que eu uso?". Essa pergunta se responde vendo os NOVE de uma vez, e
+   não descobrindo o nono embaixo do oitavo.
 
-   Nada de invólucro posicionado em volta: o GhostCursor escreve
-   `position: relative` no pai via style inline, e isso venceria a folha,
-   zerando a altura da caixa. Ele é filho direto da seção, e só o `if` decide se
-   existe. */
-function FumacaQuandoVisivel() {
-  const marcaRef = useRef(null);
-  const [perto, setPerto] = useState(false);
-  /* Cursor fantasma: canvas com laço próprio a cada quadro. É o primeiro a cair
-     quando a máquina não dá conta — some sem deixar buraco, porque é enfeite
-     sobre um fundo que já existe. */
-  const { podeQuadroAQuadro } = useEfeitos();
+   ── A COR SÓ EXISTE NO HOVER ──
 
-  useEffect(() => {
-    const el = marcaRef.current?.parentElement;
-    if (!el || typeof IntersectionObserver === "undefined") { setPerto(true); return undefined; }
-    const io = new IntersectionObserver(([e]) => setPerto(e.isIntersecting), { rootMargin: "300px 0px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
+   Em repouso os nove cartões são iguais: superfície neutra, ícone e nome em
+   cinza. Nenhum acende sozinho. É o que impede a seção de virar uma vitrine de
+   logotipos de terceiros brigando entre si — nove marcas fortes acesas ao mesmo
+   tempo roubam a página de quem ela é.
 
+   Ao passar o mouse, aquele cartão vira a marca: fundo na cor dela, e uma cena
+   curta mostrando o que a Omnimob FAZ ali. Uma de cada vez, porque só há um
+   ponteiro.
+
+   ── AS CENAS SÃO DOM, E SÓ RODAM NO HOVER ──
+
+   Cada cena é meia dúzia de divs com keyframes. Nada de vídeo, nada de GIF: o
+   mais pesado da seção continua sendo o texto. E a animação é declarada DENTRO
+   do :hover, não pausada por `animation-play-state` — assim ela recomeça do
+   zero a cada entrada do ponteiro, em vez de a pessoa pegar a cena no meio.
+
+   Quem pediu menos movimento recebe o quadro final parado: a cor entra, a cena
+   aparece montada, nada se move. Ver o bloco de prefers-reduced-motion no CSS.
+
+   ── SOBRE OS DESENHOS DAS MARCAS ──
+
+   Vale a mesma regra que já valia no leque, e ela está no comentário de
+   INTEGRACOES: as CORES são das marcas, os ÍCONES são nossos. Logotipo de
+   terceiro numa página de vendas é pedido de licença, não detalhe técnico. */
+
+/* O que a Omnimob faz em cada canal, em meia dúzia de elementos.
+
+   A cena responde "o que acontece aqui?", e não "como é a tela desse app?" —
+   desenhar o feed do Instagram seria imitar a interface deles; mostrar uma
+   grade em que UM quadro acende é mostrar a publicação sendo feita. */
+function CenaDoCanal({ nome }) {
+  switch (nome) {
+    /* O post sobe e assenta no topo do feed. */
+    case "Facebook":
+      return (
+        <span className="cn-cena cn-cena--feed">
+          <i className="cn-post" />
+          <i className="cn-linha" />
+          <i className="cn-linha" />
+          <i className="cn-linha" />
+        </span>
+      );
+
+    /* Nove quadros da grade do perfil; o novo acende e cresce. */
+    case "Instagram":
+      return (
+        <span className="cn-cena cn-cena--grade">
+          {Array.from({ length: 9 }, (_, k) => (
+            <i key={k} className={k === 4 ? "cn-quadro cn-quadro--novo" : "cn-quadro"} />
+          ))}
+        </span>
+      );
+
+    /* A arte 1080×1920 subindo como status: a barra corre no topo. */
+    case "WhatsApp":
+      return (
+        <span className="cn-cena cn-cena--status">
+          <i className="cn-fone">
+            <i className="cn-barra" />
+            <i className="cn-arte" />
+          </i>
+        </span>
+      );
+
+    /* A descrição se escrevendo sozinha, com o brilho da IA piscando. */
+    case "Google Gemini":
+      return (
+        <span className="cn-cena cn-cena--texto">
+          <i className="cn-brilho" />
+          <i className="cn-frase" />
+          <i className="cn-frase" />
+          <i className="cn-frase" />
+        </span>
+      );
+
+    /* A vitrine se montando: cabeçalho desce, dois cartões sobem. */
+    case "Página online":
+      return (
+        <span className="cn-cena cn-cena--vitrine">
+          <i className="cn-topo" />
+          <i className="cn-bloco" />
+          <i className="cn-bloco" />
+        </span>
+      );
+
+    /* O anúncio criado pela API: a caixa se desenha e o aceite chega. */
+    case "Mercado Livre":
+      return (
+        <span className="cn-cena cn-cena--anuncio">
+          <i className="cn-caixa" />
+          <i className="cn-aceite" />
+        </span>
+      );
+
+    /* O anúncio no ar, com o selo assentando por cima. */
+    case "OLX Imóveis":
+      return (
+        <span className="cn-cena cn-cena--selo">
+          <i className="cn-cartao" />
+          <i className="cn-etiqueta" />
+        </span>
+      );
+
+    /* O ZAP vem BUSCAR o feed, e o lead volta pelo mesmo caminho. Os dois
+       sentidos importam: é a única integração da lista que é de mão dupla, e
+       ela é puxada por eles, não empurrada por nós. */
+    case "ZAP Imóveis":
+      return (
+        <span className="cn-cena cn-cena--troca">
+          <i className="cn-doc" />
+          <i className="cn-trilho" />
+          <i className="cn-ida" />
+          <i className="cn-volta" />
+        </span>
+      );
+
+    /* O endereço trocando de dono. Aqui o texto é texto de verdade, e não
+       barrinha cega: o argumento desta integração É o endereço. */
+    case "Domínio próprio":
+      return (
+        <span className="cn-cena cn-cena--url">
+          <i className="cn-barra-url">
+            <span className="cn-url cn-url--nossa">omnimob.app/sua-marca</span>
+            <span className="cn-url cn-url--dela">suaimobiliaria.com.br</span>
+          </i>
+        </span>
+      );
+
+    /* O MESMO feed servindo tres portais de uma vez. E a verdade da integracao:
+       nao ha uma ligacao por portal, ha um XML que os tres vem buscar. */
+    case "VivaReal":
+      return (
+        <span className="cn-cena cn-cena--leque">
+          <i className="cn-fonte" />
+          <i className="cn-raio" />
+          <i className="cn-raio" />
+          <i className="cn-raio" />
+          <i className="cn-destino" />
+          <i className="cn-destino" />
+          <i className="cn-destino" />
+        </span>
+      );
+
+    /* O imovel caindo no mapa. Diferencia do VivaReal de proposito: dois
+       cartoes contando a mesma historia do feed seria repeticao. */
+    case "Imovelweb":
+      return (
+        <span className="cn-cena cn-cena--mapa">
+          <i className="cn-malha" />
+          <i className="cn-alfinete" />
+          <i className="cn-sombra" />
+        </span>
+      );
+
+    /* A rubrica se desenhando. E o unico traco de verdade das doze cenas —
+       stroke-dashoffset num caminho SVG, porque assinatura e um GESTO, e
+       barrinha nenhuma diz isso. */
+    case "DocuSign":
+      return (
+        <span className="cn-cena cn-cena--rubrica">
+          <i className="cn-papel" />
+          <svg className="cn-traco" viewBox="0 0 120 40" aria-hidden="true">
+            <path d="M4 30C14 8 20 6 24 16s-2 20 2 20 10-26 16-26 4 22 9 22 8-14 14-14 6 8 12 8 12-6 15-10" />
+          </svg>
+          <i className="cn-selo" />
+        </span>
+      );
+
+    default:
+      return null;
+  }
+}
+
+function CartaoDeCanal({ it }) {
   return (
-    <>
-      {/* Âncora de zero altura: serve só para achar a seção pai sem envolver o
-          canvas em nada — é o pai dele que precisa ser a seção. */}
-      <span ref={marcaRef} aria-hidden="true" style={{ display: "none" }} />
-      {perto && podeQuadroAQuadro ? (
-        <Suspense fallback={null}>
-        <GhostCursor
-          color="#a99109"
-          brightness={1}
-          edgeIntensity={0}
-          trailLength={50}
-          inertia={0.5}
-          grainIntensity={0.05}
-          bloomStrength={0.1}
-          bloomRadius={1.0}
-          bloomThreshold={0.025}
-          fadeDelayMs={1000}
-          fadeDurationMs={1500}
-        />
-        </Suspense>
-      ) : null}
-    </>
+    <li
+      className={`cn-card${it.texto ? " cn-card--claro" : ""}`}
+      style={{ "--canal-cor": it.cor, "--canal-tinta": it.texto || "#ffffff" }}
+    >
+      {/* O fundo é uma camada própria, e não o `background` do cartão: a cor de
+          algumas marcas é um degradê (Instagram, Gemini), e degradê não faz
+          transição. Uma camada por cima, com a opacidade animada, faz. */}
+      <i className="cn-card__cor" aria-hidden="true" />
+
+      <span className="cn-card__repouso" aria-hidden="true">
+        <it.Icon size={30} weight="fill" />
+        <b>{it.curto || it.name}</b>
+      </span>
+
+      <span className="cn-card__ativo" aria-hidden="true">
+        <CenaDoCanal nome={it.name} />
+        <span className="cn-card__rodape">
+          <it.Icon size={15} weight="fill" />
+          <b>{it.curto || it.name}</b>
+        </span>
+      </span>
+
+      {/* O nome de verdade, para leitor de tela e para busca. As duas camadas
+          acima são `aria-hidden` porque repetem o mesmo nome duas vezes. */}
+      <span className="cn-card__rotulo">{it.type}: {it.name}</span>
+    </li>
   );
 }
 
-/* Baralho dos canais — substitui a grade de quatro colunas que havia aqui.
-
-   O leque tem 12 peças, e a quantidade não está travada em lugar nenhum: as
-   posições são calculadas pelo BounceCards a partir do número de itens e da
-   largura medida. Acrescentar um canal em INTEGRACOES basta — no componente
-   original isso exigiria editar um array paralelo de transformações, e esquecer
-   dele empilharia o cartão novo em cima do último, sem erro.
-
-   O contêiner acompanha a largura da tela porque o leque é horizontal: fixado
-   em pixels, ele estouraria no celular e sobraria no monitor grande. */
-function BaralhoDeCanais() {
-  const caixaRef = useRef(null);
-  const [largura, setLargura] = useState(1000);
-  /* O leque abre os nove canais lado a lado, girados: ele precisa de largura, e
-     abaixo de ~900px os das duas pontas ficam cortados pela borda da tela.
-     Medido: sobram -2px a 900, -22 a 860, -68 a 768 e -102 a 700 — ou seja, não
-     é um problema só de celular, é de tudo que não é desktop. Daí o corte em
-     900 e não no ponto do carrossel (640).
-
-     Abaixo dele a mesma lista vira esteira: um laço que corre sozinho e cabe em
-     qualquer largura, porque não tenta mostrar tudo de uma vez. */
-  const semEspacoParaLeque = useMedia(LEQUE_APERTADO);
-
-  useEffect(() => {
-    const el = caixaRef.current;
-    if (!el) return undefined;
-    const ro = new ResizeObserver(([e]) => setLargura(e.contentRect.width || 1000));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const cartao = (it) => (
-    <span
-      className={`bc-canal${it.texto ? " bc-canal--claro" : ""}`}
-      style={{ "--canal-cor": it.cor, "--canal-tinta": it.texto || "#fff" }}
-    >
-      <span className="bc-canal__marca" aria-hidden="true">
-        <it.Icon size={86} weight="fill" />
-      </span>
-      <span className="bc-canal__texto">
-        <span className="bc-canal__tipo">{it.type}</span>
-        <span className="bc-canal__nome">{it.curto || it.name}</span>
-      </span>
-    </span>
-  );
-
-  const pecas = useMemo(
-    () => INTEGRACOES.map((it) => ({ key: it.name, content: cartao(it) })),
-    [],
-  );
-
+function GradeDeCanais() {
   return (
-    <div className="dl-baralho" ref={caixaRef}>
-      {semEspacoParaLeque ? (
-        /* A lista sai DUAS vezes e o percurso da animação é exatamente uma
-           cópia: na virada, o cartão n assume o lugar do cartão n+8 e o laço
-           fecha sem emenda visível. É a mesma mecânica da esteira do acervo.
-
-           aria-hidden porque logo abaixo vem a mesma lista em texto — e aqui
-           cada canal aparece duas vezes, que é o preço de fechar o laço. */
-        <div className="dl-canais-esteira" aria-hidden="true">
-          <div className="dl-canais-esteira__fila">
-            {[...INTEGRACOES, ...INTEGRACOES].map((it, i) => (
-              <span className="dl-canais-esteira__item" key={`${it.name}-${i}`}>
-                {cartao(it)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <BounceCards
-          items={pecas}
-          containerWidth={Math.max(320, largura)}
-          containerHeight={largura < 700 ? 220 : 280}
-          animationDelay={0.15}
-          animationStagger={0.05}
-          easeType="elastic.out(1, 0.62)"
-          inclinacao={largura < 700 ? 6 : 9}
-        />
-      )}
-
-      {/* A mesma lista, em texto, para leitor de tela e para busca: o baralho é
-          um monte de peças giradas e sobrepostas, e a ordem visual dele não
-          corresponde a ordem nenhuma que faça sentido ler em voz alta. */}
-      <ul className="dl-baralho__lista">
-        {INTEGRACOES.map((it) => (
-          <li key={it.name}>{it.type}: {it.name}</li>
-        ))}
-      </ul>
-    </div>
+    <ul className="cn-grade">
+      {INTEGRACOES.map((it) => (
+        <CartaoDeCanal key={it.name} it={it} />
+      ))}
+    </ul>
   );
 }
 
@@ -3004,7 +3328,7 @@ function ConteudoDaLanding() {
      home. Sem isto, sair de uma vitrine e voltar deixaria o título da
      imobiliária na aba. */
   useSeo({
-    titulo: "Omnimob — CRM e gestão imobiliária com vitrine digital",
+    titulo: "Omnimob — Sua imobiliária, em movimento.",
     descricao:
       "Software para imobiliárias e corretores: cadastro de imóveis, vitrine digital personalizável, captação e gestão de leads e publicação nas redes sociais.",
     caminho: "/",
@@ -3074,9 +3398,11 @@ function ConteudoDaLanding() {
   /* A névoa só existe perto da seção dela.
 
      Ela nascia no load e ficava viva a página inteira — um contexto WebGL a
-     desenhar por trás de tudo enquanto a pessoa lê o topo. Com o GhostCursor
-     eram DOIS contextos permanentes, e navegador guarda poucos: o custo aparece
-     como queda de quadros na rolagem, longe da seção que causa. */
+     desenhar por trás de tudo enquanto a pessoa lê o topo. Navegador guarda
+     poucos contextos, e o custo aparece como queda de quadros na rolagem, longe
+     da seção que causa. (Houve um segundo permanente aqui, a fumaça do
+     GhostCursor na seção O DESAFIO; ela saiu, e o lugar dela é o relevo da
+     palavra-fantasma, que é CSS.) */
   const [nevoaPerto, setNevoaPerto] = useState(false);
   useEffect(() => {
     const el = vantaRef.current;
@@ -3086,32 +3412,15 @@ function ConteudoDaLanding() {
     return () => io.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (!vantaRef.current || !nevoaPerto || !podeWebGL) return undefined;
-    let efeito = null;
-    let cancelado = false;
+  /* ── A NÉVOA DO VANTA SAIU; ENTROU O SHADER DE IRIDESCÊNCIA ────────────────
 
-    carregarVanta().then((vanta) => {
-      if (cancelado || !vanta || !vantaRef.current) return;
-      efeito = vanta.FOG({
-        el: vantaRef.current,
-        THREE: vanta.THREE,
-        mouseControls: true,
-        touchControls: true,
-        gyroControls: false,
-        minHeight: 200.00,
-        minWidth: 200.00,
-        highlightColor: "#6b70f3",
-        midtoneColor: "#ffb221",
-        lowlightColor: "#f4f5f7",
-        baseColor: "#ffffff",
-        blurFactor: 0.50,
-        zoom: 2.00,
-      });
-    });
+     As duas travas continuam iguais, e são elas que importam mais que o efeito:
+     `podeWebGL` (o orçamento de `capacidadeDaMaquina`) e `nevoaPerto` (só perto
+     da seção). Um shader de tela cheia desenhando enquanto a pessoa lê o topo
+     da página é custo puro — foi o que fez a névoa antiga ganhar as duas.
 
-    return () => { cancelado = true; efeito?.destroy(); };
-  }, [nevoaPerto, podeWebGL]);
+     O componente cuida do resto: sem `ativo`, ele não cria contexto nenhum.
+     Ver `components/Iridescencia.jsx`. */
 
   return (
     <div className="dl-root">
@@ -3223,7 +3532,19 @@ function ConteudoDaLanding() {
       {/* Os ids das seções sem âncora de menu existem para o revezamento de
           fundos: no celular a seção do desafio sai de cena e o xadrez precisa
           ser refeito de lá para baixo (ver "Zebra do celular" no CSS). */}
-      <section className="dl-section dl-section--alt" id="numeros">
+      <section className="dl-section dl-section--alt dl-section--compacto dl-numeros" id="numeros">
+        {/* A terceira forma da familia. Entra PARADA, e nao girando como as duas
+            irmas: ela veio em PNG, e PNG girando a 240px serrilha na diagonal.
+            Vira textura de canto — o mesmo papel, sem o movimento. Se um dia
+            chegar o SVG dela, ela passa a usar FormaDeFundo como as outras. */}
+        <img
+          className="dl-numeros__forma"
+          src="/ilustracoes/forma-arco.png"
+          alt=""
+          width={240}
+          height={240}
+          loading="lazy"
+        />
         <div className="dl-wrap">
           <SectionHead eyebrow="NÚMEROS DA OMNIMOB" strong="A plataforma completa" soft="para quem vive de vender imóveis.">
             Uma base só, pensada para imobiliárias brasileiras: imóveis, vitrine, leads, equipe e divulgação
@@ -3242,22 +3563,13 @@ function ConteudoDaLanding() {
           fundo vazio. Quem esconde é o CSS, não uma condição em JS — assim não
           há um segundo componente montado por largura de tela, e girar o
           aparelho volta a mostrar a seção sem remontar nada. */}
-      <section className="dl-section dl-section--ghost" id="desafio">
+      <section className="dl-section dl-section--amplo dl-section--ghost" id="desafio">
         <GhostWord>+ visibilidade.</GhostWord>
-
-        {/* Filho DIRETO da seção, e não dentro de um invólucro.
-
-            O componente escreve `position: relative` no PAI via style inline, e
-            isso vencia o `position: absolute` da folha no invólucro que havia
-            aqui: ele saía do posicionamento absoluto, virava elemento de fluxo
-            sem conteúdo e ficava com altura 0. Caixa zerada, o resize nunca
-            valida e o canvas fica nos 300×150 padrão — o efeito existia no DOM
-            e não desenhava nada.
-
-            A seção já é `position: relative` e tem altura própria, que é
-            exatamente o que ele espera. */}
-        <FumacaQuandoVisivel />
-        <div className="dl-wrap">
+        {/* Duas colunas: o texto explica o problema, a cena mostra ele
+            acontecendo. Antes a ilustracao vinha depois do callout e lia como
+            anexo; ao lado do conjunto inteiro ela vira a outra metade da frase. */}
+        <div className="dl-wrap dl-desafio__grade">
+          <div className="dl-desafio__conteudo">
           <SectionHead eyebrow="O DESAFIO" eyebrowTone={GOLD} strong="Pare de perder cliente" soft="por falta de presença digital.">
             Anúncio espalhado em grupo de WhatsApp, foto solta no Instagram, planilha desatualizada. O
             interessado aparece, não encontra nada organizado e vai para a concorrência.
@@ -3273,15 +3585,26 @@ function ConteudoDaLanding() {
               prontos a partir do cadastro do imóvel, com você só revisando e publicando.
             </p>
           </Reveal>
-
           <Reveal className="dl-btn-row" delay={120} style={{ marginTop: "26px" }}>
             <Button href="#contato" variant="primary">Quero conhecer</Button>
+          </Reveal>
+          </div>
+
+          {/* A unica ilustracao da pagina que mostra o PROBLEMA. */}
+          <Reveal className="dl-desafio__arte" delay={90}>
+            <img
+              src="/ilustracoes/desafio-bagunca.png"
+              alt="Corretora cercada de fotos soltas, grupo de WhatsApp e planilha desatualizada, enquanto um interessado vai embora"
+              width={640}
+              height={420}
+              loading="lazy"
+            />
           </Reveal>
         </div>
       </section>
 
       {/* ── Editor de vitrine ── */}
-      <section className="dl-section dl-section--alt" id="editor">
+      <section className="dl-section dl-section--alt dl-section--amplo" id="editor">
         <div className="dl-wrap dl-editor">
           <Reveal>
             <Eyebrow tone={ROSE}>EDITOR VISUAL</Eyebrow>
@@ -3297,6 +3620,17 @@ function ConteudoDaLanding() {
               O layout do mobile é independente do desktop — e, se preferir, você copia um para o outro num
               clique. Tudo salva sozinho enquanto você edita.
             </p>
+            {/* Pequena de proposito. A seccao ja tem a tela do editor animada ao
+                lado, e o briefing foi explicito: aqui a ilustracao e apoio do
+                texto, nunca substituta da tela. */}
+            <img
+              className="dl-editor__desenho"
+              src="/ilustracoes/vitrine-montando.png"
+              alt="Pessoa encaixando um bloco numa página que está sendo montada"
+              width={600}
+              height={400}
+              loading="lazy"
+            />
           </Reveal>
 
           <EditorAoVivo />
@@ -3317,14 +3651,14 @@ function ConteudoDaLanding() {
       
 
       {/* ── Integrações ── */}
-      <section className="dl-section dl-section--alt" id="integracoes">
+      <section className="dl-section dl-section--alt dl-section--compacto" id="integracoes">
         <div className="dl-wrap">
           <SectionHead eyebrow="CANAIS E INTEGRAÇÕES" strong="Conectada aos canais" soft="onde seu cliente já está.">
             A Omnimob liga o cadastro do imóvel aos canais que realmente trazem cliente, com a IA cuidando do
             conteúdo dentro da própria plataforma.
           </SectionHead>
 
-          <BaralhoDeCanais />
+          <GradeDeCanais />
         </div>
       </section>
 
@@ -3334,15 +3668,11 @@ function ConteudoDaLanding() {
           segunda metade. Colocada antes, ela apresentaria o Flow para quem
           ainda não sabe o que é o produto; depois dos planos, chegaria tarde —
           a escolha do pacote já teria sido feita sem saber o que se escolhia. */}
-      <section className="dl-section" id="modulos">
-        <div className="dl-wrap">
-          <SectionHead eyebrow="DOIS MÓDULOS" strong="Anunciar é metade." soft="Fechar é a outra.">
-            O Hub cuida do que a imobiliária tem. O Flow cuida do que ela está fechando.
-            Você leva um, ou os dois.
-          </SectionHead>
-
-          <DoisModulos />
-        </div>
+      {/* A única seção CLARA da página. Não leva `dl-wrap` nem `SectionHead`: o
+          manifesto traz o próprio invólucro e o próprio cabeçalho, porque a
+          escala da frase e o alinhamento à esquerda não são os da página. */}
+      <section className="dl-section dl-section--claro" id="modulos">
+        <ManifestoDoFlow />
       </section>
 
       {/* ── Destaques: parede à deriva no fundo da seção inteira ──
@@ -3384,7 +3714,7 @@ function ConteudoDaLanding() {
       </section>
 
       {/* ── FAQ ── */}
-      <section id="faq" className="dl-section">
+      <section id="faq" className="dl-section dl-section--compacto">
         <div className="dl-wrap">
           <SectionHead eyebrow="PERGUNTAS FREQUENTES" strong="Tudo sobre a Omnimob," soft="direto ao ponto.">
             As dúvidas que mais aparecem antes de começar.
@@ -3454,9 +3784,15 @@ function ConteudoDaLanding() {
           </Reveal>
 
           <Reveal className="dl-app-soon__visual" delay={120}>
+            {/* Trocou /em_breve.png, que era um PNG de 1,4 MB em 1448x1086 para
+                caber em 760. Este vem no tamanho exato de exibicao e pesa 273 kB
+                — 1,1 MB a menos na landing, e agora ele pertence a mesma familia
+                dos outros dez desenhos em vez de ser a unica peca ilustrada. */}
             <img
-              src="/em_breve.png"
-              alt="Ilustração da Omnimob chegando em breve ao Google Play e à App Store"
+              src="/ilustracoes/app-no-bolso.png"
+              alt="Corretora a caminho de uma visita, olhando o painel da Omnimob no celular"
+              width={760}
+              height={570}
               loading="lazy"
             />
           </Reveal>
@@ -3465,8 +3801,24 @@ function ConteudoDaLanding() {
 
       {/* ── CTA final (seção clara) ── */}
       <section id="contato" className="dl-cta" ref={vantaRef}>
-        {/* Sem escalopes aqui: a névoa em WebGL já é o movimento desta seção, e
-            as flores disputavam com ela em cima do mesmo fundo claro. */}
+        {/* ── O fundo ────────────────────────────────────────────────────
+            Sem escalopes aqui: o shader já é o movimento desta seção, e as
+            flores disputavam com ele em cima do mesmo fundo claro.
+
+            `seguirMouse` LIGADO nesta seção e em nenhuma outra: é o fim da
+            página, o lugar onde a pessoa já parou para decidir. O deslocamento
+            é pequeno (`amplitude`) — o suficiente para o fundo responder sem
+            virar brinquedo por cima de um botão. */}
+        {podeWebGL ? (
+          <Iridescencia
+            ativo={nevoaPerto}
+            cor={[0.502, 0.6, 0.8]}
+            velocidade={0.55}
+            amplitude={0.12}
+            seguirMouse
+            className="dl-cta__fundo"
+          />
+        ) : null}
         <Reveal className="dl-wrap dl-cta__inner">
           {/* A marca fecha a página aqui, e não por acaso: esta é a única
               seção clara, a única em que os vazados do PNG (as janelas e o
@@ -3474,11 +3826,19 @@ function ConteudoDaLanding() {
           <span className="dl-cta__brand">
             <img src={LOGO_SIMBOLO_SRC} alt="Omnimob" />
           </span>
-          <Eyebrow tone={ACCENT_SOFT}>PRÓXIMO PASSO</Eyebrow>
+          {/* Sem `tone`: a bolinha índigo se perdia sobre o shader, do mesmo
+              jeito que os cinzas do texto se perdiam. A eyebrow inteira é
+              branca aqui — as três regras estão juntas em `.dl-cta`. */}
+          <Eyebrow>PRÓXIMO PASSO</Eyebrow>
           <h2 className="dl-cta__title">
             <span>Pronto para vender</span>
             <span>mais imóveis</span>
-            <span className="dl-cta__grad">com processo?</span>
+            {/* Dois spans, e nao um: a lapide usa o `background` do elemento
+                para o vidro, e `background-clip: text` recortaria a PLACA no
+                formato das letras. O de dentro carrega o texto e o degrade. */}
+            <span className="dl-cta__grad">
+              <span className="dl-cta__grad-texto">com processo?</span>
+            </span>
           </h2>
           <p className="dl-cta__sub">
             Crie um ambiente de teste em segundos. Já tem uma imobiliária rodando? A gente traz a
@@ -3498,6 +3858,36 @@ function ConteudoDaLanding() {
 
       {/* ── Footer ── */}
       <footer className="dl-footer">
+        {/* O par da marca fechando a página. Grande e quase invisível (4%): o
+            rodapé é onde o olho já desacelerou, e uma forma discreta ali é a
+            diferença entre a página TERMINAR e a página simplesmente parar.
+            Mesmo par do manifesto do Flow — é a repetição que faz virar
+            assinatura em vez de enfeite. */}
+        <FormaDeFundo
+          forma="flor"
+          cor="rgba(255,255,255,0.04)"
+          gira={90}
+          className="dl-footer__forma dl-footer__forma--a"
+        />
+        <FormaDeFundo
+          forma="luas"
+          cor="rgba(99,102,241,0.07)"
+          gira={70}
+          inverso
+          className="dl-footer__forma dl-footer__forma--b"
+        />
+        {/* O predio da marca em cena, fechando a pagina. Fica no rodape e nao no
+            heroi de proposito: no topo ele competiria com o simbolo de verdade,
+            que esta no cabecalho a poucos pixels dali. Aqui ele e a assinatura
+            de quem escreveu a pagina. */}
+        <img
+          className="dl-footer__predio"
+          src="/ilustracoes/predio-omnimob.png"
+          alt=""
+          width={300}
+          height={420}
+          loading="lazy"
+        />
         <div className="dl-wrap dl-footer__inner">
           <div className="dl-footer__brand">
             <Link to="/" className="dl-footer__logo" aria-label="Omnimob — início">
@@ -3624,21 +4014,33 @@ const CSS = `
 .dl-section { --pad-sec: clamp(64px, 8vw, 112px); padding: var(--pad-sec) 0; border-top: 1px solid var(--line-soft); }
 .dl-section--alt { background: var(--bg-alt); }
 .dl-section--tight { padding-bottom: clamp(48px, 6vw, 80px); }
+/* ── RITMO VERTICAL ──────────────────────────────────────────────────────────
+   Todas as secoes respiravam igual, e uma pagina com espacamento constante le
+   como lista: secao, vao, secao, vao. O que da cadencia e a DENSIDADE variar de
+   proposito — as secoes narrativas abrem, as de consulta fecham.
+
+   Sao modificadores do token que ja existe (--pad-sec), e nao paddings novos:
+   a camada de ondas dos planos e a palavra-fantasma leem esse mesmo token para
+   sangrar ate a borda da secao, e um padding escrito por fora deixaria as duas
+   desalinhadas da secao que habitam.
+
+   A conta fecha em altura: a 1440px sao +32px em cada lado de duas secoes e
+   -28px em cada lado de tres. O saldo e cerca de 40px A MENOS de pagina. */
+.dl-section--amplo { --pad-sec: clamp(84px, 10vw, 144px); }
+.dl-section--compacto { --pad-sec: clamp(52px, 6vw, 84px); }
 
 /* ── Palavra-fantasma ──
    A seção precisa conter e recortar a palavra, que é bem mais larga que ela.
    O conteúdo não precisa de z-index: .dl-wrap já é relative com z-index 1, e
    a palavra fica no 0. */
 .dl-section--ghost { position: relative; overflow: hidden; }
-/* O canvas do GhostCursor cobre a seção (o componente o posiciona sozinho) e
-   não recebe ponteiro. O conteúdo sobe acima dele: o z-index padrão do
-   componente é 10, então o texto precisa de um valor maior para continuar
-   selecionável e clicável. */
+/* O conteúdo fica acima da palavra. Os valores são folgados (havia um canvas de
+   WebGL em z-index 10 entre os dois, e ele saiu) — mantidos porque só precisam
+   respeitar a ordem, e mexer neles não compra nada. */
 .dl-section--ghost > .dl-wrap { position: relative; z-index: 12; }
 .dl-ghost {
-  /* Acima do canvas do GhostCursor (z-index 10). As letras são pretas como o
-     fundo, então por cima da fumaça elas a ocultam: a palavra lê como um
-     recorte vazado no rastro, e não como texto iluminado sobre ele. */
+  /* Atrás do conteúdo e à frente do fundo. As letras são pretas como o fundo:
+     o que se vê é o relevo dourado vazando por trás delas, e não texto aceso. */
   position: absolute; inset: 0; z-index: 11;
   display: flex; align-items: center; justify-content: center;
   pointer-events: none; user-select: none;
@@ -3656,9 +4058,18 @@ const CSS = `
   white-space: nowrap;
   /* Mesma cor do fundo: a palavra some, e só o relevo das sombras aparece. */
   color: var(--bg);
-  /* Sem sombra: o relevo dourado existia para dar volume à palavra quando ela
-     era o único efeito da seção. Com a fumaça atrás, ele virava um segundo
-     brilho competindo com o rastro — e é o rastro que ilumina agora. */
+  /* O relevo dourado. Ele saiu quando a fumaça em WebGL passou a iluminar a
+     seção, e voltou quando ela saiu: a palavra é de novo o único efeito daqui,
+     e sem sombra nenhuma ela seria preto sobre preto — invisível mesmo dentro
+     do buraco que a máscara abre.
+
+     A primeira camada é mais fechada e mais opaca: é ela que dá a aresta do
+     relevo perto do cursor. As outras três só espalham o brilho. */
+  text-shadow:
+    22px 22px 46px rgba(212,175,55,0.50),
+    40px 40px 90px rgba(212,175,55,0.30),
+    64px 64px 140px rgba(212,175,55,0.16),
+    92px 92px 200px rgba(212,175,55,0.08);
 }
 /* Se a palavra for para uma seção alternada, ela acompanha o fundo de lá. */
 .dl-section--alt .dl-ghost span { color: var(--bg-alt); }
@@ -3669,7 +4080,10 @@ const CSS = `
    luz, sem competir com o texto branco por cima.
 
    O blur é baixo de propósito: a partir de uns 14px as letras viram uma
-   mancha dourada sem forma, e o que se quer é justamente reconhecê-las. */
+   mancha dourada sem forma, e o que se quer é justamente reconhecê-las.
+
+   O texto fala em "brilho": é o relevo dourado da palavra. Valia igual quando
+   quem iluminava a seção era a fumaça em WebGL, e continua valendo sem ela. */
 .dl-section--ghost .dl-callout {
   background: rgba(20,20,22,0.72);
   backdrop-filter: blur(9px) saturate(140%);
@@ -3678,17 +4092,17 @@ const CSS = `
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
-/* Legibilidade por cima do rastro.
+/* Legibilidade por cima do relevo.
 
    Fora do callout o texto da seção não tem fundo nenhum: é letra transparente
-   direto sobre o canvas. E o miolo da palavra — o "bili" de "+ visibilidade." —
-   é justamente onde a coluna de leitura cruza a faixa da fumaça: o halo chega
-   ali no auge do brilho e o cinza do lead perde o contraste.
+   direto sobre a palavra. E o miolo dela — o "bili" de "+ visibilidade." — é
+   justamente onde a coluna de leitura cruza a parte mais acesa do relevo: o
+   dourado chega ali no auge e o cinza do lead perde o contraste.
 
    O remédio é um halo escuro em volta de cada glifo, na cor do próprio fundo.
    Sobre o preto ele é invisível (é a mesma cor) e só se manifesta quando há
-   brilho atrás — que é exatamente onde precisa aparecer. Escurecer a fumaça
-   resolveria também, mas a fumaça é o efeito; quem tem de ceder é o fundo
+   brilho atrás — que é exatamente onde precisa aparecer. Baixar o dourado
+   resolveria também, mas o dourado é o efeito; quem tem de ceder é o fundo
    imediato das letras, não a seção inteira.
 
    As camadas são cumulativas de propósito, e repetidas de propósito: uma
@@ -4644,65 +5058,475 @@ ${editorCSS()}
   letter-spacing: inherit;
 }
 
-/* ── Baralho dos canais ──
-   O leque é posicionado por transform, então ele não ocupa altura própria: a
-   caixa é que reserva o espaço, e o overflow precisa ficar visível para as
-   pontas do baralho e o giro dos cartões não serem decepados. */
-.dl-baralho {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  overflow: visible;
-  margin-top: clamp(8px, 2vw, 20px);
+/* ── A GRADE DE CANAIS ───────────────────────────────────────────────────────
+   Ver o cabecalho de GradeDeCanais para o porque da troca do leque.
+   (Sem crases nestes comentarios: este CSS mora num template literal.) */
+.cn-grade {
+  list-style: none;
+  margin: clamp(20px, 3vw, 34px) 0 0;
+  padding: 0;
+  display: grid;
+  /* auto-fit e nao um numero fixo de colunas: nove cartoes nunca fecham uma
+     grade redonda, entao qualquer numero fixo deixa buraco em alguma largura.
+     Assim a ultima fila fica curta, que e o unico arranjo honesto para nove. */
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px;
 }
-/* ── Esteira dos canais (celular) ──
-   O leque vira um laço que corre sozinho. A lista é renderizada duas vezes e o
-   percurso é exatamente uma cópia: -50% da fila inteira, que é o comprimento de
-   uma cópia — daí a emenda cair sempre no mesmo pixel e não se ver.
 
-   translateX em porcentagem da PRÓPRIA fila (e não em px), para o laço fechar
-   igual em qualquer largura de tela e sem ninguém medir nada em JS. */
-.dl-canais-esteira {
-  --canal-vao: 12px;
-  width: 100%;
+.cn-card {
+  position: relative;
+  /* Alto e estreito, como na referencia: o formato e o que faz nove caberem sem
+     virar uma parede de quadrados. */
+  aspect-ratio: 200 / 260;
+  min-height: 180px;
+  border-radius: 16px;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  isolation: isolate;
 }
-.dl-canais-esteira__fila {
-  display: flex;
-  gap: var(--canal-vao);
-  width: max-content;
-  animation: dlCanaisEsteira 34s linear infinite;
+
+/* A cor da marca numa camada propria. Duas marcas (Instagram, Gemini) tem
+   degrade como cor, e degrade nao aceita transition — opacidade de uma camada
+   por cima aceita, e vale igual para cor chapada. */
+.cn-card__cor {
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--canal-cor);
+  opacity: 0;
+  transition: opacity 0.42s ease;
 }
-@keyframes dlCanaisEsteira {
-  from { transform: translateX(0); }
-  /* Metade da fila é uma cópia inteira da lista; o vão a mais é o que separa a
-     última peça da cópia da primeira peça da seguinte, e sem ele a emenda
-     andaria 12px a cada volta. */
-  to { transform: translateX(calc(-50% - var(--canal-vao) / 2)); }
+.cn-card:hover .cn-card__cor,
+.cn-card:focus-within .cn-card__cor { opacity: 1; }
+
+/* ── Repouso: cinza, igual para os nove ── */
+.cn-card__repouso {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 11px;
+  color: var(--placeholder);
+  transition: opacity 0.3s ease, transform 0.42s ease;
 }
-.dl-canais-esteira__item {
-  flex: 0 0 132px;
-  height: 168px;
-  border-radius: 18px;
+.cn-card__repouso b {
+  font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--subtle);
+}
+.cn-card:hover .cn-card__repouso,
+.cn-card:focus-within .cn-card__repouso {
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+/* ── Ativo: a cena e o rodape, na tinta da marca ── */
+.cn-card__ativo {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column;
+  padding: 16px 14px 13px;
+  color: var(--canal-tinta);
+  opacity: 0;
+  transition: opacity 0.3s ease 0.06s;
+}
+.cn-card:hover .cn-card__ativo,
+.cn-card:focus-within .cn-card__ativo { opacity: 1; }
+
+.cn-card__rodape {
+  margin-top: auto;
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 650; letter-spacing: -0.01em;
+}
+
+/* Nome de verdade, so para leitor de tela e busca. */
+.cn-card__rotulo {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ── O palco das cenas ── */
+.cn-cena {
+  position: relative;
   display: block;
-  box-shadow: 0 14px 30px -18px rgba(0,0,0,0.85);
+  flex: 1;
+  min-height: 0;
 }
-/* Parada com "reduzir movimento": a esteira é movimento constante e não há
-   versão estática dela — o que fica é a faixa parada, legível do mesmo jeito. */
-@media (prefers-reduced-motion: reduce) {
-  .dl-canais-esteira__fila { animation: none; }
+/* As pecas herdam a tinta da marca. Uma cor so por cartao: quem da variedade e
+   a coreografia, nao a paleta. */
+.cn-cena i {
+  position: absolute;
+  display: block;
+  background: currentColor;
+  border-radius: 3px;
 }
 
-/* Lista de acesso: existe para leitor de tela e busca, não para os olhos. */
-.dl-baralho__lista {
-  position: absolute;
-  width: 1px; height: 1px;
-  margin: -1px; padding: 0;
+/* ── 01 · Facebook: o post sobe e assenta no topo do feed ── */
+.cn-cena--feed .cn-linha {
+  left: 0; width: 100%; height: 7px; border-radius: 4px; opacity: 0.34;
+}
+.cn-cena--feed .cn-linha:nth-of-type(2) { top: 52%; }
+.cn-cena--feed .cn-linha:nth-of-type(3) { top: 68%; width: 82%; }
+.cn-cena--feed .cn-linha:nth-of-type(4) { top: 84%; width: 64%; }
+.cn-cena--feed .cn-post {
+  left: 0; top: 0; width: 100%; height: 42%;
+  border-radius: 7px; opacity: 0.9;
+}
+.cn-card:hover .cn-cena--feed .cn-post {
+  animation: cnSobe 0.62s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@keyframes cnSobe {
+  from { transform: translateY(150%); opacity: 0; }
+  to { transform: translateY(0); opacity: 0.9; }
+}
+
+/* ── 02 · Instagram: nove quadros, o novo acende ── */
+.cn-cena--grade {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 1fr; gap: 4px;
+}
+.cn-cena--grade .cn-quadro {
+  position: relative; width: 100%; height: 100%;
+  border-radius: 4px; opacity: 0.26;
+}
+.cn-card:hover .cn-cena--grade .cn-quadro--novo {
+  animation: cnAcende 0.7s cubic-bezier(0.2, 0.9, 0.25, 1) 0.1s both;
+}
+@keyframes cnAcende {
+  from { opacity: 0.26; transform: scale(0.6); }
+  60%  { opacity: 1; transform: scale(1.14); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── 03 · WhatsApp: a arte 9:16 subindo como status ── */
+.cn-cena--status { display: flex; align-items: center; justify-content: center; }
+.cn-cena--status .cn-fone {
+  position: relative; width: 52%; height: 100%;
+  border-radius: 8px; background: transparent;
+  border: 2px solid currentColor; opacity: 0.5;
   overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+}
+.cn-cena--status .cn-barra {
+  left: 5px; top: 5px; right: 5px; width: auto; height: 3px;
+  border-radius: 2px; opacity: 0.55; transform-origin: left center;
+}
+.cn-cena--status .cn-arte {
+  left: 5px; right: 5px; top: 13px; bottom: 5px; width: auto; height: auto;
+  border-radius: 5px; opacity: 0.3;
+}
+.cn-card:hover .cn-cena--status .cn-fone { opacity: 1; }
+.cn-card:hover .cn-cena--status .cn-barra {
+  animation: cnCorre 1.5s linear 0.15s both;
+}
+.cn-card:hover .cn-cena--status .cn-arte {
+  animation: cnEntra 0.5s ease 0.1s both;
+}
+@keyframes cnCorre {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes cnEntra {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 0.34; transform: scale(1); }
+}
+
+/* ── 04 · Gemini: a descricao se escrevendo ── */
+.cn-cena--texto .cn-brilho {
+  left: 0; top: 4px; width: 13px; height: 13px; border-radius: 0;
+  opacity: 0.85;
+  /* Losango: e a forma que o produto ja usa para IA, e nao um circulo. */
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.cn-cena--texto .cn-frase {
+  left: 0; height: 7px; border-radius: 4px; opacity: 0.4;
+  transform-origin: left center;
+}
+.cn-cena--texto .cn-frase:nth-of-type(2) { top: 32%; width: 100%; }
+.cn-cena--texto .cn-frase:nth-of-type(3) { top: 52%; width: 88%; }
+.cn-cena--texto .cn-frase:nth-of-type(4) { top: 72%; width: 56%; }
+.cn-card:hover .cn-cena--texto .cn-brilho { animation: cnPisca 1.4s ease-in-out infinite; }
+.cn-card:hover .cn-cena--texto .cn-frase:nth-of-type(2) { animation: cnDigita 0.5s ease-out 0.12s both; }
+.cn-card:hover .cn-cena--texto .cn-frase:nth-of-type(3) { animation: cnDigita 0.5s ease-out 0.44s both; }
+.cn-card:hover .cn-cena--texto .cn-frase:nth-of-type(4) { animation: cnDigita 0.5s ease-out 0.76s both; }
+@keyframes cnDigita {
+  from { transform: scaleX(0); opacity: 0.4; }
+  to   { transform: scaleX(1); opacity: 0.4; }
+}
+@keyframes cnPisca {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* ── 05 · Pagina online: a vitrine se montando ── */
+.cn-cena--vitrine .cn-topo {
+  left: 0; top: 0; width: 100%; height: 22%; border-radius: 6px; opacity: 0.75;
+}
+.cn-cena--vitrine .cn-bloco {
+  top: 30%; bottom: 0; height: auto; width: 47%; border-radius: 6px; opacity: 0.34;
+}
+.cn-cena--vitrine .cn-bloco:nth-of-type(2) { left: 0; }
+.cn-cena--vitrine .cn-bloco:nth-of-type(3) { right: 0; }
+.cn-card:hover .cn-cena--vitrine .cn-topo { animation: cnDesce 0.42s cubic-bezier(0.2,0.9,0.25,1) both; }
+.cn-card:hover .cn-cena--vitrine .cn-bloco:nth-of-type(2) { animation: cnMonta 0.45s cubic-bezier(0.2,0.9,0.25,1) 0.2s both; }
+.cn-card:hover .cn-cena--vitrine .cn-bloco:nth-of-type(3) { animation: cnMonta 0.45s cubic-bezier(0.2,0.9,0.25,1) 0.32s both; }
+@keyframes cnDesce {
+  from { transform: translateY(-130%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 0.75; }
+}
+@keyframes cnMonta {
+  from { transform: translateY(38%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 0.34; }
+}
+
+/* ── 06 · Mercado Livre: o anuncio criado pela API ── */
+.cn-cena--anuncio .cn-caixa {
+  left: 0; top: 6%; width: 100%; height: 62%;
+  border-radius: 7px; opacity: 0.32; transform-origin: center top;
+}
+.cn-cena--anuncio .cn-aceite {
+  left: 50%; bottom: 4%; width: 26px; height: 26px; border-radius: 999px;
+  margin-left: -13px; opacity: 0.9;
+}
+.cn-card:hover .cn-cena--anuncio .cn-caixa { animation: cnDesenha 0.5s ease-out both; }
+.cn-card:hover .cn-cena--anuncio .cn-aceite { animation: cnEstoura 0.5s cubic-bezier(0.2,1.5,0.4,1) 0.44s both; }
+@keyframes cnDesenha {
+  from { transform: scaleY(0); opacity: 0.32; }
+  to   { transform: scaleY(1); opacity: 0.32; }
+}
+@keyframes cnEstoura {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 0.9; }
+}
+
+/* ── 07 · OLX: o selo assentando sobre o anuncio ── */
+.cn-cena--selo .cn-cartao {
+  left: 0; top: 12%; width: 100%; height: 76%; border-radius: 7px; opacity: 0.3;
+}
+.cn-cena--selo .cn-etiqueta {
+  right: 6%; top: 4%; width: 46%; height: 20px; border-radius: 999px; opacity: 0.92;
+}
+.cn-card:hover .cn-cena--selo .cn-cartao { animation: cnEntra 0.4s ease both; }
+.cn-card:hover .cn-cena--selo .cn-etiqueta { animation: cnAssenta 0.55s cubic-bezier(0.2,1.3,0.35,1) 0.26s both; }
+@keyframes cnAssenta {
+  from { transform: translate(18px, -22px) rotate(-14deg); opacity: 0; }
+  to   { transform: translate(0, 0) rotate(-6deg); opacity: 0.92; }
+}
+
+/* ── 08 · ZAP: eles vem buscar, e o lead volta ──
+   Os dois sentidos importam: e a unica integracao da lista que e de mao dupla,
+   e ela e PUXADA por eles, nao empurrada por nos. */
+.cn-cena--troca .cn-doc {
+  left: 0; top: 50%; width: 30%; height: 46%;
+  margin-top: -23%; border-radius: 5px; opacity: 0.42;
+}
+.cn-cena--troca .cn-trilho {
+  right: 0; top: 50%; width: 58%; height: 2px; margin-top: -1px;
+  border-radius: 2px; opacity: 0.25;
+}
+.cn-cena--troca .cn-ida,
+.cn-cena--troca .cn-volta {
+  top: 50%; width: 9px; height: 9px; border-radius: 999px; margin-top: -4.5px;
+  left: 34%; opacity: 0;
+}
+.cn-card:hover .cn-cena--troca .cn-ida { animation: cnVai 0.8s ease-in-out 0.1s both; }
+.cn-card:hover .cn-cena--troca .cn-volta { animation: cnVolta 0.8s ease-in-out 0.95s both; }
+@keyframes cnVai {
+  0%   { transform: translateX(0); opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateX(180%); opacity: 0; }
+}
+@keyframes cnVolta {
+  0%   { transform: translateX(180%); opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateX(0); opacity: 0; }
+}
+
+/* ── 09 · Dominio proprio: o endereco troca de dono ──
+   Aqui o texto e texto de verdade, e nao barrinha cega: o argumento desta
+   integracao E o endereco, entao esconde-lo esvaziaria a cena. */
+.cn-cena--url { display: flex; align-items: center; }
+.cn-cena--url .cn-barra-url {
+  position: relative; display: block; width: 100%; height: 30px;
+  border-radius: 999px; background: transparent;
+  border: 1.5px solid currentColor; opacity: 0.85;
+  overflow: hidden;
+}
+.cn-url {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8.5px; letter-spacing: 0.01em;
+  padding: 0 6px; text-align: center;
+}
+.cn-url--dela { opacity: 0; }
+.cn-card:hover .cn-cena--url .cn-url--nossa { animation: cnSaiUrl 0.45s ease 0.5s both; }
+.cn-card:hover .cn-cena--url .cn-url--dela { animation: cnEntraUrl 0.45s ease 0.72s both; }
+@keyframes cnSaiUrl {
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(-120%); opacity: 0; }
+}
+@keyframes cnEntraUrl {
+  from { transform: translateY(120%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* ── 10 · VivaReal: um feed, tres portais ──
+   A fonte fica a esquerda e tres raios abrem em leque ate tres destinos, que
+   acendem em cascata. E a unica cena da faixa com mais de um alvo, e e de
+   proposito: o argumento aqui nao e "falamos com o VivaReal", e "o mesmo XML
+   atende o VivaReal, o ZAP e a OLX de uma vez". */
+.cn-cena--leque .cn-fonte {
+  left: 0; top: 50%; width: 22%; height: 40%;
+  margin-top: -20%; border-radius: 5px; opacity: 0.5;
+}
+.cn-cena--leque .cn-raio {
+  left: 24%; top: 50%; width: 46%; height: 2px; margin-top: -1px;
+  border-radius: 2px; opacity: 0.22; transform-origin: left center;
+}
+.cn-cena--leque .cn-raio:nth-of-type(2) { transform: rotate(-26deg); }
+.cn-cena--leque .cn-raio:nth-of-type(4) { transform: rotate(26deg); }
+.cn-cena--leque .cn-destino {
+  right: 0; width: 13px; height: 13px; border-radius: 4px; opacity: 0.28;
+}
+.cn-cena--leque .cn-destino:nth-of-type(5) { top: 14%; }
+.cn-cena--leque .cn-destino:nth-of-type(6) { top: 50%; margin-top: -6.5px; }
+.cn-cena--leque .cn-destino:nth-of-type(7) { bottom: 14%; }
+.cn-card:hover .cn-cena--leque .cn-destino:nth-of-type(5) { animation: cnChega 0.4s ease 0.30s both; }
+.cn-card:hover .cn-cena--leque .cn-destino:nth-of-type(6) { animation: cnChega 0.4s ease 0.44s both; }
+.cn-card:hover .cn-cena--leque .cn-destino:nth-of-type(7) { animation: cnChega 0.4s ease 0.58s both; }
+@keyframes cnChega {
+  from { opacity: 0.28; transform: scale(0.6); }
+  60%  { opacity: 1; transform: scale(1.22); }
+  to   { opacity: 0.95; transform: scale(1); }
+}
+
+/* ── 11 · Imovelweb: o imovel caindo no mapa ──
+   A malha e o mapa em silhueta; o alfinete cai e quica, e a sombra abre embaixo
+   dele no mesmo tempo. Sao os dois movimentos que fazem uma queda parecer peso
+   e nao teletransporte. */
+.cn-cena--mapa .cn-malha {
+  left: 0; top: 12%; right: 0; bottom: 12%; width: auto; height: auto;
+  border-radius: 7px; opacity: 0.16;
+  background:
+    repeating-linear-gradient(0deg, currentColor 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 26px);
+}
+/* A receita classica do alfinete: tres cantos redondos e um reto, girado -45
+   graus para o canto reto virar a ponta e apontar para BAIXO. A versao anterior
+   girava +45 e nascia de cabeca para baixo.
+
+   E o giro usa a propriedade INDEPENDENTE rotate, nao transform. Com os dois
+   dentro do mesmo transform, o translate da queda acontece no eixo JA GIRADO —
+   o alfinete descia na diagonal e o quique saia de lado. Separados, cada um
+   compoe no seu proprio eixo e a queda e vertical de verdade. */
+.cn-cena--mapa .cn-alfinete {
+  left: 50%; top: 30%; width: 16px; height: 16px;
+  margin-left: -8px;
+  border-radius: 50% 50% 50% 0;
+  rotate: -45deg;
+  opacity: 0.95;
+}
+/* Perto o bastante para ler como sombra DELE. A 62% ficava a meia altura de
+   distancia e virava um tracinho solto no mapa. */
+.cn-cena--mapa .cn-sombra {
+  left: 50%; top: 52%; width: 26px; height: 6px;
+  margin-left: -13px; border-radius: 999px; opacity: 0;
+}
+.cn-card:hover .cn-cena--mapa .cn-alfinete { animation: cnCai 0.66s cubic-bezier(0.35, 0, 0.2, 1) 0.12s both; }
+.cn-card:hover .cn-cena--mapa .cn-sombra { animation: cnAbre 0.66s cubic-bezier(0.35, 0, 0.2, 1) 0.12s both; }
+@keyframes cnCai {
+  0%   { translate: 0 -70px; opacity: 0; }
+  55%  { translate: 0 0; opacity: 0.95; }
+  72%  { translate: 0 -8px; }
+  100% { translate: 0 0; opacity: 0.95; }
+}
+@keyframes cnAbre {
+  0%, 40% { opacity: 0; transform: scaleX(0.3); }
+  60%     { opacity: 0.4; transform: scaleX(1.15); }
+  100%    { opacity: 0.3; transform: scaleX(1); }
+}
+
+/* ── 12 · DocuSign: a rubrica se desenhando ──
+   A unica cena com traco de verdade. Um caminho SVG com o tracejado do tamanho
+   do proprio caminho: animando o deslocamento de 100% a 0, a linha aparece como
+   se estivesse sendo escrita. Barrinha nenhuma diz "assinatura" — o que diz e o
+   GESTO, e gesto e caminho. */
+.cn-cena--rubrica .cn-papel {
+  left: 0; top: 8%; right: 0; bottom: 8%; width: auto; height: auto;
+  border-radius: 6px; opacity: 0.16;
+}
+.cn-cena--rubrica .cn-traco {
+  position: absolute;
+  left: 8%; right: 8%; top: 50%;
+  width: 84%; height: auto;
+  transform: translateY(-58%);
+  overflow: visible;
+}
+.cn-cena--rubrica .cn-traco path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* 260 cobre o comprimento do caminho com folga; medir exato exigiria JS, e a
+     folga so faz a animacao comecar um instante antes de o traco aparecer. */
+  stroke-dasharray: 260;
+  stroke-dashoffset: 260;
+  opacity: 0.95;
+}
+.cn-card:hover .cn-cena--rubrica .cn-traco path {
+  animation: cnEscreve 1.15s cubic-bezier(0.4, 0, 0.3, 1) 0.14s both;
+}
+@keyframes cnEscreve {
+  from { stroke-dashoffset: 260; }
+  to   { stroke-dashoffset: 0; }
+}
+.cn-cena--rubrica .cn-selo {
+  right: 4%; bottom: 4%; width: 22px; height: 22px;
+  border-radius: 999px; opacity: 0; background: transparent;
+  border: 2px solid currentColor;
+}
+.cn-card:hover .cn-cena--rubrica .cn-selo {
+  animation: cnCarimba 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) 1.2s both;
+}
+@keyframes cnCarimba {
+  from { opacity: 0; transform: scale(1.9) rotate(-16deg); }
+  to   { opacity: 0.9; transform: scale(1) rotate(-8deg); }
+}
+
+/* Menos movimento: o quadro final das tres novas. */
+@media (prefers-reduced-motion: reduce) {
+  .cn-cena--leque .cn-destino { opacity: 0.95; transform: none; }
+  .cn-cena--mapa .cn-alfinete { translate: none; opacity: 0.95; }
+  .cn-cena--mapa .cn-sombra { opacity: 0.3; transform: none; }
+  .cn-cena--rubrica .cn-traco path { stroke-dashoffset: 0; }
+  .cn-cena--rubrica .cn-selo { opacity: 0.9; transform: rotate(-8deg); }
+}
+
+/* ── Marcas de fundo claro ──
+   O amarelo do Mercado Livre e o laranja do ZAP nao sustentam tinta branca; a
+   tinta deles vem do campo texto em INTEGRACOES e desce por --canal-tinta. O
+   que muda aqui e so a borda, que sumiria contra o proprio fundo claro. */
+.cn-card--claro:hover { border-color: rgba(10,10,11,0.18); }
+
+/* ── Menos movimento: o quadro FINAL, parado ──
+   Nao e desligar a animacao e deixar o estado inicial — varias cenas comecam
+   invisiveis ou com escala zero, e isso deixaria o cartao vazio no hover. O que
+   fica e a cena montada: a cor entra, tudo aparece no lugar, nada se move. */
+@media (prefers-reduced-motion: reduce) {
+  .cn-card *,
+  .cn-card *::before,
+  .cn-card *::after { animation: none !important; transition: none !important; }
+  .cn-cena--feed .cn-post { opacity: 0.9; transform: none; }
+  .cn-cena--vitrine .cn-topo { opacity: 0.75; transform: none; }
+  .cn-cena--vitrine .cn-bloco { opacity: 0.34; transform: none; }
+  .cn-cena--grade .cn-quadro--novo { opacity: 1; transform: none; }
+  .cn-cena--status .cn-barra { transform: none; }
+  .cn-cena--status .cn-arte { opacity: 0.34; transform: none; }
+  .cn-cena--anuncio .cn-caixa { transform: none; }
+  .cn-cena--anuncio .cn-aceite { opacity: 0.9; transform: none; }
+  .cn-cena--selo .cn-etiqueta { opacity: 0.92; transform: rotate(-6deg); }
+  .cn-cena--troca .cn-ida { opacity: 0; }
+  .cn-cena--troca .cn-volta { opacity: 1; transform: translateX(90%); }
+  .cn-cena--url .cn-url--nossa { opacity: 0; }
+  .cn-cena--url .cn-url--dela { opacity: 1; }
 }
 
 /* ── Destaques: parede à deriva no fundo da seção ──
@@ -4869,6 +5693,11 @@ ${editorCSS()}
 .dl-fcard--mint { background: #a7f3d0; border-color: #a7f3d0; color: #052e21; }
 .dl-fcard--gold { background: #fde68a; border-color: #fde68a; color: #3b2f05; }
 .dl-fcard--accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* O tom do Omnimob Flow. Pastel como o mint e o gold, e nao o rosa cheio da
+   marca: os cartoes de estatistica da parede sao superficie com texto escuro em
+   cima, e o acento #ec0b5b nessa funcao vira um bloco vibrante que rouba a
+   leitura do titulo da secao — que e o unico texto que a parede tem atras. */
+.dl-fcard--rose { background: #fbcfe8; border-color: #fbcfe8; color: #500724; }
 
 /* ── Planos ── */
 .dl-plans {
@@ -5031,78 +5860,546 @@ ${editorCSS()}
    duas que ja tem (o baralho de canais acima, o fundo em ondas dos planos
    abaixo), e uma terceira no meio cansa a rolagem.
    (SEM CRASES nestes comentarios: eles vivem dentro de um template literal.) */
-.dl-modulos {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px; margin-top: 44px;
-}
-@media (max-width: 860px) { .dl-modulos { grid-template-columns: 1fr; gap: 16px; } }
+/* ── A SECAO CLARA DO FLOW ───────────────────────────────────────────────────
+   A pagina inteira e preta. Esta secao e branca, e e a unica — o contraste E o
+   argumento: um modulo novo precisa ler como interrupcao, e nao como mais um
+   bloco na rolagem.
 
-.dl-modulo {
+   Os tokens sao redefinidos LOCALMENTE, e nao sobrescritos peca a peca. A folha
+   toda desenha com --strong, --default, --subtle e --line; trocando os quatro
+   aqui dentro, qualquer componente da pagina que caia nesta secao nasce legivel
+   sem precisar de uma regra propria. Foi o contrario disso que fez a primeira
+   tentativa virar uma lista de excecoes que envelhecia a cada peca nova.
+
+   (Sem crases neste comentario — este CSS mora dentro de um template literal.) */
+.dl-section--claro {
+  --strong: #0a0a0b;
+  --default: #33333a;
+  --subtle: #55555f;
+  --placeholder: #8a8a95;
+  --line: rgba(10,10,11,0.12);
+  background: #ffffff;
+  color: var(--default);
   position: relative;
-  padding: 28px 30px 30px;
+  overflow: hidden;
+}
+
+.dl-manifesto {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, calc(100% - clamp(24px, 6vw, 72px) * 2));
+  margin: 0 auto;
+}
+
+/* ── As formas ───────────────────────────────────────────────────────────────
+   Estas duas silhuetas sao a resposta a "falta desenho autoral". Nao sao
+   ilustracao: sao geometria da marca, e e por isso que funcionam sem ninguem
+   desenhar um boneco. Uma e a flor de doze lobulos, a outra e o par de meias
+   luas — vetor puro, uma cor so, giro muito lento.
+
+   O giro e lento de proposito (60s e 80s). Rapido o bastante para se perceber
+   que mexe, lento o bastante para nunca disputar com a leitura: quem esta lendo
+   a frase nao deve notar a forma, e quem levanta o olho encontra a pagina viva.
+
+   Sangram para fora pelas quinas, e quem as recorta e o overflow escondido do
+   pai. Recorte reto num arco le como corte de papel, e nao como falha. */
+/* Só posição e tamanho: o giro, o recorte do ponteiro e a parada em
+   prefers-reduced-motion vem da classe .omni-forma, no kit. */
+.dl-manifesto__forma--a {
+  top: clamp(-90px, -6vw, -40px);
+  right: clamp(-70px, -4vw, -30px);
+  width: clamp(150px, 17vw, 300px);
+  height: clamp(150px, 17vw, 300px);
+}
+.dl-manifesto__forma--b {
+  bottom: clamp(-110px, -7vw, -50px);
+  left: clamp(-80px, -5vw, -36px);
+  width: clamp(130px, 14vw, 240px);
+  height: clamp(130px, 14vw, 240px);
+}
+
+/* A sobrancelha com o ponto — o mesmo par da Eyebrow da pagina, mas com o ponto
+   ANTES do texto e sem o tracinho: aqui ela abre um bloco alinhado a esquerda
+   que ja tem uma frase enorme embaixo, e o traco competiria com ela. */
+.dl-manifesto__olho {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--subtle); font-weight: 500;
+}
+.dl-manifesto__olho i {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--flow);
+}
+
+.dl-manifesto__titulo {
+  margin: 22px 0 0;
+  font-size: clamp(32px, 4.6vw, 62px);
+  line-height: 1.06;
+  letter-spacing: -0.045em;
+  font-weight: 800;
+  color: var(--strong);
+  max-width: 17ch;
+}
+/* O trecho em cor. Italico E colorido, como no manifesto que serviu de
+   referencia: so a cor faz a palavra saltar sem dizer por que; a inclinacao diz
+   que aquilo e a voz mudando, e nao um link. */
+.dl-manifesto__titulo em {
+  font-style: italic;
+  color: var(--flow);
+}
+
+/* Duas colunas de leitura, e nao uma. Uma frase de 62px seguida de um paragrafo
+   de largura inteira faz a pagina cair de um degrau alto demais; a coluna dupla
+   segura o ritmo e ainda deixa a segunda metade — que e onde o Flow e
+   explicado — comecar na altura do olho. */
+.dl-manifesto__corpo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(24px, 4vw, 64px);
+  margin-top: clamp(32px, 4vw, 52px);
+  max-width: 940px;
+}
+.dl-manifesto__corpo p {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--default);
+}
+.dl-manifesto__corpo p:last-child { margin-bottom: 0; }
+.dl-manifesto__corpo strong { color: var(--strong); font-weight: 600; }
+
+.dl-manifesto__fecho {
+  margin: clamp(34px, 4vw, 54px) 0 0;
+  padding-top: clamp(26px, 3vw, 40px);
+  border-top: 1px solid var(--line);
+  max-width: 940px;
+  font-size: clamp(19px, 2vw, 27px);
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+  color: var(--strong);
+}
+.dl-manifesto__fecho em {
+  font-style: normal;
+  color: var(--flow);
+}
+
+@media (max-width: 760px) {
+  .dl-manifesto__corpo { grid-template-columns: 1fr; gap: 0; }
+  .dl-manifesto__corpo > div { margin-top: 16px; }
+  .dl-manifesto__titulo { max-width: none; }
+}
+
+/* ── AS ILUSTRACOES NA PAGINA ────────────────────────────────────────────────
+   Onze pecas encomendadas, seis delas na landing. A regra que organiza todas:
+
+     A ILUSTRACAO E COLUNA, NAO RODAPE DE COLUNA.
+
+   A primeira versao punha cada desenho embaixo do texto da secao. Funcionava e
+   lia como anexo — "aqui esta o assunto, e aqui um desenho sobre ele". Colocada
+   AO LADO, a mesma peca vira a outra metade da frase: o texto explica, a cena
+   mostra. Nada mudou de tamanho de arquivo; mudou de posicao na grade.
+
+   Tres regras tecnicas valem para todas:
+
+   1. LARGURA em clamp com teto em px, nunca 100%. Elas foram entregues no
+      tamanho exato de exibicao — passar disso borra, porque sao PNG.
+   2. object-fit: contain e height: auto, com width/height no HTML. Os dois
+      atributos reservam a caixa antes de a imagem chegar; sem eles a secao pula
+      quando ela carrega.
+   3. Nenhuma sombra e nenhuma caixa atras. Sao desenhos recortados sobre preto;
+      qualquer fundo denuncia o retangulo que nao deveria existir.
+
+   E uma regra de composicao: a DIRECAO alterna entre as secoes. Desafio joga a
+   arte para a direita, o Flow abre a direita e fecha pela esquerda, o aplicativo
+   volta para a direita. E o que da ritmo — tudo do mesmo lado seria uma coluna
+   de figurinhas.
+
+   (Sem crases nestes comentarios: este CSS mora num template literal.) */
+
+.dl-desafio__arte img,
+.dl-manifesto__desenho,
+.dl-manifesto__remate-img,
+.dl-editor__desenho,
+.dl-app-soon__visual img {
+  display: block;
+  height: auto;
+  object-fit: contain;
+}
+
+/* ── 1 · O Desafio: texto explica, cena mostra ───────────────────────────────
+   57/43. O texto leva a maior porque tem titulo, paragrafo, card de vidro e
+   botao; a arte leva o resto e fica centrada nesse conjunto todo. */
+.dl-desafio__grade {
+  display: grid;
+  /* 53/47. Era 1.32/1 (57/43): a coluna da arte ganhou espaco porque a peca
+     precisava crescer, e crescer dentro de uma coluna estreita so aumentaria a
+     margem transparente em volta dela. Quem manda no tamanho e a COLUNA; a
+     largura da imagem so nao deixa passar do arquivo. */
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: clamp(22px, 3vw, 48px);
+  align-items: center;
+}
+/* O SectionHead e uma grade de duas colunas (titulo | descricao). Dentro de uma
+   coluna de 57% as duas ficam estreitas demais e o titulo quebra em quatro
+   linhas. Aqui ele volta a ser uma coluna so. */
+.dl-desafio__conteudo .dl-head {
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 30px;
+}
+/* ── POR QUE ELA PARECIA PERDIDA ─────────────────────────────────────────────
+   Nao era tamanho. A coluna da esquerda tem titulo de tres linhas, paragrafo,
+   card de vidro e botao: uns 560px de altura. A arte tem 290px e estava CENTRADA
+   nessa altura, com cerca de 135px de preto sobrando em cima e outros 135
+   embaixo. Um objeto centrado num retangulo vazio, sem dividir borda nem linha
+   com nada, le como ilha — e aumentar uma ilha so faz uma ilha maior.
+
+   Duas ancoras resolvem, e nenhuma das duas e escala:
+
+   1. ELA POUSA NO CHAO DA SECAO (align-self: end). O pe da arte passa a cair na
+      mesma faixa do botao, e essa linha compartilhada e o que amarra as duas
+      colunas. O vazio nao sumiu: juntou-se todo em cima, do lado oposto ao
+      titulo, onde le como respiro em vez de sobra.
+
+   2. ELA ENCOSTA NA BEIRADA DA TELA. Antes morria dentro da coluna de texto,
+      onde nao havia borda nenhuma para segura-la. Passando da margem do
+      container, ela ganha uma borda de verdade: a da janela.
+
+   O avanco tem teto em px porque a folga lateral e (100vw - 1120) / 2 — a 1440
+   sao 160px de sobra e os 52 cabem com folga; a 1200 a folga cai para 40 e o
+   3vw cai junto para 36. Nunca passa da janela, entao nao cria rolagem. */
+.dl-desafio__arte {
+  align-self: end;
+  translate: clamp(0px, 3vw, 52px) 0;
+}
+.dl-desafio__arte img {
+  /* O arquivo tem 640px de largura: ate 560 ele ainda nao estica. */
+  width: clamp(320px, 38vw, 560px);
+  max-width: none;
+  margin-left: auto;
+}
+
+/* ── 2 · Editor: apoio que aponta para o produto ─────────────────────────────
+   A tela real do editor continua sendo a prova; esta peca e apoio. O que ela
+   ganhou foi tamanho e DIRECAO: encostada na borda direita da coluna de texto,
+   ela avanca alguns pixels para o vao e a figura, que esta encaixando um bloco,
+   aponta para o editor de verdade ao lado. */
+/* A peca que ENCOSTA no produto.
+
+   A personagem esta encaixando um bloco numa pagina; o editor de verdade fica na
+   coluna ao lado. Empurrando o desenho para dentro do vao e subindo alguns
+   pixels, o bloco que ela segura chega perto da tela real e a leitura vira uma
+   piada visual: ela esta montando a vitrine da Omnimob.
+
+   O avanco e em translate e tem TETO em px. Assim ele nao participa do layout
+   (nao empurra a coluna vizinha, nao cria rolagem) e nao cresce sem limite em
+   tela larga — a 3440px um 4vw solto jogaria o desenho por cima da interface.
+   O que se quer e tangenciar, nao invadir. */
+.dl-editor__desenho {
+  /* Mesmo diagnostico do Desafio, causa diferente: aqui a arte nao ficava
+     centrada num vazio, ficava PENDURADA. O .dl-editor centra as duas colunas,
+     entao o texto sobe para o meio e a arte sobra na quina de baixo, com ar em
+     volta e nada por baixo.
+
+     A margem de 22px separava a arte do paragrafo — e separacao e o que
+     transforma um elemento de apoio em elemento solto. Encostando nele (10px),
+     ela passa a ler como parte da coluna de texto, que e o papel dela: apoio da
+     interface, nunca concorrente dela.
+
+     O avanco horizontal continua com teto em px, e o motivo e o mesmo de antes:
+     a 3440px um 5vw solto jogaria o desenho POR CIMA da tela do editor. O que
+     se quer e tangenciar. */
+  width: clamp(240px, 24vw, 340px);
+  max-width: 100%;
+  margin: 10px 0 0 auto;
+  translate: clamp(0px, 5vw, 76px) -6px;
+}
+
+/* ── 3 · Flow: a abertura da secao clara ─────────────────────────────────────
+   A ilustracao sobe para o lado do TITULO e fica quase do tamanho dele: e a
+   imagem de abertura do modulo, nao um adendo. A flor rosa continua atras, como
+   decoracao — quem manda aqui e o corretor movendo o negocio. */
+.dl-manifesto__wrap { position: relative; z-index: 1; }
+
+.dl-manifesto__cabeca {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(20px, 4vw, 56px);
+}
+.dl-manifesto__desenho {
+  width: clamp(280px, 30vw, 400px);
+  max-width: 100%;
+  translate: 0 -8px;
+}
+
+/* ── 4 · Flow: o remate, e a direcao INVERTE ─────────────────────────────────
+   O bloco de cima joga a arte para a direita; este devolve para a esquerda. E o
+   que transforma duas imagens numa sequencia — movemos o negocio pelo funil,
+   depois a chave troca de mao — em vez de duas figuras do mesmo lado.
+
+   A ordem no DOM e texto-primeiro por causa do celular, onde ler a frase antes
+   da imagem e o natural. No desktop o order inverte a coluna. */
+.dl-manifesto__remate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(22px, 4vw, 56px);
+  max-width: 940px;
+  margin: clamp(38px, 5vw, 62px) 0 0;
+  padding-top: clamp(26px, 3vw, 40px);
+  border-top: 1px solid var(--line);
+}
+/* O fio de cima pertencia ao paragrafo; dentro de uma grade de duas colunas ele
+   parava no meio da linha. Passou para o contorno da grade. */
+.dl-manifesto__remate .dl-manifesto__fecho {
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+  max-width: none;
+  order: 2;
+}
+/* O climax da narrativa do Flow: o negocio concluido, a chave trocando de mao.
+   Nenhum filtro, nenhuma mistura de camada, nenhuma opacidade — o arquivo ja
+   veio preparado para o fundo branco e qualquer tratamento aqui o sujaria. */
+.dl-manifesto__remate-img {
+  width: clamp(300px, 29vw, 390px);
+  max-width: 100%;
+  order: 1;
+  translate: 0 10px;
+}
+
+/* ── 5 · Aplicativo: a figura entra na pagina ────────────────────────────────
+   A coluna da direita ja era a maior da grade (1.18fr contra 0.82fr) — a
+   ilustracao aqui nunca foi pequena de largura, ela so estava ancorada no
+   centro. Encostada a direita e escapando alguns pixels para fora, ela ganha a
+   direcao da caminhada da personagem: ela entra na pagina em vez de posar.
+
+   O escape usa translate e nao margem negativa: margem negativa em coluna de
+   grid empurra a vizinha, translate nao mexe em layout nenhum — e e por isso
+   que ele nao consegue criar rolagem horizontal aqui. */
+/* As regras ficam na declaracao ORIGINAL de .dl-app-soon__visual, mais abaixo:
+   ela vem depois desta no arquivo e venceria uma copia daqui. Duas declaracoes
+   do mesmo seletor brigando na cascata e o defeito que este bloco existe para
+   nao criar. */
+
+/* ── 6 · O predio no rodape: assinatura, nao coluna ──────────────────────────
+   Ja estava assim e continua: sangrando pela quina direita, a 30%, atras dos
+   links. Ver .dl-footer__predio, junto das formas do rodape. */
+
+/* ── CELULAR ─────────────────────────────────────────────────────────────────
+   Uma regra vale para todas: some o desalinho, some a sobreposicao, a coluna
+   vira uma so e a arte vem DEPOIS do texto, centrada. Numa tela estreita o
+   deslocamento nao le como composicao, le como erro de alinhamento — e nao ha
+   vao onde avancar. */
+/* 1024 e o breakpoint que o projeto ja usa para colapsar .dl-editor,
+   .dl-app-soon__grid e .dl-head. Reusar em vez de inventar um proprio evita
+   uma faixa de larguras em que metade da pagina virou coluna unica e a outra
+   metade nao. */
+@media (max-width: 1024px) {
+  .dl-desafio__grade,
+  .dl-manifesto__cabeca,
+  .dl-manifesto__remate { grid-template-columns: 1fr; }
+
+  .dl-desafio__conteudo .dl-head { margin-bottom: 24px; }
+
+  .dl-desafio__arte,
+  .dl-manifesto__desenho,
+  .dl-manifesto__remate-img,
+  .dl-editor__desenho { translate: none; }
+
+  .dl-desafio__arte img,
+  .dl-manifesto__desenho,
+  .dl-manifesto__remate-img,
+  .dl-editor__desenho {
+    width: min(86vw, 340px);
+    margin-inline: auto;
+    margin-top: 30px;
+  }
+
+  /* No remate a ordem volta ao natural: le-se a frase e depois ve-se a cena. */
+  .dl-manifesto__remate .dl-manifesto__fecho { order: 1; }
+  .dl-manifesto__remate-img { order: 2; }
+
+}
+
+/* Abaixo de 640 a folga lateral ja e pequena; a arte usa quase a largura toda,
+   com teto para nao passar do tamanho em que foi entregue. */
+@media (max-width: 640px) {
+  .dl-desafio__arte img,
+  .dl-manifesto__desenho,
+  .dl-manifesto__remate-img,
+  .dl-editor__desenho { width: min(88vw, 300px); }
+}
+
+/* ── OS TRES CARTOES DE TELA ─────────────────────────────────────────────────
+   Cada cartao e uma superficie pastel com uma tela falsa dentro e o texto de
+   verdade embaixo. O pastel muda por cartao: tres tons vizinhos do rosa do
+   Flow, e nao tres cores diferentes — a variacao existe para separar os
+   assuntos, nao para criar tres marcas.
+
+   (Sem crases nestes comentarios: este CSS mora num template literal.) */
+.dl-flowtelas {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(14px, 1.6vw, 22px);
+  margin-top: clamp(40px, 5vw, 68px);
+}
+@media (max-width: 980px) { .dl-flowtelas { grid-template-columns: 1fr; } }
+
+.dl-flowtela {
   border-radius: 20px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  /* Entrada escalonada pelo indice: as duas colunas nao sobem juntas, o que
-     faria a secao inteira piscar de uma vez. 90ms e o bastante para o olho
-     perceber a ordem sem sentir espera. */
-  opacity: 0; transform: translateY(18px);
-  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: calc(var(--i) * 90ms);
+  padding: clamp(18px, 1.8vw, 24px);
+  display: flex; flex-direction: column;
+  background: var(--pastel);
 }
-.dl-modulos.is-in .dl-modulo { opacity: 1; transform: none; }
-@media (prefers-reduced-motion: reduce) {
-  .dl-modulo { transition: none; opacity: 1; transform: none; }
+.dl-flowtela--funil    { --pastel: #fdf0f5; }
+.dl-flowtela--minuta   { --pastel: #f6f1fa; }
+.dl-flowtela--comissao { --pastel: #fdf4ec; }
+
+.dl-flowtela__tag {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: #6a5560;
+}
+.dl-flowtela__tag i {
+  width: 5px; height: 5px; border-radius: 999px; background: var(--flow);
 }
 
-/* O fio de cor no topo do cartao. E a unica coisa que distingue os dois
-   visualmente, e e o bastante: a cor ja e a identidade do modulo no painel, e
-   repeti-la aqui ensina a associacao antes de a pessoa entrar no produto. */
-.dl-modulo::before {
-  content: ""; position: absolute; inset: 0 0 auto; height: 3px;
-  border-radius: 20px 20px 0 0;
-  background: linear-gradient(90deg, var(--cor), transparent);
+/* O quadro branco onde a tela mora. Altura fixa nos tres para os cartoes
+   alinharem os titulos: sem ela, o do funil puxa e os outros dois ficam com o
+   texto flutuando em alturas diferentes. */
+.dl-flowtela__quadro {
+  margin: 14px 0 18px;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 13px;
+  height: 216px;
+  overflow: hidden;
+  box-shadow: 0 10px 26px -20px rgba(10,10,11,0.5);
 }
 
-.dl-modulo header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
-.dl-modulo__marca {
-  flex: none; width: 44px; height: 44px; border-radius: 13px;
-  display: flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--cor) 13%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cor) 30%, transparent);
+.dl-flowtela h3 {
+  margin: 0; font-size: 18px; font-weight: 700;
+  letter-spacing: -0.03em; color: var(--strong);
 }
-.dl-modulo__marca img { width: 62%; height: 62%; object-fit: contain; }
-.dl-modulo h3 {
+.dl-flowtela p {
+  margin: 9px 0 0; font-size: 13px; line-height: 1.62; color: var(--subtle);
+}
+
+/* ── O funil ── */
+.dl-fkanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.dl-fkanban__topo {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #8a8a95; margin-bottom: 6px; font-weight: 600;
+}
+.dl-fkanban__topo b {
+  font-size: 8px; color: #55555f;
+  background: rgba(10,10,11,0.06); border-radius: 999px; padding: 1px 5px;
+}
+/* A coluna alvo e a unica com o acento. Uma tela em que tudo se destaca nao
+   destaca nada; aqui ela diz "e para este ponto que o funil empurra". */
+.dl-fkanban__col.is-alvo .dl-fkanban__topo { color: var(--flow); }
+.dl-fkanban__col.is-alvo .dl-fkanban__topo b {
+  background: color-mix(in srgb, var(--flow) 14%, transparent); color: var(--flow);
+}
+.dl-fkanban__card {
+  background: #fbfbfc; border: 1px solid rgba(10,10,11,0.08);
+  border-radius: 8px; padding: 7px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.dl-fkanban__col.is-alvo .dl-fkanban__card {
+  border-color: color-mix(in srgb, var(--flow) 34%, transparent);
+  box-shadow: 0 4px 12px -8px color-mix(in srgb, var(--flow) 70%, transparent);
+}
+.dl-fkanban__cod {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8px; color: #a0a0aa;
+}
+.dl-fkanban__card strong {
+  font-size: 10.5px; font-weight: 650; color: #1a1a1f; line-height: 1.25;
+}
+.dl-fkanban__bairro { font-size: 9px; color: #8a8a95; }
+.dl-fkanban__valor { font-size: 10px; font-weight: 700; color: #33333a; margin-top: 2px; }
+.dl-fkanban__resto {
+  display: block; margin-top: 12px; padding-top: 10px;
+  border-top: 1px dashed rgba(10,10,11,0.12);
+  font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #b0b0ba;
+}
+
+/* ── A minuta ── */
+.dl-fminuta { display: flex; flex-direction: column; height: 100%; }
+.dl-fminuta__titulo {
+  font-size: 10px; font-weight: 700; color: #1a1a1f;
+  padding-bottom: 9px; border-bottom: 1px solid rgba(10,10,11,0.08);
+}
+.dl-fminuta ul { list-style: none; margin: 9px 0 0; padding: 0; display: grid; gap: 7px; flex: 1; }
+.dl-fminuta li {
+  display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 7px;
+  font-size: 10px; color: #55555f;
+}
+.dl-fminuta li b { font-size: 9.5px; font-weight: 600; color: #33333a; }
+.dl-fminuta li i {
+  width: 12px; height: 12px; border-radius: 999px; display: block;
+  position: relative;
+}
+.dl-fminuta li.is-ok i { background: #d6f5e4; }
+.dl-fminuta li.is-ok i::after {
+  content: ""; position: absolute; left: 3.5px; top: 3px;
+  width: 3px; height: 5.5px; border: solid #167a4a; border-width: 0 1.4px 1.4px 0;
+  transform: rotate(42deg);
+}
+/* A pendencia usa o rosa do modulo, e nao vermelho de erro: nada quebrou. E uma
+   informacao que falta, e o cartao inteiro fala sobre isso. */
+.dl-fminuta li.is-falta i { background: color-mix(in srgb, var(--flow) 16%, transparent); }
+.dl-fminuta li.is-falta i::after {
+  content: ""; position: absolute; left: 5.2px; top: 2.6px;
+  width: 1.6px; height: 6.8px; border-radius: 1px; background: var(--flow);
+}
+.dl-fminuta li.is-falta b { color: var(--flow); font-style: italic; }
+.dl-fminuta__pe {
   display: flex; align-items: center; gap: 9px;
-  margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.02em; color: var(--strong);
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid rgba(10,10,11,0.08);
 }
-.dl-modulo__novo {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700;
-  padding: 3px 8px; border-radius: 999px;
-  color: var(--cor);
-  background: color-mix(in srgb, var(--cor) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--cor) 32%, transparent);
+/* Botao apagado de proposito: e o estado bloqueado que conta a historia. */
+.dl-fminuta__botao {
+  font-size: 9.5px; font-weight: 600; color: #a0a0aa;
+  background: rgba(10,10,11,0.05); border-radius: 999px; padding: 5px 11px;
 }
-.dl-modulo__chamada {
-  display: block; margin-top: 3px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--subtle);
-}
-.dl-modulo p { margin: 0 0 18px; font-size: 14.5px; line-height: 1.72; color: var(--default); }
-.dl-modulo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.dl-modulo li {
-  position: relative; padding-left: 24px;
-  font-size: 13.5px; line-height: 1.6; color: var(--default);
-}
-/* O marcador e um tracinho na cor do modulo, e nao um check verde: check diz
-   "incluido no plano", e essa e a conversa da tabela logo abaixo. Aqui a lista
-   e descritiva. */
-.dl-modulo li::before {
-  content: ""; position: absolute; left: 0; top: 10px;
-  width: 12px; height: 2px; border-radius: 2px; background: var(--cor);
+.dl-fminuta__aviso {
+  font-size: 9px; font-weight: 600; color: var(--flow);
 }
 
+/* ── O split ── */
+.dl-fsplit { display: flex; flex-direction: column; height: 100%; }
+.dl-fsplit__topo,
+.dl-fsplit__taxa {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 10px; color: #8a8a95;
+}
+.dl-fsplit__topo b { font-size: 15px; font-weight: 700; color: #1a1a1f; letter-spacing: -0.02em; }
+.dl-fsplit__taxa {
+  margin-top: 7px; padding-bottom: 10px;
+  border-bottom: 1px solid rgba(10,10,11,0.08);
+}
+.dl-fsplit__taxa b { font-size: 12px; font-weight: 700; color: var(--flow); }
+.dl-fsplit ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; flex: 1; }
+.dl-fsplit li {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 10px; color: #55555f;
+}
+.dl-fsplit li b { font-size: 11px; font-weight: 650; color: #33333a; }
+/* O resto e a linha que fecha a conta, e por isso ela e a unica com peso. */
+.dl-fsplit li.is-resto {
+  margin-top: 2px; padding-top: 9px;
+  border-top: 1px dashed rgba(10,10,11,0.14);
+}
+.dl-fsplit li.is-resto span { color: #33333a; font-weight: 600; }
+.dl-fsplit li.is-resto b { color: #1a1a1f; font-weight: 750; }
 /* A caixa do interruptor do Flow. O componente traz o desenho dele; o que fica
    aqui e so a largura e o respiro nesta pagina — largura de leitura, centrada,
    e nao a coluna inteira de 1200px, onde uma frase de duas linhas ficaria com
@@ -5271,19 +6568,38 @@ ${editorCSS()}
    cor nenhuma exatamente onde a seção encosta nas vizinhas, que é onde a emenda
    se vê.
 
-   A máscara também abriu. Os raios agora passam da metade da caixa (128% e 104%
-   contra os 72% e 68% anteriores), então o miolo opaco alcança as quatro bordas
-   e a queda para transparente sobra só para as quinas — antes ela terminava bem
-   dentro da seção, e era ela, não o tamanho da camada, que apagava a cor antes
-   da hora. */
+   ── O RAIO É COMPRIMENTO, E NÃO PORCENTAGEM ────────────────────────────────
+
+   Esta é a correção que encolheu a mancha. A caixa tem a largura da JANELA
+   (left/right saem em 50vw), então um raio em porcentagem media a tela, não o
+   conteúdo: os 78% que estavam aqui davam 500px de raio num laptop de 1280 e
+   1340px num monitor de 3440 — a mesma regra produzindo um brilho discreto numa
+   máquina e uma lavagem de cor na tela inteira na outra. O sintoma só aparece
+   em tela larga, que é onde ninguém testa.
+
+   Em comprimento o brilho tem o tamanho que foi escolhido, e ele é escolhido em
+   relação ao que deve iluminar: a coluna de conteúdo tem no máximo 1120px, e um
+   raio de 470px cobre a largura dos três cartões sem passar muito deles. Cresce
+   um pouco com a janela pelo termo em vw, e para de crescer no teto.
+
+   A máscara saiu junto. Ela existia para apagar as quinas de uma mancha que
+   alcançava as bordas da caixa; uma que morre bem antes delas não tem quina
+   para apagar, e o que restava era uma composição de máscara sobre uma camada
+   da largura da janela, de graça.
+
+   Nada disso vale no carrossel: lá a seção é mais alta que larga, a mancha
+   precisa esticar na vertical e a porcentagem mede uma tela estreita, que é o
+   caso em que ela funciona. O bloco do celular declara os próprios raios e a
+   própria máscara, e continua como estava. */
 .dl-plans-onda {
   position: absolute; z-index: -1; pointer-events: none;
   top: calc(-1 * var(--pad-sec)); bottom: calc(-1 * var(--pad-sec));
   left: calc(50% - 50vw); right: calc(50% - 50vw);
   opacity: 0; transition: opacity 0.9s ease;
-  background: radial-gradient(78% 74% at 50% 48%, var(--tinta, transparent), transparent 74%);
-  -webkit-mask-image: radial-gradient(128% 104% at 50% 50%, #000 44%, transparent 100%);
-  mask-image: radial-gradient(128% 104% at 50% 50%, #000 44%, transparent 100%);
+  background: radial-gradient(
+    clamp(280px, 26vw, 470px) clamp(150px, 15vw, 260px) at 50% 48%,
+    var(--tinta, transparent), transparent 74%
+  );
 }
 .dl-plans-onda.is-on { opacity: 0.5; }
 
@@ -5440,7 +6756,10 @@ ${editorCSS()}
   display: grid;
   grid-template-columns: minmax(0, 0.82fr) minmax(420px, 1.18fr);
   align-items: center;
-  gap: clamp(42px, 7vw, 104px);
+  /* Vao menor: a personagem esta caminhando PARA o texto, e cem pixels de vazio
+     entre os dois desfaziam a relacao. Aproximar aumenta a presenca dela sem
+     precisar aumentar a imagem — que ja e a maior da pagina. */
+  gap: clamp(32px, 4.5vw, 68px);
 }
 .dl-app-soon__copy .dl-h2 { margin-top: 14px; }
 .dl-app-soon__copy .dl-lead { max-width: 530px; }
@@ -5475,7 +6794,11 @@ ${editorCSS()}
 .dl-app-soon__visual {
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* Encostada a direita, e nao centrada na coluna. A personagem esta ANDANDO;
+     ancorada no centro ela posa como icone, encostada na borda ela entra na
+     pagina. A coluna ja e a maior da grade (1.18fr contra 0.82fr), entao o que
+     mudou aqui e a ancora, nao o tamanho. */
+  justify-content: flex-end;
   min-width: 0;
 }
 .dl-app-soon__visual img {
@@ -5484,6 +6807,16 @@ ${editorCSS()}
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 28px 52px rgba(0,0,0,0.28));
+  /* Escapa alguns pixels para fora da coluna. translate e nao margem negativa:
+     margem negativa em coluna de grid empurra a vizinha e pode gerar rolagem
+     horizontal; translate nao participa do layout. */
+  translate: clamp(0px, 2.4vw, 40px) 12px;
+}
+/* Em coluna unica a personagem volta ao centro e ao eixo: nao ha vao lateral
+   para onde escapar, e o desalinho leria como erro. */
+@media (max-width: 1024px) {
+  .dl-app-soon__visual { justify-content: center; }
+  .dl-app-soon__visual img { translate: none; }
 }
 
 /* ── CTA final (claro) ── */
@@ -5494,11 +6827,43 @@ ${editorCSS()}
   color: #0c121a;
   padding: clamp(72px, 9vw, 128px) 0;
 }
-.dl-cta canvas {
-  opacity: 0.5;
+/* ── O fundo de iridescencia ────────────────────────────────────────────────
+
+   A nevoa do Vanta se pintava NO PROPRIO elemento da secao; o shader novo mora
+   num filho, entao ele precisa ser posicionado a mao — e ficar ATRAS do
+   conteudo.
+
+   A linha que mais importa e a de pointer-events: sem ela o div do canvas cobre
+   a secao inteira e engole o clique no botao "Testar gratis", que e o unico
+   motivo desta secao existir. O movimento do mouse que o efeito le nao depende
+   disso — ele escuta no proprio elemento e continua recebendo.
+
+   (Sem crases nestes comentarios: isto vive dentro de um template literal, e
+   uma crase aqui encerra a string inteira em silencio.) */
+.dl-cta__fundo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.9;
+}
+.dl-cta__fundo canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* O shader e vibrante demais em cheio: esta secao e a UNICA clara da pagina,
+     e o texto dela e escuro. Em 100% o contraste do titulo caia abaixo do
+     legivel sobre as faixas mais saturadas. Meio caminho mantem o movimento e
+     devolve o texto. */
+  opacity: 1;
 }
 
-.dl-cta__inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
+/* O conteudo sobe acima do fundo. Sem isto ele fica no mesmo plano do canvas e
+   a ordem passa a depender de quem vem depois no DOM. */
+.dl-cta__inner {
+  position: relative; z-index: 1;
+  text-align: center; display: flex; flex-direction: column; align-items: center;
+}
 
 /* Marca de fechamento. O halo é ::before e a imagem é relative de propósito:
    as duas são caixas posicionadas, então quem vem depois no DOM pinta por
@@ -5530,24 +6895,137 @@ ${editorCSS()}
 .dl-cta__title {
   display: flex; flex-direction: column; margin: 18px 0 0;
   font-size: clamp(34px, 5vw, 66px); line-height: 1.04;
-  letter-spacing: -0.045em; font-weight: 800; color: #0c121a;
+  letter-spacing: -0.045em; font-weight: 800; color: #d4d4d4;
 }
+
 .dl-cta__grad {
-  background: linear-gradient(
-    100deg, 
-    color-mix(in srgb, var(--accent) 75%, transparent), 
-    color-mix(in srgb, var(--accent-soft) 75%, transparent) 45%, 
-    color-mix(in srgb, var(--gold) 75%, transparent)
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+  align-self: center;
+  position: relative;
+  padding: 0.02em 0.3em 0.1em;
+  border-radius: 0.24em;
+
+  /* A cor do texto sai de uma variavel para a secao poder virar clara ou
+     escura sem mexer aqui. */
+  color: var(--cta-vidro-texto, #0b1018);
+  -webkit-text-fill-color: currentColor;
+
+  /* O vidro. O saturate acima de 1 existe porque o borrao lava a cor: sem ele
+     a lapide fica cinzenta no meio de um fundo vibrante. */
+  -webkit-backdrop-filter: blur(16px) saturate(150%) brightness(1.24);
+  backdrop-filter: blur(16px) saturate(150%) brightness(1.24);
+  background: rgba(255, 255, 255, 0.2);
+
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 18px 40px -26px rgba(8, 12, 20, 0.32);
+
+  /* Halo branco curto: nao desenha nada, so separa a letra escura da parte
+     mais escura do borrao. */
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.5);
 }
-.dl-cta__sub { margin-top: 20px; font-size: 15.5px; line-height: 1.72; color: #4b5563; max-width: 46ch; }
-.dl-cta__note { margin-top: 32px; color: #9aa2ad; font-size: 9px; letter-spacing: 0.16em; }
-.dl-cta .dl-eyebrow { color: #4b5563; }
-.dl-cta .dl-eyebrow__line { background: rgba(12,18,26,0.2); }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dl-cta__grad { background: rgba(255, 255, 255, 0.68); }
+}
+
+/* ── A luz correndo dentro das letras ────────────────────────────────────────
+   O preto solido era o unico elemento parado de uma secao inteiramente em
+   movimento — a iridescencia atras nao para, e a lapide de vidro deixa ela
+   atravessar. As letras ficavam por cima como um adesivo.
+
+   O que corre e uma faixa violeta atravessando um texto que continua escuro nas
+   duas pontas. Le como luz pegando o relevo das letras, e nao como texto
+   colorido: em nenhum momento do ciclo a cor sobe o suficiente para virar
+   destaque por conta propria, o que atrapalharia a leitura de uma frase que e a
+   chamada final da pagina.
+
+   A tecnica e a MESMA da etiqueta "mais popular" dos planos (dlTagOnda): um
+   degrade largo demais para a caixa, deslocado por animacao. Repetir o que a
+   pagina ja faz custa menos que introduzir um segundo jeito de mover cor.
+
+   Dois cuidados que nao sao obvios:
+
+   - O bloco supports esta pelo lado POSITIVO. Preenchimento transparente sem o
+     recorte funcionando e texto INVISIVEL — o pior fim possivel para a chamada
+     principal. Escrito assim, quem nao tem o recurso nunca chega a ficar
+     transparente: fica com o preto de antes.
+
+   - A sombra branca saiu do text-shadow e virou drop-shadow. Com o
+     preenchimento transparente, o text-shadow e pintado ACIMA do fundo
+     recortado — o halo apareceria POR DENTRO das letras, lavando justamente o
+     que ele deveria separar. O drop-shadow age sobre o resultado ja composto e
+     fica atras, que e o que se queria desde o inicio. */
+.dl-cta__grad-texto {
+  text-shadow: none;
+  filter: drop-shadow(0 1px 7px rgba(255, 255, 255, 0.55));
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .dl-cta__grad-texto {
+    background-image: linear-gradient(
+      100deg,
+      var(--cta-vidro-texto, #0b1018) 0%,
+      var(--cta-vidro-texto, #0b1018) 32%,
+      #3d3475 44%,
+      #6a54a6 50%,
+      #3d3475 56%,
+      var(--cta-vidro-texto, #0b1018) 68%,
+      var(--cta-vidro-texto, #0b1018) 100%
+    );
+    background-size: 320% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: dlVidroVarredura 9s linear infinite;
+  }
+}
+
+@keyframes dlVidroVarredura {
+  from { background-position: 100% 50%; }
+  to { background-position: -220% 50%; }
+}
+
+/* Quem pediu menos movimento fica com a faixa PARADA, e nao com o preto de
+   antes: o degrade e o efeito, a varredura e so como ele se anuncia. */
+@media (prefers-reduced-motion: reduce) {
+  .dl-cta__grad-texto { animation: none; background-position: 46% 50%; }
+}
+
+/* ── POR QUE NAO HA UMA REGRA DE prefers-reduced-transparency AQUI ───────────
+
+   Havia. Ela trocava o vidro por uma placa branca a 86% quando o sistema pedia
+   menos transparencia, e SAIU de proposito.
+
+   O motivo e o que esse sinal realmente quer dizer no Windows. Ele nao vem de
+   Facilidade de Acesso: vem de Personalizacao > Cores > "Efeitos de
+   transparencia", o mesmo interruptor que desliga o vidro da barra de tarefas e
+   do menu Iniciar. Muita gente o desliga por gosto ou para aliviar uma maquina
+   antiga, anos antes de abrir este site, e nunca mais pensa nele. Chegando aqui
+   como "reduza a transparencia", ele apagava a lapide de vidro — a peca central
+   da ultima secao — para um publico que nunca pediu isso.
+
+   O que continua valendo logo acima e o supports: aquilo nao e preferencia, e
+   CAPACIDADE. Navegador que nao sabe desfocar o fundo recebe a placa solida,
+   porque senao seria transparencia sem borrao nenhum e o texto escuro ficaria
+   sobre o shader cru.
+
+   Se um dia voltar a ser desejavel, o bloco removido esta no historico:
+   git log -S prefers-reduced-transparency
+
+   (Sem crases neste comentario — este CSS mora dentro de um template literal.) */
+.dl-cta__sub { margin-top: 20px; font-size: 15.5px; line-height: 1.72; color: #d4d4d4; max-width: 46ch; }
+.dl-cta__note { margin-top: 32px; color: #ffffff; font-size: 9px; letter-spacing: 0.16em; }
+/* Branco: os cinzas aqui foram escolhidos para o fundo claro que esta secao
+   tinha antes do shader. Sobre o Iridescence eles somem. */
+.dl-cta .dl-eyebrow { color: #ffffff; }
+/* O tracinho acompanha o texto: escuro, ele ficava invisivel do mesmo jeito. */
+.dl-cta .dl-eyebrow__line { background: rgba(255,255,255,0.45); }
+/* A bolinha vinha do atributo tone em JSX, que e estilo inline e venceria
+   daqui. Por isso ela perdeu o tone la em cima: a cor sai deste bloco agora.
+   (Sem crase neste comentario — este CSS mora dentro de um template literal.) */
+.dl-cta .dl-eyebrow__dot { background: #ffffff; }
 
 /* ── Footer ── */
 .dl-footer { position: relative; background: #050506; padding: 56px 0 26px; overflow: hidden; }
@@ -5556,7 +7034,46 @@ ${editorCSS()}
   background: radial-gradient(closest-side, rgba(99,102,241,0.22), transparent);
   pointer-events: none;
 }
-.dl-footer__inner { display: grid; grid-template-columns: 1fr 1.35fr; gap: 48px; }
+/* So posicao e tamanho; o giro vem de .omni-forma, no kit. */
+/* O predio da marca, sangrando pela quina direita do rodape. Opacidade baixa:
+   ele e assinatura, nao ilustracao em destaque — e o rodape tem links que
+   precisam continuar sendo a coisa mais legivel dali. */
+.dl-footer__predio {
+  position: absolute;
+  right: clamp(-40px, -2vw, -10px);
+  bottom: -30px;
+  width: clamp(120px, 13vw, 200px);
+  height: auto;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+@media (max-width: 760px) { .dl-footer__predio { display: none; } }
+
+/* A forma-arco na quina da secao de numeros. Parada, sangrando, bem apagada:
+   textura, e nao figura. */
+.dl-numeros { position: relative; overflow: hidden; }
+.dl-numeros__forma {
+  position: absolute;
+  left: clamp(-70px, -4vw, -30px);
+  top: clamp(-50px, -3vw, -20px);
+  width: clamp(110px, 12vw, 200px);
+  height: auto;
+  opacity: 0.13;
+  pointer-events: none;
+  z-index: 0;
+}
+.dl-numeros > .dl-wrap { position: relative; z-index: 1; }
+
+.dl-footer__forma--a {
+  top: -70px; right: -60px;
+  width: clamp(180px, 20vw, 330px); height: clamp(180px, 20vw, 330px);
+}
+.dl-footer__forma--b {
+  bottom: -60px; left: 8%;
+  width: clamp(120px, 12vw, 200px); height: clamp(120px, 12vw, 200px);
+}
+.dl-footer__inner { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1.35fr; gap: 48px; }
 .dl-footer__logo { display: inline-flex; align-items: center; }
 .dl-footer__brand p { font-size: 13px; line-height: 1.8; color: var(--placeholder); margin-top: 14px; max-width: 34ch; }
 .dl-footer__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 28px; }

@@ -27,11 +27,14 @@ import "./StaggeredMenu.css";
       voltando à tela de carregamento. Item que começa com "/" navega pelo
       roteador; item que começa com "#" rola até a seção.
 
-   3. gsap VEM ESTÁTICO, e isso foi medido. A primeira versão o carregava por
-      `import()` para economizar ~70 kB de quem só lê a página — até o build
-      avisar que não adiantava: o `BounceCards`, na mesma landing, já o importa
-      no topo, então ele está no pacote de qualquer jeito. Adiar o que já
-      chegou é complexidade sem troco.
+   3. gsap VEM ESTATICO. A primeira versao o carregava por `import()` para
+      economizar ~70 kB de quem so le a pagina, e o build avisou que nao
+      adiantava: outro componente da mesma landing ja o importava no topo.
+
+      Aquele componente era o `BounceCards`, e ele SAIU da landing quando o
+      leque de canais virou grade. A conclusao continua valendo, mas por outro
+      motivo: este arquivo mesmo importa gsap na linha 3, e o menu esta em toda
+      visita. Adiar o que sempre chega e complexidade sem troco.
 
    4. RESPEITA O ORÇAMENTO DE EFEITOS. Em máquina fraca (`podeQuadroAQuadro`
       falso) o menu abre e fecha na hora, sem linha do tempo. Continua sendo o

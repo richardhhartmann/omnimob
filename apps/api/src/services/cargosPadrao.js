@@ -140,23 +140,110 @@ export const CARGOS_PADRAO = [
      efeito colateral de desmarcar caixas. */
   {
     descricao: "Jurídico",
+    soComFlow: true,
     permite: ["acessarFlow", "gerenciarNegocios", "gerenciarContratos", "validarJuridico"],
   },
   {
     descricao: "Financeiro",
+    soComFlow: true,
     permite: ["acessarFlow", "gerenciarNegocios", "validarFinanceiro", "verComissoes"],
   },
   {
     descricao: "Corretor Flow",
+    /* Tem permissões do HUB e mesmo assim é do Flow: ele existe POR CAUSA do
+       módulo. É o caso que provou que a marca precisa ser explícita — nenhuma
+       dedução a partir das caixas marcadas o classificaria certo. */
+    soComFlow: true,
     permite: ["acessarPainel", "acessarFlow", "gerenciarImoveis", "gerenciarClientes", "verRelatorios", "gerenciarNegocios"],
   },
 ];
+
+/* ── `acessarPainel` É DERIVADA — E A REGRA MORA AQUI ────────────────────────
+
+   Ela é a PORTA do Hub, o par de `acessarFlow` (ver `services/modulos.js`), e
+   não é uma escolha de ninguém: não há caixa para ela na tela e um PUT feito à
+   mão não a define. O que ela responde é "este cargo tem alguma coisa a fazer
+   no Hub?".
+
+   ── POR QUE ESTA FUNÇÃO EXISTE, E NÃO DUAS CÓPIAS DA REGRA ──
+
+   Ela nasceu dentro de `cargoRoutes`, e isso durou uma tarde. Cargo é criado em
+   DOIS caminhos: pela tela (`cargoRoutes`) e pelo catálogo, quando uma
+   imobiliária é provisionada (`criarCargosPadrao`, logo abaixo). O segundo não
+   passa pelo primeiro.
+
+   O estrago foi imediato e total: `acessarPainel` tem `@default(false)` no
+   schema e não está em `PERMISSOES`, então `dadosDoCargo` nunca a escrevia —
+   todo cargo de tenant NOVO nascia sem a porta do Hub. Enquanto o login cravava
+   `true` isso passou despercebido por anos; no instante em que a sessão passou
+   a ler a coluna, criar uma imobiliária virou "entrei e caí na vitrine", para
+   TODOS os cargos dela, inclusive o Administrador.
+
+   Uma regra, um arquivo, os dois caminhos. */
+export function alcancaOHub(permissoes) {
+  const alcancaOFlow = PERMISSOES_FLOW_LISTA.some((p) => permissoes[p]);
+  /* Sem nada do Flow, só resta o Hub — inclusive para o cargo em branco, que
+     não é "só-Flow", é um cargo pela metade. Trancá-lo para fora de tudo
+     devolveria o sintoma de ser mandado para a vitrine no login sem uma palavra
+     de explicação. */
+  if (!alcancaOFlow) return true;
+  return PERMISSOES.some((p) => !PERMISSOES_FLOW_LISTA.includes(p) && permissoes[p]);
+}
 
 /** Monta o `data` de um cargo a partir de um item do catálogo. */
 export function dadosDoCargo({ descricao, permite }, tenantId) {
   const data = { tenantId, descricao };
   for (const p of PERMISSOES) data[p] = permite.includes(p);
+  /* Derivada, e não lida de `permite`: o catálogo lista `acessarPainel` em
+     alguns cargos por hábito, e essas entradas eram silenciosamente ignoradas
+     porque o laço acima percorre `PERMISSOES`, que não a contém. Deixar a
+     dedução aqui faz o catálogo e a tela concordarem sem que ninguém precise
+     lembrar de marcar a caixa certa. */
+  data.acessarPainel = alcancaOHub(data);
   return data;
+}
+
+/* ── O CATÁLOGO DEPENDE DO QUE A CONTA CONTRATOU ─────────────────────────────
+
+   Três dos dez cargos existem só por causa do Flow: Jurídico, Financeiro e
+   Corretor Flow. Numa imobiliária que não contratou o módulo eles não são
+   inofensivos — são piores que inúteis:
+
+     · "Corretor Flow" aparece na tela de cargos ao lado de "Corretor", com
+       nome de um produto que a conta não tem. Quem administra fica escolhendo
+       entre dois cargos e um deles é uma promessa vazia.
+
+     · Jurídico e Financeiro são SÓ-FLOW: `acessarPainel` deriva para `false`
+       (não têm permissão nenhuma do Hub) e `acessarFlow` para `true` num
+       módulo que não existe ali. O resultado é um cargo que não alcança NADA —
+       e quem for posto nele é despejado na vitrine ao entrar, sem explicação.
+
+   ── POR QUE UMA MARCA EXPLÍCITA, E NÃO UMA DEDUÇÃO ──
+
+   A primeira tentativa deduziu: "tem permissão do Flow, logo é do Flow". Errou
+   nos dois sentidos, e a lista abaixo mostra por quê.
+
+     · Administrador e Gerente TÊM permissões do Flow e não são cargos do Flow —
+       são os cargos centrais da casa, que por acaso também alcançam o módulo.
+       A dedução os apagava do catálogo, e uma imobiliária sem Flow nascia sem
+       administrador.
+     · "Corretor Flow" tem permissões do HUB (imóveis, clientes, relatórios) e
+       existe só por causa do módulo. A dedução o mantinha.
+
+   `soComFlow` diz a intenção, que é o que a dedução não alcança: este cargo
+   existe POR CAUSA do Flow, independentemente de quais caixas ele marca.
+
+   Os que ficam mantêm as permissões de Flow que têm. Não incomodam: quem lê o
+   que a pessoa alcança cruza com os módulos da CONTA (`modulosDoUsuario`), e
+   sem o módulo elas não valem nada. Zerá-las custaria a vantagem de o
+   administrador já sair pronto no dia em que a imobiliária contratar.
+
+   Contratar o Flow depois NÃO cria estes cargos retroativamente, e é aceitável:
+   a tela de cargos passa a mostrar o grupo do Flow e quem administra monta o
+   arranjo que quiser. Criá-los de surpresa numa conta que já ajustou os cargos
+   à mão seria pior. */
+export function cargosDoCatalogo({ temFlow = false } = {}) {
+  return temFlow ? CARGOS_PADRAO : CARGOS_PADRAO.filter((c) => !c.soComFlow);
 }
 
 /**
@@ -166,11 +253,12 @@ export function dadosDoCargo({ descricao, permite }, tenantId) {
  *
  * @param {import("@prisma/client").PrismaClient} prisma
  * @param {string} tenantId
+ * @param {{ temFlow?: boolean }} [opcoes] a imobiliária contratou o Flow?
  * @returns {Promise<{ id: number, descricao: string }>} o cargo Administrador
  */
-export async function criarCargosPadrao(prisma, tenantId) {
+export async function criarCargosPadrao(prisma, tenantId, { temFlow = false } = {}) {
   await prisma.cargo.createMany({
-    data: CARGOS_PADRAO.map((c) => dadosDoCargo(c, tenantId)),
+    data: cargosDoCatalogo({ temFlow }).map((c) => dadosDoCargo(c, tenantId)),
   });
   /* Relido em vez de deduzido do createMany: o Postgres não devolve os ids
      criados em lote, e inventar um "o primeiro é o Administrador" a partir da

@@ -82,7 +82,30 @@ async function autenticarBase(req, res, next) {
   try {
     const usuario = await prisma.usuario.findUnique({
       where: { id: payload.userId },
-      select: { id: true, nome: true, ativo: true, tenantId: true, cargoCodigo: true, cargo: true },
+      select: {
+        id: true, nome: true, ativo: true, tenantId: true, cargoCodigo: true, cargo: true,
+        /* ── A SESSÃO FOI ENCERRADA À MÃO? ──────────────────────────────────
+
+           JWT é sem estado: uma vez emitido, vale até expirar. O "sair" do
+           painel apagava o token do `localStorage` e mais nada — quem tivesse
+           copiado aquele texto (navegador compartilhado, log, dump) continuava
+           dentro por até sete dias, e não havia como impedir.
+
+           A conferência entra no MESMO `select`, como relação filtrada pelo
+           `jti` do token: continua UMA ida ao banco por requisição, como antes.
+           Uma segunda consulta seria caro demais para uma trava que quase nunca
+           tem o que dizer — a lista está vazia para a imensa maioria das
+           sessões.
+
+           `payload.jti ?? ""` porque token EMITIDO ANTES desta mudança não tem
+           jti. Ele não pode ser recusado (derrubaria todo mundo no deploy) nem
+           casar com linha nenhuma; a string vazia garante as duas coisas. */
+        sessoesRevogadas: {
+          where: { jti: payload.jti ?? "" },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
 
     /* `sessaoEncerrada` no corpo, e não só o 401: o front distingue "sua sessão
@@ -92,6 +115,16 @@ async function autenticarBase(req, res, next) {
     if (!usuario || !usuario.ativo) {
       return res.status(401).json({
         error: "Seu acesso foi encerrado. Fale com o administrador da sua imobiliária.",
+        sessaoEncerrada: true,
+      });
+    }
+
+    /* Sessão encerrada por um logout. Mesma marca de "acesso encerrado" que o
+       usuário desativado usa: para quem está do outro lado, as duas situações
+       são a mesma — este token não vale mais, entre de novo. */
+    if (usuario.sessoesRevogadas?.length) {
+      return res.status(401).json({
+        error: "Esta sessão foi encerrada. Entre novamente.",
         sessaoEncerrada: true,
       });
     }

@@ -10004,7 +10004,7 @@ ${Xme()}
   color: transparent;
 }
 .dl-cta__sub { margin-top: 20px; font-size: 15.5px; line-height: 1.72; color: #4b5563; max-width: 46ch; }
-.dl-cta__note { margin-top: 32px; color: #9aa2ad; font-size: 9px; letter-spacing: 0.16em; }
+.dl-cta__note { margin-top: 32px; color: #ffffff; font-size: 9px; letter-spacing: 0.16em; }
 .dl-cta .dl-eyebrow { color: #4b5563; }
 .dl-cta .dl-eyebrow__line { background: rgba(12,18,26,0.2); }
 

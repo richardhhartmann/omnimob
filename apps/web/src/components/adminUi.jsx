@@ -139,9 +139,25 @@ export function PageHeader({ title, subtitle, action }) {
    `acaoLabel`/`onAcao` são opcionais de propósito: quando a lista está vazia
    porque um FILTRO escondeu tudo, "cadastrar o primeiro" é falso — já existem
    itens, só não estes. Nesse caso quem chama passa só a mensagem. */
-export function EmptyState({ mensagem, acaoLabel, onAcao, padding = "48px 24px" }) {
+/* `desenho` e opcional e so entra no vazio DE VERDADE — nunca no vazio de
+   filtro. A razao e a mesma que ja separa o texto e o botao: filtro que escondeu
+   tudo e um estado passageiro de meio segundo, e ilustracao ali vira peso numa
+   tela que a pessoa vai atravessar dezenas de vezes por dia. No primeiro acesso,
+   quando a lista esta vazia porque a conta e nova, ela e o contrario disso: a
+   unica coisa na tela. */
+export function EmptyState({ mensagem, acaoLabel, onAcao, desenho, desenhoAlt = "", padding = "48px 24px" }) {
   return (
     <div className="glass-panel" style={{ textAlign: "center", padding }}>
+      {desenho ? (
+        <img
+          src={desenho}
+          alt={desenhoAlt}
+          width={360}
+          height={360}
+          loading="lazy"
+          style={{ display: "block", width: "100%", maxWidth: "210px", height: "auto", margin: "0 auto 18px" }}
+        />
+      ) : null}
       <p style={{ color: "var(--text-muted)", margin: 0 }}>{mensagem}</p>
       {acaoLabel && onAcao ? (
         <button

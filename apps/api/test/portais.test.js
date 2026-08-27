@@ -42,16 +42,32 @@ function imovelDe(extra = {}) {
   return prisma.property.create({
     data: {
       tenantId: A.tenant.id,
-      title: "Imóvel de teste",
+      /* ── O imóvel aqui precisa ser PUBLICÁVEL, e isso ficou mais exigente ──
+
+         Estes testes perguntam "o imóvel certo chegou ao feed certo?", e para
+         responder isso o imóvel tem de conseguir entrar em algum feed. Quem
+         decide é `conferirAnuncio` (`services/feedPortais.js`), com as regras
+         que o portal cobra: título de 10 a 100 caracteres, cinco fotos,
+         preço, cidade, UF reconhecível e descrição.
+
+         A fábrica tinha título curto, uma foto e nenhum endereço — passava
+         quando o feed só exigia "ao menos uma imagem". Deixá-la assim faria
+         estes três testes falharem por um motivo que não é o deles. */
+      title: "Imóvel de teste para os portais",
       description: "Descrição de teste.",
       address: "Rua de Teste, 1",
+      city: "Campinas",
+      state: "SP",
+      neighborhood: "Centro",
       price: 100000,
       status: "ACTIVE",
-      /* A foto é obrigatória para entrar no feed — imóvel sem imagem é recusado
-         na carga do portal, então `feedPortais` o deixa de fora. Sem ela estes
-         testes passariam por motivo errado. `PropertyImage` tem `tenantId`
-         próprio. */
-      images: { create: [{ tenantId: A.tenant.id, url: "https://exemplo.test/foto.jpg", position: 0 }] },
+      images: {
+        create: Array.from({ length: 5 }, (_, i) => ({
+          tenantId: A.tenant.id,
+          url: `https://exemplo.test/foto${i}.jpg`,
+          position: i,
+        })),
+      },
       ...extra,
     },
   });
@@ -89,19 +105,19 @@ test("os nomes viram frase legível", () => {
 // ─── Os feeds ───────────────────────────────────────────────────────────────
 
 test("cada endereço leva só os imóveis marcados para aquele portal", async () => {
-  const soZap = await imovelDe({ title: "So no ZAP", publicarPortais: true, portais: ["ZAP"] });
-  const soOlx = await imovelDe({ title: "So na OLX", publicarPortais: true, portais: ["OLX"] });
+  const soZap = await imovelDe({ title: "Anuncio so no ZAP", publicarPortais: true, portais: ["ZAP"] });
+  const soOlx = await imovelDe({ title: "Anuncio so na OLX", publicarPortais: true, portais: ["OLX"] });
 
   const zap = await feed("feed/zap.xml");
-  assert.ok(zap.includes("So no ZAP"), "o marcado para ZAP entra no feed do ZAP");
-  assert.ok(!zap.includes("So na OLX"), "e o da OLX NÃO — foi o que a imobiliária pediu");
+  assert.ok(zap.includes("Anuncio so no ZAP"), "o marcado para ZAP entra no feed do ZAP");
+  assert.ok(!zap.includes("Anuncio so na OLX"), "e o da OLX NÃO — foi o que a imobiliária pediu");
 
   const olx = await feed("feed/olx.xml");
-  assert.ok(olx.includes("So na OLX"));
-  assert.ok(!olx.includes("So no ZAP"));
+  assert.ok(olx.includes("Anuncio so na OLX"));
+  assert.ok(!olx.includes("Anuncio so no ZAP"));
 
   const viva = await feed("feed/vivareal.xml");
-  assert.ok(!viva.includes("So no ZAP") && !viva.includes("So na OLX"), "nenhum dos dois marcou VivaReal");
+  assert.ok(!viva.includes("Anuncio so no ZAP") && !viva.includes("Anuncio so na OLX"), "nenhum dos dois marcou VivaReal");
 
   await prisma.property.deleteMany({ where: { id: { in: [soZap.id, soOlx.id] } } });
 });

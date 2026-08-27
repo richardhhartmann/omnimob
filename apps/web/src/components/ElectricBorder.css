@@ -89,3 +89,25 @@
 .electric-border--so-raios .eb-glow-2 {
   display: none;
 }
+
+/* ─── O bloom do fundo, com alcance FIXO ─────────────────────────────────────
+   Como moldura, o alcance do brilho deixa de ser detalhe estético e vira um
+   número que o pai precisa acomodar: quem monta a moldura sobre um cartão quase
+   sempre tem um `overflow` recortando por perto, e brilho que passa do recorte
+   não esmaece — ele termina numa RETA. Reta é o que denuncia que aquilo é um
+   efeito, e não luz.
+
+   O `scale(1.1)` do padrão não serve aqui porque o alcance dele é PROPORCIONAL:
+   são 5% da altura para cada lado, o que num cartão de 1000px vira 50px antes
+   mesmo do desfoque. Somado à cauda de blur(32px) — que se vê por uns 48px —
+   dava cerca de 98px de brilho para fora, contra os 70px de folga que a grade
+   de planos concede. O corte caía bem no meio da queda, onde é mais visível.
+
+   Com `inset` o alcance é o mesmo em cartão baixo ou alto: 10px de extensão
+   mais ~30px de cauda, uns 40px no total. Cabe na folga da grade e cabe também
+   no respiro do carrossel, que é o mais apertado dos dois. */
+.electric-border--moldura .eb-background-glow {
+  transform: none;
+  inset: -10px;
+  filter: blur(20px);
+}

@@ -6,6 +6,57 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
 
+/* ────────────────────────────────────────────────────────────────────────────
+   O QUE UM USUÁRIO MOSTRA — E O QUE NUNCA SAI
+
+   Estas rotas devolviam a LINHA INTEIRA do banco (`include: { cargo: true }`,
+   sem `select`), e junto com ela ia o campo `senha`: o hash bcrypt de todo
+   mundo da imobiliária, em `GET /api/usuarios`, para qualquer pessoa com
+   "Gerenciar Usuários".
+
+   Hash não é senha, mas é a matéria-prima dela: bcrypt sai da máquina do
+   atacante para ser quebrado offline, sem limite de tentativas, sem rate limit
+   e sem ninguém perceber. E senha de painel é reaproveitada em outros lugares.
+
+   Iam junto os campos `google*` — identificador de outra plataforma, que não
+   tem uso nenhum nesta tela.
+
+   ── LISTA FECHADA, E NÃO UMA LISTA DE EXCLUSÃO ──
+
+   `select` e não `omit`: com uma lista de exclusão, a próxima coluna sensível
+   que alguém acrescentar ao schema (um segredo de MFA, um token de convite)
+   vaza por padrão, e o vazamento é silencioso. Com lista fechada, o padrão é
+   NÃO sair — e o campo novo só aparece quando alguém escreve o nome dele aqui.
+
+   Uma projeção só para as três rotas: listar, criar e atualizar precisam
+   devolver a mesma forma, senão a tela recebe um usuário com campos a mais
+   numa e a menos noutra. */
+const USUARIO_VISIVEL = {
+  id: true,
+  tenantId: true,
+  cargoCodigo: true,
+  nome: true,
+  login: true,
+  email: true,
+  ativo: true,
+  forcaAlterarSenha: true,
+  temaPainel: true,
+  foto: true,
+  creci: true,
+  whatsapp: true,
+  exibirNaVitrine: true,
+  cargoVitrine: true,
+  createdAt: true,
+  updatedAt: true,
+  origemExterna: true,
+  /* O vínculo com o Google vira um BOOLEANO. Quem administra precisa saber que
+     a pessoa entra pelo Google (para não ficar procurando por que ela nunca
+     define senha); o identificador, o e-mail e a foto de lá não têm uso nesta
+     tela e são dado de outra plataforma. */
+  googleVinculadoEm: true,
+  cargo: true,
+};
+
 export const usuarioRouter = Router();
 usuarioRouter.use(requireAuth);
 usuarioRouter.use(requireTenant);
@@ -15,7 +66,7 @@ usuarioRouter.get("/", async (req, res) => {
   try {
     const usuarios = await prisma.usuario.findMany({
       where: { tenantId: req.tenant.id },
-      include: { cargo: true },
+      select: USUARIO_VISIVEL,
       orderBy: { nome: "asc" },
     });
     return res.json(usuarios);
@@ -102,7 +153,7 @@ usuarioRouter.post("/", async (req, res) => {
         ativo: true,
         ...camposDeVitrine(req.body),
       },
-      include: { cargo: true },
+      select: USUARIO_VISIVEL,
     });
     limparCacheDaVitrine(req.tenant.id);
     return res.status(201).json(usuario);
@@ -146,7 +197,7 @@ usuarioRouter.put("/:id", async (req, res) => {
     const usuario = await prisma.usuario.update({
       where: { id: req.params.id },
       data,
-      include: { cargo: true },
+      select: USUARIO_VISIVEL,
     });
     limparCacheDaVitrine(req.tenant.id);
     return res.json(usuario);

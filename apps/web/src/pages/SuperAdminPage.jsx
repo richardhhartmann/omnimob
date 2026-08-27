@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Buildings, GraduationCap, Lifebuoy } from "@phosphor-icons/react";
-import { api, adminApi } from "../api";
+import { api, adminApi, setApiToken } from "../api";
+import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
@@ -148,6 +149,11 @@ export function SuperAdminPage({ session, onLogout }) {
   const [chamadosAbertos, setChamadosAbertos] = useState(0);
 
   const { confirm, modal: confirmModal } = useConfirm();
+  // Qual imobiliária está abrindo agora. Trava o botão daquela linha, e só dela.
+  const [entrando, setEntrando] = useState(null);
+  /* A senha recém-gerada, para o cartão que a mostra. Some ao fechar, e não
+     volta: o texto não é guardado em lugar nenhum além do hash. */
+  const [senhaGerada, setSenhaGerada] = useState(null);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -328,6 +334,91 @@ export function SuperAdminPage({ session, onLogout }) {
     }
   }
 
+  /* ── Entrar na conta como o Administrador dela ─────────────────────────────
+
+     PERGUNTA ANTES, e não é cerimônia: a ação deixa registro na trilha da
+     imobiliária, com nome e hora. Quem clica precisa saber disso ANTES de
+     clicar — descobrir depois, pelo cliente perguntando "quem entrou aqui
+     ontem?", é a pior ordem possível.
+
+     A sessão do super-admin NÃO é apagada. Ela vive noutra chave do
+     `localStorage` (`adminRequest` usa a sua, `saveSession` a do painel), então
+     sair da imobiliária devolve o super-admin de onde ele estava. */
+  async function entrarComo(t) {
+    /* `confirm` é posicional aqui — (mensagem, rótulo, tom) —, a mesma forma
+       que `handleDelete` usa. Tom "primary" e não "danger": entrar não destrói
+       nada, e pintar de vermelho o que não apaga gasta o vermelho. */
+    const ok = await confirm(
+      `Entrar em ${t.name} como o Administrador dela?
+
+` +
+        "A sessão dura 2 horas. O acesso fica registrado no Registro de Atividade da imobiliária, " +
+        "com o seu e-mail e a hora — e tudo que você fizer lá dentro será gravado como se fosse " +
+        "o Administrador dela.",
+      "Entrar",
+      "primary",
+    );
+    if (!ok) return;
+
+    setEntrando(t.id);
+    setError("");
+    try {
+      const sessao = await adminApi.entrarNoTenant(t.id);
+      /* A ordem importa: grava, aponta o cliente HTTP para o token novo, e só
+         então navega. Navegar antes faria a primeira tela pedir dados com o
+         token que ainda não existe. */
+      saveSession(sessao);
+      setApiToken(sessao.token);
+      /* Recarrega em vez de `navegar("/")`: a sessão do painel é lida uma vez,
+         na montagem do `App`, e trocá-la por baixo de uma árvore já montada
+         deixaria metade da tela com os dados do super-admin. */
+      window.location.assign("/");
+    } catch (err) {
+      /* ── A CONTA AINDA NÃO TEM SENHA DEFINIDA ────────────────────────────
+
+         A imobiliária nasce com uma senha temporária que aparece UMA vez, no
+         modal da criação. Fechar aquele modal e clicar em "Entrar" deixava a
+         conta num beco: o super-admin entrava, e o cliente ficava sem forma
+         nenhuma de acessar — a senha tinha se perdido.
+
+         Agora o servidor recusa entrar nesse estado (a exigência de trocar a
+         senha temporária existe justamente porque ela viajou), e a saída é
+         reemitir: uma temporária nova, mostrada uma vez, que o cliente é
+         obrigado a trocar no primeiro acesso. Ninguém aqui fica sabendo a
+         senha real de ninguém. */
+      if (err?.body?.precisaDefinirSenha) {
+        setEntrando(null);
+        const gerar = await confirm(
+          `${t.name} ainda não definiu a senha do Administrador, então não dá para entrar na conta ` +
+            "— a exigência de trocar a senha temporária existe justamente porque ela viajou. " +
+            "Quer gerar uma nova senha temporária para passar ao cliente? Ela aparece uma vez só, " +
+            "e ele terá de trocá-la no primeiro acesso.",
+          "Gerar nova senha",
+          "primary",
+        );
+        if (gerar) await reemitirSenha(t);
+        return;
+      }
+      setError(err.message);
+      setEntrando(null);
+    }
+  }
+
+  /* Reemite a senha temporária do Administrador. Serve para o caso acima e para
+     o chamado mais comum de todos — "o cliente perdeu o acesso e não recebe o
+     e-mail de recuperação" —, que até aqui não tinha resposta nenhuma. */
+  async function reemitirSenha(t) {
+    setEntrando(t.id);
+    try {
+      const r = await adminApi.reemitirSenhaAdmin(t.id);
+      setSenhaGerada({ tenant: t.name, ...r });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEntrando(null);
+    }
+  }
+
   async function handleDelete(t) {
     const ok = await confirm(
       `Excluir o tenant "${t.name}"? Isso remove usuários, imóveis, leads e chamados — e cancela ` +
@@ -449,6 +540,22 @@ export function SuperAdminPage({ session, onLogout }) {
                   <Button as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false} onClick={() => openEdit(t)}>
                     Editar
                   </Button>
+                  {/* ── ENTRAR NA CONTA DO CLIENTE ────────────────────────
+                      "Não consigo publicar" é impossível de responder sem ver
+                      a tela que a pessoa está vendo, e a alternativa que
+                      existia era pedir a senha dela — que depois continua com
+                      quem pediu.
+
+                      Fica ao lado de Editar e ANTES de Excluir de propósito:
+                      é uma ação de suporte, não destrutiva, e encostá-la no
+                      botão vermelho aumentaria a chance do clique errado. */}
+                  <Button
+                    as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false}
+                    disabled={entrando === t.id}
+                    onClick={() => entrarComo(t)}
+                  >
+                    {entrando === t.id ? "Entrando…" : "Entrar"}
+                  </Button>
                   <Button as="button" type="button" variant="danger" className="dl-btn--sm" arrow={false} onClick={() => handleDelete(t)}>
                     Excluir
                   </Button>
@@ -458,6 +565,47 @@ export function SuperAdminPage({ session, onLogout }) {
           })}
         </div>
         </>
+      ) : null}
+
+      {/* ── A senha reemitida ─────────────────────────────────────────────
+          O MESMO desenho do cartão de credenciais da criação (`sa-credenciais`),
+          e não um segundo: as duas telas dizem a mesma coisa — "anote agora,
+          isto não volta" — e um segundo desenho divergiria na primeira palavra
+          que alguém trocasse. */}
+      {senhaGerada ? (
+        <div className="sa-modal" onClick={() => setSenhaGerada(null)}>
+          <div className="sa-modal__card" onClick={(e) => e.stopPropagation()}>
+            <div className="sa-modal__head">
+              <Eyebrow>SENHA REEMITIDA</Eyebrow>
+              <h2 className="sa-modal__title">{senhaGerada.tenant}</h2>
+            </div>
+
+            <div className="sa-credenciais">
+              <span className="dl-mono sa-modal__extra-label">// acesso do administrador</span>
+              <dl className="sa-credenciais__lista">
+                <div>
+                  <dt className="dl-mono">LOGIN</dt>
+                  <dd>{senhaGerada.login}</dd>
+                </div>
+                <div>
+                  <dt className="dl-mono">SENHA PROVISÓRIA</dt>
+                  <dd>{senhaGerada.senha}</dd>
+                </div>
+              </dl>
+              <p className="sa-credenciais__nota">
+                Anote agora: a senha não volta a ser exibida. No primeiro acesso o sistema
+                exige que {senhaGerada.nome} defina uma nova — esta serve só para chegar lá.
+                A troca fica registrada no Registro de Atividade da imobiliária.
+              </p>
+            </div>
+
+            <div className="sa-modal__actions">
+              <Button as="button" type="button" onClick={() => setSenhaGerada(null)} arrow={false}>
+                Anotei
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {/* ── Modal de cadastro/edição ── */}

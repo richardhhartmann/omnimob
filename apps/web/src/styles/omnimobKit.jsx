@@ -284,6 +284,81 @@ export function Scallop({ size = 130, color, petals = 12, style }) {
   );
 }
 
+/* ── AS FORMAS DE FUNDO ──────────────────────────────────────────────────────
+
+   O vocabulário de formas da marca. São duas, e serem POUCAS é o ponto: uma
+   página com sete formas decorativas não tem linguagem visual, tem sobra de
+   ideias. Repetir as mesmas duas em lugares diferentes é o que as transforma
+   de enfeite em assinatura.
+
+     flor  o `Scallop` que este arquivo já gerava — doze pétalas em volta de um
+           miolo. Ela já vivia nas telas de acesso e na seção do editor; o que
+           mudou é que agora tem nome de sistema em vez de ser chamada solta.
+     luas  duas meias-luas encostadas. Entrou junto do manifesto do Flow, e é a
+           contraparte da flor: onde a flor é radial e macia, esta tem eixo e
+           corta reto no meio.
+
+   ── AS REGRAS QUE FAZEM ISSO PARECER PROPOSITAL ──
+
+   1. UMA COR SÓ por forma, sempre translúcida. Forma decorativa com degradê
+      compete com o conteúdo e vira ilustração de fundo de tela.
+   2. GIRO MUITO LENTO, entre 50s e 90s. Rápido o bastante para que a página
+      não pareça uma imagem, lento o bastante para ninguém acompanhar o
+      movimento enquanto lê.
+   3. SANGRAM pela borda da seção, sempre. Uma forma inteira e centrada lê como
+      figura; cortada pela quina, lê como textura — e é textura que se quer.
+   4. Só `transform`, nunca `top`/`left` animados: o giro fica no compositor e
+      não custa layout. É por isso que ela não pergunta ao orçamento de efeitos,
+      ao contrário dos shaders — o que a desliga é `prefers-reduced-motion`, e o
+      CSS cuida disso sozinho. */
+const CAMINHO_LUAS =
+  "M0 0C66.274 0 120 53.726 120 120C120 186.274 66.274 240 0 240V0ZM120 0C186.274 0 240 53.726 240 120C240 186.274 186.274 240 120 240V0Z";
+
+export function FormaDeFundo({
+  forma = "flor",
+  cor,
+  gira = 60,
+  inverso = false,
+  className = "",
+  style,
+}) {
+  return (
+    <span
+      className={`omni-forma ${className}`.trim()}
+      aria-hidden="true"
+      style={{
+        color: cor,
+        animationDuration: `${gira}s`,
+        animationDirection: inverso ? "reverse" : "normal",
+        ...style,
+      }}
+    >
+      {forma === "luas" ? (
+        <svg viewBox="0 0 240 240" aria-hidden="true">
+          <path d={CAMINHO_LUAS} fill="currentColor" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 240 240" aria-hidden="true">
+          <g fill="currentColor">
+            <circle cx="120" cy="120" r="82.2" />
+            {Array.from({ length: 12 }, (_, i) => {
+              const a = (i / 12) * Math.PI * 2;
+              return (
+                <circle
+                  key={i}
+                  cx={120 + Math.cos(a) * 82.2}
+                  cy={120 + Math.sin(a) * 82.2}
+                  r={37.2}
+                />
+              );
+            })}
+          </g>
+        </svg>
+      )}
+    </span>
+  );
+}
+
 export function OmnimobStyles({ extra }) {
   return <style>{extra ? `${CORE_CSS}\n${extra}` : CORE_CSS}</style>;
 }
@@ -560,5 +635,29 @@ const CORE_CSS = `
 @media (max-width: 640px) {
   .dl-wrap { padding: 0 18px; }
   .dl-grid-hair--2, .dl-grid-hair--3, .dl-grid-hair--4 { grid-template-columns: 1fr; }
+}
+
+/* ── Formas de fundo ──
+   O posicionamento e o tamanho ficam com quem usa (sao decisao de cada secao);
+   o que mora aqui e so o que TODA forma tem em comum, que e o giro e o fato de
+   nao receber ponteiro. Ver o comentario do componente para as quatro regras.
+   (Sem crases neste comentario: este CSS e um template literal.) */
+.omni-forma {
+  position: absolute;
+  pointer-events: none;
+  line-height: 0;
+  z-index: 0;
+  animation-name: omniFormaGira;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.omni-forma svg { width: 100%; height: 100%; display: block; }
+
+@keyframes omniFormaGira {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .omni-forma { animation: none; }
 }
 `;

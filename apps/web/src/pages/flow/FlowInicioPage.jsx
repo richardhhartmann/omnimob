@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { Kanban, Handshake, SealCheck, Coins, Broadcast, WarningCircle, TrendUp } from "@phosphor-icons/react";
+import {
+  Kanban, Handshake, SealCheck, Coins, Broadcast, WarningCircle, TrendUp,
+  ListChecks, FileText, PlusCircle,
+} from "@phosphor-icons/react";
 import { api } from "../../api";
 import { PageHeader, StatCard, StatGrid } from "../../components/adminUi";
 import { ESTAGIOS_FLOW, estagioInfo, reais } from "../../utils/flow";
@@ -200,8 +203,53 @@ export function FlowInicioPage({ session }) {
         </div>
       </div>
 
-      {/* ── Atalhos do processo ───────────────────────────────────────────── */}
+      {/* ── Atalhos do processo ─────────────────────────────────────────────
+
+          ── TODA PÁGINA DO FLOW TEM PORTA AQUI ──
+
+          Faltavam três — Funil, Negócios e Modelos de Minuta —, e a ausência
+          não era neutra: esta tela é a primeira coisa que quem entra no módulo
+          vê, e o que não aparece nela só existe para quem já sabe procurar na
+          barra lateral. Quem chega ao Flow pela primeira vez encontrava um
+          resumo bonito e três caminhos de quatro.
+
+          A ordem segue o processo, e não a importância: capta, organiza no
+          funil, acompanha o negócio, valida, contrata, comissiona. É a mesma
+          ordem da barra lateral, de propósito — duas ordens diferentes para os
+          mesmos itens obrigam a reaprender o mapa a cada tela.
+
+          Cada cartão continua atrás da permissão que abre a página que ele
+          leva. Um atalho para uma tela que responde "sem permissão" é pior do
+          que atalho nenhum. */}
       <div className="flow-atalhos">
+        {cargo?.gerenciarNegocios ? (
+          <AtalhoFlow
+            Icon={Kanban} cor="#14b8a6"
+            titulo="Funil de vendas"
+            texto="O quadro com todos os negócios por estágio, para arrastar conforme avançam."
+            onClick={() => navigate("/flow/funil")}
+          />
+        ) : null}
+        {cargo?.gerenciarNegocios ? (
+          <AtalhoFlow
+            Icon={ListChecks} cor="#6366f1"
+            titulo="Todos os negócios"
+            texto={
+              emAberto.quantidade
+                ? `${emAberto.quantidade} em andamento. A lista completa, com busca e filtro por estágio.`
+                : "A lista completa, com busca e filtro por estágio."
+            }
+            onClick={() => navigate("/flow/negocios")}
+          />
+        ) : null}
+        {cargo?.gerenciarNegocios ? (
+          <AtalhoFlow
+            Icon={PlusCircle} cor="#10b981"
+            titulo="Novo negócio"
+            texto="Começar um negócio a partir de um cliente e um imóvel do acervo."
+            onClick={() => navigate("/flow/negocios/novo")}
+          />
+        ) : null}
         {cargo?.gerenciarCaptacao ? (
           <AtalhoFlow
             Icon={Broadcast} cor="#0ea5e9"
@@ -234,6 +282,14 @@ export function FlowInicioPage({ session }) {
             }
             destaque={dados.aguardandoAssinatura > 0}
             onClick={() => navigate("/flow/contratos")}
+          />
+        ) : null}
+        {cargo?.gerenciarContratos ? (
+          <AtalhoFlow
+            Icon={FileText} cor="#a78bfa"
+            titulo="Modelos de minuta"
+            texto="Os contratos em branco, com os marcadores que o sistema preenche sozinho."
+            onClick={() => navigate("/flow/modelos")}
           />
         ) : null}
         {cargo?.verComissoes ? (

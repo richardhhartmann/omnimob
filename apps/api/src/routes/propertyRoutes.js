@@ -10,6 +10,7 @@ import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { planoPermiteTour360 } from "../middlewares/planoMiddleware.js";
 import { gerarConteudoImovel, inferirComodidadesRegiao, isAiEnabled } from "../services/aiService.js";
 import { createPropertySchema, updatePropertySchema, updateTiposContratoSchema } from "../validators/propertyValidators.js";
+import { conferirAnuncio, TITULO_MIN, TITULO_MAX } from "../services/feedPortais.js";
 
 const { PropertyStatus, MetricEventType, TipoContrato } = prismaPkg;
 
@@ -250,6 +251,56 @@ propertyRouter.get("/", async (req, res) => {
   }
 });
 
+/* ─── O que está ficando de fora do portal, e por quê ────────────────────────
+
+   O feed exclui em silêncio o que o portal recusaria — e "em silêncio" é a
+   parte cara. A imobiliária marca cem imóveis para o ZAP, oitenta entram, e não
+   existe tela nenhuma que explique os vinte. A conversa vira "o sistema não
+   está mandando", que é a pior forma de descobrir que faltavam duas fotos.
+
+   Esta rota é a lista dessa diferença: um item por imóvel marcado que não passa
+   em `conferirAnuncio`, com os motivos já em português e o `campo` de cada um,
+   para a tela levar o corretor direto ao lugar que falta preencher.
+
+   Vem ANTES de `/:id` na leitura do arquivo por hábito, não por necessidade —
+   `/portais/pendencias` tem dois segmentos e `/:id` casa só com um. */
+propertyRouter.get("/portais/pendencias", async (req, res) => {
+  try {
+    const imoveis = await prisma.property.findMany({
+      where: { tenantId: req.tenant.id, status: "ACTIVE", publicarPortais: true },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true, title: true, price: true, city: true, state: true,
+        description: true, publicarPortais: true,
+        images: { select: { id: true, url: true, is360: true } },
+      },
+    });
+
+    const pendentes = [];
+    for (const imovel of imoveis) {
+      const { pode, problemas } = conferirAnuncio(imovel);
+      if (pode) continue;
+      pendentes.push({
+        id: imovel.id,
+        title: imovel.title,
+        problemas,
+      });
+    }
+
+    return res.json({
+      pendentes,
+      total: pendentes.length,
+      /* Quantos DE FATO alimentam o portal. É o número que a imobiliária
+         compara com o painel do ZAP quando desconfia da carga. */
+      publicando: imoveis.length - pendentes.length,
+      marcados: imoveis.length,
+    });
+  } catch (err) {
+    console.error("[GET /properties/portais/pendencias]", err);
+    return res.status(500).json({ error: "Erro ao conferir os anúncios.", detail: err.message });
+  }
+});
+
 propertyRouter.get("/:id", async (req, res) => {
   try {
     const property = await prisma.property.findFirst({
@@ -276,6 +327,45 @@ function validarTipoContrato(tipoContrato, tenant) {
   if (tipoContrato == null) return null;
   if (tiposContratoDoTenant(tenant).includes(tipoContrato)) return null;
   return { error: "Este tipo de contrato não está habilitado para a sua imobiliária.", tipoContrato };
+}
+
+/* ─── O título que o portal aceita ──────────────────────────────────────────
+
+   ZAP, VivaReal e OLX recusam anúncio com título fora de 10–100 caracteres. O
+   limite mora em `feedPortais.js` junto do resto das regras do portal, e é
+   importado daqui: escrever `10` outra vez neste arquivo é como as listas
+   duplicadas deste projeto começaram todas as vezes.
+
+   ── QUANDO ISTO COBRA, E QUANDO NÃO ──
+
+   Cobrar sempre que o imóvel esteja marcado para portais seria uma armadilha:
+   metade do acervo antigo tem título curto, e mexer no PREÇO de um deles
+   passaria a devolver um erro sobre o título — um campo que a pessoa não
+   tocou, numa tela que ela não abriu por causa dele.
+
+   Então a trava cai só sobre a ação que de fato publica:
+     • criar um imóvel já marcado para portais;
+     • LIGAR a marcação num imóvel que estava fora;
+     • MUDAR o título de um imóvel que está marcado.
+
+   O acervo antigo com título curto não fica travado — fica FORA do feed, pelo
+   mesmo `conferirAnuncio`, e aparece nomeado em `/portais/pendencias`. É a
+   diferença entre impedir a pessoa de trabalhar e mostrar a ela o que falta. */
+function validarTituloDePortal(titulo) {
+  const limpo = String(titulo || "").trim();
+  if (limpo.length >= TITULO_MIN && limpo.length <= TITULO_MAX) return null;
+
+  return {
+    error:
+      limpo.length < TITULO_MIN
+        ? `Para publicar nos portais, o título precisa de pelo menos ${TITULO_MIN} caracteres (tem ${limpo.length}).`
+        : `Para publicar nos portais, o título não pode passar de ${TITULO_MAX} caracteres (tem ${limpo.length}).`,
+    code: "TITULO_FORA_DO_PORTAL",
+    campo: "title",
+    minimo: TITULO_MIN,
+    maximo: TITULO_MAX,
+    tamanho: limpo.length,
+  };
 }
 
 /* `tenantId` fecha o caso em que não veio tipo: sem ele, o filtro caía só sobre
@@ -366,6 +456,13 @@ propertyRouter.post("/", requireImoveis, async (req, res) => {
     const erroContrato = validarTipoContrato(propertyData.tipoContrato, req.tenant);
     if (erroContrato) return res.status(400).json(erroContrato);
 
+    /* Nasce marcado para portais? Então o título já tem de servir. O padrão de
+       `publicarPortais` é ligado, então isto cobre o cadastro comum. */
+    if (propertyData.publicarPortais !== false) {
+      const erroTitulo = validarTituloDePortal(propertyData.title);
+      if (erroTitulo) return res.status(400).json(erroTitulo);
+    }
+
     // Deriva propertyType do tipo selecionado para manter compatibilidade
     let propertyType = propertyData.propertyType || "";
     if (tipoImovelId) {
@@ -437,6 +534,23 @@ propertyRouter.put("/:id", requireImoveis, async (req, res) => {
 
     const erroContrato = validarTipoContrato(propertyData.tipoContrato, req.tenant);
     if (erroContrato) return res.status(400).json(erroContrato);
+
+    /* Ver `validarTituloDePortal`: cobra só quando a edição É a publicação —
+       ligar a marcação, ou trocar o título de quem já está marcado. Editar
+       qualquer outro campo de um imóvel antigo continua passando. */
+    const vaiParaPortais =
+      propertyData.publicarPortais !== undefined
+        ? propertyData.publicarPortais
+        : current.publicarPortais;
+    const ligandoAgora = propertyData.publicarPortais === true && !current.publicarPortais;
+    const mudandoTitulo = propertyData.title !== undefined && propertyData.title !== current.title;
+
+    if (vaiParaPortais && (ligandoAgora || mudandoTitulo)) {
+      const erroTitulo = validarTituloDePortal(
+        propertyData.title !== undefined ? propertyData.title : current.title,
+      );
+      if (erroTitulo) return res.status(400).json(erroTitulo);
+    }
 
     let propertyType = propertyData.propertyType;
     if (tipoImovelId !== undefined) {

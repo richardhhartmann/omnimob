@@ -93,7 +93,6 @@ export const MODULOS = [
        da logo no balão do seletor (228px) e vira a chamada do cartão na
        landing. Duas frases diferentes para as duas telas seriam duas versões da
        mesma ideia — e a da landing já tinha divergido uma vez. */
-    tagline: "O acervo e a presença",
     descricao:
       "Onde a imobiliária cadastra os imóveis, monta a vitrine pública, recebe os " +
       "interessados e organiza a equipe.",
@@ -111,7 +110,6 @@ export const MODULOS = [
     nome: "Flow",
     nomeCompleto: "Omnimob Flow",
     palavra: "/flow.png",
-    tagline: "A operação comercial",
     descricao:
       "Onde o lead vira negócio: captação automática dos portais, funil por " +
       "estágio, minuta, assinatura digital e comissão.",

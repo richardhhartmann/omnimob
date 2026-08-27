@@ -571,3 +571,130 @@ export async function analisarLead(lead = {}, imovel = null, acervo = []) {
       : [],
   };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   A LEITURA DO PAINEL DO GESTOR.
+
+   Quem dirige a imobiliária abre o painel de manhã e vê catorze números. A
+   pergunta que ele tem não é "quantos leads?", é "e aí, como estamos?" — e
+   responder isso exige comparar números entre si, que é justamente o trabalho
+   que ninguém faz às oito da manhã.
+
+   ── AS REGRAS DESTE PROMPT, E POR QUE CADA UMA ──
+
+   1. SÓ OS NÚMEROS QUE MANDAMOS. O modelo não tem acesso ao banco e não pode
+      inventar contexto ("o mercado está aquecido"). Todo número que ele citar
+      tem de estar na ficha.
+
+   2. AUSÊNCIA É AUSÊNCIA. O painel manda `null` para o que não tem como
+      calcular (ticket médio sem venda, conversão sem visita). O modelo é
+      instruído a NÃO tratar isso como zero — "seu ticket médio caiu para zero"
+      é uma afirmação falsa sobre o negócio de alguém, e é exatamente o tipo de
+      frase que faz perder a confiança na ferramenta inteira.
+
+   3. NADA DE ELOGIO VAZIO. Uma análise que sempre começa com "excelente
+      desempenho!" é ruído. Se o mês está pior que o anterior, o texto diz isso.
+
+   4. UMA AÇÃO, NÃO CINCO. A tela já tem a lista de pendências. O que a IA
+      acrescenta é a PRIORIDADE — qual delas resolver primeiro, e por quê.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const HUMORES = ["BOM", "ATENCAO", "RUIM", "NEUTRO"];
+
+const ou = (v, vazio = "sem dado") => (v === null || v === undefined ? vazio : v);
+
+/**
+ * @param {object} painel  o retorno de `services/painelGestor.js`
+ * @param {string} nomeDaImobiliaria
+ * @returns {Promise<{humor,titulo,leitura,destaque,acao}>}
+ */
+export async function analisarPainelGestor(painel = {}, nomeDaImobiliaria = "a imobiliária") {
+  const schema = {
+    type: "object",
+    properties: {
+      humor: { type: "string", enum: HUMORES },
+      titulo: { type: "string" },
+      leitura: { type: "string" },
+      destaque: { type: "string" },
+      acao: { type: "string" },
+    },
+    required: ["humor", "titulo", "leitura", "acao"],
+  };
+
+  const { hoje = {}, mes = {}, atencao = {}, acervo = {}, serie = [], meses = [], funil = [], equipe = [] } = painel;
+
+  /* A série inteira não vai: 30 pontos gastam contexto e o modelo não precisa
+     do dia 12 para dizer se a tendência subiu. Mandamos as duas metades
+     somadas, que é a comparação que interessa. */
+  const metade = Math.floor(serie.length / 2);
+  const somar = (lista, campo) => lista.reduce((s, d) => s + (d[campo] || 0), 0);
+  const primeiraQuinzena = serie.slice(0, metade);
+  const segundaQuinzena = serie.slice(metade);
+
+  const prompt =
+    `Leia os números do painel de ${nomeDaImobiliaria} e diga como a imobiliária está.\n\n` +
+    `HOJE\n` +
+    `- Interessados hoje: ${ou(hoje.interessados)} (ontem: ${ou(hoje.interessadosOntem)})\n` +
+    `- Visitas à vitrine hoje: ${ou(hoje.visitas)} (ontem: ${ou(hoje.visitasOntem)})\n\n` +
+    `ÚLTIMOS 30 DIAS\n` +
+    `- Visitas na 1ª metade: ${somar(primeiraQuinzena, "visitas")} | na 2ª metade: ${somar(segundaQuinzena, "visitas")}\n` +
+    `- Interessados na 1ª metade: ${somar(primeiraQuinzena, "leads")} | na 2ª metade: ${somar(segundaQuinzena, "leads")}\n\n` +
+    `MÊS ATUAL\n` +
+    `- Faturamento: R$ ${ou(mes.faturamento, 0)}\n` +
+    `- Variação sobre o mês passado: ${mes.variacaoFaturamento === null || mes.variacaoFaturamento === undefined ? "sem base de comparação" : `${mes.variacaoFaturamento}%`}\n` +
+    `- Vendas fechadas: ${ou(mes.vendas, 0)}\n` +
+    `- Ticket médio: ${mes.ticketMedio === null || mes.ticketMedio === undefined ? "NÃO CALCULÁVEL (nenhuma venda no mês)" : `R$ ${mes.ticketMedio}`}\n` +
+    `- Comissões: R$ ${ou(mes.comissoes, 0)}\n` +
+    `- Visitas que viraram interessado: ${mes.visitaParaLead === null || mes.visitaParaLead === undefined ? "NÃO CALCULÁVEL (nenhuma visita)" : `${mes.visitaParaLead}%`}\n` +
+    `- Interessados que viraram venda: ${mes.leadParaVenda === null || mes.leadParaVenda === undefined ? "NÃO CALCULÁVEL (nenhum interessado)" : `${mes.leadParaVenda}%`}\n\n` +
+    `FATURAMENTO POR MÊS (6 meses)\n` +
+    `${meses.map((m) => `- ${m.mes}: R$ ${m.faturamento} em ${m.vendas} venda(s)`).join("\n") || "- (sem histórico)"}\n\n` +
+    `ONDE OS INTERESSADOS ESTÃO PARADOS\n` +
+    `${funil.map((f) => `- ${f.estagio}: ${f.total}`).join("\n") || "- (nenhum interessado)"}\n\n` +
+    `PENDÊNCIAS\n` +
+    `- Interessados sem o primeiro contato: ${ou(atencao.leadsSemResposta, 0)}\n` +
+    `- Interessados sem corretor responsável: ${ou(atencao.leadsSemDono, 0)}\n` +
+    `- Imóveis ativos sem foto: ${ou(atencao.imoveisSemFoto, 0)}\n` +
+    `- Rascunhos não publicados: ${ou(atencao.rascunhos, 0)}\n\n` +
+    `ACERVO\n` +
+    `- Imóveis ativos: ${ou(acervo.ativos, 0)} | valor em carteira: R$ ${ou(acervo.valorEmCarteira, 0)}\n\n` +
+    `EQUIPE NO MÊS\n` +
+    `${equipe.map((p) => `- ${p.nome}: ${p.vendas} venda(s), R$ ${p.valor}`).join("\n") || "- (nenhuma venda registrada)"}\n\n` +
+    `Devolva:\n` +
+    `1. "humor": BOM (os números melhoraram e não há pendência cara), ATENCAO ` +
+    `(há pendência que custa dinheiro agora, ou queda relevante), RUIM (queda forte ` +
+    `somada a pendências) ou NEUTRO (não há movimento suficiente para afirmar nada).\n` +
+    `2. "titulo": no máximo 8 palavras, dizendo o essencial. Sem ponto final. ` +
+    `Nada de "Análise do painel" — diga o FATO ("Movimento subiu, mas 4 contatos esperam").\n` +
+    `3. "leitura": 2 a 4 frases ligando os números entre si. Compare, não repita: ` +
+    `"as visitas subiram 30% e os contatos não acompanharam" vale; "houve 40 visitas ` +
+    `e 3 contatos" não vale, porque isso a tela já mostra.\n` +
+    `4. "destaque": uma frase sobre o que foi melhor no período, ou string vazia se ` +
+    `não houver nada digno de nota. NÃO invente elogio.\n` +
+    `5. "acao": UMA coisa para fazer hoje, a mais cara de deixar parada, e por quê. ` +
+    `Se não houver nada urgente, diga o que observar nos próximos dias.\n\n` +
+    `REGRAS QUE NÃO SE QUEBRAM:\n` +
+    `- Use SOMENTE os números acima. Não invente nada sobre mercado, região ou concorrência.\n` +
+    `- "NÃO CALCULÁVEL" significa que o dado não existe. NUNCA o trate como zero e ` +
+    `nunca diga que algo "caiu para zero" por causa disso.\n` +
+    `- Sem elogio de abertura e sem saudação. Comece pelo fato.\n` +
+    `- Português do Brasil, tratamento por "você", direto e sem jargão de consultoria.`;
+
+  const raw = await callGemini([{ text: prompt }], {
+    system:
+      "Você é o sócio que cuida dos números de uma imobiliária brasileira e conversa " +
+      "com quem a dirige. É direto e honesto: se o mês está pior, você diz que está " +
+      "pior. Nunca inventa dado nem enfeita resultado ruim. Escreve em português do Brasil.",
+    responseSchema: schema,
+    temperature: 0.3,
+  });
+
+  const parsed = JSON.parse(raw);
+  return {
+    humor: HUMORES.includes(parsed.humor) ? parsed.humor : "NEUTRO",
+    titulo: String(parsed.titulo || "").trim(),
+    leitura: String(parsed.leitura || "").trim(),
+    destaque: String(parsed.destaque || "").trim(),
+    acao: String(parsed.acao || "").trim(),
+  };
+}

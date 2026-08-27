@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import { prisma } from "../db.js";
@@ -31,36 +32,62 @@ export const authRouter = Router();
    `PERMISSOES` é a mesma lista do catálogo de cargos: uma permissão nova entra
    na sessão sem ninguém precisar lembrar deste arquivo. */
 /* ── O cargo como a TELA precisa dele ────────────────────────────────────────
+
    `PERMISSOES` é a lista do que se ESCOLHE, e `acessarPainel` saiu dela quando
-   deixou de ser uma escolha. Só que a tela ainda lê essa chave para decidir se
-   manda a pessoa ao painel ou à vitrine — e sem ela na sessão, todo cargo que
-   não tivesse `editarPagina` era despejado na vitrine ao entrar.
+   deixou de ser uma escolha. Só que a tela ainda lê essa chave — para decidir
+   entre painel e vitrine, e hoje também para saber se o cargo alcança o HUB
+   (é a `porta` do módulo, ver `services/modulos.js`). Sem ela na sessão, todo
+   cargo sem `editarPagina` era despejado na vitrine ao entrar.
 
-   Foi exatamente o sintoma: o Administrador não notou (tem `editarPagina`), e
-   um cargo restrito a Relatórios e Auditoria não conseguia entrar.
+   ── POR QUE ELA DEIXOU DE SER CRAVADA `true` AQUI ──
 
-   Ela vai explícita porque é sempre verdadeira — o cargo existe, logo entra. */
+   Vinha assim, com o argumento de que o cargo existe, logo entra. O argumento
+   valia enquanto havia um painel só. Com dois módulos ela virou a porta do
+   Hub, e cravá-la fazia TODO cargo alcançá-lo: um cargo só-Flow — Jurídico,
+   Financeiro, ou qualquer um montado com o interruptor do Flow ligado e nada
+   do Hub marcado — abria o seletor com os dois módulos, com chevron, e caía no
+   Dashboard do Hub ao entrar. Na prática, cargo só-Flow não existia.
+
+   Agora ela vem da COLUNA, que `cargoRoutes` deriva a cada gravação
+   (`alcancaOHub`). Dois lugares cravando o mesmo `true` era o suficiente para
+   a correção no outro parecer não ter surtido efeito nenhum.
+
+   O `?? true` cobre a linha antiga: cargo gravado antes desta regra pode ter a
+   coluna nula, e nula não é "não alcança" — é "ninguém decidiu ainda". */
 function cargoDaSessao(cargo) {
-  const saida = { id: cargo.id, descricao: cargo.descricao, acessarPainel: true };
+  const saida = {
+    id: cargo.id,
+    descricao: cargo.descricao,
+    acessarPainel: cargo.acessarPainel ?? true,
+  };
   for (const p of PERMISSOES) saida[p] = Boolean(cargo[p]);
   return saida;
 }
 
 // Monta o payload de sessão (token + usuario + tenant) devolvido no login e ao
 // definir a senha. `usuario` deve vir com include { tenant, cargo }.
-function montarSessao(usuario, { escopo = null } = {}) {
+/* Exportada para o super-admin poder ENTRAR numa imobiliária como o
+   administrador dela (ver `adminRoutes`). Uma segunda montagem de sessão lá
+   divergiria desta na primeira coisa que a tela passasse a ler — e a sessão é o
+   objeto de que TODA a interface depende. */
+export function montarSessao(usuario, { escopo = null, validade = null } = {}) {
   const token = jwt.sign(
     {
       userId: usuario.id,
       tenantId: usuario.tenantId,
       cargoCodigo: usuario.cargoCodigo,
+      /* O identificador ÚNICO desta sessão. É o que permite encerrá-la sem
+         derrubar as outras da mesma pessoa — sair no celular não pode matar o
+         painel aberto no computador. Ver `SessaoRevogada` no schema. */
+      jti: randomUUID(),
       // Só a sessão de reativação carrega escopo. Ver `authMiddleware.js`.
       ...(escopo ? { escopo } : {}),
     },
     JWT_SECRET,
-    // A sessão de reativação é curta de propósito: ela existe para uma compra,
-    // não para acompanhar a conta suspensa por uma semana.
-    { expiresIn: escopo === ESCOPO_REATIVACAO ? "2h" : "7d" }
+    /* A sessão de reativação é curta de propósito: ela existe para uma compra,
+       não para acompanhar a conta suspensa por uma semana. `validade` permite
+       ao chamador encurtar mais — é o que o acesso do super-admin usa. */
+    { expiresIn: validade || (escopo === ESCOPO_REATIVACAO ? "2h" : "7d") }
   );
   return {
     token,
@@ -148,14 +175,127 @@ authRouter.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Dados invalidos para login.", details: parsed.error.flatten() });
     }
 
+    /* ── SEM `include`, E O MOTIVO É O RELÓGIO ──────────────────────────────
+
+       Vinha com `include: { tenant: true, cargo: true }`, e o Prisma resolve
+       relação em CONSULTAS SEPARADAS. Contra um banco remoto isso significava
+       que o caminho de quem existe custava três idas e o de quem não existe,
+       uma — 424 ms de diferença, medidos. A mensagem genérica e o
+       `HASH_FANTASMA` não valiam nada diante disso: bastava cronometrar para
+       enumerar quem tem conta.
+
+       Agora o caminho de RECUSA é idêntico nos dois casos: uma consulta e um
+       bcrypt. As relações só são buscadas depois de a senha conferir — quando
+       já não há o que esconder de quem perguntou. */
     const usuario = await prisma.usuario.findUnique({
       where: { login: parsed.data.login },
-      include: { tenant: true, cargo: true },
+      select: {
+        id: true, nome: true, login: true, senha: true, ativo: true,
+        tenantId: true, cargoCodigo: true, forcaAlterarSenha: true,
+        tentativasFalhas: true, bloqueadoAte: true,
+      },
     });
 
     if (!usuario || !usuario.ativo) {
+      /* Gasta o tempo do bcrypt mesmo sem ter contra o que comparar. Ver
+         `HASH_FANTASMA`: sem isto o relógio denuncia quem existe, e a mensagem
+         genérica logo abaixo não serve para nada. */
+      await bcrypt.compare(String(parsed.data.senha || ""), HASH_FANTASMA);
+
+      /* ── E gasta a IDA AO BANCO que o outro caminho gasta ─────────────────
+
+         Quem existe e erra a senha paga uma segunda viagem: a gravação da
+         tentativa falha. Contra um banco remoto isso são ~200 ms — mais do que
+         os ~100 ms do bcrypt que o `HASH_FANTASMA` acabou de igualar, e
+         suficiente para enumerar contas com um cronômetro.
+
+         A alternativa era não esperar a gravação. Foi tentada, e quebrou a
+         trava: a décima tentativa ainda não tinha sido contada quando a décima
+         primeira chegou. Entre uma trava confiável e uma consulta de sobra por
+         login inválido, a consulta é o preço menor.
+
+         `count` sobre um id que não existe: uma viagem de ida e volta, com o
+         índice primário respondendo vazio. Não escreve nada, não tranca nada. */
+      await prisma.usuario.count({ where: { id: "__compensacao-de-tempo__" } });
+
       return res.status(401).json({ error: "Usuario ou senha invalidos." });
     }
+
+    /* ── A conta está trancada? ─────────────────────────────────────────────
+       ANTES de conferir a senha, e a ordem importa: conferir primeiro deixaria
+       o atacante saber que acertou mesmo com a conta trancada, o que é
+       exatamente o que ele quer descobrir.
+
+       A mensagem diz o que houve, e isso é deliberado apesar de confirmar que a
+       conta existe. Quem está trancado é o DONO tentando entrar — ele precisa
+       saber que a espera tem fim, senão abre chamado. E o atacante já sabia que
+       a conta existe: foi ele quem a escolheu. */
+    if (usuario.bloqueadoAte && usuario.bloqueadoAte > new Date()) {
+      const faltam = Math.max(1, Math.ceil((usuario.bloqueadoAte - Date.now()) / 60000));
+      return res.status(429).json({
+        error: `Muitas tentativas erradas. Tente de novo em ${faltam} minuto${faltam > 1 ? "s" : ""}.`,
+        contaBloqueada: true,
+      });
+    }
+
+    // Usuário recém-criado ainda pode não ter senha definida. Nesse caso o
+    // primeiro acesso não valida senha: cai direto na tela de definir senha.
+    const temSenha = Boolean(usuario.senha);
+    if (temSenha) {
+      const passwordMatch = await bcrypt.compare(parsed.data.senha, usuario.senha);
+      if (!passwordMatch) {
+        /* A tentativa é contada NA CONTA. `increment` e não ler-somar-gravar:
+           duas tentativas simultâneas com leitura-e-escrita separadas gravariam
+           o mesmo número, e o atacante ganharia tentativas de graça só
+           paralelizando. */
+        const n = usuario.tentativasFalhas + 1;
+
+        /* ── COM `await`, E A TENTATIVA DE FAZER SEM ELE ENSINOU ALGO ───────
+
+           Cheguei a tirar o `await` daqui, para igualar o tempo de resposta dos
+           dois caminhos. Funcionou para o relógio e QUEBROU A TRAVA: a
+           gravação da décima tentativa ainda não tinha chegado ao banco quando
+           a décima primeira foi conferida, e a conta não bloqueava. O teste
+           pegou.
+
+           Uma trava de força bruta que conta com atraso não é uma trava. Então
+           o `await` volta, e o tempo é igualado do outro lado — ver
+           `passoDeCompensacao`, no caminho de quem não existe. */
+        await prisma.usuario.update({
+          where: { id: usuario.id },
+          data: {
+            tentativasFalhas: { increment: 1 },
+            ...(n >= TENTATIVAS_ATE_BLOQUEAR
+              ? { bloqueadoAte: new Date(Date.now() + MINUTOS_BLOQUEADO * 60000) }
+              : {}),
+          },
+        });
+
+        return res.status(401).json({ error: "Usuario ou senha invalidos." });
+      }
+
+      /* Acertou: o contador zera. Quem sabe a senha nunca chega perto da trava,
+         e um dia ruim de digitação não se acumula com o do mês passado. */
+      if (usuario.tentativasFalhas > 0 || usuario.bloqueadoAte) {
+        await prisma.usuario.update({
+          where: { id: usuario.id },
+          data: { tentativasFalhas: 0, bloqueadoAte: null },
+        });
+      }
+    }
+
+    /* ── AGORA SIM: quem é a imobiliária desta pessoa ───────────────────────
+       Segunda consulta, e só para quem provou a senha. Além de igualar o tempo
+       do caminho de recusa (ver o comentário na busca acima), isto deixa de
+       contar o estado da CONTA para quem não provou nada: antes, uma senha
+       errada numa imobiliária suspensa já revelava a suspensão. */
+    const conta = await prisma.usuario.findUnique({
+      where: { id: usuario.id },
+      include: { tenant: true, cargo: true },
+    });
+    Object.assign(usuario, { tenant: conta.tenant, cargo: conta.cargo, temaPainel: conta.temaPainel,
+      atalhos: conta.atalhos, googleId: conta.googleId, googleEmail: conta.googleEmail,
+      googleFoto: conta.googleFoto, googleNome: conta.googleNome, googleVinculadoEm: conta.googleVinculadoEm });
 
     /* ── A IMOBILIÁRIA ainda vale? ─────────────────────────────────────────
        O login conferia só `usuario.ativo`, e não a conta. Um tenant vencido e
@@ -199,16 +339,6 @@ authRouter.post("/login", async (req, res) => {
         error: "A assinatura desta imobiliária foi cancelada. Fale com o administrador da conta.",
         code: "TENANT_CANCELADO",
       });
-    }
-
-    // Usuário recém-criado ainda pode não ter senha definida. Nesse caso o
-    // primeiro acesso não valida senha: cai direto na tela de definir senha.
-    const temSenha = Boolean(usuario.senha);
-    if (temSenha) {
-      const passwordMatch = await bcrypt.compare(parsed.data.senha, usuario.senha);
-      if (!passwordMatch) {
-        return res.status(401).json({ error: "Usuario ou senha invalidos." });
-      }
     }
 
     // Sem senha (ativação) OU marcado para trocar → exige definir nova senha.
@@ -474,6 +604,98 @@ authRouter.put("/meu-tema", requireAuth, async (req, res) => {
     console.error("[auth] tema:", erro);
     return res.status(500).json({ error: "Erro ao salvar o tema." });
   }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   SAIR DE VERDADE.
+
+   O "sair" do painel apagava o token do `localStorage` e mais nada. Isso não é
+   encerrar sessão, é esconder a chave: o token continuava válido por até sete
+   dias, e quem tivesse copiado aquele texto — de um navegador compartilhado, de
+   um log, de um dump de memória — entrava sem obstáculo nenhum.
+
+   ── SEM AUTENTICAÇÃO FORTE, DE PROPÓSITO ──
+
+   Não usa `requireAuth`: ele recusaria um token já expirado ou já revogado, e
+   nesses casos a resposta certa é "pronto, não vale mesmo" e não um erro. A
+   autorização aqui é o próprio token — quem o apresenta pode encerrá-lo, e
+   encerrar uma sessão que já não vale não faz mal a ninguém.
+
+   ── POR QUE 200 EM QUALQUER DESFECHO ──
+
+   Sair não pode falhar. Um erro aqui deixaria a pessoa presa numa tela com um
+   botão que não funciona, e o desfecho dela — apagar a sessão local — acontece
+   de qualquer jeito. O servidor faz a parte dele em silêncio.
+   ──────────────────────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────────
+   FORÇA BRUTA: A TRAVA QUE SEGURA A CONTA, E NÃO O IP.
+
+   O limite por IP (`authLimiter`, em `server.js`) não alcança o ataque que
+   importa. Ele conta tentativas por ORIGEM, e quem ataca uma conta específica
+   distribui: mil máquinas fazendo cinco tentativas cada passam por qualquer
+   limite por IP sem esforço, e somam cinco mil tentativas contra a mesma senha.
+
+   Estas duas colunas contam por CONTA, então não importa de onde a tentativa
+   vem. Dez erros trancam por quinze minutos; o primeiro acerto zera tudo.
+
+   ── OS NÚMEROS, E POR QUE NÃO SÃO MENORES ──
+
+   Dez é generoso de propósito: quem digita a própria senha errado três vezes
+   seguidas é rotina, e trancar aí produziria mais chamado de suporte do que
+   segurança. Contra força bruta, o que vale não é o teto ser baixo — é ele
+   existir: dez tentativas a cada quinze minutos são 960 por dia, contra um
+   espaço de senha que não se percorre em séculos nesse ritmo.
+
+   ── E POR QUE A CONTA NÃO FICA TRANCADA PARA SEMPRE ──
+
+   Bloqueio permanente vira arma: basta errar a senha de alguém dez vezes para
+   deixá-lo de fora até um humano intervir. A janela que expira sozinha tira o
+   ataque de negação de serviço sem abrir mão da trava.
+   ──────────────────────────────────────────────────────────────────────────── */
+const TENTATIVAS_ATE_BLOQUEAR = 10;
+const MINUTOS_BLOQUEADO = 15;
+
+/* ── O TEMPO TAMBÉM CONTA UMA HISTÓRIA ───────────────────────────────────────
+
+   A mensagem de erro é genérica ("Usuario ou senha invalidos"), e isso resolve
+   metade do problema. A outra metade é o RELÓGIO: login inexistente respondia
+   na hora, login existente com senha errada gastava os ~100 ms do bcrypt. Essa
+   diferença é medível de fora, e transforma a mensagem genérica em decoração —
+   dá para enumerar quem existe cronometrando as respostas.
+
+   Comparar contra um hash descartável iguala os dois caminhos. O texto abaixo é
+   um hash bcrypt de custo 10 de uma senha que ninguém conhece; ele nunca casa
+   com nada, só gasta o mesmo tempo. */
+const HASH_FANTASMA = "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+
+authRouter.post("/logout", async (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return res.json({ ok: true });
+
+  try {
+    /* `verify` e não `decode`: um token forjado não pode inserir linha nenhuma
+       nesta tabela. Se ele não é válido, também não há sessão para encerrar. */
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload?.jti && payload?.userId) {
+      await prisma.sessaoRevogada.upsert({
+        where: { usuarioId_jti: { usuarioId: payload.userId, jti: payload.jti } },
+        update: {},
+        /* `expiraEm` é o vencimento do próprio token: depois disso ele não vale
+           mais por conta própria, e a linha vira lixo que a faxina recolhe.
+           Sem isto a tabela cresceria para sempre. */
+        create: {
+          usuarioId: payload.userId,
+          jti: payload.jti,
+          expiraEm: new Date((payload.exp ?? Math.floor(Date.now() / 1000) + 604800) * 1000),
+        },
+      });
+    }
+  } catch {
+    /* Token expirado, forjado ou de antes do `jti`. Nos três casos não há o que
+       revogar, e a pessoa está saindo de qualquer forma. */
+  }
+
+  return res.json({ ok: true });
 });
 
 authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {

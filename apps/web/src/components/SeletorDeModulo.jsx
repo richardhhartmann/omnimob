@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretUpDown, Check } from "@phosphor-icons/react";
+import { MenuFluido } from "./MenuFluido.jsx";
 import { MODULOS, SIMBOLO_OMNIMOB, TIPO_OMNIMOB, moduloInfo } from "../utils/modulos";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -207,24 +208,38 @@ export function SeletorDeModulo({ atual, disponiveis, aoTrocar, aoAlternarAberto
               onMouseLeave={(e) => { if (saiuDeVerdade(e)) setAberto(false); }}
               onBlur={(e) => { if (saiuDeVerdade(e)) setAberto(false); }}
             >
-              {opcoes.map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  role="option"
-                  aria-selected={m.key === atual}
-                  className={`ds-mod__opcao${m.key === atual ? " is-atual" : ""}`}
-                  style={{ "--acento": m.acento, "--acento-suave": m.acentoSuave }}
-                  onClick={() => { setAberto(false); if (m.key !== atual) aoTrocar(m.key); }}
-                >
-                  {/* O atual entra na lista também, marcado. Um seletor que
-                      mostra só as opções NÃO escolhidas obriga a pessoa a
-                      lembrar onde estava para saber o que o clique vai fazer. */}
-                  <LogoModulo modulo={m} className="is-na-lista" />
-                  <span className="ds-mod__tagline">{m.tagline}</span>
-                  {m.key === atual ? <Check size={13} weight="bold" className="ds-mod__check" /> : null}
-                </button>
-              ))}
+              {/* ── As opções agora são o MENU FLUIDO ─────────────────────
+                  Ao passar o ponteiro, uma faixa entra pela borda mais próxima
+                  do cursor com o nome do módulo correndo, tingida do acento
+                  dele. O efeito é do React Bits (`FlowingMenu`), adaptado à
+                  escala do balão — ver `MenuFluido.jsx`, que lista o que mudou
+                  e por quê.
+
+                  A face parada continua sendo o que estava aqui: a logo e a
+                  tagline. Ela não foi substituída pelo efeito, ficou POR BAIXO
+                  dele — quem não passa o mouse vê exatamente a lista de antes,
+                  e o balão continua legível de relance. */}
+              <MenuFluido
+                aoEscolher={aoTrocar}
+                itens={opcoes.map((m) => ({
+                  chave: m.key,
+                  texto: m.nome,
+                  imagem: SIMBOLO_OMNIMOB,
+                  acento: m.acento,
+                  acentoSuave: m.acentoSuave,
+                  atual: m.key === atual,
+                  conteudo: (
+                    <>
+                      {/* O atual entra na lista também, marcado. Um seletor que
+                          mostra só as opções NÃO escolhidas obriga a pessoa a
+                          lembrar onde estava para saber o que o clique faz. */}
+                      <LogoModulo modulo={m} className="is-na-lista" />
+                      <span className="ds-mod__tagline">{m.tagline}</span>
+                      {m.key === atual ? <Check size={13} weight="bold" className="ds-mod__check" /> : null}
+                    </>
+                  ),
+                }))}
+              />
             </div>,
             document.body,
           ) : null}

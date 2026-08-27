@@ -202,8 +202,18 @@ export const api = {
       body: JSON.stringify(corpo),
     }),
 
+  /* Encerra a sessão NO SERVIDOR. Sem isto, "sair" só apagava o token do
+     navegador e ele continuava válido por sete dias. Ver `authRoutes`. */
+  logout: () => request("/api/auth/logout", { method: "POST" }),
+
   painelGestor: (tenantSlug) =>
     request("/api/tenants/me/painel-gestor", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  /* A leitura do painel pela IA. Rota separada de propósito — o painel abre em
+     milissegundos e o modelo leva segundos; ver o comentário em
+     `tenantRoutes`. Responde sempre 200, com `disponivel: false` quando não dá. */
+  painelGestorAnalise: (tenantSlug) =>
+    request("/api/tenants/me/painel-gestor/analise", { headers: { "x-tenant-slug": tenantSlug } }),
 
   canaisParaRemover: (tenantSlug, propertyId) =>
     request(`/api/properties/${propertyId}/canais-para-remover`, {
@@ -1114,6 +1124,15 @@ export const adminApi = {
   createTenant: (payload) => adminRequest("/api/admin/tenants", { method: "POST", body: JSON.stringify(payload) }),
   updateTenant: (id, payload) => adminRequest(`/api/admin/tenants/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteTenant: (id) => adminRequest(`/api/admin/tenants/${id}`, { method: "DELETE" }),
+
+  /* Entrar na conta do cliente como o Administrador dela. Devolve uma sessão de
+     painel (a mesma forma do login), com validade curta, e deixa registro na
+     trilha da imobiliária. Ver `adminRoutes`. */
+  entrarNoTenant: (id) => adminRequest(`/api/admin/tenants/${id}/entrar`, { method: "POST" }),
+
+  /* Gera uma senha temporária NOVA para o Administrador da imobiliária. O texto
+     volta uma vez só — como na criação. Ver `adminRoutes`. */
+  reemitirSenhaAdmin: (id) => adminRequest(`/api/admin/tenants/${id}/senha-admin`, { method: "POST" }),
 
   // Caixa de entrada do suporte — todos os tenants.
   listChamados: (filtros = {}) => {

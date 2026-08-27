@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { PaginaPublica, Secao } from "../../components/PaginaPublica.jsx";
+import { Ilustracao } from "../../components/Ilustracao.jsx";
 import { api } from "../../api";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -82,6 +83,13 @@ export function ContatoPage() {
       subtitulo="Para testar não é preciso falar com ninguém — o ambiente sai em segundos e sem cartão. Mas se você prefere conversar antes, é por aqui."
       descricao="Canais de contato da Omnimob: WhatsApp, e-mail comercial, privacidade de dados e formulário para retorno."
     >
+      {/* Um dos três lugares onde desenho de pessoa cabe (ver o cabeçalho de
+          `components/Ilustracao.jsx`): a página de contato abre com uma
+          promessa de conversa, e uma coluna de texto puro contradiz isso. Sem
+          arquivo baixado, o encaixe desenha as formas da marca — a página nunca
+          fica com buraco esperando alguém lembrar de um SVG. */}
+      <Ilustracao src="/ilustracoes/contato-atendimento.png" alt="Pessoa de fone com microfone acenando, com balões de conversa ao lado" altura={180} />
+
       <Secao titulo="Canais diretos">
         <div className="ct-canais">
           {CANAIS.map((c) => (
