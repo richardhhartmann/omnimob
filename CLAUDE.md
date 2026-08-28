@@ -110,6 +110,11 @@ omnimob/
   autenticada pela chave no caminho e pelo HMAC do corpo. Montada ANTES do
   `flowRouter` no `server.js`, senão o `requireAuth` dele a engoliria.
   Responde 200 quase sempre — portal que recebe erro desativa a integração
+- `POST /api/tenants/me/cobranca-pix` e `GET /me/cobranca-pix/:id` — **o Pix do
+  plano anual**, no Mercado Pago. Uma COBRANÇA, não uma assinatura: devolve QR e
+  copia-e-cola, não toca no tenant, e quem libera o plano é o pagamento —
+  avisado em `POST /api/webhooks/mercadopago` ou visto pela consulta que a tela
+  faz enquanto espera. As duas ativam pela MESMA função
 - `/api/canais/*` — a central de canais: retrato de onde os imóveis aparecem,
   OAuth e publicação no Mercado Livre, e a ponte de WhatsApp
 - `GET /api/tenants/me/exportar` — tudo da imobiliária num JSON, para
@@ -134,6 +139,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/apiPublica.test.js` | A chave de A não enxerga nada de B nem pelo id real; escopo cobrado; senha nunca sai; escrita por chave deixa rastro na trilha; plano abaixo de Profissional recusado |
 | `test/documentacaoApi.test.js` | a especificação descreve a API que existe — rota nova sem documentação, ou documentação apontando para rota morta, falha aqui |
 | `test/enderecoPublico.test.js` | o endereço oculto some do PAYLOAD, não só da tela. Verifica o texto cru da resposta, o CEP junto, e o feed seguindo a mesma marcação |
+| `test/mercadoPago.test.js` | a tradução plano → cobrança e a **assinatura do webhook** — um defeito ali vale um ano de plano de graça para quem achar a URL. Não toca no banco |
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
@@ -194,6 +200,13 @@ invisíveis porque com um cliente só o sintoma não aparece.
 - `feedPortais.js` — monta o XML VRSync. `distribuicaoLeads.js` — roleta de
   corretores por carga, não por sorteio. `cofre.js` — cifragem em repouso.
   `auditoria.js` — a trilha.
+- `pagamentoMercadoPago.js` — a cobrança ÚNICA, paga por Pix. Não substitui o
+  `pagamentoService.js`: a divisão é de natureza (assinatura recorrente lá,
+  pagamento avulso aqui), e existe porque conta Stripe brasileira não faz Pix
+  recorrente nem parcelado. **Não inventa preço** — o valor sai de
+  `valorDoPlano`, que lê o catálogo do Stripe; uma segunda tabela de preços
+  envelheceria em silêncio. ⚠ escrito contra a documentação, não verificado
+  contra a API real.
 - `mercadoLivre.js` — o primeiro portal EMPURRADO. ZAP/VivaReal/OLX vêm buscar
   o XML; o ML exige criar cada anúncio pela API em nome do vendedor, com token
   por tenant e renovação. **Escrito contra a documentação, não verificado contra
@@ -261,6 +274,9 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `META_CALLBACK_URL` | **API** | `http://localhost:4000/api/social/oauth/callback` | `https://api.omnimob.app/api/social/oauth/callback` |
 | `META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN` | — | do app Meta | idem |
 | `MERCADOLIVRE_APP_ID` / `_APP_SECRET` | — | do app no ML (opcional) | idem — sem elas o canal aparece indisponível |
+| `MERCADOPAGO_ACCESS_TOKEN` | — | token de teste do app (opcional) | token de produção — **sem ele o Pix do plano anual some da tela** |
+| `MERCADOPAGO_WEBHOOK_SECRET` | — | segredo da notificação, no painel do MP | idem — **sem ele o webhook recusa tudo** |
+| `MERCADOPAGO_WEBHOOK_URL` | **API** | vazio (localhost não recebe aviso) | `https://api.omnimob.app/api/webhooks/mercadopago` |
 | `MERCADOLIVRE_CALLBACK_URL` | **API** | `http://localhost:4000/api/canais/mercadolivre/callback` | `https://api.omnimob.app/api/canais/mercadolivre/callback` |
 | `GOOGLE_CLIENT_ID` | — | id OAuth do Google Cloud (opcional) | idem — **sem ela o botão "entrar com Google" some da tela** |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | — | Google AI Studio / `gemini-2.5-flash` | idem |

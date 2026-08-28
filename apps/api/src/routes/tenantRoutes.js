@@ -5,6 +5,13 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant, requireTenantMesmoSuspenso } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
 import {
+  criarCobrancaPix,
+  consultarCobranca,
+  aplicarCobrancaAprovada,
+  mercadoPagoConfigurado,
+  PERIODO_DO_PIX,
+} from "../services/pagamentoMercadoPago.js";
+import {
   criarAssinatura,
   criarAssinaturaPix,
   criarAssinaturaBoleto,
@@ -657,7 +664,18 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
     /* O que a CONTA consegue cobrar. Vai junto porque a tela precisa decidir
        quais meios oferecer — ela chegou a mostrar Pix num ambiente onde ele
        nunca funcionaria, e o cliente só descobria no clique. */
-    const meios = await meiosDisponiveis();
+    /* Cópia, e não o objeto devolvido: `meiosDisponiveis` guarda a resposta em
+       cache e a entrega a todo mundo — escrever nela contamina as próximas
+       requisições. */
+    const meios = { ...(await meiosDisponiveis()) };
+    /* O Pix do Mercado Pago entra no MESMO objeto que a tela já lê para saber
+       o que oferecer. Chave própria, e não `meios.pix = true`: aquele campo diz
+       o que a conta do STRIPE consegue cobrar, e misturar os dois faria a tela
+       mandar um Pix do Mercado Pago pelo caminho do Stripe.
+
+       `periodo` viaja junto porque a oferta não vale em todo lugar: cobrança
+       única no mensal significaria a pessoa lembrar de pagar todo mês. */
+    meios.pixMercadoPago = mercadoPagoConfigurado() ? { periodo: PERIODO_DO_PIX } : null;
     const contaStripe = await marcaDaConta();
     // "Gerei um boleto — ele foi pago?" O painel não sabia responder.
     const cobranca = await cobrancaEmAberto(tenant.id);
@@ -1248,6 +1266,97 @@ tenantRouter.post(
       }
       console.error("[POST /tenants/me/assinar-assincrono]", err);
       return res.status(500).json({ error: "Erro ao preparar o pagamento." });
+    }
+  },
+);
+
+/* ─── Pagar o ANO por Pix, no Mercado Pago ───────────────────────────────────
+
+   Uma COBRANÇA, não uma assinatura — e a diferença é o motivo de esta rota
+   existir separada das outras duas. O Stripe cuida da recorrência; em conta
+   brasileira ele não faz Pix recorrente nem parcelado, e é esse buraco que o
+   Mercado Pago tapa.
+
+   Aqui NÃO se toca no tenant. A resposta é um QR: quem paga está no app do
+   banco, e quem vira a chave é o webhook (ou a consulta logo abaixo, que a
+   tela faz enquanto espera). Marcar EM_DIA na criação liberaria o plano para
+   quem só gerou o código e fechou a aba. */
+tenantRouter.post(
+  "/me/cobranca-pix",
+  requireAuthOuReativacao,
+  requireTenantMesmoSuspenso,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    const { plano, periodo, pacote } = req.body || {};
+    if (!["BASICO", "PROFISSIONAL", "PREMIUM"].includes(plano)) {
+      return res.status(400).json({ error: "Plano inválido." });
+    }
+    if (!mercadoPagoConfigurado()) {
+      return res.status(503).json({
+        error: "O pagamento por Pix ainda não está conectado. Fale com o time.",
+        code: "PROVEDOR_NAO_CONFIGURADO",
+      });
+    }
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.tenant.id } });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      const cobranca = await criarCobrancaPix({ tenant, plano, periodo, pacote });
+      return res.json(cobranca);
+    } catch (err) {
+      if (err.code === "PROVEDOR_NAO_CONFIGURADO" || err.code === "PERIODO_INDISPONIVEL") {
+        return res.status(503).json({ error: err.message, code: err.code });
+      }
+      console.error("[POST /tenants/me/cobranca-pix]", err);
+      return res.status(500).json({ error: "Não foi possível gerar o Pix." });
+    }
+  },
+);
+
+/* "Já caiu?" — a pergunta que a tela faz enquanto o QR está aberto.
+
+   Ela existe por duas razões, e a segunda é a que importa: o aviso do provedor
+   pode demorar, e em desenvolvimento ele nem chega (localhost não recebe
+   webhook). Sem esta rota, um Pix pago deixaria a tela girando para sempre.
+
+   A ativação é a MESMA função do webhook, idempotente pelo id da cobrança —
+   não há uma segunda definição de "pagou".
+
+   ISOLAMENTO: o pagamento só é respondido a quem é dono dele. Id de outra
+   imobiliária devolve 404, e não 403 — a diferença entre "não é seu" e "não
+   existe" já é informação. */
+tenantRouter.get(
+  "/me/cobranca-pix/:id",
+  requireAuthOuReativacao,
+  requireTenantMesmoSuspenso,
+  requirePermissao("verConfiguracoes"),
+  async (req, res) => {
+    if (!mercadoPagoConfigurado()) {
+      return res.status(503).json({ error: "Pix não conectado.", code: "PROVEDOR_NAO_CONFIGURADO" });
+    }
+    try {
+      const cobranca = await consultarCobranca(req.params.id);
+      if (!cobranca.tenantId || cobranca.tenantId !== req.tenant.id) {
+        return res.status(404).json({ error: "Cobrança não encontrada." });
+      }
+
+      let ate = null;
+      if (cobranca.status === "aprovado") {
+        const r = await aplicarCobrancaAprovada(cobranca);
+        ate = r.ate || null;
+      }
+
+      return res.json({
+        status: cobranca.status,
+        valor: cobranca.valor,
+        /* Só quando ESTA chamada ativou. Quando o webhook chegou primeiro, o
+           motivo é `JA_APLICADO` e não há data para devolver — a tela lê o
+           `status`, que é o que ela precisa para comemorar. */
+        ate,
+      });
+    } catch (err) {
+      console.error("[GET /tenants/me/cobranca-pix/:id]", err);
+      return res.status(500).json({ error: "Não foi possível consultar o pagamento." });
     }
   },
 );

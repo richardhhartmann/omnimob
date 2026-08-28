@@ -1006,6 +1006,23 @@ export const api = {
       method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
     }),
 
+  /* ── Pagar o ano por Pix, no Mercado Pago ────────────────────────────────
+     Uma COBRANÇA, não uma assinatura: devolve um QR e um copia-e-cola, e não
+     muda nada na conta. Quem libera o plano é o pagamento — avisado pelo
+     webhook, ou visto pela consulta abaixo enquanto a pessoa espera. */
+  criarCobrancaPix: (tenantSlug, payload = {}) =>
+    request("/api/tenants/me/cobranca-pix", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
+    }),
+
+  /* "Já caiu?". Responde `pendente` | `aprovado` | `recusado`, e é ela que
+     ativa a conta quando o webhook ainda não chegou (ou não pode chegar, como
+     em desenvolvimento). */
+  consultarCobrancaPix: (tenantSlug, id) =>
+    request(`/api/tenants/me/cobranca-pix/${encodeURIComponent(id)}`, {
+      headers: { "x-tenant-slug": tenantSlug },
+    }),
+
   assinarPlano: (tenantSlug, payload = {}) =>
     request("/api/tenants/me/assinar", {
       method: "POST",
@@ -1124,6 +1141,14 @@ export const adminApi = {
   createTenant: (payload) => adminRequest("/api/admin/tenants", { method: "POST", body: JSON.stringify(payload) }),
   updateTenant: (id, payload) => adminRequest(`/api/admin/tenants/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteTenant: (id) => adminRequest(`/api/admin/tenants/${id}`, { method: "DELETE" }),
+
+  /* Marca a conta como paga SEM passar pelo provedor — transferência, acordo,
+     cortesia, demonstração. Chama a mesma `fidelizarTrial` do caminho pago, e
+     por isso reativa a conta e limpa a suspensão, coisas que o PUT do cadastro
+     não faz. A resposta traz em `ativacao` o que ficou gravado (data, valor,
+     módulos); a tela escreve isso de volta no formulário em vez de recalcular. */
+  fidelizarTenant: (id, payload = {}) =>
+    adminRequest(`/api/admin/tenants/${id}/fidelizar`, { method: "POST", body: JSON.stringify(payload) }),
 
   /* Entrar na conta do cliente como o Administrador dela. Devolve uma sessão de
      painel (a mesma forma do login), com validade curta, e deixa registro na

@@ -26,6 +26,7 @@ import { propertyRouter } from "./routes/propertyRoutes.js";
 import { publicRouter } from "./routes/publicRoutes.js";
 import { previaRouter } from "./routes/previaRoutes.js";
 import { stripeWebhookRouter } from "./routes/stripeWebhookRoutes.js";
+import { mercadoPagoWebhookRouter } from "./routes/mercadoPagoWebhookRoutes.js";
 import { iniciarFaxinaAutomatica } from "./services/faxinaScheduler.js";
 import { iniciarRelatorioMensal } from "./services/relatorioScheduler.js";
 import { socialRouter } from "./routes/socialRoutes.js";
@@ -163,6 +164,8 @@ app.use(
 app.use("/api/social/webhook", express.raw({ type: "*/*" }), socialWebhookRouter);
 // Mesmo motivo: a assinatura do Stripe é sobre os bytes crus do corpo.
 app.use("/api/webhooks/stripe", express.raw({ type: "*/*" }), stripeWebhookRouter);
+// E o mesmo para o Mercado Pago, que assina `id;request-id;ts` com HMAC.
+app.use("/api/webhooks/mercadopago", express.raw({ type: "*/*" }), mercadoPagoWebhookRouter);
 
 /* A API da imobiliária aceita XML no corpo, e para isso precisa do texto CRU.
 

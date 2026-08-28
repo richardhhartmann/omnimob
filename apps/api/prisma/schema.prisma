@@ -355,6 +355,27 @@ model Tenant {
   assinaturaId String? @map("tnt_assinatura_id")
 
   /**
+   * A última cobrança AVULSA que deixou esta conta em dia, e quem a processou.
+   *
+   * Nada a ver com `assinaturaId`, que é a assinatura recorrente do Stripe.
+   * Aqui mora o pagamento único — hoje o Pix do Mercado Pago, amanhã o cartão
+   * parcelado —, que não renova sozinho: ele empurra `proximoVencimento` uma
+   * vez e acaba.
+   *
+   * Guardar o id não é conveniência, é o que torna a ativação IDEMPOTENTE. O
+   * provedor reenvia o mesmo aviso por horas, e a tela consulta o pagamento em
+   * paralelo enquanto a pessoa espera; sem comparar o id, o mesmo Pix somaria
+   * doze meses ao calendário a cada chegada.
+   *
+   * `cobrancaProvedor` é texto e não enum porque a lista vai crescer por fora
+   * do schema (um segundo meio no mesmo provedor, um provedor novo para
+   * boleto), e migração de enum para acrescentar um valor é cara demais para o
+   * que este campo faz: dizer, no suporte, para onde olhar.
+   */
+  cobrancaId       String? @map("tnt_cobranca_id")
+  cobrancaProvedor String? @map("tnt_cobranca_provedor")
+
+  /**
    * Quais boas-vindas do painel esta imobiliária já recebeu: "teste" e/ou
    * "assinante" (ver `BoasVindasModal`, no web).
    *

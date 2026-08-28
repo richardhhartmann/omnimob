@@ -833,12 +833,22 @@ const formatarBRL = (valor) =>
     minimumFractionDigits: Number.isInteger(Number(valor)) ? 0 : 2,
   });
 
-/* Rodapé do preço, por período. O anual é cobrado de uma vez — dizer isso na
-   própria etiqueta evita a leitura de que "R$ 1.415,50/ano" seja parcelado. */
-const NOTA_DO_PERIODO = {
-  mensal: "cobrado mensalmente",
-  anual: "cobrado uma vez por ano",
-};
+/* Rodapé do preço, por período.
+
+   No MENSAL a etiqueta é uma linha curta. No ANUAL ela carrega mais peso: o
+   número grande do cartão passou a ser a MÉDIA MENSAL do plano anual (é assim
+   que a pessoa compara os dois períodos — "R$ 1.415,50/ano" ao lado de
+   "R$ 149/mês" não se compara de cabeça), e um valor mensal sem explicação
+   esconderia justamente o que o anual tem de diferente: o total. Por isso a
+   nota diz o total por extenso. */
+const NOTA_DO_PERIODO = { mensal: "cobrado mensalmente" };
+
+/* A nota do anual precisa do PLANO, não só do período — ela nomeia o que está
+   sendo comprado ("plano Profissional com Flow anual") e diz o total. */
+function notaDoAnual(plano, total) {
+  const descricao = plano.comFlow ? `${plano.name} com Flow` : plano.name;
+  return `Valor equivalente à média mensal do plano ${descricao} anual, totalizando ${formatarBRL(total)}, com facilidade de parcelamento em até 6x no cartão ou boleto.`;
+}
 
 // Linhas da tabela comparativa. As linhas "Tudo do Plano X" existem só para os
 // cards resumidos do painel e não fazem sentido numa comparação lado a lado.
@@ -1010,6 +1020,12 @@ function usePrecosVigentes(periodo, pacotes) {
           return { ...p, carregando: false, price: "Sob consulta", per: "", nota: "fale com o time" };
         }
         const ehAnual = periodo === "anual" && Boolean(vivo?.anual);
+        /* No anual o cartão mostra a MÉDIA MENSAL, não o valor cobrado. Os dois
+           períodos ficam na mesma unidade e a comparação vira uma subtração; a
+           nota abaixo diz o total, que é o que a fatura pratica. A divisão é
+           feita aqui e não no servidor de propósito: lá o preço é o que o
+           provedor cobra, e média mensal é uma leitura desta página. */
+        const mediaMensal = ehAnual && doPeriodo.valor > 0 ? doPeriodo.valor / 12 : null;
         return {
           ...p,
           carregando: false,
@@ -1017,10 +1033,11 @@ function usePrecosVigentes(periodo, pacotes) {
              lado. Vêm partidos do servidor — ver o comentário em
              `precosDosPlanos`. O `rotulo` inteiro fica de reserva para o caso de
              uma resposta antiga, ainda sem os campos novos. */
-          price: doPeriodo.numero || doPeriodo.rotulo,
-          per: doPeriodo.numero ? doPeriodo.sufixo || "" : "",
+          price: mediaMensal != null ? formatarBRL(mediaMensal) : doPeriodo.numero || doPeriodo.rotulo,
+          per: mediaMensal != null ? "/mês" : doPeriodo.numero ? doPeriodo.sufixo || "" : "",
           valor: doPeriodo.valor,
-          nota: NOTA_DO_PERIODO[ehAnual ? "anual" : "mensal"],
+          nota: mediaMensal != null ? notaDoAnual(p, doPeriodo.valor) : NOTA_DO_PERIODO.mensal,
+          notaLonga: mediaMensal != null,
           economia: ehAnual ? vivo.economia || null : null,
         };
       }),
@@ -2746,7 +2763,7 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
             {/* Mesma ideia na etiqueta de baixo: a própria classe da nota, para
                 a margem e a altura de linha serem as mesmas. */}
             <span
-              className={`dl-mono dl-plan__nota${p.carregando ? " dl-esqueleto dl-esqueleto--nota" : ""}`}
+              className={`dl-mono dl-plan__nota${p.notaLonga && !p.carregando ? " dl-plan__nota--longa" : ""}${p.carregando ? " dl-esqueleto dl-esqueleto--nota" : ""}`}
               aria-hidden={p.carregando || undefined}
             >
               {p.carregando ? " " : p.nota}
@@ -5774,6 +5791,24 @@ ${editorCSS()}
 .dl-plan__price strong { font-size: 34px; font-weight: 700; letter-spacing: -0.045em; color: var(--strong); }
 .dl-plan__price span { font-size: 13px; color: var(--subtle); }
 .dl-plan__nota { color: var(--placeholder); font-size: 9px; margin-top: 6px; display: block; }
+/* A nota do anual é uma frase, não uma etiqueta: precisa de entrelinha para ser
+   lida e de uma ALTURA MÍNIMA reservada. Sem ela, "Básico" e "Profissional com
+   Flow" quebram em números de linhas diferentes e as listas de recursos dos
+   três cartões deixam de começar na mesma altura — o mesmo motivo pelo qual a
+   economia já ficou em linha própria. */
+/* Duas classes no seletor de propósito: a .dl-mono (mono, caixa-alta, espaçada)
+   vem de outra folha, e depender da ordem de injeção para vencê-la seria uma
+   aposta. Frase longa não se lê em caixa-alta.
+   Sem CRASE nenhuma neste comentário: este CSS mora dentro de um template
+   literal, e uma crase aqui fecha a string e transforma o resto em código. */
+.dl-plan__nota.dl-plan__nota--longa {
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  min-height: calc(4 * 1.55em);
+}
 /* Economia do anual, ao lado do preço. Em verde-menta, a mesma cor dos ✓ da
    lista: nesta página o menta já quer dizer "isto está incluído". */
 .dl-plan__economia {

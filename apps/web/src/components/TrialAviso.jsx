@@ -74,6 +74,57 @@ function GuiaDoBoleto({ guia }) {
   );
 }
 
+/* ── O código Pix ───────────────────────────────────────────────────────────
+   O COPIA-E-COLA vem primeiro, e não o QR: quem está no celular já tem o app do
+   banco a um toque e não consegue fotografar a própria tela. O QR é para quem
+   abriu o painel no computador e vai pagar pelo telefone.
+
+   A imagem chega em base64 dentro da resposta — nada é buscado de fora, o que
+   mantém o QR funcionando mesmo com o provedor fora do ar no instante seguinte,
+   e não abre uma requisição a um domínio de terceiro dentro do painel. */
+function CodigoPix({ pix }) {
+  const [copiado, setCopiado] = useState(false);
+  if (!pix) return null;
+
+  function copiar() {
+    navigator.clipboard?.writeText(pix.qrCode || "").then(
+      () => { setCopiado(true); setTimeout(() => setCopiado(false), 2000); },
+      () => {},
+    );
+  }
+
+  return (
+    <div className="tv-pix">
+      {pix.qrCodeBase64 ? (
+        <img
+          className="tv-pix__qr"
+          src={`data:image/png;base64,${pix.qrCodeBase64}`}
+          alt="QR Code do Pix"
+          width={168}
+          height={168}
+        />
+      ) : null}
+      <span className="tv-guia__rotulo">Pix copia e cola</span>
+      <code className="tv-guia__numero tv-pix__codigo">{pix.qrCode}</code>
+      <button type="button" className="tv-btn tv-btn--primario" onClick={copiar}>
+        {copiado ? "Copiado" : "Copiar código Pix"}
+      </button>
+      {pix.ticketUrl ? (
+        <div className="tv-guia__links">
+          <a href={pix.ticketUrl} target="_blank" rel="noreferrer">Abrir no Mercado Pago</a>
+        </div>
+      ) : null}
+      {pix.venceEm ? (
+        <span className="tv-guia__prazo">
+          O código vale até{" "}
+          {new Date(pix.venceEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          {" "}— depois disso é só gerar outro.
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function plural(n, singular, pluralForma) {
   return `${n} ${n === 1 ? singular : pluralForma}`;
 }
@@ -95,6 +146,11 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
      ver `temFlow`. Enquanto não existir, esta tela é exatamente a de antes. */
   const [pacote, setPacote] = useState("HUB");
   const [aguardandoAssinc, setAguardandoAssinc] = useState(null);
+  /* A cobrança Pix em aberto (Mercado Pago). É uma COBRANÇA, não uma
+     assinatura: enquanto ela existe, a tela mostra o código e fica perguntando
+     se caiu. Ver `gerarPix`. */
+  const [pix, setPix] = useState(null);
+  const [gerandoPix, setGerandoPix] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState("");
   const [concluido, setConcluido] = useState(null);
@@ -335,6 +391,62 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
      A diferença que sobra é de natureza, não de interface. Cartão cobra na
      hora. Boleto nasce como guia, e o dinheiro entra depois — quem vira a chave
      nesse caso é o webhook `invoice.paid`. */
+  /* ── Gerar o Pix do ano ───────────────────────────────────────────────────
+     Caminho paralelo ao do cartão, e não uma variação dele: aqui não há
+     assinatura, não há token e o Stripe não participa. A tela troca de conteúdo
+     e passa a esperar o dinheiro. */
+  async function gerarPix() {
+    setGerandoPix(true);
+    setFalha("");
+    try {
+      const r = await api.criarCobrancaPix(tenantSlug, { plano, periodo: "anual", pacote });
+      esquecerTrialStatus(tenantSlug);
+      setPix(r);
+    } catch (erro) {
+      setFalha(erro.message || "Não foi possível gerar o Pix.");
+    } finally {
+      setGerandoPix(false);
+    }
+  }
+
+  /* ── "Já caiu?" ───────────────────────────────────────────────────────────
+     Pergunta de quatro em quatro segundos enquanto o código está na tela. O
+     webhook é o caminho normal e chega sozinho — mas ele pode demorar, e em
+     desenvolvimento não chega nunca (localhost não recebe aviso de fora). Sem
+     esta consulta, um Pix pago deixaria a pessoa olhando para o QR.
+
+     Quem ativa a conta é o servidor, nos dois caminhos, com a mesma função.
+     Esta tela só pergunta. */
+  useEffect(() => {
+    if (!pix?.cobrancaId) return undefined;
+    let vivo = true;
+
+    const relogio = setInterval(async () => {
+      try {
+        const r = await api.consultarCobrancaPix(tenantSlug, pix.cobrancaId);
+        if (!vivo || r.status === "pendente") return;
+        clearInterval(relogio);
+        if (r.status === "aprovado") {
+          esquecerTrialStatus(tenantSlug);
+          setPix(null);
+          /* Os valores vêm do que o SERVIDOR acabou de gravar. `ate` só volta
+             quando foi esta chamada que ativou — se o webhook chegou primeiro,
+             a data fica de fora e o resumo simplesmente não a mostra. */
+          setConcluido({ plano, proximoVencimento: r.ate || null });
+          setPasso(4);
+        } else {
+          setPix(null);
+          setFalha("O pagamento não foi concluído. Você pode gerar um novo código.");
+        }
+      } catch {
+        /* Falha de rede não derruba a espera: o código continua válido e a
+           próxima batida tenta de novo. */
+      }
+    }, 4000);
+
+    return () => { vivo = false; clearInterval(relogio); };
+  }, [pix, tenantSlug, plano]);
+
   async function assinar() {
     setEnviando(true);
     setFalha("");
@@ -603,7 +715,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
               </>
             ) : null}
 
-            {passo === 3 && !aguardandoAssinc ? (
+            {passo === 3 && !aguardandoAssinc && !pix ? (
               <>
                 <span className="tv-eyebrow">● PAGAMENTO</span>
                 <h2 id="tv-titulo" className="tv-titulo">
@@ -679,7 +791,67 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                     {enviando ? "Processando…" : "Confirmar assinatura"}
                   </button>
                 </div>
+
+                {/* ── A alternativa: o ano inteiro no Pix ───────────────────
+                    Fora do formulário de cartão, e depois dele, porque é outro
+                    NEGÓCIO e não outro meio: ali em cima assina-se uma cobrança
+                    automática; aqui paga-se uma vez, e não renova sozinho.
+
+                    Não é um segundo seletor de meio de pagamento — aquele erro
+                    já foi cometido nesta tela e está contado no comentário do
+                    passo 3. O Payment Element continua sendo o único seletor do
+                    que o Stripe cobra; isto é uma porta ao lado, de outro
+                    provedor, que o Stripe brasileiro não abre.
+
+                    Só aparece no ANUAL: cobrança única no mensal significaria a
+                    pessoa lembrar de pagar todo mês. */}
+                {situacao?.meios?.pixMercadoPago && periodo === "anual" && doPacote(plano)?.anual ? (
+                  <div className="tv-pixoferta">
+                    <div className="tv-pixoferta__texto">
+                      <strong>Ou pague o ano inteiro no Pix</strong>
+                      <small>
+                        Um pagamento só, aprovado na hora. Não é cobrança automática: no ano que
+                        vem avisamos antes de vencer.
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      className="tv-btn"
+                      onClick={gerarPix}
+                      disabled={gerandoPix || enviando || !plano}
+                    >
+                      {gerandoPix ? "Gerando…" : "Gerar código Pix"}
+                    </button>
+                  </div>
+                ) : null}
               </>
+            ) : null}
+
+            {/* ── Esperando o Pix ──────────────────────────────────────────
+                Como na tela do boleto, NÃO se diz "assinado" aqui. O código
+                pode nunca ser pago, e comemorar cedo faz a pessoa parar de
+                acompanhar justamente quando ainda falta o passo dela. */}
+            {pix ? (
+              <div className="tv-festa">
+                <span className="tv-eyebrow">● AGUARDANDO O PIX</span>
+                <h2 id="tv-titulo" className="tv-titulo">Pague para liberar o plano</h2>
+                <p className="tv-texto">
+                  Abra o app do seu banco, escolha Pix e leia o código abaixo. Assim que o
+                  pagamento cair, esta tela muda sozinha — pode levar alguns segundos.
+                </p>
+                <CodigoPix pix={pix} />
+                {falha ? <p className="tv-falha">{falha}</p> : null}
+                <div className="tv-acoes">
+                  <button
+                    type="button"
+                    className="tv-btn"
+                    onClick={() => { setPix(null); setFalha(""); }}
+                  >
+                    Voltar
+                  </button>
+                  <span className="tv-pix__espera" aria-live="polite">Aguardando o pagamento…</span>
+                </div>
+              </div>
             ) : null}
 
             {aguardandoAssinc ? (
@@ -788,6 +960,31 @@ const CSS = `
 .tv-guia__links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
 .tv-guia__links a { color: #a5b4fc; }
 .tv-guia__prazo { font-size: 12px; color: #94a3b8; }
+
+/* Pix. O QR fica CENTRADO e com fundo branco fixo: o codigo e lido por camera,
+   e um fundo que acompanha o tema deixaria de ter contraste no modo escuro —
+   a leitura falharia sem nada na tela explicando por que.
+   (Sem crases nestes comentarios: este CSS mora num template literal.) */
+.tv-pix { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.tv-pix__qr {
+  align-self: center; width: 168px; height: 168px; padding: 8px;
+  background: #fff; border-radius: 12px; image-rendering: pixelated;
+}
+.tv-pix__codigo { max-height: 84px; overflow-y: auto; }
+.tv-pix__espera { font-size: 12.5px; color: #94a3b8; align-self: center; }
+
+/* A oferta do Pix, no pe do passo do cartao. Em ambar, nao no indigo do botao
+   principal: e um caminho alternativo, e um segundo botao com o mesmo peso do
+   "Confirmar assinatura" faria a tela ter duas acoes primarias. */
+.tv-pixoferta {
+  margin-top: 16px; padding: 13px 15px; border-radius: 12px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  justify-content: space-between;
+  background: rgba(212,175,55,0.06); border: 1px solid rgba(212,175,55,0.22);
+}
+.tv-pixoferta__texto { display: flex; flex-direction: column; gap: 3px; min-width: 200px; flex: 1 1 220px; }
+.tv-pixoferta__texto strong { font-size: 13px; }
+.tv-pixoferta__texto small { font-size: 11.5px; line-height: 1.5; color: #94a3b8; }
 
 /* Selo do rodape com cobranca esperando pagamento: ambar, entre o normal e o
    vencido. (Sem crases neste comentario: template literal.) */

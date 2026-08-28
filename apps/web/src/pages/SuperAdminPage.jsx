@@ -171,6 +171,12 @@ export function SuperAdminPage({ session, onLogout }) {
      o banco guarda apenas o hash —, então o modal para no lugar e mostra o que
      precisa ser repassado à imobiliária. */
   const [criado, setCriado] = useState(null);
+  /* Ativação manual (ver o bloco no rodapé do modal de edição). `ativacao`
+     guarda o que o SERVIDOR gravou — data, valor e módulos —, e não o que a
+     tela pediu: a conta da data é dele. */
+  const [periodoAtivacao, setPeriodoAtivacao] = useState("mensal");
+  const [ativando, setAtivando] = useState(false);
+  const [ativacao, setAtivacao] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -271,6 +277,7 @@ export function SuperAdminPage({ session, onLogout }) {
     setFormError("");
     setSlug(SLUG_VAZIO);
     setCriado(null);
+    setAtivacao(null);
     setModalOpen(true);
   }
 
@@ -285,6 +292,7 @@ export function SuperAdminPage({ session, onLogout }) {
     setFormError("");
     setSlug(SLUG_VAZIO);
     setCriado(null);
+    setAtivacao(null);
     setModalOpen(true);
   }
 
@@ -295,6 +303,56 @@ export function SuperAdminPage({ session, onLogout }) {
 
   function setField(k, v) {
     setForm((prev) => ({ ...prev, [k]: v }));
+  }
+
+  /* ── Ativar a conta à mão, como se a assinatura tivesse sido paga ─────────
+
+     A tela NÃO calcula a data nem o valor. Ela escolhe o período, e quem faz as
+     duas contas é a rota — a mesma `fidelizarTrial` do caminho pago. Uma cópia
+     da regra aqui divergiria da de lá no primeiro ajuste, e o sintoma seria uma
+     conta que vence num dia diferente do que o painel prometeu.
+
+     Depois de ativar, o formulário é REESCRITO com o que voltou. Sem isso, um
+     "Salvar" logo em seguida mandaria de volta o status e o vencimento antigos
+     que ainda estavam nos campos — desfazendo em silêncio o que acabou de ser
+     feito. */
+  async function ativarComoPago() {
+    const anual = periodoAtivacao === "anual";
+    const ok = await confirm(
+      `Ativar ${form.name || "esta imobiliária"} como paga por ${anual ? "12 meses" : "1 mês"}?
+
+` +
+        "A conta passa a EM_DIA, volta a ficar ativa e sai da fila de remoção, sem nenhuma " +
+        "cobrança no provedor. O período é somado ao vencimento atual quando ele ainda está no " +
+        "futuro. Fica registrado no Registro de Atividade da imobiliária, com o seu e-mail.",
+      anual ? "Ativar por 12 meses" : "Ativar por 1 mês",
+      "primary",
+    );
+    if (!ok) return;
+
+    setAtivando(true);
+    setFormError("");
+    try {
+      const r = await adminApi.fidelizarTenant(editingId, {
+        plano: form.plano || undefined,
+        periodo: periodoAtivacao,
+        /* A lista completa, como no salvar: o servidor grava o array inteiro. */
+        modulos: form.temFlow ? ["HUB", "FLOW"] : ["HUB"],
+      });
+      setAtivacao(r.ativacao || null);
+      setForm((prev) => ({
+        ...prev,
+        statusPagamento: "EM_DIA",
+        plano: r.ativacao?.plano || prev.plano,
+        valorMensal: r.ativacao?.valorMensal ?? prev.valorMensal,
+        proximoVencimento: toDateInput(r.ativacao?.ate) || prev.proximoVencimento,
+      }));
+      await load();
+    } catch (err) {
+      setFormError(err.message || "Não foi possível ativar a conta.");
+    } finally {
+      setAtivando(false);
+    }
   }
 
   async function handleSave(e) {
@@ -784,6 +842,82 @@ export function SuperAdminPage({ session, onLogout }) {
                   </span>
                 </label>
 
+                {/* ── Ativar sem passar pelo provedor ─────────────────────
+                    Só na EDIÇÃO: numa conta que ainda não existe não há o que
+                    ativar, e o cadastro já nasce com o vencimento do teste.
+
+                    Separado dos campos por uma razão de natureza: os campos
+                    acima são um formulário — nada acontece até "Salvar" —, e
+                    este botão AGE na hora, sozinho. Misturá-lo à grade faria a
+                    ativação parecer mais um dado a preencher.
+
+                    Ele existe porque dá para chegar quase lá na mão (status,
+                    plano, valor, vencimento), e o "quase" é o problema: pela
+                    grade, `suspensoEm` continuava marcado e a faxina levava,
+                    dias depois, uma conta já paga. */}
+                {editingId ? (
+                  <div className="sa-ativar">
+                    <div className="sa-ativar__texto">
+                      <strong>Ativar como paga</strong>
+                      <small>
+                        Para quem pagou por fora — transferência, acordo comercial, cortesia ou
+                        ambiente de demonstração. A conta vai para EM_DIA, volta a ficar ativa e sai
+                        da fila de remoção, sem cobrar nada no provedor. O prazo é somado ao
+                        vencimento atual quando ele ainda está no futuro, e o valor sai da tabela de
+                        preços do provedor.
+                      </small>
+                    </div>
+
+                    <div className="sa-ativar__acao">
+                      {/* Rádio de verdade, e não dois botões: são duas opções do
+                          mesmo campo, e é o que faz as setas do teclado andarem
+                          entre elas sem código nosso. */}
+                      <div className="sa-ativar__periodo" role="radiogroup" aria-label="Período da ativação">
+                        {[
+                          { chave: "mensal", rotulo: "1 mês" },
+                          { chave: "anual", rotulo: "12 meses" },
+                        ].map((op) => (
+                          <label
+                            key={op.chave}
+                            className={`sa-ativar__opcao${periodoAtivacao === op.chave ? " is-on" : ""}`}
+                          >
+                            <input
+                              type="radio"
+                              name="sa-periodo-ativacao"
+                              value={op.chave}
+                              checked={periodoAtivacao === op.chave}
+                              onChange={() => setPeriodoAtivacao(op.chave)}
+                            />
+                            {op.rotulo}
+                          </label>
+                        ))}
+                      </div>
+                      <Button
+                        as="button"
+                        type="button"
+                        variant="primary"
+                        arrow={false}
+                        disabled={ativando}
+                        onClick={ativarComoPago}
+                      >
+                        {ativando ? "Ativando…" : "Ativar como paga"}
+                      </Button>
+                    </div>
+
+                    {/* O que ficou gravado, dito pelo servidor. A tela não
+                        recalcula a data — ver `ativarComoPago`. */}
+                    {ativacao ? (
+                      <p className="sa-ativar__ok" aria-live="polite">
+                        Conta em dia até <b>{new Date(ativacao.ate).toLocaleDateString("pt-BR")}</b>
+                        {ativacao.valorMensal
+                          ? ` — R$ ${Number(ativacao.valorMensal).toFixed(2).replace(".", ",")}/mês registrados`
+                          : ""}
+                        {ativacao.modulos?.includes("FLOW") ? ", com o Flow." : "."}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {!editingId ? (
                   <p className="dl-mono sa-modal__extra-label">
                     // o acesso do administrador é criado junto, com senha provisória e troca
@@ -831,6 +965,38 @@ const CSS = `
 .sa-addon > span { display: flex; flex-direction: column; gap: 3px; }
 .sa-addon strong { font-size: 13.5px; }
 .sa-addon small { font-size: 12px; line-height: 1.55; color: var(--subtle, #b6b6c2); }
+/* Ativacao manual. Em ambar e nao no menta do add-on do Flow: aquele bloco e
+   uma escolha de produto, este e uma acao de excecao — dinheiro que entrou por
+   fora. A cor separa "o que a conta tem" de "o que nos fizemos por ela".
+   Sem CRASE nenhuma nestes comentarios: este CSS mora num template literal. */
+.sa-ativar {
+  margin-top: 18px; padding: 14px 16px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 12px;
+  background: rgba(212,175,55,0.06); border: 1px solid rgba(212,175,55,0.24);
+}
+.sa-ativar__texto { display: flex; flex-direction: column; gap: 3px; }
+.sa-ativar__texto strong { font-size: 13.5px; }
+.sa-ativar__texto small { font-size: 12px; line-height: 1.55; color: var(--subtle, #b6b6c2); }
+.sa-ativar__acao { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sa-ativar__periodo { display: flex; gap: 6px; }
+.sa-ativar__opcao {
+  display: inline-flex; align-items: center; cursor: pointer; user-select: none;
+  padding: 7px 14px; border-radius: 999px; font-size: 12.5px;
+  border: 1px solid var(--hairline, rgba(255,255,255,0.12));
+  color: var(--subtle, #b6b6c2); background: transparent;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+/* O input existe para o teclado e para o leitor de tela; quem desenha o estado
+   e a etiqueta. Nada de display:none, que tiraria o foco junto. */
+.sa-ativar__opcao input { position: absolute; opacity: 0; width: 0; height: 0; }
+.sa-ativar__opcao:hover { color: var(--strong, #fff); }
+.sa-ativar__opcao.is-on {
+  background: rgba(212,175,55,0.16); border-color: rgba(212,175,55,0.5);
+  color: var(--strong, #fff);
+}
+.sa-ativar__opcao:focus-within { outline: 2px solid rgba(212,175,55,0.6); outline-offset: 2px; }
+.sa-ativar__ok { margin: 0; font-size: 12.5px; color: var(--strong, #fff); }
+
 .sa-head { margin-bottom: 34px; }
 .sa-title { max-width: 22ch; }
 .sa-stats { margin-top: 4px; }

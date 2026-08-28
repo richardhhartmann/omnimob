@@ -267,6 +267,27 @@ export function periodosDoPlano(plano, pacote = "HUB") {
   return PERIODOS.filter((periodo) => Boolean(idDoPreco(plano, periodo, pacote)));
 }
 
+/* ── O PREÇO, para quem cobra fora do Stripe ─────────────────────────────────
+
+   O Mercado Pago não tem catálogo: lá se manda um número, e pronto. Se esse
+   número viesse de uma variável de ambiente nova, a Omnimob passaria a ter DUAS
+   tabelas de preço para manter em dia — e a segunda envelheceria calada, que é
+   o pior defeito possível numa cobrança.
+
+   Então o Stripe continua sendo o catálogo mesmo quando o dinheiro entra por
+   outro caminho: esta função lê o `Price` de lá e devolve o valor em reais, que
+   o outro provedor apenas cobra. Mexer no preço no painel do Stripe muda o Pix
+   do Mercado Pago junto, sem deploy.
+
+   Devolve `null` quando aquele plano/período/pacote não tem preço — e quem
+   chama tem de recusar a cobrança, nunca inventar um valor. */
+export async function valorDoPlano(plano, periodo, pacote = "HUB") {
+  const precos = await precosDosPlanos();
+  const doPacote = normalizarPacote(pacote) === "HUB_FLOW" ? precos?.[plano]?.flow : precos?.[plano];
+  const doPeriodo = doPacote?.[normalizarPeriodo(periodo)];
+  return doPeriodo?.valor > 0 ? doPeriodo.valor : null;
+}
+
 /* A API do Stripe é form-urlencoded e aceita aninhamento por colchetes
    (`metadata[tenantId]`, `items[0][price]`). Este encoder achata o objeto
    nesse formato. */

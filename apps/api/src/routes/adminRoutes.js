@@ -6,7 +6,14 @@ import { prisma } from "../db.js";
 import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
 import { provisionTenant, senhaTemporaria } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
-import { cancelarAssinaturasDoSlug, diagnosticarPagamento } from "../services/pagamentoService.js";
+import {
+  cancelarAssinaturasDoSlug,
+  diagnosticarPagamento,
+  precosDosPlanos,
+  normalizarPeriodo,
+  normalizarPacote,
+  modulosDoPacote,
+} from "../services/pagamentoService.js";
 import { verificarEmail } from "../services/notificationService.js";
 import { diagnosticarBanco } from "../services/healthService.js";
 import { montarSessao } from "./authRoutes.js";
@@ -629,13 +636,128 @@ adminRouter.post("/tenants/:id/senha-admin", async (req, res) => {
   }
 });
 
+/* ─── Ativar a conta À MÃO, como se a assinatura tivesse sido paga ───────────
+
+   Existe porque o dinheiro nem sempre entra pelo provedor: transferência,
+   acordo comercial, cortesia, cliente que fechou por fora, ambiente de
+   demonstração. Antes disto, quem precisava disso mexia em quatro campos do
+   cadastro (status, plano, valor, vencimento) — e o quinto, `suspensoEm`, não
+   estava lá: conta suspensa voltava para EM_DIA com o relógio da remoção ainda
+   correndo, e a faxina a levava dias depois, já paga.
+
+   `fidelizarTrial` é a MESMA função que o caminho pago usa. Não existe uma
+   segunda definição de "conta em dia" — é a diferença entre uma ativação
+   manual e uma gambiarra.
+
+   O que esta rota acrescenta a ela são as três contas que quem clica não
+   deveria fazer de cabeça:
+     · a data — período escolhido a partir do vencimento atual, e não de hoje,
+       para que renovar antes do fim não jogue fora os dias que faltavam;
+     · o valor — lido do CATÁLOGO do provedor, nunca digitado (preço escrito à
+       mão é preço que envelhece);
+     · os módulos — o pacote vira `Tenant.modulos`, senão o Flow vendido por
+       fora nunca acende.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** Soma meses a uma data preservando o fim de mês (31/01 + 1 mês = 28/02). */
+function somarMeses(base, meses) {
+  const d = new Date(base);
+  const dia = d.getDate();
+  d.setMonth(d.getMonth() + meses);
+  // Estourou para o mês seguinte (31 → 31/04 não existe): volta para o último
+  // dia do mês pretendido.
+  if (d.getDate() < dia) d.setDate(0);
+  return d;
+}
+
 adminRouter.post("/tenants/:id/fidelizar", async (req, res) => {
   try {
-    const { plano, valorMensal, proximoVencimento } = req.body || {};
-    const tenant = await fidelizarTrial(req.params.id, { plano, valorMensal, proximoVencimento });
-    res.json({ tenant });
+    const b = req.body || {};
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, slug: true, name: true, plano: true, modulos: true, proximoVencimento: true },
+    });
+    if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+    const plano = ["BASICO", "PROFISSIONAL", "PREMIUM"].includes(b.plano) ? b.plano : tenant.plano || "BASICO";
+    const periodo = normalizarPeriodo(b.periodo);
+    const modulos = modulosDoCorpo(b) || (b.pacote ? modulosDoPacote(normalizarPacote(b.pacote)) : null);
+
+    /* A data. Explícita no corpo manda; senão, o período conta a partir do
+       vencimento atual quando ele ainda está no futuro — renovar no dia 20 com
+       vencimento no dia 30 não pode custar dez dias ao cliente. */
+    const agora = new Date();
+    const partida =
+      tenant.proximoVencimento && tenant.proximoVencimento > agora ? tenant.proximoVencimento : agora;
+    const vencimento = b.proximoVencimento
+      ? new Date(b.proximoVencimento)
+      : somarMeses(partida, periodo === "anual" ? 12 : 1);
+
+    /* O valor. Vem do catálogo do provedor — a MESMA fonte que a landing e a
+       tela de planos leem —, e só é digitado quando quem ativa quer registrar
+       um acordo diferente do preço de tabela. Provedor desligado devolve `{}`:
+       aí não gravamos valor nenhum, em vez de inventar um. */
+    let valorMensal = b.valorMensal === "" || b.valorMensal == null ? null : Number(b.valorMensal);
+    if (valorMensal == null) {
+      try {
+        const precos = await precosDosPlanos();
+        const pacote = modulos?.includes("FLOW") ? "HUB_FLOW" : "HUB";
+        const doPlano = pacote === "HUB_FLOW" ? precos?.[plano]?.flow : precos?.[plano];
+        /* Sem preço anual cadastrado, cai no mensal — o mesmo que a landing
+           faz. E no anual o que se GRAVA é a média mensal, porque a coluna se
+           chama `valorMensal` e é ela que a tela de planos exibe. */
+        const ehAnual = periodo === "anual" && doPlano?.anual?.valor > 0;
+        const doPeriodo = ehAnual ? doPlano.anual : doPlano?.mensal;
+        if (doPeriodo?.valor > 0) {
+          valorMensal = ehAnual
+            ? Math.round((doPeriodo.valor / 12) * 100) / 100
+            : doPeriodo.valor;
+        }
+      } catch (erro) {
+        console.warn("[admin/fidelizar] não consegui ler o preço no provedor:", erro.message);
+      }
+    }
+
+    const atualizado = await fidelizarTrial(tenant.id, {
+      plano,
+      valorMensal,
+      proximoVencimento: vencimento,
+      ...(modulos ? { modulos } : {}),
+    });
+
+    /* Na trilha DA IMOBILIÁRIA, como o acesso de suporte e a reemissão de
+       senha. Quem abrir o registro de atividade meses depois precisa achar por
+       que a conta ficou em dia sem nenhuma fatura correspondente. */
+    const quem = req.superAdmin?.email || req.superAdmin?.nome || "super-admin";
+    await prisma.auditoria.create({
+      data: {
+        tenantId: tenant.id,
+        usuarioId: null,
+        usuarioNome: `Omnimob (${quem})`,
+        acao: "ASSINATURA_ATIVADA_MANUALMENTE",
+        entidade: "Tenant",
+        entidadeId: tenant.id,
+        resumo:
+          `A equipe da Omnimob ativou o plano ${plano} (${periodo}) até ` +
+          `${vencimento.toLocaleDateString("pt-BR")} sem cobrança pelo provedor.`,
+        dados: { superAdmin: quem, plano, periodo, modulos, valorMensal, ate: vencimento },
+        ip: req.ip,
+        rota: req.originalUrl,
+      },
+    });
+
+    console.warn(
+      `[suporte] ${quem} ativou manualmente ${tenant.slug} — ${plano}/${periodo} até ${vencimento.toISOString().slice(0, 10)}`,
+    );
+
+    return res.json({
+      tenant: atualizado,
+      /* O que de fato foi gravado, para a tela não ter de recalcular nada — e
+         para a mensagem de confirmação dizer a data certa. */
+      ativacao: { plano, periodo, modulos: atualizado.modulos, valorMensal, ate: vencimento },
+    });
   } catch (err) {
     console.error("[POST /admin/tenants/:id/fidelizar]", err);
-    res.status(500).json({ error: "Erro ao fidelizar tenant.", detail: err.message });
+    res.status(500).json({ error: "Erro ao ativar a assinatura.", detail: err.message });
   }
 });
