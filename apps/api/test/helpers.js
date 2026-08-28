@@ -104,7 +104,8 @@ export async function criarImobiliariaDeTeste({ plano = "PREMIUM" } = {}) {
       descricao: "Administrador",
       acessarPainel: true, editarPagina: true, gerenciarImoveis: true, gerenciarLeads: true,
       gerenciarUsuarios: true, gerenciarClientes: true, gerenciarCargos: true,
-      verConfiguracoes: true, verRelatorios: true, verAuditoria: true, publicarRedes: true,
+      verConfiguracoes: true, verCobranca: true, verRelatorios: true, verAuditoria: true,
+      publicarRedes: true,
     },
   });
 

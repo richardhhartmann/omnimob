@@ -25,6 +25,14 @@ import {
 
 const NOME_PLANO = { BASICO: "Básico", PROFISSIONAL: "Profissional", PREMIUM: "Premium" };
 
+/* A seção de Cobrança, e não `/login`.
+
+   O botão do aviso de vencimento promete uma ação ("gerar meu Pix agora"), e
+   largar a pessoa no painel a faria procurar onde. Quem não estiver logado cai
+   no login e volta para CÁ depois de entrar — o destino é guardado, ver o
+   comentário da rota de fallback em `App.jsx`. */
+const CAMINHO_COBRANCA = "/configuracoes?ver=cobranca";
+
 /* Endereço público da vitrine para os links dos e-mails.
 
    Quem chama passa `urlVitrine` já resolvido (ver `enderecoDaVitrine` em
@@ -640,6 +648,118 @@ export function emailRelatorioMensal({ imobiliaria, relatorio, base }) {
       botao("Abrir o painel", painel),
     ].join(""),
     rodape: "Você recebe este resumo porque sua assinatura inclui relatório mensal.",
+  });
+
+  return { subject, body, html };
+}
+
+// ─── 11. O plano vence em breve ──────────────────────────────────────────────
+
+/**
+ * Aviso de vencimento, mandado ANTES de a conta cair.
+ *
+ * ── POR QUE ELE EXISTE ──
+ * Enquanto tudo era cartão, ele não fazia falta: a assinatura renova sozinha, e
+ * quem precisava saber de algo era só quem tinha o cartão recusado. Com o Pix,
+ * NADA renova sozinho — Pix Automático não existe para nós —, então o cliente
+ * precisa voltar e pagar de novo. No anual, uma vez por ano; no mensal, doze.
+ * Sem este e-mail, o desfecho normal de um cliente satisfeito é a conta vencer
+ * em silêncio e o painel fechar na cara dele.
+ *
+ * ── O TOM ──
+ * Não é cobrança, é lembrete — e a diferença aparece na primeira linha. Quem
+ * recebe isto está EM DIA e não fez nada de errado; tratar como inadimplente
+ * quem ainda nem venceu é a forma mais rápida de transformar um lembrete em
+ * motivo de cancelamento.
+ *
+ * @param {{ imobiliaria: string, dias: number, vence: Date, plano?: string,
+ *           renovaSozinho?: boolean, base?: string }} args
+ *        `renovaSozinho` muda a mensagem INTEIRA: quem paga no cartão só
+ *        precisa conferir se o cartão continua válido; quem paga no Pix precisa
+ *        entrar e gerar o código. Mandar o texto do Pix para quem tem cartão
+ *        faria a pessoa achar que a assinatura dela parou de funcionar.
+ */
+export function emailVencimentoProximo({ imobiliaria, dias, vence, plano, renovaSozinho = false, base = "" }) {
+  const raiz = String(base || "").replace(/\/+$/, "");
+  const quando = dias <= 1 ? "amanhã" : `em ${dias} dias`;
+  /* O FUSO é obrigatório aqui. Sem ele a data sai no fuso do SERVIDOR, que em
+     produção é UTC — e um vencimento às 21h de Brasília seria impresso como o
+     dia seguinte, contradizendo a contagem de dias que decidiu mandar este
+     e-mail (`diasAte`, em `avisoVencimento.js`, conta em São Paulo). O cliente
+     leria "vence em 7 dias" ao lado de uma data que fica a 8. */
+  const data = vence
+    ? new Date(vence).toLocaleDateString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+  const nomePlano = NOME_PLANO[plano] || plano || "";
+
+  const subject = renovaSozinho
+    ? `A assinatura da ${imobiliaria} renova ${quando}`
+    : dias <= 1
+      ? `O plano da ${imobiliaria} vence amanhã`
+      : `O plano da ${imobiliaria} vence ${quando}`;
+
+  const acao = renovaSozinho
+    ? [
+        "Não precisa fazer nada: a cobrança é automática, no cartão cadastrado.",
+        "Se o cartão mudou de número ou está perto de expirar, vale conferir antes — é o motivo mais comum de uma renovação falhar.",
+      ]
+    : [
+        "Seu pagamento é por Pix, e o Pix não renova sozinho: é preciso entrar no painel e gerar um novo código.",
+        "Leva menos de um minuto, e o acesso continua sem interrupção nenhuma.",
+      ];
+
+  const body = [
+    `O plano ${nomePlano ? `${nomePlano} ` : ""}da ${imobiliaria} vence ${quando}${data ? ` (${data})` : ""}.`,
+    "",
+    ...acao,
+    "",
+    raiz ? `Cobrança: ${raiz}${CAMINHO_COBRANCA}` : "",
+    "",
+    "Se algo mudou por aí — plano, forma de pagamento, dados da nota — é só responder este e-mail.",
+  ]
+    .filter((l) => l !== undefined)
+    .join("\n");
+
+  const html = layoutEmail({
+    preheader: renovaSozinho
+      ? `Renovação automática ${quando}. Só confira o cartão.`
+      : `Vence ${quando}. O Pix não renova sozinho.`,
+    conteudo: [
+      eyebrow(renovaSozinho ? "● RENOVAÇÃO PRÓXIMA" : "● VENCIMENTO PRÓXIMO", COR.dourado),
+      titulo(
+        renovaSozinho
+          ? `Sua assinatura renova ${esc(quando)}`
+          : `Seu plano vence ${esc(quando)}`,
+      ),
+      paragrafo(
+        `O plano ${nomePlano ? `${forte(nomePlano)} ` : ""}da ${forte(imobiliaria)} vence ` +
+          `${esc(quando)}${data ? ` — ${esc(data)}` : ""}.`,
+      ),
+      renovaSozinho
+        ? aviso(
+            "Não precisa fazer nada: a cobrança sai sozinha no cartão cadastrado. " +
+              "Só vale conferir se ele não mudou de número nem está perto de expirar.",
+          )
+        : aviso(
+            "Seu pagamento é por <strong>Pix</strong>, e ele <strong>não renova sozinho</strong>. " +
+              "Entre no painel e gere um novo código — leva menos de um minuto, e o acesso segue sem interrupção.",
+          ),
+      raiz
+        ? botao(
+            renovaSozinho ? "Conferir minha assinatura" : "Gerar meu Pix agora",
+            `${raiz}${CAMINHO_COBRANCA}`,
+          )
+        : "",
+      paragrafo(
+        "Se algo mudou por aí — plano, forma de pagamento, dados da nota — é só responder este e-mail.",
+      ),
+      raiz ? linkDeReserva(`${raiz}${CAMINHO_COBRANCA}`) : "",
+    ],
   });
 
   return { subject, body, html };

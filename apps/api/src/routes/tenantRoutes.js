@@ -4,12 +4,13 @@ import { requireAuth, requireAuthOuReativacao } from "../middlewares/authMiddlew
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant, requireTenantMesmoSuspenso } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
+import { historicoDoTenant, ultimoPagamento, renovaSozinho } from "../services/pagamentos.js";
 import {
   criarCobrancaPix,
   consultarCobranca,
   aplicarCobrancaAprovada,
   mercadoPagoConfigurado,
-  PERIODO_DO_PIX,
+  PERIODOS_DO_PIX,
 } from "../services/pagamentoMercadoPago.js";
 import {
   criarAssinatura,
@@ -22,6 +23,7 @@ import {
   normalizarPacote,
   modulosDoPacote,
   precosDosPlanos,
+  valorDoPlano,
   agendarCancelamentoDoSlug,
   normalizarPeriodo,
 } from "../services/pagamentoService.js";
@@ -673,9 +675,10 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
        o que a conta do STRIPE consegue cobrar, e misturar os dois faria a tela
        mandar um Pix do Mercado Pago pelo caminho do Stripe.
 
-       `periodo` viaja junto porque a oferta não vale em todo lugar: cobrança
-       única no mensal significaria a pessoa lembrar de pagar todo mês. */
-    meios.pixMercadoPago = mercadoPagoConfigurado() ? { periodo: PERIODO_DO_PIX } : null;
+       Os PERÍODOS viajam junto porque a tela precisa saber o que oferecer, e
+       essa lista é do servidor: se um dia o mensal voltar a ser bloqueado, a
+       aba se ajusta sem deploy do front. */
+    meios.pixMercadoPago = mercadoPagoConfigurado() ? { periodos: PERIODOS_DO_PIX } : null;
     const contaStripe = await marcaDaConta();
     // "Gerei um boleto — ele foi pago?" O painel não sabia responder.
     const cobranca = await cobrancaEmAberto(tenant.id);
@@ -1266,6 +1269,102 @@ tenantRouter.post(
       }
       console.error("[POST /tenants/me/assinar-assincrono]", err);
       return res.status(500).json({ error: "Erro ao preparar o pagamento." });
+    }
+  },
+);
+
+/* ─── O extrato da imobiliária ───────────────────────────────────────────────
+
+   Tudo que a seção "Cobrança e pagamentos" precisa, numa chamada: a situação de
+   hoje, o histórico e a última forma usada.
+
+   Uma rota e não três porque a tela desenha as três coisas juntas — três
+   chamadas fariam a página aparecer em pedaços, e a segunda contradiz a
+   primeira enquanto a terceira não chega.
+
+   ISOLAMENTO: o `tenantId` sai de `req.tenant`, nunca do cliente. É a junção
+   rota + query, que é onde moraram os três vazamentos deste projeto.
+
+   `verCobranca`, e não `verConfiguracoes`. A diferença é que esta é uma
+   ESCOLHA: a outra o servidor deriva do nome do cargo, então não há caixa para
+   marcar e ninguém consegue concedê-la. Enquanto a cobrança morava atrás dela,
+   ou a pessoa era Administrador e via tudo — plano, domínio, cancelamento — ou
+   não via nada. O financeiro de uma imobiliária média precisa do meio-termo. */
+tenantRouter.get(
+  "/me/pagamentos",
+  requireAuthOuReativacao,
+  requireTenantMesmoSuspenso,
+  requirePermissao("verCobranca"),
+  async (req, res) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenant.id },
+        select: {
+          plano: true,
+          modulos: true,
+          statusPagamento: true,
+          proximoVencimento: true,
+          valorMensal: true,
+          assinaturaId: true,
+          cobrancaProvedor: true,
+        },
+      });
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+
+      const [pagamentos, ultimo] = await Promise.all([
+        historicoDoTenant(req.tenant.id),
+        ultimoPagamento(req.tenant.id),
+      ]);
+
+      /* ── O que a antecipação custa ────────────────────────────────────────
+         Vem na MESMA resposta porque é a mesma tela: pedir o preço numa
+         segunda chamada faria o botão aparecer depois do extrato, mudando a
+         página debaixo de quem já está lendo.
+
+         Só existe para quem NÃO renova sozinho. Oferecer "adiantar" a quem tem
+         cobrança automática seria oferecer uma segunda cobrança do mesmo mês —
+         a assinatura vai cobrar de novo no dia dela, independentemente disto. */
+      const pacote = (tenant.modulos || []).includes("FLOW") ? "HUB_FLOW" : "HUB";
+      const periodos = [];
+      if (mercadoPagoConfigurado() && !renovaSozinho(tenant) && tenant.plano) {
+        for (const periodo of PERIODOS_DO_PIX) {
+          /* O preço sai do catálogo do Stripe, como em toda cobrança daqui —
+             o Mercado Pago só recebe o número. Período sem preço cadastrado
+             simplesmente não é oferecido: nunca um valor inventado. */
+          const valor = await valorDoPlano(tenant.plano, periodo, pacote);
+          if (valor) periodos.push({ periodo, valor });
+        }
+      }
+
+      return res.json({
+        situacao: {
+          plano: tenant.plano,
+          modulos: tenant.modulos,
+          statusPagamento: tenant.statusPagamento,
+          proximoVencimento: tenant.proximoVencimento,
+          valorMensal: tenant.valorMensal != null ? Number(tenant.valorMensal) : null,
+          /* A pergunta que mais confunde quem abre esta tela: "isso renova
+             sozinho?". A regra é a MESMA do e-mail de vencimento — ver
+             `renovaSozinho`, em `pagamentos.js`. */
+          renovaSozinho: renovaSozinho(tenant),
+        },
+        /* `Decimal` do Prisma não sobrevive ao JSON como número — vira string
+           ou objeto, dependendo da versão. Convertido aqui, onde se sabe o que
+           ele é, e não na tela, que teria de adivinhar. */
+        pagamentos: pagamentos.map((p) => ({ ...p, valor: Number(p.valor) })),
+        ultimo: ultimo ? { ...ultimo, valor: Number(ultimo.valor) } : null,
+        /* `sugerido` é o período do último pagamento: quem pagou o ano passado
+           quer o ano de novo, e abrir no mensal faria a pessoa trocar sempre.
+           Sem histórico, o mensal — que é o menor número da tela. */
+        antecipacao: {
+          disponivel: periodos.length > 0,
+          periodos,
+          sugerido: periodos.some((p) => p.periodo === ultimo?.periodo) ? ultimo.periodo : "mensal",
+        },
+      });
+    } catch (err) {
+      console.error("[GET /tenants/me/pagamentos]", err);
+      return res.status(500).json({ error: "Não foi possível ler o histórico de cobrança." });
     }
   },
 );

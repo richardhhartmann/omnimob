@@ -157,3 +157,42 @@ export function SkeletonComissoes({ linhas = 4 }) {
     </div>
   );
 }
+
+/* ── Pagamento ──────────────────────────────────────────────────────────────
+   O formulário do Stripe é um iframe: ele demora a montar e, até montar, não
+   ocupa altura nenhuma. Antes havia um "Carregando o campo seguro…" no lugar —
+   texto que diz que algo acontece, mas deixa o botão de pagar saltar para cima
+   quando o iframe finalmente aparece.
+
+   Este esqueleto tem a forma do formulário de CARTÃO, que é a aba padrão e a de
+   todo mundo: número, validade e código lado a lado, país. O boleto pede outros
+   campos, e por um instante o desenho não corresponde — o que se ganha em
+   troca, a altura reservada e o layout parado, vale mais do que a precisão de
+   meio segundo.
+
+   Usado pelo modal do teste e pela parede de conta suspensa. */
+export function SkeletonPagamento() {
+  const campo = { display: "flex", flexDirection: "column", gap: "8px" };
+  return (
+    <div style={{ display: "grid", gap: "16px" }} aria-hidden="true">
+      <div style={campo}>
+        <Skeleton width={112} height={10} />
+        <Skeleton width="100%" height={46} radius={10} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div style={campo}>
+          <Skeleton width={96} height={10} />
+          <Skeleton width="100%" height={46} radius={10} />
+        </div>
+        <div style={campo}>
+          <Skeleton width={118} height={10} />
+          <Skeleton width="100%" height={46} radius={10} />
+        </div>
+      </div>
+      <div style={campo}>
+        <Skeleton width={38} height={10} />
+        <Skeleton width="100%" height={46} radius={10} />
+      </div>
+    </div>
+  );
+}

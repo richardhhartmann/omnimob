@@ -25,19 +25,24 @@ const fonte = bruto
   .replace(/\/\*[\s\S]*?\*\//g, " ")
   .replace(/\/\/[^\n]*/g, " ");
 
-/* Cinco, e cada uma por um motivo diferente:
+/* Seis, e cada uma por um motivo diferente:
      · gerenciarCargos    — a chave de todas as outras portas
      · gerenciarUsuarios  — desativa, exclui e troca a senha de qualquer conta
      · verPainelGestor    — faturamento da casa e o resultado de cada corretor
+     · verCobranca        — o que a imobiliária PAGA, e o botão que gera cobrança
      · validarJuridico    — destrava o fechamento de um negócio
      · validarFinanceiro  — idem, e é no fechamento que a comissão é congelada
 
-   As duas últimas entraram com o Omnimob Flow e são as mais silenciosas do
-   produto: quem as tem não ganha tela nenhuma, só um botão. É justamente por
-   isso que elas pedem aviso — a permissão que não muda nada na interface é a
-   mais fácil de conceder por engano ao montar um cargo às pressas. */
+   `validarJuridico` e `validarFinanceiro` entraram com o Omnimob Flow e são as
+   mais silenciosas do produto: quem as tem não ganha tela nenhuma, só um botão.
+   É justamente por isso que elas pedem aviso — a permissão que não muda nada na
+   interface é a mais fácil de conceder por engano ao montar um cargo às pressas.
+
+   `verCobranca` entrou depois, com a seção de Cobrança, e é a única das seis
+   em que o risco é de DINHEIRO nos dois sentidos: quem a recebe vê quanto a
+   casa paga e pode adiantar doze meses num clique. */
 const DE_RISCO = [
-  "gerenciarCargos", "gerenciarUsuarios", "verPainelGestor",
+  "gerenciarCargos", "gerenciarUsuarios", "verPainelGestor", "verCobranca",
   "validarJuridico", "validarFinanceiro",
 ];
 

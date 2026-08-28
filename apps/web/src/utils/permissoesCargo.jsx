@@ -1,7 +1,7 @@
 import {
   Shield, Buildings, UserCircle, UserSquare,
   ClockCounterClockwise, PencilSimple, ShareNetwork, ChartPieSlice,
-  SignIn, Kanban, FileText, Scales, CurrencyCircleDollar, Coins, Broadcast,
+  SignIn, Kanban, FileText, Scales, CurrencyCircleDollar, Coins, Broadcast, Receipt,
 } from "@phosphor-icons/react";
 import { planoLiberaRedes } from "./planos";
 import { IconeRelatorios } from "./iconesRelatorios";
@@ -28,6 +28,11 @@ export const PERMISSOES = [
   { key: "gerenciarUsuarios", label: "Gerenciar Usuários",    Icon: UserSquare },
   { key: "gerenciarCargos",   label: "Gerenciar Cargos",      Icon: Shield },
   { key: "verAuditoria",      label: "Registro de Atividade", Icon: ClockCounterClockwise },
+  /* Cobrança é a única "chave da casa" que se pode conceder — ver o comentário
+     em `cargosPadrao.js`. Ela abre o extrato e o botão de adiantar pagamento,
+     e não abre plano, domínio nem cancelamento, que seguem sendo consequência
+     de ser o Administrador. */
+  { key: "verCobranca",       label: "Cobrança e Pagamentos", Icon: Receipt },
   { key: "editarPagina",      label: "Editar Página",         Icon: PencilSimple },
   /* "Ver Relatórios" absorveu o antigo "Gerenciar Leads": ela abre a página
      Relatórios inteira — leads, relatório mensal, funil e comissões. */
@@ -182,6 +187,24 @@ export function cargoVazio() {
    Um aviso genérico ("esta permissão é sensível") ensina a clicar em confirmar
    sem ler — e aí o modal deixa de proteger e vira só um passo a mais. */
 export const PERMISSOES_DE_RISCO = {
+  /* ── A conta da própria imobiliária ──────────────────────────────────────
+     Aqui o risco não é de acesso indevido a dado de cliente: é de DINHEIRO. A
+     tela mostra quanto a casa paga e tem um botão que gera cobrança de
+     verdade — quem adianta doze meses adianta doze meses.
+
+     E há o outro lado, menos óbvio: o valor do plano é uma informação que o
+     dono da imobiliária pode não querer que a equipe veja. */
+  verCobranca: {
+    titulo: "Dar acesso à cobrança da imobiliária?",
+    verbo: "ver o que a imobiliária paga e adiantar pagamentos",
+    riscos: [
+      "Este cargo passa a ver quanto a imobiliária paga, o que já foi pago e por qual forma.",
+      "Pode ADIANTAR um pagamento: o botão gera uma cobrança Pix de verdade, no valor de um mês ou de doze.",
+      "Não dá acesso a trocar de plano, mexer no domínio ou cancelar a assinatura — isso continua sendo só do Administrador.",
+      "Faz sentido para quem cuida do financeiro. Não faz para quem só atende cliente.",
+    ],
+    textoCiencia: "Estou ciente de que este cargo poderá ver a cobrança da imobiliária e gerar pagamentos, e quero conceder assim mesmo.",
+  },
   /* ── As duas travas do Flow ───────────────────────────────────────────────
      Elas não concedem acesso a nada: concedem o poder de dizer "conferi, pode
      fechar". É a permissão mais silenciosa do produto — quem a tem não vê

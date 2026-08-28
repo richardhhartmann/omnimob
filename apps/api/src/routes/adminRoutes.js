@@ -15,6 +15,7 @@ import {
   modulosDoPacote,
 } from "../services/pagamentoService.js";
 import { verificarEmail } from "../services/notificationService.js";
+import { registrarPagamento } from "../services/pagamentos.js";
 import { diagnosticarBanco } from "../services/healthService.js";
 import { montarSessao } from "./authRoutes.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
@@ -725,10 +726,35 @@ adminRouter.post("/tenants/:id/fidelizar", async (req, res) => {
       ...(modulos ? { modulos } : {}),
     });
 
+    /* Quem liberou. Declarado aqui em cima porque as DUAS anotações abaixo o
+       usam: a linha do histórico e a trilha de auditoria. */
+    const quem = req.superAdmin?.email || req.superAdmin?.nome || "super-admin";
+
+    /* No histórico de pagamento, para a imobiliária ver por que está em dia.
+       Sem esta linha, quem foi ativado por acordo comercial abriria a tela de
+       cobrança e encontraria o vazio — a pior resposta possível para "eu
+       paguei?". É o buraco que nenhum fornecedor cobre, porque esta ativação
+       não existe em fornecedor nenhum. */
+    const meses = periodo === "anual" ? 12 : 1;
+    await registrarPagamento({
+      tenantId: tenant.id,
+      provedor: "MANUAL",
+      meio: "manual",
+      status: "PAGO",
+      /* O valor do PERÍODO, não a mensalidade: é o que foi "pago". Sem preço
+         lido do provedor não há valor, e aí não há linha — melhor um histórico
+         com uma lacuna do que um "R$ 0,00" que ninguém sabe explicar. */
+      valor: valorMensal != null ? Number(valorMensal) * meses : 0,
+      plano,
+      periodo,
+      cobreDe: partida,
+      cobreAte: vencimento,
+      descricao: `Ativado pela equipe da Omnimob (${quem}), sem cobrança pelo provedor.`,
+    });
+
     /* Na trilha DA IMOBILIÁRIA, como o acesso de suporte e a reemissão de
        senha. Quem abrir o registro de atividade meses depois precisa achar por
        que a conta ficou em dia sem nenhuma fatura correspondente. */
-    const quem = req.superAdmin?.email || req.superAdmin?.nome || "super-admin";
     await prisma.auditoria.create({
       data: {
         tenantId: tenant.id,

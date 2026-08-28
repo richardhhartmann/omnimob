@@ -6,6 +6,7 @@ import {
   Database,
   Crown,
   Kanban,
+  Receipt,
 } from "@phosphor-icons/react";
 import { planoLiberaRedes } from "./planos";
 import { FLOW, modulosDoTenant } from "./modulos";
@@ -80,6 +81,21 @@ export const ABAS_CONFIG = [
     desc: "Assinatura digital dos contratos e a política de comissão da casa.",
   },
   {
+    /* Cobrança é irmã de Plano, e não uma tela própria: "quanto custa" e "o que
+       já paguei" são a mesma conversa, e uma segunda Configurações é a
+       divergência que este projeto já pagou duas vezes (ver o comentário do
+       Flow, logo acima).
+
+       Separada de Plano porque respondem a perguntas diferentes: lá se DECIDE
+       (trocar de faixa, contratar o Flow), aqui se CONFERE (venci quando, paguei
+       o quê, por qual meio). Juntas, a decisão ficava enterrada num extrato. */
+    key: "cobranca",
+    label: "Cobrança e pagamentos",
+    cor: "#94a3b8",
+    Icon: Receipt,
+    desc: "Quando vence, o que já foi pago e por qual forma — com o recibo de cada cobrança.",
+  },
+  {
     key: "plano",
     label: "Plano e recursos",
     cor: "#94a3b8",
@@ -116,6 +132,12 @@ export function abasVisiveis(cargo, plano, { podeImportar, temFlow = false }) {
        quem vende módulo é a tela de planos, não um cadeado no meio das
        configurações. */
     if (a.key === "flow") return temFlow && Boolean(cargo?.verConfiguracoes);
+    /* Cobrança tem permissão PRÓPRIA, e é a única seção daqui que um cargo
+       pode receber sem ser o Administrador — o financeiro precisa conferir o
+       que foi pago sem poder trocar de plano ou cancelar a assinatura.
+       Escondida e não bloqueada, como o resto desta lista; a rota recusa do
+       mesmo jeito para quem digitar o endereço. */
+    if (a.key === "cobranca") return Boolean(cargo?.verCobranca);
     return true;
   });
 }

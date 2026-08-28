@@ -8,6 +8,9 @@ import {
 import { ouvirPedidoDeAssinatura } from "../utils/pulsoTrial";
 import { PLANOS } from "../utils/planos";
 import { ToggleDoFlow } from "./ToggleDoFlow.jsx";
+import { CodigoPix, useEsperaDoPix, CODIGO_PIX_CSS } from "./CodigoPix.jsx";
+import { SkeletonPagamento } from "./Skeleton.jsx";
+import { AbasDePagamento, ABAS_PAGAMENTO_CSS } from "./AbasDePagamento.jsx";
 import { carregarStripe, stripeConfigurado, chavesDaMesmaConta, APARENCIA_STRIPE } from "../utils/stripe";
 import { IconeCheck } from "./Icones.jsx";
 
@@ -74,57 +77,6 @@ function GuiaDoBoleto({ guia }) {
   );
 }
 
-/* ── O código Pix ───────────────────────────────────────────────────────────
-   O COPIA-E-COLA vem primeiro, e não o QR: quem está no celular já tem o app do
-   banco a um toque e não consegue fotografar a própria tela. O QR é para quem
-   abriu o painel no computador e vai pagar pelo telefone.
-
-   A imagem chega em base64 dentro da resposta — nada é buscado de fora, o que
-   mantém o QR funcionando mesmo com o provedor fora do ar no instante seguinte,
-   e não abre uma requisição a um domínio de terceiro dentro do painel. */
-function CodigoPix({ pix }) {
-  const [copiado, setCopiado] = useState(false);
-  if (!pix) return null;
-
-  function copiar() {
-    navigator.clipboard?.writeText(pix.qrCode || "").then(
-      () => { setCopiado(true); setTimeout(() => setCopiado(false), 2000); },
-      () => {},
-    );
-  }
-
-  return (
-    <div className="tv-pix">
-      {pix.qrCodeBase64 ? (
-        <img
-          className="tv-pix__qr"
-          src={`data:image/png;base64,${pix.qrCodeBase64}`}
-          alt="QR Code do Pix"
-          width={168}
-          height={168}
-        />
-      ) : null}
-      <span className="tv-guia__rotulo">Pix copia e cola</span>
-      <code className="tv-guia__numero tv-pix__codigo">{pix.qrCode}</code>
-      <button type="button" className="tv-btn tv-btn--primario" onClick={copiar}>
-        {copiado ? "Copiado" : "Copiar código Pix"}
-      </button>
-      {pix.ticketUrl ? (
-        <div className="tv-guia__links">
-          <a href={pix.ticketUrl} target="_blank" rel="noreferrer">Abrir no Mercado Pago</a>
-        </div>
-      ) : null}
-      {pix.venceEm ? (
-        <span className="tv-guia__prazo">
-          O código vale até{" "}
-          {new Date(pix.venceEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          {" "}— depois disso é só gerar outro.
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 function plural(n, singular, pluralForma) {
   return `${n} ${n === 1 ? singular : pluralForma}`;
 }
@@ -149,6 +101,9 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   /* A cobrança Pix em aberto (Mercado Pago). É uma COBRANÇA, não uma
      assinatura: enquanto ela existe, a tela mostra o código e fica perguntando
      se caiu. Ver `gerarPix`. */
+  /* Qual aba de pagamento esta aberta: "cartao" | "boleto" | "pix".
+     Ver `AbasDePagamento`. */
+  const [meio, setMeio] = useState("cartao");
   const [pix, setPix] = useState(null);
   const [gerandoPix, setGerandoPix] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -224,7 +179,9 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
      entra nesta página nem chega à nossa API — só volta um id de método de
      pagamento. É o que mantém a Omnimob fora do escopo pesado do PCI. */
   useEffect(() => {
-    if (passo !== 3 || !stripeConfigurado()) return undefined;
+    /* Na aba do Pix não há Payment Element nenhum: o Mercado Pago não tem
+       formulário, tem um código. */
+    if (meio === "pix" || passo !== 3 || !stripeConfigurado()) return undefined;
 
     /* `mode` e `amount` são obrigatórios ao criar o grupo de Elements neste
        fluxo — o cartão é coletado aqui e a assinatura é criada no servidor
@@ -259,8 +216,17 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
              pagamento e é o servidor que cria a assinatura depois. */
           paymentMethodCreation: "manual",
           appearance: APARENCIA_STRIPE,
+          /* UM método por vez, porque quem escolhe agora é a tira de abas lá
+             fora — ela precisa incluir o Pix do Mercado Pago, que jamais
+             apareceria dentro do iframe do Stripe. */
+          paymentMethodTypes: [meio === "boleto" ? "boleto" : "card"],
         });
-        elemento = elements.create("payment", { layout: "tabs" });
+        /* Acordeão sem rádio e já aberto: com um método só, isto desenha o
+           formulário direto. O layout "tabs" mostraria uma aba solitária logo
+           abaixo da nossa tira — a mesma pergunta, duas vezes. */
+        elemento = elements.create("payment", {
+          layout: { type: "accordion", defaultCollapsed: false, radios: false, spacedAccordionItems: false },
+        });
         elemento.mount(cartaoRef.current);
         elemento.on("ready", () => vivo && setCartaoPronto(true));
         elementsRef.current = elements;
@@ -274,7 +240,11 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
       if (elemento) elemento.destroy();
       elementsRef.current = null;
     };
-  }, [passo, plano, periodo, pacote, precosVivos]);
+  /* `pix` entra nas dependências para o campo do Stripe ser REMONTADO ao
+     voltar do código Pix. Sem ele, a div do cartão saía do DOM enquanto o QR
+     estava na tela, voltava vazia, e o `elements` apontava para um elemento que
+     já não existia — o botão ficava habilitado e o pagamento falhava no envio. */
+  }, [passo, plano, periodo, pacote, precosVivos, pix, meio]);
 
   /* O que sobra DEPOIS do vencimento. Vem do servidor, da mesma constante que
      a faxina usa para apagar — cravar o número aqui seria a forma mais fácil de
@@ -289,6 +259,26 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   /* Uma cobrança esperando pagamento mantém o selo de pé mesmo fora do teste:
      é o único lugar do painel onde se reencontra o boleto gerado. */
   const cobranca = situacao?.cobranca || null;
+
+  /* A espera do Pix mora em `CodigoPix.jsx`, junto do desenho do código: as
+     duas telas que vendem plano usam a mesma. O que é DESTA tela é o desfecho —
+     comemorar no passo 4 com o que o servidor acabou de gravar. */
+  useEsperaDoPix({
+    tenantSlug,
+    pix,
+    aoAprovar: (r) => {
+      esquecerTrialStatus(tenantSlug);
+      setPix(null);
+      /* `ate` só volta quando foi esta consulta que ativou — se o webhook
+         chegou primeiro, a data fica de fora e o resumo não a mostra. */
+      setConcluido({ plano, proximoVencimento: r.ate || null });
+      setPasso(4);
+    },
+    aoRecusar: () => {
+      setPix(null);
+      setFalha("O pagamento não foi concluído. Você pode gerar um novo código.");
+    },
+  });
 
   if (!situacao?.emTrial && !graca?.venceu && cobranca?.situacao !== "aberta") return null;
 
@@ -315,6 +305,9 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
   const periodoDe = (chave) => (doPacote(chave)?.[periodo] ? periodo : "mensal");
   const precoDe = (chave) =>
     doPacote(chave)?.[periodoDe(chave)]?.rotulo || PRECOS_RESERVA[chave];
+  /* O valor que o Pix vai cobrar, no período escolhido. Sai do MESMO lugar que
+     o cartão lê — é o servidor que decide o número em qualquer dos caminhos. */
+  const precoDoPix = plano ? doPacote(plano)?.[periodoDe(plano)]?.numero || null : null;
   const economiaDe = (chave) =>
     periodoDe(chave) === "anual" ? doPacote(chave)?.economia || null : null;
   const temAnual = Object.values(precosVivos).some((p) => (pacote === "HUB_FLOW" ? p?.flow?.anual : p?.anual));
@@ -391,62 +384,6 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
      A diferença que sobra é de natureza, não de interface. Cartão cobra na
      hora. Boleto nasce como guia, e o dinheiro entra depois — quem vira a chave
      nesse caso é o webhook `invoice.paid`. */
-  /* ── Gerar o Pix do ano ───────────────────────────────────────────────────
-     Caminho paralelo ao do cartão, e não uma variação dele: aqui não há
-     assinatura, não há token e o Stripe não participa. A tela troca de conteúdo
-     e passa a esperar o dinheiro. */
-  async function gerarPix() {
-    setGerandoPix(true);
-    setFalha("");
-    try {
-      const r = await api.criarCobrancaPix(tenantSlug, { plano, periodo: "anual", pacote });
-      esquecerTrialStatus(tenantSlug);
-      setPix(r);
-    } catch (erro) {
-      setFalha(erro.message || "Não foi possível gerar o Pix.");
-    } finally {
-      setGerandoPix(false);
-    }
-  }
-
-  /* ── "Já caiu?" ───────────────────────────────────────────────────────────
-     Pergunta de quatro em quatro segundos enquanto o código está na tela. O
-     webhook é o caminho normal e chega sozinho — mas ele pode demorar, e em
-     desenvolvimento não chega nunca (localhost não recebe aviso de fora). Sem
-     esta consulta, um Pix pago deixaria a pessoa olhando para o QR.
-
-     Quem ativa a conta é o servidor, nos dois caminhos, com a mesma função.
-     Esta tela só pergunta. */
-  useEffect(() => {
-    if (!pix?.cobrancaId) return undefined;
-    let vivo = true;
-
-    const relogio = setInterval(async () => {
-      try {
-        const r = await api.consultarCobrancaPix(tenantSlug, pix.cobrancaId);
-        if (!vivo || r.status === "pendente") return;
-        clearInterval(relogio);
-        if (r.status === "aprovado") {
-          esquecerTrialStatus(tenantSlug);
-          setPix(null);
-          /* Os valores vêm do que o SERVIDOR acabou de gravar. `ate` só volta
-             quando foi esta chamada que ativou — se o webhook chegou primeiro,
-             a data fica de fora e o resumo simplesmente não a mostra. */
-          setConcluido({ plano, proximoVencimento: r.ate || null });
-          setPasso(4);
-        } else {
-          setPix(null);
-          setFalha("O pagamento não foi concluído. Você pode gerar um novo código.");
-        }
-      } catch {
-        /* Falha de rede não derruba a espera: o código continua válido e a
-           próxima batida tenta de novo. */
-      }
-    }, 4000);
-
-    return () => { vivo = false; clearInterval(relogio); };
-  }, [pix, tenantSlug, plano]);
-
   async function assinar() {
     setEnviando(true);
     setFalha("");
@@ -489,9 +426,29 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
     }
   }
 
+  /* ── Gerar o Pix do ano ───────────────────────────────────────────────────
+     Caminho paralelo ao do cartão, e não uma variação dele: aqui não há
+     assinatura, não há token e o Stripe não participa. A tela troca de conteúdo
+     e passa a esperar o dinheiro. */
+  async function gerarPix() {
+    setGerandoPix(true);
+    setFalha("");
+    try {
+      /* O período escolhido, com a mesma queda para o mensal que `assinar` faz
+         quando aquele plano não tem preço anual cadastrado. */
+      const r = await api.criarCobrancaPix(tenantSlug, { plano, periodo: periodoDe(plano), pacote });
+      esquecerTrialStatus(tenantSlug);
+      setPix(r);
+    } catch (erro) {
+      setFalha(erro.message || "Não foi possível gerar o Pix.");
+    } finally {
+      setGerandoPix(false);
+    }
+  }
+
   return (
     <>
-      <style>{CSS}</style>
+      <style>{CSS + CODIGO_PIX_CSS + ABAS_PAGAMENTO_CSS}</style>
 
       <button
         type="button"
@@ -715,7 +672,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
               </>
             ) : null}
 
-            {passo === 3 && !aguardandoAssinc && !pix ? (
+            {passo === 3 && !aguardandoAssinc ? (
               <>
                 <span className="tv-eyebrow">● PAGAMENTO</span>
                 <h2 id="tv-titulo" className="tv-titulo">
@@ -734,27 +691,79 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                   </div>
                 ) : stripeConfigurado() ? (
                   <>
-                    {/* ── UM seletor, e ele é o do Stripe ──────────────────
-                        Havia um nosso aqui — Cartão | Boleto — e o Payment
-                        Element mostrava os mesmos dois logo abaixo, porque ele
-                        JÁ é um seletor. Duas perguntas idênticas empilhadas.
+                    {/* A tira de abas e NOSSA de novo, e o motivo mudou.
 
-                        Ficou o dele porque traz junto os campos certos de cada
-                        meio (boleto exige documento e endereço; cartão não),
-                        traduzidos e validados pelo próprio Stripe. Manter o
-                        nosso significava manter um formulário que envelhece a
-                        cada meio novo — e ele envelheceu na primeira vez, no dia
-                        em que o boleto foi habilitado na conta.
+                        Ela ja existiu aqui, foi removida porque duplicava o
+                        seletor do Payment Element, e voltou porque agora ha um
+                        meio que ele nao consegue listar: o Pix do Mercado Pago,
+                        de outro provedor, fora do iframe deles.
 
-                        Quais meios aparecem é decisão da CONTA, não nossa. */}
-                    <p className="tv-texto">
-                      Cobrança automática, cancele quando quiser. Os dados são digitados num
-                      campo do próprio Stripe — não passam pela Omnimob.
-                    </p>
-                    <div className="tv-cartao" ref={cartaoRef} />
-                    {!cartaoPronto && !falha ? (
-                      <p className="tv-texto tv-texto--fraco">Carregando o campo seguro…</p>
-                    ) : null}
+                        O que evita repetir o erro antigo esta no cabecalho de
+                        AbasDePagamento: a tira e montada a partir de `meios`,
+                        que o SERVIDOR le da conta - nao de uma lista escrita
+                        aqui -, e o Payment Element continua desenhando o
+                        formulario de cada meio, com os campos certos (o boleto
+                        pede documento e endereco; o cartao nao). Nos
+                        escolhemos, eles preenchem. */}
+                    <AbasDePagamento
+                      id="trial"
+                      meios={situacao?.meios}
+                      escolhido={meio}
+                      aoEscolher={(m) => { setMeio(m); setFalha(""); if (m !== "pix") setPix(null); }}
+                    />
+
+                    {meio === "pix" ? (
+                      pix ? (
+                        <>
+                          <p className="tv-texto">
+                            Abra o app do seu banco, escolha Pix e leia o código abaixo. Assim que
+                            o pagamento cair, esta tela muda sozinha — pode levar alguns segundos.
+                          </p>
+                          <CodigoPix pix={pix} />
+                          <p className="tv-texto tv-texto--fraco" aria-live="polite">
+                            Aguardando o pagamento…
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          {/* O VALOR do periodo escolhido vem antes do botao, e
+                              o aviso de que nao renova vem junto: Pix Automatico
+                              nao existe para nos, entao cada cobranca e um
+                              codigo que alguem paga. No mensal isso se repete
+                              doze vezes por ano, e esconder o fato produziria
+                              conta vencida em silencio. */}
+                          <p className="tv-texto">
+                            {periodoDe(plano) === "anual" ? "O ano inteiro" : "Um mês"} em um
+                            pagamento só {precoDoPix ? <strong>({precoDoPix})</strong> : null},
+                            aprovado na hora.
+                          </p>
+                          <p className="tv-texto tv-texto--fraco">
+                            Não é cobrança automática: {periodoDe(plano) === "anual"
+                              ? "daqui a um ano será preciso gerar um novo código."
+                              : "todo mês será preciso gerar um novo código. Para não pensar nisso, o cartão cobra sozinho."}
+                          </p>
+                          {!precoDoPix ? (
+                            <p className="tv-texto tv-texto--fraco">
+                              Este plano ainda não tem cobrança cadastrada para este período —
+                              escolha cartão ou boleto, ou fale com o time.
+                            </p>
+                          ) : null}
+                        </>
+                      )
+                    ) : (
+                      <>
+                        <p className="tv-texto">
+                          Cobrança automática, cancele quando quiser. Os dados são digitados num
+                          campo do próprio Stripe — não passam pela Omnimob.
+                        </p>
+                        {/* O esqueleto fica ACIMA do iframe e some quando ele
+                            avisa "ready". Reservar a altura é o ponto: sem
+                            isso, o botão de confirmar saltava para cima no
+                            instante em que o formulário aparecia. */}
+                        {!cartaoPronto && !falha ? <SkeletonPagamento /> : null}
+                        <div className="tv-cartao" ref={cartaoRef} />
+                      </>
+                    )}
                   </>
                 ) : (
                   <div className="tv-pagamento">
@@ -777,81 +786,40 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
                   </button>
                   {/* Sem ramo alternativo: quem chega até aqui já passou pela
                       guarda lá em cima, então é sempre o Administrador. */}
-                  <button
-                    type="button"
-                    className="tv-btn tv-btn--primario"
-                    onClick={assinar}
-                    /* Um botão só. Qual meio a pessoa escolheu, e se os campos
-                       dele estão completos, é o Payment Element que sabe — a
-                       validação acontece no `elements.submit()`, com a mensagem
-                       na língua e no campo certos. Duplicar essa checagem aqui
-                       significava reimplementar a regra de cada meio. */
-                    disabled={enviando || (stripeConfigurado() && !cartaoPronto)}
-                  >
-                    {enviando ? "Processando…" : "Confirmar assinatura"}
-                  </button>
-                </div>
+                  {/* O botao principal segue UM so, mas agora muda de
+                      trabalho conforme a aba: no cartao e no boleto ele cobra
+                      pelo Stripe; no Pix ele gera o codigo, e some assim que o
+                      codigo esta na tela - ali o que resta e esperar.
 
-                {/* ── A alternativa: o ano inteiro no Pix ───────────────────
-                    Fora do formulário de cartão, e depois dele, porque é outro
-                    NEGÓCIO e não outro meio: ali em cima assina-se uma cobrança
-                    automática; aqui paga-se uma vez, e não renova sozinho.
-
-                    Não é um segundo seletor de meio de pagamento — aquele erro
-                    já foi cometido nesta tela e está contado no comentário do
-                    passo 3. O Payment Element continua sendo o único seletor do
-                    que o Stripe cobra; isto é uma porta ao lado, de outro
-                    provedor, que o Stripe brasileiro não abre.
-
-                    Só aparece no ANUAL: cobrança única no mensal significaria a
-                    pessoa lembrar de pagar todo mês. */}
-                {situacao?.meios?.pixMercadoPago && periodo === "anual" && doPacote(plano)?.anual ? (
-                  <div className="tv-pixoferta">
-                    <div className="tv-pixoferta__texto">
-                      <strong>Ou pague o ano inteiro no Pix</strong>
-                      <small>
-                        Um pagamento só, aprovado na hora. Não é cobrança automática: no ano que
-                        vem avisamos antes de vencer.
-                      </small>
-                    </div>
+                      Nos meios do Stripe, se os campos estao completos e o
+                      Payment Element que sabe: a validacao acontece no
+                      elements.submit(), com a mensagem na lingua e no campo
+                      certos. Duplicar essa checagem aqui seria reimplementar a
+                      regra de cada meio. */}
+                  {meio === "pix" ? (
+                    pix ? null : (
+                      <button
+                        type="button"
+                        className="tv-btn tv-btn--primario"
+                        onClick={gerarPix}
+                        disabled={gerandoPix || !precoDoPix}
+                      >
+                        {gerandoPix ? "Gerando…" : "Gerar código Pix"}
+                      </button>
+                    )
+                  ) : (
                     <button
                       type="button"
-                      className="tv-btn"
-                      onClick={gerarPix}
-                      disabled={gerandoPix || enviando || !plano}
+                      className="tv-btn tv-btn--primario"
+                      onClick={assinar}
+                      disabled={enviando || (stripeConfigurado() && !cartaoPronto)}
                     >
-                      {gerandoPix ? "Gerando…" : "Gerar código Pix"}
+                      {enviando ? "Processando…" : "Confirmar assinatura"}
                     </button>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-
-            {/* ── Esperando o Pix ──────────────────────────────────────────
-                Como na tela do boleto, NÃO se diz "assinado" aqui. O código
-                pode nunca ser pago, e comemorar cedo faz a pessoa parar de
-                acompanhar justamente quando ainda falta o passo dela. */}
-            {pix ? (
-              <div className="tv-festa">
-                <span className="tv-eyebrow">● AGUARDANDO O PIX</span>
-                <h2 id="tv-titulo" className="tv-titulo">Pague para liberar o plano</h2>
-                <p className="tv-texto">
-                  Abra o app do seu banco, escolha Pix e leia o código abaixo. Assim que o
-                  pagamento cair, esta tela muda sozinha — pode levar alguns segundos.
-                </p>
-                <CodigoPix pix={pix} />
-                {falha ? <p className="tv-falha">{falha}</p> : null}
-                <div className="tv-acoes">
-                  <button
-                    type="button"
-                    className="tv-btn"
-                    onClick={() => { setPix(null); setFalha(""); }}
-                  >
-                    Voltar
-                  </button>
-                  <span className="tv-pix__espera" aria-live="polite">Aguardando o pagamento…</span>
+                  )}
                 </div>
-              </div>
+
+              </>
             ) : null}
 
             {aguardandoAssinc ? (
@@ -961,30 +929,6 @@ const CSS = `
 .tv-guia__links a { color: #a5b4fc; }
 .tv-guia__prazo { font-size: 12px; color: #94a3b8; }
 
-/* Pix. O QR fica CENTRADO e com fundo branco fixo: o codigo e lido por camera,
-   e um fundo que acompanha o tema deixaria de ter contraste no modo escuro —
-   a leitura falharia sem nada na tela explicando por que.
-   (Sem crases nestes comentarios: este CSS mora num template literal.) */
-.tv-pix { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
-.tv-pix__qr {
-  align-self: center; width: 168px; height: 168px; padding: 8px;
-  background: #fff; border-radius: 12px; image-rendering: pixelated;
-}
-.tv-pix__codigo { max-height: 84px; overflow-y: auto; }
-.tv-pix__espera { font-size: 12.5px; color: #94a3b8; align-self: center; }
-
-/* A oferta do Pix, no pe do passo do cartao. Em ambar, nao no indigo do botao
-   principal: e um caminho alternativo, e um segundo botao com o mesmo peso do
-   "Confirmar assinatura" faria a tela ter duas acoes primarias. */
-.tv-pixoferta {
-  margin-top: 16px; padding: 13px 15px; border-radius: 12px;
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  justify-content: space-between;
-  background: rgba(212,175,55,0.06); border: 1px solid rgba(212,175,55,0.22);
-}
-.tv-pixoferta__texto { display: flex; flex-direction: column; gap: 3px; min-width: 200px; flex: 1 1 220px; }
-.tv-pixoferta__texto strong { font-size: 13px; }
-.tv-pixoferta__texto small { font-size: 11.5px; line-height: 1.5; color: #94a3b8; }
 
 /* Selo do rodape com cobranca esperando pagamento: ambar, entre o normal e o
    vencido. (Sem crases neste comentario: template literal.) */

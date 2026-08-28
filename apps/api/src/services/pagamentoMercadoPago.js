@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { getGlobalPrisma } from "./tenantRegistry.js";
 import { fidelizarTrial } from "./trialService.js";
+import { registrarPagamento } from "./pagamentos.js";
 import {
   valorDoPlano,
   normalizarPeriodo,
@@ -51,13 +52,27 @@ const URL_NOTIFICACAO = process.env.MERCADOPAGO_WEBHOOK_URL || "";
    voltar amanhã e pagar um valor que já mudou de preço. */
 const MINUTOS_DE_VALIDADE = 30;
 
-/* O Pix só é oferecido no ANUAL, e não é limitação técnica.
+/* ── Os dois períodos, e o que o mensal custa ────────────────────────────────
 
-   Cobrança única no mensal significaria a pessoa lembrar de pagar todo mês, e a
-   conta caindo no dia em que ela esquecer. O mensal tem assinatura de verdade
-   no cartão; o anual é onde o pagamento único faz sentido — uma vez por ano,
-   com o valor cheio na frente. */
-export const PERIODO_DO_PIX = "anual";
+   O Pix vale para MENSAL e ANUAL. A escolha é do cliente, e a diferença entre
+   os dois não é técnica — é de consequência.
+
+   Nenhum pagamento por Pix aqui renova sozinho: **Pix Automático não existe
+   para nós**. O mandato que debita todo mês é recurso do BCB que o Stripe
+   recusa em conta brasileira (o comentário longo em `pagamentoService.js` conta
+   a história) e que as assinaturas do Mercado Pago, sendo de cartão e saldo,
+   também não fazem. Então cada cobrança é um código que alguém precisa pagar.
+
+   No anual isso é um compromisso por ano, que a pessoa lembra. No mensal são
+   doze, e o dia em que ela esquecer é o dia em que a conta vence e a máquina de
+   suspensão começa a contar. Foi por isso que o mensal nasceu bloqueado aqui.
+
+   Ele foi liberado por decisão de produto — conversão vale o risco de retenção
+   —, e a contrapartida é da TELA: ela precisa dizer, no mensal, que não é
+   cobrança automática e que o código volta a ser necessário no mês seguinte.
+   Prometer aviso de vencimento seria mentira enquanto esse e-mail não existir.
+   ────────────────────────────────────────────────────────────────────────── */
+export const PERIODOS_DO_PIX = ["mensal", "anual"];
 
 export function mercadoPagoConfigurado() {
   return Boolean(TOKEN);
@@ -168,13 +183,77 @@ export function corpoDaCobrancaPix({ tenant, plano, periodo, pacote, valor, agor
   };
 }
 
-/* CPF e CNPJ pelo tamanho. O cadastro tem uma coluna só (`cnpj`), e autônomo
+/* ── O documento do pagador ─────────────────────────────────────────────────
+
+   CPF e CNPJ pelo tamanho. O cadastro tem uma coluna só (`cnpj`), e autônomo
    com CRECI põe o CPF nela — recusar por causa disso seria bloquear justamente
-   o cliente do plano Básico. Documento ilegível simplesmente não vai: ele é
-   recomendado, não obrigatório, e a cobrança nasce do mesmo jeito. */
+   o cliente do plano Básico.
+
+   Documento que não fecha simplesmente NÃO VAI. Ele é recomendado, não
+   obrigatório, e a cobrança nasce do mesmo jeito sem ele — enquanto um número
+   que o provedor recusa derruba a cobrança INTEIRA, com um "Invalid user
+   identification number" que a tela traduz para "não foi possível gerar o Pix".
+
+   ⚠ ESTA CONFERÊNCIA NÃO BASTA, e a primeira tentativa real provou: o CNPJ de
+   exemplo do cadastro (12.345.678/0001-95) tem dígitos verificadores VÁLIDOS e
+   ainda assim foi recusado — o Mercado Pago não confere só a matemática, ele
+   confere se o documento EXISTE. O remédio de verdade está em
+   `criarCobrancaPix`, que repete a cobrança sem o documento quando o provedor
+   reclama dele; isto aqui é só a primeira peneira, que evita a ida e volta no
+   caso óbvio.
+
+   Conferir aqui e não no cadastro é deliberado: o cadastro é do CLIENTE, pode
+   ter sido preenchido antes desta regra existir, e travar o pagamento de quem
+   digitou o CNPJ errado seria punir a pessoa pelo campo errado. */
+export function documentoValido(digitos) {
+  // 111.111.111-11 e afins passam no modulo 11 e nao sao documento de ninguem.
+  // `Set` em vez de retrovisor de regex: uma barra invertida a menos para errar.
+  if (digitos.length > 0 && new Set(digitos).size === 1) return false;
+
+  if (digitos.length === 11) {
+    // CPF: dois dígitos verificadores, pesos decrescentes a partir de 10 e 11.
+    for (const [tamanho, pesoInicial] of [[9, 10], [10, 11]]) {
+      let soma = 0;
+      for (let i = 0; i < tamanho; i += 1) soma += Number(digitos[i]) * (pesoInicial - i);
+      const resto = (soma * 10) % 11 % 10;
+      if (resto !== Number(digitos[tamanho])) return false;
+    }
+    return true;
+  }
+
+  if (digitos.length === 14) {
+    // CNPJ: mesma ideia, com os pesos cíclicos de 2 a 9.
+    for (const tamanho of [12, 13]) {
+      let soma = 0;
+      let peso = tamanho - 7;
+      for (let i = 0; i < tamanho; i += 1) {
+        soma += Number(digitos[i]) * peso;
+        peso -= 1;
+        if (peso < 2) peso = 9;
+      }
+      const resto = soma % 11;
+      const esperado = resto < 2 ? 0 : 11 - resto;
+      if (esperado !== Number(digitos[tamanho])) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+/* O provedor está reclamando do DOCUMENTO?
+
+   Casamos pela mensagem porque o Mercado Pago devolve 400 para tudo e o código
+   numérico dele não separa este caso. A lista é curta e conservadora de
+   propósito: se a mensagem mudar, o pedido volta a falhar como antes — nunca a
+   passar despercebido. */
+export function ehErroDeDocumento(erro) {
+  return /identification|documento|document|cpf|cnpj/i.test(String(erro?.message || ""));
+}
+
 function documentoDoPagador(bruto) {
   const digitos = String(bruto || "").replace(/\D/g, "");
-  if (digitos.length !== 11 && digitos.length !== 14) return {};
+  if (!documentoValido(digitos)) return {};
   return { identification: { type: digitos.length === 11 ? "CPF" : "CNPJ", number: digitos } };
 }
 
@@ -195,31 +274,57 @@ export async function criarCobrancaPix({ tenant, plano, periodo, pacote }) {
   const periodoEscolhido = normalizarPeriodo(periodo);
   const pacoteEscolhido = normalizarPacote(pacote);
 
-  if (periodoEscolhido !== PERIODO_DO_PIX) {
-    const err = new Error(
-      "O Pix está disponível para o plano anual, pago de uma vez. No mensal a cobrança é automática, no cartão.",
-    );
-    err.code = "PERIODO_INDISPONIVEL";
-    throw err;
-  }
-
+  /* Sem preço cadastrado para aquele período não há cobrança — e nunca um
+     valor inventado no lugar. É a mesma recusa que o cartão dá. */
   const valor = await valorDoPlano(plano, periodoEscolhido, pacoteEscolhido);
   if (!valor) {
-    const err = new Error("A cobrança anual deste plano ainda não está disponível. Fale com o time.");
+    const err = new Error(
+      `A cobrança ${periodoEscolhido} deste plano ainda não está disponível. Fale com o time.`,
+    );
     err.code = "PERIODO_INDISPONIVEL";
     throw err;
   }
 
   const corpo = corpoDaCobrancaPix({ tenant, plano, periodo: periodoEscolhido, pacote: pacoteEscolhido, valor });
 
-  const pagamento = await mp("/v1/payments", {
-    dados: corpo,
-    /* A chave amarra a TENTATIVA, não o pedido: tenant, plano, pacote e a
-       janela de validade. Dois cliques seguidos reencontram a mesma cobrança —
-       e o mesmo QR, que é o que a pessoa já tem na tela. Meia hora depois, com
-       o código vencido, a chave muda e nasce um novo. */
-    idempotencia: `pix-${tenant.id}-${plano}-${pacoteEscolhido}-${janelaAtual()}`,
-  });
+  /* A chave amarra a TENTATIVA, não o pedido: tenant, plano, PERÍODO, pacote e
+     a janela de validade. Dois cliques seguidos reencontram a mesma cobrança —
+     e o mesmo QR, que é o que a pessoa já tem na tela. Meia hora depois, com o
+     código vencido, a chave muda e nasce um novo.
+
+     O período entra na chave desde que o mensal existe, e não é detalhe: sem
+     ele, quem gerasse um Pix mensal e trocasse para anual em seguida receberia
+     de volta o código de R$ 99 com a tela anunciando R$ 891. */
+  const chave = `pix-${tenant.id}-${plano}-${periodoEscolhido}-${pacoteEscolhido}-${janelaAtual()}`;
+
+  let pagamento;
+  try {
+    pagamento = await mp("/v1/payments", { dados: corpo, idempotencia: chave });
+  } catch (erro) {
+    /* ── O documento não pode custar a venda ─────────────────────────────────
+       O Mercado Pago recusa a cobrança inteira quando não gosta do CPF/CNPJ do
+       pagador — e não é só matemática de dígito verificador: o CNPJ de exemplo
+       do cadastro tem dígitos válidos e mesmo assim volta como "Invalid user
+       identification number".
+
+       O documento é OPCIONAL. Insistir com ele deixaria o cliente sem entender
+       por que o cartão passa e o Pix não, por causa de um campo cadastral que
+       ninguém relaciona ao pagamento. Então tentamos de novo sem ele.
+
+       Uma vez só, e só para este erro: `documento` fora do corpo e fora da
+       chave de idempotência — repetir a chave devolveria a MESMA falha em cache
+       em vez de uma cobrança nova. */
+    if (!ehErroDeDocumento(erro) || !corpo.payer?.identification) throw erro;
+
+    console.warn(
+      `[mercadopago] documento do pagador recusado (${erro.message}) — refazendo a cobrança sem ele.`,
+    );
+    const { identification, ...pagador } = corpo.payer;
+    pagamento = await mp("/v1/payments", {
+      dados: { ...corpo, payer: pagador },
+      idempotencia: `${chave}-sem-doc`,
+    });
+  }
 
   const dados = pagamento?.point_of_interaction?.transaction_data || {};
   if (!dados.qr_code) {
@@ -284,6 +389,9 @@ export async function consultarCobranca(id) {
     periodo: pagamento?.metadata?.periodo || null,
     pacote: pagamento?.metadata?.pacote || null,
     aprovadoEm: pagamento?.date_approved ? new Date(pagamento.date_approved) : null,
+    /* O comprovante fica no site de quem processou. Nunca hospedamos recibo: o
+       documento é do fornecedor, e uma cópia nossa envelheceria. */
+    reciboUrl: pagamento?.point_of_interaction?.transaction_data?.ticket_url || null,
   };
 }
 
@@ -414,6 +522,27 @@ export async function aplicarCobrancaAprovada(cobranca) {
   await prisma.tenant.update({
     where: { id: tenant.id },
     data: { cobrancaId: cobranca.cobrancaId, cobrancaProvedor: "MERCADO_PAGO" },
+  });
+
+  /* E a linha no histórico, que é o que a imobiliária vai LER. Depois de
+     liberar o acesso, nunca antes: anotar não pode atrasar nem derrubar a
+     liberação — `registrarPagamento` engole o próprio erro por isso. */
+  await registrarPagamento({
+    tenantId: tenant.id,
+    provedor: "MERCADO_PAGO",
+    meio: "pix",
+    status: "PAGO",
+    valor,
+    plano: cobranca.plano,
+    periodo: cobranca.periodo,
+    /* O intervalo COBERTO por este pagamento: de onde a contagem partiu até o
+       vencimento novo. Não é "hoje + 12 meses" — quem renova antes do fim
+       empurra a partir do vencimento antigo, e o histórico precisa dizer isso. */
+    cobreDe: partida,
+    cobreAte: vencimento,
+    externoId: cobranca.cobrancaId,
+    reciboUrl: cobranca.reciboUrl || null,
+    pagoEm: cobranca.aprovadoEm || new Date(),
   });
 
   console.log(

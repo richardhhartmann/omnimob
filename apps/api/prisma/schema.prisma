@@ -376,6 +376,26 @@ model Tenant {
   cobrancaProvedor String? @map("tnt_cobranca_provedor")
 
   /**
+   * Qual aviso de vencimento esta conta já recebeu, no formato
+   * `<data-do-vencimento>:<degrau>` — por exemplo `2026-09-27:1`.
+   *
+   * Existe porque o aviso é por E-MAIL, e e-mail enviado não volta: sem marca,
+   * um reinício da API no mesmo dia mandaria de novo, e o agendador roda
+   * várias vezes por dia de propósito (para não depender de a instância estar
+   * viva às 9h em ponto).
+   *
+   * A data do vencimento entra na chave, e não só o degrau, porque é ela que
+   * FECHA o ciclo: quando o cliente paga, `proximoVencimento` muda, a chave
+   * deixa de casar e a próxima rodada de avisos começa sozinha. Nenhuma
+   * limpeza, nenhum backfill.
+   *
+   * Um campo só, e não um por degrau, porque os degraus são processados do
+   * mais distante para o mais próximo (7 antes de 1): gravado o `:1`, não há
+   * mais nada a mandar para aquele vencimento.
+   */
+  avisoVencimento String? @map("tnt_aviso_vencimento")
+
+  /**
    * Quais boas-vindas do painel esta imobiliária já recebeu: "teste" e/ou
    * "assinante" (ver `BoasVindasModal`, no web).
    *
@@ -458,6 +478,7 @@ model Tenant {
   auditorias  Auditoria[]
   leadEventos LeadEvento[]
   perfisBusca PerfilBusca[]
+  pagamentos  Pagamento[]
 
   // ─── Omnimob Flow ───
   negocios        Negocio[]
@@ -567,6 +588,25 @@ model Cargo {
    * plano, cobrança, domínio e o cancelamento da assinatura.
    */
   verConfiguracoes  Boolean @default(false) @map("ver_configuracoes")
+
+  /**
+   * Ver a cobrança da imobiliária: extrato de pagamentos, vencimento, forma
+   * usada — e ADIANTAR um pagamento, que gera cobrança de verdade.
+   *
+   * Separada de `verConfiguracoes` porque, ao contrário dela, é uma ESCOLHA. A
+   * outra não é: o servidor a deriva do nome do cargo, então não existe caixa
+   * para marcar e nem como conceder a alguém. Enquanto a cobrança morava lá
+   * dentro, ou a pessoa era Administrador e via tudo, ou não via nada — e o
+   * caso real que isso não atende é o mais comum das imobiliárias médias: o
+   * financeiro precisa conferir o que foi pago sem poder trocar o plano, mexer
+   * no domínio ou cancelar a assinatura.
+   *
+   * Nasce `false`, inclusive para cargos que já existem: dado de dinheiro não
+   * aparece para ninguém por efeito colateral de migração. Quem já tinha acesso
+   * pela porta antiga (`verConfiguracoes`) é migrado explicitamente — ver a
+   * migração `20260828170000_ver_cobranca`.
+   */
+  verCobranca       Boolean @default(false) @map("ver_cobranca")
   verRelatorios     Boolean @default(false) @map("ver_relatorios")
   /* Ler a trilha de auditoria — quem criou, alterou e excluiu o quê.
      Exclusiva do Administrador, como `verConfiguracoes` e pelo mesmo motivo: a
@@ -1986,4 +2026,85 @@ model CaptacaoEvento {
   @@index([tenantId, createdAt])
   @@index([fonteId, createdAt])
   @@map("tb_captacao_evento")
+}
+
+/// ─── O que a imobiliária JÁ PAGOU ────────────────────────────────────────────
+///
+/// Uma linha por cobrança liquidada. A tabela existe porque o histórico de
+/// pagamento não estava em lugar nenhum: o `Tenant` guarda só o estado ATUAL
+/// (`statusPagamento`, `proximoVencimento`, `valorMensal`), e o passado morava
+/// espalhado em dois fornecedores.
+///
+/// ── POR QUE NÃO LER DO FORNECEDOR NA HORA ──
+/// Parece mais barato e não é. Três buracos, e o primeiro é fatal:
+///
+///   1. a ATIVAÇÃO MANUAL (acordo comercial, cortesia, transferência) não
+///      existe em fornecedor nenhum — quem foi ativado assim veria uma tela
+///      vazia, que é a pior resposta possível para "eu paguei?";
+///   2. são DOIS fornecedores, e uma conta pode ter histórico nos dois (cartão
+///      no Stripe, Pix no Mercado Pago). Montar a lista a cada abertura da tela
+///      seria duas chamadas de rede para desenhar uma página de leitura;
+///   3. `npm run stripe:limpar` cancela assinaturas, e o que o fornecedor apaga
+///      levaria o histórico junto.
+///
+/// Mesmo raciocínio do `CaptacaoEvento`, que guarda o corpo cru de cada chamada
+/// de portal: o registro é NOSSO porque a pergunta é feita depois, quando o
+/// outro lado já não responde.
+///
+/// ── O QUE ESTA TABELA NÃO É ──
+/// Não é fatura, e o nome não deve virar "fatura" na tela: quem lê fatura pede
+/// nota fiscal, e a Omnimob não emite. É o registro de um pagamento, com o
+/// link do recibo de quem processou.
+model Pagamento {
+  id       String @id @default(cuid()) @map("pgt_id")
+  tenantId String @map("tenant_id")
+
+  /// STRIPE | MERCADO_PAGO | MANUAL. Texto e não enum porque a lista cresce por
+  /// fora do schema, e migração de enum para acrescentar um valor é cara demais
+  /// para o que este campo faz: dizer para onde olhar no suporte.
+  provedor String  @map("pgt_provedor")
+  /// cartao | boleto | pix | manual. É ele que alimenta a etiqueta "última
+  /// forma usada" na tela — sem precisar de coluna nova no Tenant.
+  meio     String? @map("pgt_meio")
+  /// PAGO | PENDENTE | FALHOU | ESTORNADO.
+  status   String  @map("pgt_status")
+
+  /// O valor COBRADO, não a mensalidade: no anual são doze meses de uma vez.
+  /// `Decimal` pelo mesmo motivo de `comissoes.js` — dinheiro em float mente na
+  /// terceira casa e a diferença aparece somando o ano.
+  valor Decimal @map("pgt_valor") @db.Decimal(10, 2)
+
+  /// O que foi comprado, congelado no momento do pagamento. Trocar de plano
+  /// depois não pode reescrever o passado.
+  plano   String? @map("pgt_plano")
+  periodo String? @map("pgt_periodo")
+
+  /// O intervalo que este pagamento cobre. É o que permite responder "até
+  /// quando estou pago" sem depender do `proximoVencimento`, que anda.
+  cobreDe  DateTime? @map("pgt_cobre_de")
+  cobreAte DateTime? @map("pgt_cobre_ate")
+
+  /// O id no fornecedor (fatura do Stripe, pagamento do Mercado Pago). Junto
+  /// com `provedor` forma a chave única — e é ELA que torna o registro
+  /// idempotente: o webhook do Stripe reenvia o mesmo evento por horas, e a
+  /// tela do Pix consulta o pagamento em paralelo com o aviso do provedor.
+  /// Nulo na ativação manual, e no Postgres nulos não colidem entre si — então
+  /// duas cortesias para o mesmo tenant continuam sendo duas linhas.
+  externoId String? @map("pgt_externo_id")
+  /// Onde a pessoa vê o comprovante, no site de quem processou. Nunca hospedamos
+  /// recibo: o documento é do fornecedor, e uma cópia nossa envelheceria.
+  reciboUrl String? @map("pgt_recibo_url")
+
+  /// Texto curto para o que os campos não explicam — "ativado pela equipe",
+  /// o nome de quem liberou, o motivo do acordo.
+  descricao String? @map("pgt_descricao")
+
+  pagoEm    DateTime  @default(now()) @map("pgt_pago_em")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([provedor, externoId])
+  @@index([tenantId, pagoEm])
+  @@map("tb_pagamento")
 }

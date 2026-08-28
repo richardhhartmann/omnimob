@@ -454,7 +454,20 @@ export default function App() {
       <Route
         path="/login"
         element={
-          session ? <Navigate to={destinoAposLogin} replace /> : <LoginPage onLogin={handleLogin} />
+          /* ── De volta para onde a pessoa QUERIA ir ────────────────────────
+             `location.state.de` é guardado pelo redirecionamento lá embaixo,
+             quando alguém sem sessão abre um endereço fundo. Sem isto, o botão
+             "gerar meu Pix agora" do e-mail de vencimento levava ao login e
+             depois ao Dashboard — a pessoa entrava e tinha de procurar onde
+             era, que é o oposto do que o botão prometeu.
+
+             O destino é sempre um caminho INTERNO, montado por nós a partir da
+             própria navegação; nada vindo de fora entra aqui. */
+          session ? (
+            <Navigate to={location.state?.de || destinoAposLogin} replace />
+          ) : (
+            <LoginPage onLogin={handleLogin} />
+          )
         }
       />
       {/* Destino do link mágico do teste grátis: público e sem sessão. */}
@@ -512,7 +525,13 @@ export default function App() {
           ) : location.pathname === "/" ? (
             <OmnimobLandingPage />
           ) : (
-            <Navigate to="/login" replace />
+            /* Leva junto para ONDE a pessoa tentou ir. A rota `/login` devolve
+               ela para cá depois de entrar — ver o comentário de lá. */
+            <Navigate
+              to="/login"
+              replace
+              state={{ de: `${location.pathname}${location.search}` }}
+            />
           )
         }
       >

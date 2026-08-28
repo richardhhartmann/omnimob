@@ -1006,6 +1006,11 @@ export const api = {
       method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload),
     }),
 
+  /* O extrato da imobiliária, para a seção "Cobrança e pagamentos": situação de
+     hoje, histórico e a última forma usada, numa chamada só. */
+  listarPagamentos: (tenantSlug) =>
+    request("/api/tenants/me/pagamentos", { headers: { "x-tenant-slug": tenantSlug } }),
+
   /* ── Pagar o ano por Pix, no Mercado Pago ────────────────────────────────
      Uma COBRANÇA, não uma assinatura: devolve um QR e um copia-e-cola, e não
      muda nada na conta. Quem libera o plano é o pagamento — avisado pelo

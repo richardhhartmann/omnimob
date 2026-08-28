@@ -24,6 +24,13 @@ import crypto from "crypto";
 const SEGREDO = "segredo-de-teste-do-webhook";
 process.env.MERCADOPAGO_WEBHOOK_SECRET = SEGREDO;
 process.env.MERCADOPAGO_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "token-de-teste";
+/* Vazia à força, e ANTES do import: o serviço lê a variável uma vez, ao
+   carregar, e o `.env` de quem roda o teste pode ter um endereço de produção
+   ali. Sem esta linha a suíte passava na máquina de quem ainda não tinha
+   configurado o webhook e falhava na de quem tinha — teste que depende do
+   ambiente não guarda nada. O `dotenv` não sobrescreve chave já definida, então
+   basta existir. */
+process.env.MERCADOPAGO_WEBHOOK_URL = "";
 
 const { corpoDaCobrancaPix, lerWebhook, normalizarStatus } = await import(
   "../src/services/pagamentoMercadoPago.js"
@@ -114,6 +121,31 @@ test("a descrição diz o prazo e o pacote — é o que a pessoa lê no app do b
   assert.match(comFlow.description, /Hub \+ Flow/);
 });
 
+test("o mensal é uma cobrança legítima, e a descrição diz o prazo certo", () => {
+  /* O mensal foi bloqueado no começo e liberado por decisão de produto. O que
+     não pode acontecer é a cobrança sair com cara de anual: a descrição é o que
+     a pessoa lê no app do banco na hora de confirmar, e `periodo` na metadata é
+     o que decide quantos meses a conta ganha quando o pagamento cai. */
+  const corpo = corpoDaCobrancaPix({
+    tenant: TENANT,
+    plano: "PROFISSIONAL",
+    periodo: "mensal",
+    pacote: "HUB",
+    valor: 99,
+  });
+  assert.match(corpo.description, /1 mês/);
+  assert.ok(!/12 meses/.test(corpo.description));
+  assert.equal(corpo.metadata.periodo, "mensal");
+  assert.equal(corpo.transaction_amount, 99);
+});
+
+test("período desconhecido cai no mensal, e nunca em silêncio no anual", () => {
+  /* O padrão seguro é o mais barato: um corpo malformado não pode virar uma
+     cobrança de doze meses. */
+  const corpo = corpoDaCobrancaPix({ tenant: TENANT, plano: "BASICO", periodo: "trimestral", valor: 10 });
+  assert.equal(corpo.metadata.periodo, "mensal");
+});
+
 test("o vencimento vai com fuso EXPLÍCITO, e não com o Z", () => {
   const agora = new Date("2026-08-27T12:00:00.000Z");
   const corpo = corpoDaCobrancaPix({
@@ -129,8 +161,10 @@ test("o vencimento vai com fuso EXPLÍCITO, e não com o Z", () => {
 });
 
 test("sem endereço público de webhook, a cobrança nasce sem notification_url", () => {
-  // O ambiente do teste não define a variável — e mandar um localhost faria o
-  // provedor recusar a cobrança inteira por causa do aviso.
+  /* Mandar um `http://localhost` faria o provedor recusar a cobrança INTEIRA
+     por causa do aviso — o pagamento morreria por causa da notificação. Em
+     desenvolvimento a variável fica vazia de propósito, e é a tela que
+     confirma o pagamento. */
   const corpo = corpoDaCobrancaPix({ tenant: TENANT, plano: "BASICO", periodo: "anual", valor: 10 });
   assert.equal(corpo.notification_url, undefined);
 });

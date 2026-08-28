@@ -66,6 +66,7 @@ export const PERMISSOES = [
   "gerenciarClientes",
   "gerenciarCargos",
   "verConfiguracoes",
+  "verCobranca",
   "verRelatorios",
   "verAuditoria",
   "publicarRedes",
@@ -74,10 +75,18 @@ export const PERMISSOES = [
   ...PERMISSOES_FLOW_LISTA,
 ];
 
-/* `verConfiguracoes`, `gerenciarCargos`, `verAuditoria` e `verPainelGestor`
-   aparecem SÓ no Administrador, e é deliberado: são as chaves da casa. Configurações guarda plano, cobrança,
-   domínio e o cancelamento da assinatura; Gerenciar Cargos permite reescrever
-   as permissões de todo mundo — inclusive conceder a si mesmo o que faltava. */
+/* `verConfiguracoes`, `verCobranca`, `gerenciarCargos`, `verAuditoria` e
+   `verPainelGestor` aparecem SÓ no Administrador, e é deliberado: são as chaves
+   da casa. Configurações guarda plano, domínio e o cancelamento da assinatura;
+   Gerenciar Cargos permite reescrever as permissões de todo mundo — inclusive
+   conceder a si mesmo o que faltava.
+
+   `verCobranca` é a única das cinco que se pode CONCEDER: ela mostra o extrato
+   e deixa adiantar um pagamento, e o financeiro de uma imobiliária média
+   precisa exatamente disso — sem poder trocar de plano nem cancelar a
+   assinatura, que continuam atrás de `verConfiguracoes`. Vem de fábrica no
+   Administrador porque é ele quem responde pela conta; para os outros, a tela
+   pede confirmação antes de conceder (ver `PERMISSOES_DE_RISCO`). */
 /* ── O Flow nos cargos que já nascem prontos ─────────────────────────────────
 
    Só três dos sete cargos padrão o alcançam, e o Administrador NÃO recebe as

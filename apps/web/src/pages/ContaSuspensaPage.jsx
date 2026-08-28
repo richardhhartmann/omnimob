@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { PLANOS } from "../utils/planos";
 import { ToggleDoFlow } from "../components/ToggleDoFlow.jsx";
+import { CodigoPix, useEsperaDoPix, CODIGO_PIX_CSS } from "../components/CodigoPix.jsx";
+import { SkeletonPagamento } from "../components/Skeleton.jsx";
+import { AbasDePagamento, ABAS_PAGAMENTO_CSS } from "../components/AbasDePagamento.jsx";
 import { carregarStripe, stripeConfigurado, APARENCIA_STRIPE } from "../utils/stripe";
 import { IconeCheck } from "../components/Icones.jsx";
 
@@ -61,6 +64,13 @@ export function ContaSuspensaPage({ session, onLogout }) {
   const [pacote, setPacote] = useState(
     () => (session?.tenant?.modulos?.includes("FLOW") ? "HUB_FLOW" : "HUB"),
   );
+  /* A cobrança Pix em aberto. É uma COBRANÇA, não uma assinatura: enquanto ela
+     existe, a tela mostra o código no lugar do cartão e espera o dinheiro. */
+  /* Qual aba está aberta: "cartao" | "boleto" | "pix". Começa no cartão, que é
+     o caminho da maioria e o único garantido em qualquer conta. */
+  const [meio, setMeio] = useState("cartao");
+  const [pix, setPix] = useState(null);
+  const [gerandoPix, setGerandoPix] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState("");
   const [pronto, setPronto] = useState(false);
@@ -72,10 +82,21 @@ export function ContaSuspensaPage({ session, onLogout }) {
 
   const precos = useMemo(() => situacao?.precos || {}, [situacao]);
 
+  /* O TOKEN entra nas dependências, e não só o slug.
+
+     Logo depois do login esta página monta antes de o token estar no cliente
+     HTTP, e a busca levava 401. Como a falha só faz `setSituacao(null)` e não
+     havia nova tentativa, a tela ficava para sempre sem preços vindos do
+     provedor: caía nos valores de reserva, sem alternador de período e — desde
+     que ele existe — sem a oferta de Pix, porque `meios` mora nessa mesma
+     resposta. Ninguém relacionaria as duas coisas.
+
+     Reagir ao token resolve sem relógio nem nova tentativa às cegas: quando ele
+     chega, a busca refaz sozinha. */
   useEffect(() => {
     if (!tenantSlug) return;
     api.getTrialStatus(tenantSlug).then(setSituacao).catch(() => setSituacao(null));
-  }, [tenantSlug]);
+  }, [tenantSlug, session?.token]);
 
   /* O prazo vem do SERVIDOR, da mesma constante que a faxina usa para apagar.
      Repetir o número aqui seria a forma mais fácil de prometer trinta dias e
@@ -86,7 +107,9 @@ export function ContaSuspensaPage({ session, onLogout }) {
      digitado nunca entra nesta página nem chega à nossa API — volta só um id de
      método de pagamento, e é o servidor que cria a assinatura. */
   useEffect(() => {
-    if (!plano || !stripeConfigurado()) return undefined;
+    /* Na aba do Pix não há Payment Element nenhum: o Mercado Pago não tem
+       formulário, tem um código. */
+    if (meio === "pix" || !plano || !stripeConfigurado()) return undefined;
 
     const escolhido = doPacote(plano)?.[periodo] || doPacote(plano)?.mensal;
     const valor = escolhido?.valor;
@@ -106,8 +129,17 @@ export function ContaSuspensaPage({ session, onLogout }) {
           amount: Math.round(valor * 100),
           paymentMethodCreation: "manual",
           appearance: APARENCIA_STRIPE,
+          /* UM método por vez, porque quem escolhe agora é a tira de abas lá
+             fora — ela precisa incluir o Pix do Mercado Pago, que jamais
+             apareceria dentro do iframe do Stripe. */
+          paymentMethodTypes: [meio === "boleto" ? "boleto" : "card"],
         });
-        elemento = elements.create("payment", { layout: "tabs" });
+        /* Acordeão sem rádio e já aberto: com um método só, isto desenha o
+           formulário direto. O layout "tabs" mostraria uma aba solitária
+           logo abaixo da nossa tira — a mesma pergunta, duas vezes. */
+        elemento = elements.create("payment", {
+          layout: { type: "accordion", defaultCollapsed: false, radios: false, spacedAccordionItems: false },
+        });
         elemento.mount(cartaoRef.current);
         elemento.on("ready", () => vivo && setCartaoPronto(true));
         elementsRef.current = elements;
@@ -119,7 +151,11 @@ export function ContaSuspensaPage({ session, onLogout }) {
       if (elemento) elemento.destroy();
       elementsRef.current = null;
     };
-  }, [plano, periodo, pacote, precos]);
+  /* `pix` entra nas dependências para o campo do Stripe ser REMONTADO ao
+     voltar do código Pix. Sem ele, a div do cartão saía do DOM enquanto o QR
+     estava na tela, voltava vazia, e o `elements` apontava para um elemento que
+     já não existia — o botão ficava habilitado e o pagamento falhava no envio. */
+  }, [plano, periodo, pacote, precos, pix, meio]);
 
   async function reativar() {
     setEnviando(true);
@@ -149,13 +185,42 @@ export function ContaSuspensaPage({ session, onLogout }) {
     }
   }
 
+  /* Caminho paralelo ao do cartão, e não uma variação dele: aqui não há
+     assinatura, não há token e o Stripe não participa. */
+  async function gerarPix() {
+    setGerandoPix(true);
+    setFalha("");
+    try {
+      /* O período que a pessoa escolheu, com a mesma queda para o mensal que o
+         cartão faz quando aquele plano não tem preço anual cadastrado. */
+      setPix(await api.criarCobrancaPix(tenantSlug, { plano, periodo: periodoDe(plano), pacote }));
+    } catch (erro) {
+      setFalha(erro.message || "Não foi possível gerar o Pix.");
+    } finally {
+      setGerandoPix(false);
+    }
+  }
+
+  /* A espera do Pix é a mesma do modal do teste — mora em `CodigoPix.jsx`. O
+     que é DESTA tela é o desfecho: aqui não há comemoração de assinatura nova,
+     há um ambiente que volta. */
+  useEsperaDoPix({
+    tenantSlug,
+    pix,
+    aoAprovar: () => { setPix(null); setPronto(true); },
+    aoRecusar: () => {
+      setPix(null);
+      setFalha("O pagamento não foi concluído. Você pode gerar um novo código.");
+    },
+  });
+
   /* Recarregar, e não navegar: a sessão em mãos é a de escopo reduzido, e ela
      continuaria reduzida mesmo com a conta já reativada. Um login novo é o que
      devolve o token cheio. */
   if (pronto) {
     return (
       <div className="cs-fundo">
-        <style>{CSS}</style>
+        <style>{CSS + CODIGO_PIX_CSS + ABAS_PAGAMENTO_CSS}</style>
         <div className="cs-caixa cs-caixa--fim">
           <span className="cs-marca">OMNIMOB</span>
           <div className="cs-selo-ok"><IconeCheck size={26} /></div>
@@ -181,6 +246,9 @@ export function ContaSuspensaPage({ session, onLogout }) {
     : PLANOS;
   const periodoDe = (k) => (doPacote(k)?.[periodo] ? periodo : "mensal");
   const precoDe = (k) => doPacote(k)?.[periodoDe(k)]?.rotulo || PRECOS_RESERVA[k];
+  /* O valor que o Pix vai cobrar, no período escolhido. Sai do MESMO lugar que
+     o cartão lê — é o servidor que decide o número em qualquer dos caminhos. */
+  const precoDoPix = plano ? doPacote(plano)?.[periodoDe(plano)]?.numero || null : null;
   /* Só existe para vender com preço cadastrado. Sem as variáveis do Flow no
      Stripe, o interruptor nem aparece e a tela é a de antes. */
   const temFlow = Object.values(precos).some((p) => p?.flow?.mensal);
@@ -189,7 +257,7 @@ export function ContaSuspensaPage({ session, onLogout }) {
 
   return (
     <div className="cs-fundo">
-      <style>{CSS}</style>
+      <style>{CSS + CODIGO_PIX_CSS + ABAS_PAGAMENTO_CSS}</style>
       <div className="cs-caixa">
         <span className="cs-marca">OMNIMOB</span>
 
@@ -274,10 +342,65 @@ export function ContaSuspensaPage({ session, onLogout }) {
         {plano ? (
           <div className="cs-secao">
             <h2 className="cs-subtitulo">Pagamento</h2>
-            {stripeConfigurado() ? (
+
+            {/* A escolha do meio saiu de dentro do iframe do Stripe. O porquê
+                está no cabeçalho de `AbasDePagamento`: o Pix é de outro
+                provedor e nunca apareceria nas abas deles. */}
+            <AbasDePagamento
+              id="reativar"
+              meios={situacao?.meios}
+              escolhido={meio}
+              aoEscolher={(m) => { setMeio(m); setFalha(""); if (m !== "pix") setPix(null); }}
+            />
+
+            {meio === "pix" ? (
+              pix ? (
+                <>
+                  <p className="cs-texto">
+                    Abra o app do seu banco, escolha Pix e leia o código abaixo. Assim que o
+                    pagamento cair, o ambiente volta sozinho — pode levar alguns segundos.
+                  </p>
+                  <CodigoPix pix={pix} />
+                  <p className="cs-texto cs-texto--fraco">Aguardando o pagamento…</p>
+                </>
+              ) : (
+                <>
+                  {/* O VALOR do período escolhido vem antes do botão, e o aviso
+                      de que não renova vem junto: Pix Automático não existe
+                      para nós, então cada cobrança é um código que alguém paga.
+                      No mensal isso se repete doze vezes por ano, e esconder o
+                      fato produziria conta vencida em silêncio. */}
+                  <p className="cs-texto">
+                    {periodoDe(plano) === "anual" ? "O ano inteiro" : "Um mês"} em um pagamento só{" "}
+                    {precoDoPix ? <strong>({precoDoPix})</strong> : null}, aprovado na hora.
+                  </p>
+                  <p className="cs-texto cs-texto--fraco">
+                    Não é cobrança automática: {periodoDe(plano) === "anual"
+                      ? "daqui a um ano será preciso gerar um novo código."
+                      : "todo mês será preciso gerar um novo código. Para não pensar nisso, o cartão cobra sozinho."}
+                  </p>
+                  <button
+                    type="button"
+                    className="cs-btn cs-btn--primario"
+                    onClick={gerarPix}
+                    disabled={gerandoPix || !precoDoPix}
+                  >
+                    {gerandoPix ? "Gerando…" : "Gerar código Pix"}
+                  </button>
+                  {!precoDoPix ? (
+                    <p className="cs-texto cs-texto--fraco">
+                      Este plano ainda não tem cobrança cadastrada para este período — escolha
+                      cartão ou boleto, ou fale com o time.
+                    </p>
+                  ) : null}
+                </>
+              )
+            ) : stripeConfigurado() ? (
               <>
+                {/* Ver o comentário de `SkeletonPagamento`: ele reserva a
+                    altura do iframe, que até montar não ocupa nada. */}
+                {!cartaoPronto ? <SkeletonPagamento /> : null}
                 <div ref={cartaoRef} className="cs-cartao" />
-                {!cartaoPronto ? <p className="cs-texto cs-texto--fraco">Carregando o formulário seguro…</p> : null}
               </>
             ) : (
               <p className="cs-texto cs-texto--fraco">
@@ -291,14 +414,19 @@ export function ContaSuspensaPage({ session, onLogout }) {
         {falha ? <div className="cs-falha">{falha}</div> : null}
 
         <div className="cs-acoes">
-          <button
-            type="button"
-            className="cs-btn cs-btn--primario"
-            disabled={!plano || enviando || (stripeConfigurado() && !cartaoPronto)}
-            onClick={reativar}
-          >
-            {enviando ? "Processando…" : "Assinar e recuperar meu ambiente"}
-          </button>
+          {/* O botão cobra pelo STRIPE. Na aba do Pix ele não existe: quem
+              paga por lá já tem o próprio botão, e clicar neste cobraria a
+              pessoa duas vezes. */}
+          {meio === "pix" ? null : (
+            <button
+              type="button"
+              className="cs-btn cs-btn--primario"
+              disabled={!plano || enviando || (stripeConfigurado() && !cartaoPronto)}
+              onClick={reativar}
+            >
+              {enviando ? "Processando…" : "Assinar e recuperar meu ambiente"}
+            </button>
+          )}
           <button type="button" className="cs-btn" onClick={onLogout}>Sair</button>
         </div>
 

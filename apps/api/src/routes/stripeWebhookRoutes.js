@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { prisma } from "../db.js";
+import { registrarPagamento } from "../services/pagamentos.js";
 
 /**
  * ─── Webhook do Stripe ───────────────────────────────────────────────────────
@@ -95,6 +96,28 @@ function fimDoPeriodo(objeto) {
   return linha?.period?.end || objeto?.period_end || null;
 }
 
+function inicioDoPeriodo(objeto) {
+  const linha = objeto?.lines?.data?.[0];
+  return linha?.period?.start || objeto?.period_start || null;
+}
+
+/* O MEIO com que a fatura foi paga, no vocabulário da nossa tabela.
+
+   Sai de `payment_settings.payment_method_types`, que é justamente onde
+   `criarAssinaturaAssincrona` grava a escolha ao criar a assinatura de Pix ou
+   boleto. Quando o campo não vem — assinatura de cartão criada pelo caminho
+   síncrono, que não restringe meio nenhum — devolvemos `null` em vez de chutar
+   "cartão": a etiqueta "última forma usada" na tela do cliente precisa dizer a
+   verdade, e um palpite ali seria informação inventada sobre o dinheiro dele. */
+function meioDaFatura(objeto) {
+  const tipos = objeto?.payment_settings?.payment_method_types;
+  const tipo = Array.isArray(tipos) ? tipos[0] : null;
+  if (tipo === "pix") return "pix";
+  if (tipo === "boleto") return "boleto";
+  if (tipo === "card") return "cartao";
+  return null;
+}
+
 stripeWebhookRouter.post("/", async (req, res) => {
   const bruto = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body || "");
 
@@ -161,6 +184,31 @@ stripeWebhookRouter.post("/", async (req, res) => {
             ...(idDaAssinatura(objeto) ? { assinaturaId: idDaAssinatura(objeto) } : {}),
           },
         });
+        /* A linha do histórico, que é o que a imobiliária vai LER. Depois do
+           update: anotar não pode atrasar nem derrubar a liberação da conta.
+
+           `amount_paid` vem em CENTAVOS, como tudo no Stripe. Dividir aqui e
+           não na tela é o mesmo motivo de `precosDosPlanos` partir o preço no
+           servidor: quem monta o número é quem conhece a unidade. */
+        await registrarPagamento({
+          tenantId,
+          provedor: "STRIPE",
+          meio: meioDaFatura(objeto),
+          status: "PAGO",
+          valor: (objeto?.amount_paid ?? 0) / 100,
+          plano: objeto?.metadata?.plano || objeto?.parent?.subscription_details?.metadata?.plano || null,
+          periodo: objeto?.metadata?.periodo || objeto?.parent?.subscription_details?.metadata?.periodo || null,
+          cobreDe: inicioDoPeriodo(objeto) ? new Date(inicioDoPeriodo(objeto) * 1000) : null,
+          cobreAte: fim ? new Date(fim * 1000) : null,
+          externoId: objeto?.id || null,
+          /* O recibo é do fornecedor. A página hospedada vem primeiro porque
+             abre no navegador; o PDF é para quem repassa ao financeiro. */
+          reciboUrl: objeto?.hosted_invoice_url || objeto?.invoice_pdf || null,
+          pagoEm: objeto?.status_transitions?.paid_at
+            ? new Date(objeto.status_transitions.paid_at * 1000)
+            : new Date(),
+        });
+
         console.log(`[stripe] fatura paga — tenant ${tenantId} em dia.`);
         break;
       }

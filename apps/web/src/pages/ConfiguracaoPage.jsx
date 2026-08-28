@@ -22,6 +22,7 @@ import { apenasMudancas } from "../utils/atalhos";
 import { Keyboard } from "@phosphor-icons/react";
 import { FLOW, modulosDoTenant } from "../utils/modulos";
 import { SecaoFlow } from "../components/flow/SecaoFlow.jsx";
+import { SecaoCobranca } from "../components/SecaoCobranca";
 import { ToggleDoFlow } from "../components/ToggleDoFlow.jsx";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
@@ -1985,6 +1986,12 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               aoAlternar={alternarFlow}
             />
           ) : null}
+
+          {/* Cobrança: componente próprio pelo mesmo motivo do Flow — tem
+              estado seu (busca o extrato) e engordaria em duzentas linhas uma
+              página que já tem mil e quinhentas. `Secao` vai por prop para o
+              desenho seguir sendo o mesmo das outras abas. */}
+          {tab === "cobranca" && <SecaoCobranca session={session} Secao={Secao} />}
 
           {tab === "flow" && (
             /* A seção do Flow mora num componente próprio, e não inline como as

@@ -110,8 +110,19 @@ omnimob/
   autenticada pela chave no caminho e pelo HMAC do corpo. Montada ANTES do
   `flowRouter` no `server.js`, senão o `requireAuth` dele a engoliria.
   Responde 200 quase sempre — portal que recebe erro desativa a integração
+- `GET /api/tenants/me/pagamentos` — **o extrato da imobiliária**: situação de
+  hoje, histórico, a última forma usada e o preço de ANTECIPAR, numa chamada só
+  (três fariam a página aparecer em pedaços). Atrás de `verConfiguracoes`;
+  alimenta a seção "Cobrança e pagamentos" das Configurações. Atrás de
+  `verCobranca` — permissão PRÓPRIA, e não `verConfiguracoes`: esta o servidor
+  deriva do nome do cargo, então não há caixa para marcar e ninguém consegue
+  concedê-la. `verCobranca` nasce ligada no Administrador, pede confirmação para
+  ser dada a outro cargo (`PERMISSOES_DE_RISCO`) e **não** abre plano, domínio
+  nem cancelamento. Antecipação só
+  existe para quem NÃO renova sozinho — oferecê-la a quem tem cobrança
+  automática seria convite a pagar duas vezes o mesmo mês
 - `POST /api/tenants/me/cobranca-pix` e `GET /me/cobranca-pix/:id` — **o Pix do
-  plano anual**, no Mercado Pago. Uma COBRANÇA, não uma assinatura: devolve QR e
+  plano, mensal ou anual**, no Mercado Pago. Uma COBRANÇA, não uma assinatura: devolve QR e
   copia-e-cola, não toca no tenant, e quem libera o plano é o pagamento —
   avisado em `POST /api/webhooks/mercadopago` ou visto pela consulta que a tela
   faz enquanto espera. As duas ativam pela MESMA função
@@ -139,6 +150,8 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/apiPublica.test.js` | A chave de A não enxerga nada de B nem pelo id real; escopo cobrado; senha nunca sai; escrita por chave deixa rastro na trilha; plano abaixo de Profissional recusado |
 | `test/documentacaoApi.test.js` | a especificação descreve a API que existe — rota nova sem documentação, ou documentação apontando para rota morta, falha aqui |
 | `test/enderecoPublico.test.js` | o endereço oculto some do PAYLOAD, não só da tela. Verifica o texto cru da resposta, o CEP junto, e o feed seguindo a mesma marcação |
+| `test/pagamentos.test.js` | o histórico de A não aparece para B, e o mesmo pagamento chegando três vezes é UMA linha. Os dois defeitos são silenciosos: um vaza, o outro faz o cliente achar que foi cobrado três vezes |
+| `test/avisoVencimento.test.js` | quem recebe aviso de vencimento e quando — os dois lados do silêncio: avisar de menos deixa a conta cair calada, avisar demais parece defeito de cobrança. **Não toca no banco** |
 | `test/mercadoPago.test.js` | a tradução plano → cobrança e a **assinatura do webhook** — um defeito ali vale um ano de plano de graça para quem achar a URL. Não toca no banco |
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
 
@@ -200,7 +213,25 @@ invisíveis porque com um cliente só o sintoma não aparece.
 - `feedPortais.js` — monta o XML VRSync. `distribuicaoLeads.js` — roleta de
   corretores por carga, não por sorteio. `cofre.js` — cifragem em repouso.
   `auditoria.js` — a trilha.
-- `pagamentoMercadoPago.js` — a cobrança ÚNICA, paga por Pix. Não substitui o
+- `pagamentos.js` — o histórico de cobrança. UMA porta de entrada
+  (`registrarPagamento`), chamada do webhook do Stripe, da aprovação do Pix e da
+  ativação manual — três gravações diferentes divergiriam no primeiro campo
+  novo. Idempotente por `(provedor, externoId)`, porque o webhook reenvia e a
+  tela consulta em paralelo. **Anotar nunca derruba o pagamento**: a função
+  engole o próprio erro e devolve `null`, já que roda DEPOIS de o acesso ser
+  liberado
+- `avisoVencimento.js` — o lembrete ANTES de a conta cair, em D-7 e D-1. Nasceu
+  com o Pix, que não renova sozinho: sem ele o desfecho normal de um cliente
+  satisfeito era a conta vencer em silêncio. A trava de reenvio é
+  `Tenant.avisoVencimento` (`<vencimento>:<degrau>`), persistente porque o laço
+  roda 4× por dia; a data na chave faz o ciclo reabrir sozinho quando o cliente
+  paga. Conta em fuso de São Paulo, e não no do servidor — em UTC, às 21h de
+  Brasília o dia já virou. Texto diferente para cartão (renova sozinho) e Pix
+  (precisa agir)
+- `pagamentoMercadoPago.js` — a cobrança ÚNICA, paga por Pix (mensal ou anual).
+  **Nada disso renova sozinho** — Pix Automático não existe para nós —, então a
+  tela é obrigada a dizer que não é cobrança automática; no mensal isso se
+  repete doze vezes por ano. Não substitui o
   `pagamentoService.js`: a divisão é de natureza (assinatura recorrente lá,
   pagamento avulso aqui), e existe porque conta Stripe brasileira não faz Pix
   recorrente nem parcelado. **Não inventa preço** — o valor sai de
@@ -325,7 +356,8 @@ Com padrão no código, defina só para sobrescrever: `EMAIL_REMETENTE`,
 `SMTP_USER`, `SMTP_PASS`).
 
 Opcionais: `FAXINA_AUTOMATICA=true` (agendador de limpeza — só com uma
-instância), `SINCRONIZACAO_AUTOMATICA=true` (relê as fontes de importação de
+instância), `AVISO_VENCIMENTO_AUTOMATICO=true` (lembretes de vencimento, mesma
+trava de instância única), `SINCRONIZACAO_AUTOMATICA=true` (relê as fontes de importação de
 hora em hora; mesma trava de instância única), `SEED_DEV=true`, `SUPER_ADMIN_EMAIL` / `_NOME` / `_PASSWORD` (só o
 seed lê; **sem `SUPER_ADMIN_PASSWORD` a senha vira `superadmin`**).
 
@@ -368,6 +400,7 @@ Modelos principais:
 | `ChaveApi` | Crachá de integração de terceiro. Hash, prefixo visível, escopos, revogação por marcação |
 | `FonteImportacao` | Endereço de feed guardado, para reler. `desativarAusentes` é a política de ausência |
 | `Webhook` | Endereço que recebe aviso de evento, com segredo de assinatura e desarme por falhas |
+| `Pagamento` | **O histórico de cobrança da imobiliária.** Uma linha por pagamento liquidado, dos três lugares onde dinheiro entra: fatura do Stripe, Pix do Mercado Pago e a ativação manual — que não existe em fornecedor nenhum. Idempotente por `(provedor, externoId)` |
 | `PropertyPublication` | Fila de publicação social (Facebook/Instagram/WhatsApp) |
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
 | `Negocio` | **Flow.** O negócio no funil. `codigo` é inteiro sequencial porque é um id que PESSOAS dizem em voz alta. Guarda as duas travas (quem validou e quando) e o split congelado |
@@ -808,6 +841,7 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 | `npm test` | Suíte de integração (ver acima) |
 | `npm run subdominios` | **Confere** `<slug>.omnimob.app` de cada imobiliária na Vercel e diz o que está faltando ou pendente de verificação. Ensaio por padrão; `-- --aplicar` cadastra os que faltam |
 | `npm run faxina` | Trials vencidos: desativa e remove. Ensaio por padrão; `--aplicar` executa |
+| `npm run avisos` | Avisa por e-mail quem vence em 7 dias e em 1 dia. Ensaio por padrão; `--aplicar` envia. Rodar demais não custa nada — a marca no banco impede o reenvio |
 | `npm run relatorio` | Relatório mensal por e-mail aos clientes Profissional/Premium. Ensaio por padrão; `--aplicar` envia. `--mes=7 --ano=2026` escolhe o período |
 | `npm run stripe:limpar -- --slug=…` | Cancela assinaturas do slug no Stripe |
 | `npm run prisma:seed:dev` | Imobiliárias de exemplo + catálogos |

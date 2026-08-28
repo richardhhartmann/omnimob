@@ -29,6 +29,7 @@ import { stripeWebhookRouter } from "./routes/stripeWebhookRoutes.js";
 import { mercadoPagoWebhookRouter } from "./routes/mercadoPagoWebhookRoutes.js";
 import { iniciarFaxinaAutomatica } from "./services/faxinaScheduler.js";
 import { iniciarRelatorioMensal } from "./services/relatorioScheduler.js";
+import { iniciarAvisosDeVencimento } from "./services/avisoVencimento.js";
 import { socialRouter } from "./routes/socialRoutes.js";
 import { socialWebhookRouter } from "./routes/socialWebhookRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
@@ -308,6 +309,9 @@ app.listen(port, () => {
   // Só liga com FAXINA_AUTOMATICA=true — ver o porquê em faxinaScheduler.js.
   iniciarFaxinaAutomatica();
   iniciarRelatorioMensal();
+  /* Avisa antes de a conta vencer. Nasceu com o Pix, que não renova sozinho —
+     ver o cabeçalho de `avisoVencimento.js`. Mesma trava de instância única. */
+  iniciarAvisosDeVencimento();
   /* Releitura das fontes de importação guardadas. Mesma trava dos dois acima:
      só com `SINCRONIZACAO_AUTOMATICA=true`, porque com mais de uma instância no
      ar todas leriam as mesmas fontes ao mesmo tempo. */
