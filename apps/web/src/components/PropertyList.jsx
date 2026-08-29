@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { DivulgarModal } from "./DivulgarModal";
 import { useConfirm } from "./ConfirmModal";
 import { useNavigate } from "react-router-dom";
+import { Trilha } from "./Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
 import { api } from "../api.js";
 import { loadSession } from "../session.js";
 import { planoLiberaRedes } from "../utils/planos.js";
@@ -10,6 +12,8 @@ import { SelectCustom } from "./SelectCustom.jsx";
 import { SkeletonCards } from "./Skeleton";
 import { EmptyState } from "./adminUi.jsx";
 import { ExcluirImovel } from "./ExcluirImovel.jsx";
+import { ConviteDeCriacao } from "./ConviteDeCriacao.jsx";
+import { HouseLine } from "@phosphor-icons/react";
 
 // ─── Selo do tipo de contrato ────────────────────────────────────────────────
 
@@ -194,6 +198,12 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
     return [...new Set(types)].sort();
   }, [properties]);
 
+  /* Acervo vazio de verdade — não é filtro escondendo. Quando é, a tela troca
+     a contagem, o alternador de visualização e a barra de filtros pelo convite:
+     seis controles que não filtram nada em cima de "0 de 0" é um relatório de
+     ausências, e é a primeira tela que a imobiliária vê. */
+  const acervoVazio = !loading && properties.length === 0;
+
   const filteredProperties = useMemo(() => {
     return properties.filter((property) => {
       const searchLower = searchTerm.toLowerCase();
@@ -257,16 +267,30 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
           }}
         />
       ) : null}
-      <div className="glass-panel" style={{ padding: "24px" }}>
+      {/* Sem acervo, o painel de vidro sai: sobrava uma caixa com trilha e
+          título em cima de outra caixa com o convite, e duas molduras
+          empilhadas para um conteúdo só. Fica a do convite, que é a que
+          convida — o cabeçalho continua, sem moldura. */}
+      <div className={acervoVazio ? undefined : "glass-panel"} style={{ padding: acervoVazio ? "0 0 4px" : "24px" }}>
+        {/* O portfólio é subitem de Gerenciar Imóveis na barra, e não tinha como
+            subir de volta a não ser pelo menu lateral. */}
+        <div style={{ marginBottom: "14px" }}>
+          <Trilha itens={degrausAte("/imoveis/portfolio", navigate)} />
+        </div>
         <div data-tour="portfolio-cabecalho" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
           <div>
             <h2 style={{ fontSize: "24px", fontWeight: "700", margin: 0 }}>Portfólio Ativo</h2>
+            {/* "Mostrando 0 de 0 imóveis" é a frase mais desanimadora possível
+                para quem acabou de assinar. Com o acervo vazio o subtítulo diz o
+                que a tela é, e a contagem volta quando houver o que contar. */}
             <p style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>
-              Mostrando {filteredProperties.length} de {properties.length} imóveis
+              {acervoVazio
+                ? "Tudo o que você cadastrar aparece aqui."
+                : `Mostrando ${filteredProperties.length} de ${properties.length} imóveis`}
             </p>
           </div>
 
-          <div className="ui-segmentado" style={{ display: "flex", borderRadius: "8px", padding: "4px" }}>
+          <div className="ui-segmentado" style={{ display: acervoVazio ? "none" : "flex", borderRadius: "8px", padding: "4px" }}>
             <button
               onClick={() => setViewMode("grid")}
               style={{
@@ -299,7 +323,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
           </div>
         </div>
 
-        <div data-tour="portfolio-filtros" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", padding: "16px", background: "var(--sup-03, rgba(255,255,255,0.03))", borderRadius: "12px", border: "1px solid var(--linha-05, rgba(255,255,255,0.05))" }}>
+        <div data-tour="portfolio-filtros" style={{ display: acervoVazio ? "none" : "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", padding: "16px", background: "var(--sup-03, rgba(255,255,255,0.03))", borderRadius: "12px", border: "1px solid var(--linha-05, rgba(255,255,255,0.05))" }}>
           <input
             placeholder="Buscar por termo ou descrição..."
             value={searchTerm}
@@ -347,18 +371,19 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
            deveriam ser: "cadastre o primeiro imóvel" para quem tem quarenta e
            filtrou por bairro seria conselho errado. O texto passa a distinguir,
            e só o vazio de verdade convida a cadastrar. */
-        <EmptyState
-          padding="64px 24px"
-          mensagem={properties.length === 0
-            ? "Nenhum imóvel cadastrado."
-            : "Nenhum imóvel encontrado com estes filtros."}
-          acaoLabel={properties.length === 0 ? "Cadastrar o primeiro imóvel" : undefined}
-          onAcao={properties.length === 0 ? () => navigate("/imoveis/novo") : undefined}
-          {...(properties.length === 0 ? {
-            desenho: "/ilustracoes/vazio-imoveis.png",
-            desenhoAlt: "Pessoa colocando a primeira foto numa moldura vazia",
-          } : {})}
-        />
+        properties.length === 0 ? (
+          <ConviteDeCriacao
+            plena
+            accent="#6366f1"
+            icone={<HouseLine size={34} weight="duotone" />}
+            titulo="Pronto para criar seu primeiro imóvel?"
+            texto="O acervo é o começo de tudo: é dele que saem a vitrine, os portais e os leads que chegam por eles."
+            acaoLabel="Cadastrar imóvel"
+            onAcao={() => navigate("/imoveis/novo")}
+          />
+        ) : (
+          <EmptyState padding="64px 24px" mensagem="Nenhum imóvel encontrado com estes filtros." />
+        )
       ) : null}
 
       {/* ── Grade ─── */}

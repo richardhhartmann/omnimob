@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CanaisDoImovel } from "./CanaisDoImovel.jsx";
 import { linkDoImovel } from "../utils/enderecoVitrine";
 import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
+import { Trilha } from "./Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
@@ -12,7 +14,7 @@ import { Panorama360 } from "./Panorama360.jsx";
 import { SelectCustom } from "./SelectCustom.jsx";
 import { overlay360 } from "../utils/cloudinaryOverlay.js";
 import { spawnRipple } from "../utils/rippleDrop.js";
-import { CartaoDeMenu } from "./CartaoDeMenu.jsx";
+import { GradeDeMenu } from "./GradeDeMenu.jsx";
 import { shareWhatsapp } from "../utils/shareWhatsapp.js";
 import { gerarArteDeStatus } from "../utils/arteParaStatus.js";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
@@ -1083,39 +1085,54 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData, lo
   return (
     <div className="management-container">
       {view === "MENU" && (
-        <div className="glass-panel" style={{ textAlign: "center", padding: "56px 40px", animation: "fadeIn 0.4s ease-out" }}>
-          <h2 style={{ marginBottom: "8px", fontSize: "28px", fontWeight: "700" }}>Gerenciar Imóveis</h2>
-          <p style={{ marginBottom: "48px", color: "var(--text-muted)", fontSize: "16px" }}>
-            Selecione o tipo de operação que deseja realizar no sistema.
-          </p>
-          <div className="grid grid-2" style={{ gap: "32px", maxWidth: "800px", margin: "0 auto" }}>
-            {[
+        <div style={{ animation: "fadeIn 0.4s ease-out" }}>
+          <GradeDeMenu
+            titulo="Gerenciar Imóveis"
+            subtitulo="Selecione o tipo de operação que deseja realizar no sistema."
+            cards={[
               {
                 onClick: abrirFormulario,
                 tourId: "imovel-menu-novo",
                 icon: <IconHome />,
                 title: "Novo Imóvel",
+                acao: "imoveis.novo",
                 desc: "Cadastre propriedades, defina valores, envie fotos e gerencie as informações.",
+                /* O índigo de Gerenciar Imóveis no Dashboard: é o mesmo
+                   assunto, um nível abaixo. */
+                accent: "#6366f1",
               },
               {
                 onClick: () => navigate("/tipos-imovel"),
                 icon: (
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
                     <line x1="7" y1="7" x2="7.01" y2="7" />
                   </svg>
                 ),
                 title: "Categoria de Imóvel",
+                acao: "imoveis.categorias",
                 desc: "Adicione novas tipologias ao sistema para categorizar seu portfólio.",
+                accent: "#8b5cf6",
               },
-            ].map((card) => (
-              <CartaoDeMenu key={card.title} {...card} />
-            ))}
-          </div>
+            ]}
+          />
         </div>
       )}
 
       {view === "PROPERTY" && (
+        <>
+        {/* A trilha que faltava nesta tela. O cadastro de imóvel é a página
+            mais longa do painel, e ela abria sem nenhuma indicação de onde
+            estava nem de como sair sem rolar até o fim. O primeiro degrau é o
+            mesmo destino do "Voltar ao menu" / "Cancelar edição". */}
+        <div style={{ marginBottom: "20px" }}>
+          <Trilha
+            itens={degrausAte(
+              initialData?.id ? "/imoveis/editar" : "/imoveis/novo",
+              navigate,
+            )}
+          />
+        </div>
         <PropertyForm
           onSubmit={onSubmitProperty}
           disabled={disabled}
@@ -1123,6 +1140,7 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData, lo
           onCancelEdit={voltarAoMenu}
           logoUrl={logoUrl}
         />
+        </>
       )}
     </div>
   );
@@ -2949,7 +2967,17 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                 <input style={withError("price")} placeholder="R$ 0,00" type="text" inputMode="numeric" value={form.price} onChange={(e) => set("price", formatCurrencyBRL(e.target.value))} disabled={disabled} />
               </Field>
 
-              <Field tourId="imovel-tipo" label="Tipo de imóvel" required error={fieldErrors.tipoImovelId}>
+              {/* Zero tipos deixou de ser impossível: o catálogo de partida virou
+                  uma escolha do assistente de primeiro acesso, e quem desmarcou
+                  chega aqui com a lista vazia. Sem esta linha o campo obrigatório
+                  abre um menu em branco e não diz para onde ir. */}
+              <Field
+                tourId="imovel-tipo"
+                label="Tipo de imóvel"
+                required
+                error={fieldErrors.tipoImovelId}
+                hint={tipos.length === 0 ? "Você ainda não tem nenhuma categoria. Crie a primeira em Categoria de Imóvel." : undefined}
+              >
                 <AiFlare active={aiFields.tipoImovelId}>
                   <SelectCustom
                     style={{ position: "relative", zIndex: 2 }}

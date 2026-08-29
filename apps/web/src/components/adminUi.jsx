@@ -1,6 +1,10 @@
 // Utilitários e componentes compartilhados das páginas administrativas
 // (Clientes, Usuários, Cargos) — mantêm um visual consistente.
 
+import { useLocation, useNavigate } from "react-router-dom";
+import { Trilha } from "./Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
+
 export function initial(name) {
   const c = (name || "").trim().charAt(0);
   return c ? c.toUpperCase() : "?";
@@ -118,15 +122,41 @@ export function StatusPill({ active }) {
 }
 
 // Cabeçalho padronizado de página com título, subtítulo opcional e ação à direita.
-export function PageHeader({ title, subtitle, action }) {
+/* ── A TRILHA VEM DE GRAÇA AQUI ──────────────────────────────────────────────
+
+   Todas as telas do Flow desenham o cabeçalho por este componente, e nenhuma
+   delas tinha trilha. Pô-la aqui dentro resolve as oito de uma vez — e, mais
+   importante, faz a nona nascer com ela: uma tela nova que use `PageHeader` já
+   aparece no caminho certo sem ninguém lembrar de nada.
+
+   Sai da ROTA, e não de um parâmetro: quem desenha o cabeçalho não precisa
+   saber onde a própria página mora. Rota fora do catálogo — ou a raiz de um
+   módulo, que não desceu de lugar nenhum — simplesmente não desenha trilha: um
+   degrau sozinho é um título repetido, não um caminho.
+
+   `trilha={false}` desliga, e `trilha={[...]}` substitui, para a tela que
+   precisa de um degrau próprio (o código de um negócio, por exemplo). */
+export function PageHeader({ title, subtitle, action, trilha }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const degraus = trilha === false
+    ? []
+    : Array.isArray(trilha) ? trilha : degrausAte(pathname, navigate);
+
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "28px", gap: "16px" }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "700", letterSpacing: "-0.3px" }}>{title}</h2>
-        {subtitle && <p style={{ margin: "5px 0 0", color: "var(--text-muted)", fontSize: "14px" }}>{subtitle}</p>}
+    <>
+      {degraus.length > 1 ? (
+        <div style={{ marginBottom: "14px" }}><Trilha itens={degraus} /></div>
+      ) : null}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "28px", gap: "16px" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "700", letterSpacing: "-0.3px" }}>{title}</h2>
+          {subtitle && <p style={{ margin: "5px 0 0", color: "var(--text-muted)", fontSize: "14px" }}>{subtitle}</p>}
+        </div>
+        {action && <div style={{ flexShrink: 0 }}>{action}</div>}
       </div>
-      {action && <div style={{ flexShrink: 0 }}>{action}</div>}
-    </div>
+    </>
   );
 }
 

@@ -18,10 +18,9 @@ import { PropertyManagement } from "../components/PropertyForm";
 import { PropertyList } from "../components/PropertyList";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { comMarcaDagua } from "../utils/marcaDagua";
-import { spawnRipple } from "../utils/rippleDrop";
+import { GradeDeMenu } from "../components/GradeDeMenu.jsx";
 import { ReescritaEmMassa } from "../components/ReescritaEmMassa";
 import { IconeRelatorios } from "../utils/iconesRelatorios";
-import { TeclaDeAtalho } from "../components/ContextoDeAtalhos.jsx";
 
 // ─── Landing page ─────────────────────────────────────────────────────────────
 
@@ -157,74 +156,13 @@ function HomePage({ session }) {
 
   return (
     <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-      <div data-tour="inicio-saudacao" style={{ marginBottom: "24px", padding: "32px 0px" }}>
-        <h2 style={{ margin: "0 0 6px 0", fontSize: "26px", fontWeight: "700" }}>
-          Dashboard
-        </h2>
-        <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "15px" }}>
-          Acesse as opções liberadas para o seu cargo, {primeiroNome}.
-        </p>
-      </div>
-
-      <div data-tour="inicio-atalhos" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "20px" }}>
-        {cards.map((card) => (
-          <button
-            key={card.title}
-            onClick={card.onClick}
-            className="pg-follow inicio-atalho"
-            /* O realce do hover é COR, e cor pertence ao CSS — este cartão já
-               teve o dele escrito nos handlers de mouse, e o preço apareceu no
-               tema claro: a folha precisava de `!important` para clarear o
-               fundo, e o `!important` matava junto o brilho do hover.
-
-               Agora o JS só entrega a cor do cartão em variáveis (o accent com
-               as três opacidades que o gradiente usa) e cuida do movimento; o
-               desenho é regra de estilo, e cada tema escreve a sua. */
-            style={{
-              "--pg-accent": card.accent,
-              "--pg-accent-borda": `${card.accent}55`,
-              "--pg-accent-brilho": `${card.accent}33`,
-              "--pg-accent-veu": `${card.accent}18`,
-              padding: "28px 28px",
-              borderRadius: "16px",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-4px)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-            }}
-            onMouseDown={(e) => {
-              spawnRipple(e, card.accent);
-              e.currentTarget.style.transform = "translateY(-1px) scale(0.975)";
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.transform = "translateY(-4px)";
-            }}
-          >
-            {/* A tecla, no canto. Some sozinha quando a imobiliária desligou os
-                atalhos ou quando a pessoa desligou este — `TeclaDeAtalho`
-                devolve `null` e o cartão fica igual, sem buraco. */}
-            {card.acao ? <TeclaDeAtalho acao={card.acao} className="tecla-atalho--canto" /> : null}
-            <div style={{
-              padding: "12px",
-              borderRadius: "12px",
-              background: `${card.accent}22`,
-              color: card.accent,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}>
-              {card.icon}
-            </div>
-            <div>
-              <div style={{ fontWeight: "600", fontSize: "16px", marginBottom: "6px" }}>{card.title}</div>
-              <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.5" }}>{card.description}</div>
-            </div>
-          </button>
-        ))}
-      </div>
+      <GradeDeMenu
+        cards={cards}
+        tourId="inicio-atalhos"
+        tourCabecalho="inicio-saudacao"
+        titulo="Dashboard"
+        subtitulo={`Acesse as opções liberadas para o seu cargo, ${primeiroNome}.`}
+      />
     </div>
   );
 }

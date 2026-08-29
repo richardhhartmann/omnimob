@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ChartLineUp } from "@phosphor-icons/react";
+import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
 import { api } from "../api";
 import { InteressadosNoImovel } from "../components/InteressadosNoImovel.jsx";
 import { comodidadesAtivas } from "../utils/comodidades";
@@ -310,14 +313,21 @@ export function PropertyInsightsPage({ session }) {
       {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
         <div>
-          <button
-            type="button"
-            onClick={() => navigate("/imoveis/portfolio")}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px", width: "auto", alignSelf: "flex-start", background: "none", border: "none", color: "var(--text-muted)", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "12px" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-            Voltar
-          </button>
+          {/* A trilha no lugar do "Voltar" — o mesmo primeiro destino, e ainda
+              diz onde esta tela mora. Ver o cabeçalho de `Trilha.jsx`. */}
+          <div style={{ marginBottom: "12px" }}>
+            <Trilha
+              itens={[
+                ...degrausAte("/imoveis/portfolio", navigate),
+                {
+                  chave: "desempenho",
+                  rotulo: "Painel de Performance",
+                  Icone: ChartLineUp,
+                  aoIr: () => {},
+                },
+              ]}
+            />
+          </div>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: "700", lineHeight: 1.2 }}>
             Painel de Performance
           </h1>

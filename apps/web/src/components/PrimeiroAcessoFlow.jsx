@@ -194,11 +194,17 @@ ${CSS_FLOW}`}</style>
 /* Só os desvios de cor. O resto (`pa-veu`, `pa-caixa`, `pa-botao`) já está no
    CSS do [PrimeiroAcessoModal], que é montado pelo mesmo layout — duplicar a
    folha inteira aqui é como as duas versões divergem. */
+/* O ROSA do modulo, e nao o jade que estava aqui. O acento do Flow e
+   #ec0b5b — a cor da palavra "flow" na arte, declarada em utils/modulos.js e
+   usada pelo seletor de modulo, pelo interruptor de contratacao e pela landing.
+   O tour era a unica peca que apresentava o modulo com outra cor, e quem
+   contrata vendo rosa e recebido por verde estranha antes de entender.
+   (Sem crase nestes comentarios: template literal.) */
 const CSS_FLOW = `
-.pa-caixa.is-flow { border-color: rgba(20,184,166,0.28); }
-.pa-icone.is-flow { background: rgba(20,184,166,0.14); color: #14b8a6; }
-.pa-eyebrow.is-flow { color: #14b8a6; }
-.pa-lista.is-flow li::before { background: #14b8a6; }
-.pa-botao--primario.is-flow { background: #14b8a6; color: #04211d; }
-.pa-botao--primario.is-flow:hover { background: #2dd4bf; }
+.pa-caixa.is-flow { border-color: rgba(236,11,91,0.30); }
+.pa-icone.is-flow { background: rgba(236,11,91,0.14); color: #ec0b5b; }
+.pa-eyebrow.is-flow { color: #ec0b5b; }
+.pa-lista.is-flow li::before { background: #ec0b5b; }
+.pa-botao--primario.is-flow { background: #ec0b5b; color: #fff; }
+.pa-botao--primario.is-flow:hover { background: #ff2d76; }
 `;

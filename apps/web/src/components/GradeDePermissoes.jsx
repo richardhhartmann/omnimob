@@ -15,14 +15,14 @@ import { gruposDePermissao } from "../utils/permissoesCargo.jsx";
 
    ── O QUE ESTE COMPONENTE NÃO DECIDE ──
 
-   Ele desenha e avisa o que a pessoa clicou. Não sabe o que é gravar, não sabe
-   o que é auto-save, não conhece o modal de ciência da permissão de risco e não
-   sabe de quem é o cargo. Tudo isso é decisão de cada tela, e é por isso que
-   `aoAlternar` devolve a intenção em vez de aplicar o valor:
+   Ele desenha e avisa o que a pessoa clicou. Não sabe o que é gravar, não
+   conhece o modal de ciência da permissão de risco e não sabe de quem é o
+   cargo. Tudo isso é decisão de cada tela, e é por isso que `aoAlternar`
+   devolve a intenção em vez de aplicar o valor:
 
-     · `CargosPage` editando  → grava na hora (auto-save)
-     · `CargosPage` criando   → guarda no form, e a permissão de risco abre modal
-     · `CargoEmLinha`         → guarda no form, sem mais nada
+     · `CargosPage`   → guarda no form, e a permissão de risco abre modal;
+                        quem grava é o "Salvar Alterações"
+     · `CargoEmLinha` → guarda no form, sem mais nada
 
    Colocar qualquer uma dessas regras aqui obrigaria a outra tela a carregá-la.
 

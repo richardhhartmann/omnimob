@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { api } from "../../api";
+import { FLOW_ACENTO } from "../../utils/modulos";
 import { reais } from "../../utils/flow";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -112,7 +113,8 @@ export function SecaoFlow({ session, Secao, showToast }) {
 
   return (
     <>
-      <Secao cor="#14b8a6" titulo="Assinatura digital" icone={<CheckCircle size={16} weight="fill" />}>
+      {/* O acento do módulo, e não um verde só desta tela — ver `FLOW_ACENTO`. */}
+      <Secao cor={FLOW_ACENTO} titulo="Assinatura digital" icone={<CheckCircle size={16} weight="fill" />}>
         <p className="config-nota">
           A conta é sua, no provedor que você contratar — os contratos saem em nome da sua
           imobiliária, não da Omnimob. Sem isto configurado, o Flow gera a minuta preenchida mas não

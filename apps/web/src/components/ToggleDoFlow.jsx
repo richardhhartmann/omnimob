@@ -46,11 +46,26 @@ import { FLOW_ACENTO } from "../utils/modulos";
  * @param {string}   [nota]        uma linha abaixo, para o caso de já estar ativo
  * @param {string}   [id]          quando há mais de um na mesma página
  */
+/**
+ * @param {boolean} [compacto] Esconde a frase de venda e aperta o espaçamento.
+ *
+ * Existe para os cartões de plano de Configurações, onde o interruptor aparece
+ * TRÊS vezes lado a lado, em colunas estreitas: a mesma descrição repetida em
+ * cada cartão deixa de informar e vira parede — e o que a pessoa compara ali é
+ * preço, não o que o módulo faz (isso ela já leu uma vez).
+ *
+ * Um parâmetro no componente compartilhado, e não uma segunda versão dele: a
+ * divergência entre cópias deste controle já custou preços diferentes para a
+ * mesma compra, e é o que `test/toggleDoFlow.test.jsx` guarda.
+ */
 export function ToggleDoFlow({
-  ligado, aoAlternar, extra, desabilitado = false, ocupado = false, nota, id = "pkg-flow",
+  ligado, aoAlternar, extra, desabilitado = false, ocupado = false, nota, compacto = false, id = "pkg-flow",
 }) {
   return (
-    <div className={`pkg-caixa${ligado ? " is-on" : ""}`} style={{ "--pkg-cor": FLOW_ACENTO }}>
+    <div
+      className={`pkg-caixa${ligado ? " is-on" : ""}${compacto ? " pkg-caixa--compacta" : ""}`}
+      style={{ "--pkg-cor": FLOW_ACENTO }}
+    >
       <style>{CSS}</style>
 
       {/* `<label>` envolvendo tudo: o rótulo inteiro vira área de clique, e o
@@ -74,11 +89,13 @@ export function ToggleDoFlow({
               VENDER (o que o módulo faz); ligado ela precisa CONFIRMAR (o que
               foi somado). O mesmo texto nos dois estados deixaria a pessoa sem
               saber se o clique surtiu efeito. */}
-          <span className="pkg-desc">
-            {ligado
-              ? "Captação automática pelos portais, funil de negócios, minutas contratuais, assinatura digital e comissão."
-              : "Você leva só o Hub: acervo, vitrine, leads, clientes e equipe."}
-          </span>
+          {compacto ? null : (
+            <span className="pkg-desc">
+              {ligado
+                ? "Captação automática pelos portais, funil de negócios, minutas contratuais, assinatura digital e comissão."
+                : "Você leva só o Hub: acervo, vitrine, leads, clientes e equipe."}
+            </span>
+          )}
         </span>
       </label>
 
@@ -91,6 +108,11 @@ export function ToggleDoFlow({
    comentário encerra a string no meio da folha — a peça inteira perde o estilo
    e nada no console diz por quê. Já aconteceu duas vezes neste projeto. */
 const CSS = `
+/* Compacta: mesma caixa, menos respiro. E o titulo deixa de quebrar em tres
+   linhas numa coluna estreita. Ver o parametro compacto, no componente. */
+.pkg-caixa--compacta { padding: 9px 11px; border-radius: 11px; }
+.pkg-caixa--compacta .pkg-titulo { font-size: 12px; line-height: 1.35; }
+
 .pkg-caixa {
   border-radius: 14px;
   padding: 14px 16px;

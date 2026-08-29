@@ -566,16 +566,49 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      que não tem nada a ver com o que está na tela. O destino de cada módulo
      mora em `utils/modulos.js`, junto do resto da definição dele. */
   const trocarDeModulo = useCallback((proximo) => {
-    const destino = moduloInfo(proximo).inicial(cargo);
-    if (tenantId && session?.usuario?.id) {
-      gravarNoUsuario(CHAVES.moduloAtivo, tenantId, session.usuario.id, proximo);
+    const usuarioId = session?.usuario?.id;
+
+    /* ── ONDE EU ESTAVA ──────────────────────────────────────────────────────
+       Guarda a tela atual do módulo que está sendo DEIXADO e tenta reabrir a
+       última do módulo de destino. Sem isso, ir ao Flow conferir um negócio e
+       voltar jogava a pessoa no Dashboard — e ela tinha de refazer o caminho
+       até a tela em que estava trabalhando.
+
+       Duas gavetas, uma por módulo: a volta ao Hub não pode depender do que
+       aconteceu no Flow, nem o contrário.
+
+       A tela guardada é só uma SUGESTÃO. Se o cargo perdeu a permissão daquela
+       rota no meio do caminho, o painel redireciona como faria com qualquer
+       link antigo — e a memória não vira uma porta trancada. */
+    const atual = moduloDaRota(location.pathname);
+    if (tenantId && usuarioId && atual && atual !== proximo) {
+      gravarNoUsuario(
+        `${CHAVES.ultimaTelaDoModulo}_${atual}`,
+        tenantId,
+        usuarioId,
+        `${location.pathname}${location.search}`,
+      );
+    }
+
+    const lembrada = tenantId && usuarioId
+      ? lerDoUsuario(`${CHAVES.ultimaTelaDoModulo}_${proximo}`, tenantId, usuarioId)
+      : null;
+    /* Confere que a rota lembrada é MESMO daquele módulo: uma gaveta antiga,
+       de antes de uma rota mudar de lugar, mandaria a pessoa para o módulo
+       errado — que é pior do que abrir na tela inicial. */
+    const destino = lembrada && moduloDaRota(lembrada) === proximo
+      ? lembrada
+      : moduloInfo(proximo).inicial(cargo);
+
+    if (tenantId && usuarioId) {
+      gravarNoUsuario(CHAVES.moduloAtivo, tenantId, usuarioId, proximo);
     }
     setModuloPreferido(proximo);
     /* Antes de navegar: a barra tem de já estar presa quando a árvore nova
        montar, senão há um quadro com ela recolhida. */
     setPresa(true);
     navigate(destino);
-  }, [cargo, navigate, tenantId, session?.usuario?.id]);
+  }, [cargo, navigate, tenantId, session?.usuario?.id, location.pathname, location.search]);
 
   /* Esta tela tem tour? A resposta decide se o modal de ajuda oferece "rever o
      tour" ou explica que aqui não existe um. Vem da mesma fonte que o TourDeTela

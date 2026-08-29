@@ -813,9 +813,6 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
         </div>
 
         <div className="tg-rodape">
-          <button type="button" className="tg-pular" onClick={() => encerrar("pulou")}>
-            Pular tour
-          </button>
           <div className="tg-botoes">
             <button
               type="button"
@@ -961,7 +958,7 @@ const CSS = `
 }
 
 .tg-rodape { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.tg-botoes { display: flex; align-items: center; gap: 6px; }
+.tg-botoes { display: flex; align-items: center; gap: 6px;  }
 
 .tg-cartao .tg-pular {
   width: auto; padding: 4px 0; border: none; background: none; box-shadow: none; transform: none;

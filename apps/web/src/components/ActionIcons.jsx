@@ -1,3 +1,6 @@
+import { useEffect, useRef } from "react";
+import { registrarNovo } from "../utils/registroDeNovo";
+import { TeclaDeAtalho } from "./ContextoDeAtalhos.jsx";
 const BASE = {
   display: "inline-flex",
   alignItems: "center",
@@ -106,7 +109,25 @@ export function BtnGerenciar({ onClick, disabled, title = "Gerenciar" }) {
   );
 }
 
+/* ── O botão que responde ao "N" ────────────────────────────────────────────
+
+   Quatro telas o usam — Clientes, Usuários, Cargos e Tipos de Imóvel —, e é por
+   isso que o registro mora AQUI e não em cada página: a tecla passa a funcionar
+   em toda tela que já tem o botão, e em toda tela nova que vier a usá-lo, sem
+   ninguém lembrar de ligar nada. Uma página que esquecesse o registro teria o
+   atalho falhando em silêncio, que é exatamente o defeito que existia.
+
+   O selo da tecla vai DENTRO do botão: um atalho que ninguém descobre não é
+   atalho. `TeclaDeAtalho` devolve `null` quando a imobiliária desligou os
+   atalhos ou a pessoa desligou este, e aí o botão fica igual ao de antes. */
 export function BtnNovo({ onClick, label = "Novo" }) {
+  /* `useRef` para o efeito não depender da identidade da função: quase toda
+     página passa uma arrow nova a cada render, e sem isto o registro seria
+     desfeito e refeito em todo ciclo. */
+  const acao = useRef(onClick);
+  acao.current = onClick;
+  useEffect(() => registrarNovo(() => acao.current?.()), []);
+
   return (
     <button
       type="button"
@@ -136,6 +157,7 @@ export function BtnNovo({ onClick, label = "Novo" }) {
         <line x1="5" y1="12" x2="19" y2="12" />
       </svg>
       {label}
+      <TeclaDeAtalho acao="global.novo" className="tecla-atalho--no-botao" />
     </button>
   );
 }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
 import {
   Users, Eye, CurrencyCircleDollar, Handshake, TrendUp, TrendDown,
   Warning, Buildings, ImageSquare, Trophy, ArrowRight, FileDashed,
@@ -204,6 +206,9 @@ export function InicioPage({ session }) {
        340px de largura útil, que é estreito demais para o rótulo do mês caber
        sem girar. */
     <div className="main-content ig-pagina" style={{ maxWidth: "1240px" }}>
+      <div style={{ marginBottom: "14px" }}>
+        <Trilha itens={degrausAte("/inicio", navigate)} />
+      </div>
       <header data-tour="gestor-saudacao" style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "28px", marginBottom: "6px" }}>
           {saudacao}{primeiroNome ? `, ${primeiroNome}` : ""}

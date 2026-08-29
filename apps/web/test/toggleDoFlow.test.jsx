@@ -116,8 +116,11 @@ test("as quatro mandam o pacote junto do plano", () => {
      assinatura sair sem `pacote`. Aí o cliente escolhe Hub+Flow, paga o preço
      do Hub+Flow e recebe só o Hub — o pior desfecho possível, e silencioso.
 
-     Configurações fica de fora porque lá a rota é outra (`contratarFlow`), que
-     não recebe plano nenhum. */
+     Em Configurações a chamada é outra — lá não se assina, se TROCA —, mas a
+     exigência é a mesma: o pacote tem de viajar junto do plano. Ela já usou
+     `contratarFlow`, uma rota só de módulos, e isso obrigava duas chamadas para
+     "quero o Profissional com Flow" — duas mexidas na assinatura e dois
+     proporcionais na mesma fatura, para uma decisão só. */
   const QUE_ASSINAM = {
     "src/components/TrialAviso.jsx": /assinarPlano(Assincrono)?\([^)]*\{[\s\S]{0,200}?pacote/,
     "src/pages/ContaSuspensaPage.jsx": /assinarPlano\([\s\S]{0,220}?pacote/,
@@ -128,7 +131,11 @@ test("as quatro mandam o pacote junto do plano", () => {
   }
 
   const config = fs.readFileSync("src/pages/ConfiguracaoPage.jsx", "utf8");
-  assert.match(config, /api\.contratarFlow\(/, "Configurações usa a rota de módulos");
+  assert.match(
+    config,
+    /api\.trocarPlano\([\s\S]{0,160}?HUB_FLOW/,
+    "Configurações precisa mandar o pacote junto do plano",
+  );
 });
 
 test("o interruptor só aparece quando existe preço do Flow", () => {

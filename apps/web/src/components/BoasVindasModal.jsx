@@ -5,6 +5,7 @@ import { getTrialStatusCompartilhado, esquecerTrialStatus } from "../utils/trial
 import { PLANOS } from "../utils/planos";
 import { IconeCheck, IconeEstrela } from "./Icones.jsx";
 import { PerfilInicialPasso, PERFIL_INICIAL_CSS } from "./PerfilInicialPasso.jsx";
+import { CatalogosPasso, CATALOGOS_CSS } from "./CatalogosPasso.jsx";
 import { DominioVitrine } from "./DominioVitrine.jsx";
 import { lerDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
 
@@ -137,6 +138,18 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
      isso é um estado que vai e volta, e não um "já concluiu". Ver o JSX. */
   const [enderecoResolvido, setEnderecoResolvido] = useState(false);
 
+  /* A ficha da imobiliária já está preenchida?
+
+     O ENDEREÇO é o sinal, e não a ficha inteira. Nome, e-mail e telefone já
+     vêm do formulário do teste, então testá-los não distingue quem preencheu de
+     quem não preencheu; endereço e cidade só existem se alguém passou por este
+     passo. E exigir a ficha completa — CNPJ, CRECI, slogan — mandaria de volta
+     ao formulário justamente o corretor autônomo, que não tem CRECI de empresa.
+
+     Sai de `/me/trial`, que a modal já buscou: uma segunda consulta só para
+     decidir se mostra um passo faria a caixa piscar depois de aberta. */
+  const fichaPreenchida = Boolean(dados?.endereco?.linha && dados?.endereco?.cidade);
+
   /* Enquanto a resposta não chega, a tela fica travada por um véu.
 
      `/me/trial` é caro: seis consultas ao banco mais uma ida ao Stripe pelos
@@ -268,7 +281,10 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
      a ficha dizia "2 de 2" com o endereço ainda por vir. */
   const itensMigracao = Array.isArray(dados.migracao?.itens) ? dados.migracao.itens : [];
   const temMigracao = Boolean(dados.migracao) && itensMigracao.some((i) => IMPORTAVEIS.includes(i));
-  const totalPassos = temMigracao ? 4 : 3;
+  /* Os catálogos viraram um passo próprio — ver o cabeçalho de
+     `CatalogosPasso.jsx`. Com ele: boas-vindas, ficha, catálogos, domínio, e a
+     importação só para quem disse ter base para trazer. */
+  const totalPassos = temMigracao ? 5 : 4;
   const dias = dados.diasRestantes;
   const prazo =
     dias == null
@@ -288,7 +304,8 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
        sempre visível. */
     <div className={`bv-veu${saindo ? " is-saindo" : ""}`}>
       <style>{`${CSS}
-${PERFIL_INICIAL_CSS}`}</style>
+${PERFIL_INICIAL_CSS}
+${CATALOGOS_CSS}`}</style>
       <div className={`bv-caixa${saindo ? " is-saindo" : ""}`} role="dialog" aria-modal="true" aria-labelledby="bv-titulo">
         {passo === "perfil" ? (
           <>
@@ -300,13 +317,24 @@ ${PERFIL_INICIAL_CSS}`}</style>
             </p>
             <PerfilInicialPasso
               tenantSlug={tenantSlug}
-              aoConcluir={(campos) => { aoAtualizarTenant?.(campos); setPasso("dominio"); }}
-              aoPular={() => setPasso("dominio")}
+              aoConcluir={(campos) => { aoAtualizarTenant?.(campos); setPasso("catalogos"); }}
+              aoPular={() => setPasso("catalogos")}
             />
+          </>
+        ) : passo === "catalogos" ? (
+          <>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 3 DE {totalPassos}</span>
+            <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">Começar com o que já está pronto</h2>
+            <p className="bv-texto bv-texto--fraco bv-texto--perfil">
+              É possível fazer com que o sistema já nasça com os cargos e as categorias que a maioria das
+              imobiliárias usa. Desmarque o que você prefere montar do seu jeito — e o que
+              vier continua editável.
+            </p>
+            <CatalogosPasso tenantSlug={tenantSlug} aoConcluir={() => setPasso("dominio")} />
           </>
         ) : passo === "dominio" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 3 DE {totalPassos}</span>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 4 DE {totalPassos}</span>
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">O endereço da sua vitrine</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               Sua vitrine já está no ar no endereço da Omnimob. Se a sua imobiliária tem
@@ -346,7 +374,7 @@ ${PERFIL_INICIAL_CSS}`}</style>
           </>
         ) : passo === "dados" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 4 DE 4</span>
+            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 5 DE {totalPassos}</span>
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">Falta trazer a sua base</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               Quando você pediu o teste, disse que tem{" "}
@@ -438,13 +466,20 @@ ${PERFIL_INICIAL_CSS}`}</style>
               você.
             </p>
 
+            {/* "mensal e automática" era dito a todo mundo, e virou mentira no
+                dia em que o Pix entrou: quem paga por Pix não tem cobrança
+                automática nenhuma — precisa voltar e gerar outro código. Dizer
+                o contrário na tela da comemoração é a forma mais eficiente de
+                produzir uma conta vencida em silêncio. */}
             {dados.proximaCobranca || dados.expiraEm ? (
               <p className="bv-texto bv-texto--fraco">
-                Próxima cobrança em{" "}
+                {dados.renovaSozinho ? "Próxima cobrança em " : "Seu plano vale até "}
                 <strong>
                   {new Date(dados.proximaCobranca || dados.expiraEm).toLocaleDateString("pt-BR")}
                 </strong>
-                , mensal e automática.
+                {dados.renovaSozinho
+                  ? ", automática no cartão."
+                  : " — o Pix não renova sozinho, e avisamos por e-mail antes de vencer."}
               </p>
             ) : null}
 
@@ -461,8 +496,24 @@ ${PERFIL_INICIAL_CSS}`}</style>
           </>
         )}
 
-        <button type="button" className="bv-botao" onClick={() => setPasso("perfil")}>
-          Continuar
+        {/* ── A ficha só é pedida a quem AINDA NÃO A PREENCHEU ──────────────
+            Quem virou assinante vindo do teste já respondeu tudo isto na
+            recepção do teste — e reencontrar o mesmo formulário, com os campos
+            já preenchidos, logo depois de pagar, faz a assinatura parecer um
+            recomeço. Foi o que aconteceu no primeiro pagamento real.
+
+            Mas o passo não pode simplesmente sumir do modo assinante: existe
+            quem chegue direto a assinante, sem teste nenhum (conta criada pela
+            equipe), e para essa pessoa a ficha nunca foi pedida.
+
+            Então a pergunta certa não é "qual recepção é esta?", é "a ficha já
+            está preenchida?". Uma condição só, que atende os dois casos. */}
+        <button
+          type="button"
+          className="bv-botao"
+          onClick={() => (fichaPreenchida ? fechar() : setPasso("perfil"))}
+        >
+          {fichaPreenchida ? "Começar" : "Continuar"}
         </button>
         </>
         )}

@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { PerfisDeBusca } from "../components/PerfisDeBusca.jsx";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { useConfirm } from "../components/ConfirmModal";
 import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { formatCep, formatCpf, formatPhone, formatRg, onlyDigits } from "../utils/masks";
+import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
+import { UserCirclePlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
+import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
+import { useSaidaDaTela } from "../components/useSaidaDaTela";
 
 const FORM_EMPTY = {
   nome: "", cpf: "", rg: "", nascimento: "", email: "", telefone: "", whatsapp: "",
@@ -42,6 +47,7 @@ const IconMegafone = () => (
 );
 
 export function ClientesPage({ session }) {
+  const navigate = useNavigate();
   const tenantSlug = session?.tenant?.slug;
   const { confirm, modal: confirmModal } = useConfirm();
   const showToast = useOutletContext()?.showToast;
@@ -243,11 +249,33 @@ export function ClientesPage({ session }) {
      o quadragésimo. A busca conta aqui apesar de ser feita no servidor: para
      quem olha a tela, ela filtra igual. */
   const filtrando = Boolean(search) || statusFilter !== "all" || soDivulgacao;
+  /* Vazio de verdade: não há cliente nenhum, e não é filtro escondendo. É ele
+     que troca a tela inteira pelo convite — ver `ConviteDeCriacao`. */
+  const semNenhum = !initialLoading && clientes.length === 0 && !filtrando;
+
+  /* Esc fecha o cadastro e volta à lista — o mesmo que o "Cancelar". Sem isto a
+     tecla não fazia nada aqui: para o atalho global esta tela continua sendo
+     `/clientes`, porque a vista trocou por estado e não por rota. */
+  useSaidaDaTela(() => setView("list"), view === "form");
 
   if (view === "form") {
     return (
       <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
-        <h2 style={{ marginBottom: "24px" }}>{editando ? "Editar Cliente" : "Novo Cliente"}</h2>
+        {/* A trilha no lugar do título: ela diz o mesmo e ainda diz de onde
+            veio — e o primeiro degrau é para onde o Esc leva. */}
+        <div style={{ marginBottom: "24px" }}>
+          <Trilha
+            itens={[
+              ...degrausAte("/clientes", navigate, () => setView("list")),
+              {
+                chave: "form",
+                rotulo: editando ? "Editar Cliente" : "Novo Cliente",
+                Icone: editando ? PencilSimple : PlusCircle,
+                aoIr: () => setView("form"),
+              },
+            ]}
+          />
+        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
 
@@ -341,16 +369,39 @@ export function ClientesPage({ session }) {
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
+      {/* A trilha vale na lista também, e não só nas sub-telas: ela começa no
+          Dashboard, então até a tela de primeiro nível tem de onde ter descido. */}
+      <div style={{ marginBottom: "14px" }}>
+        <Trilha itens={degrausAte("/clientes", navigate)} />
+      </div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <header data-tour="clientes-cabecalho">
           <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Clientes</h1>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>Sua base de clientes e contatos.</p>
         </header>
-        <span data-tour="clientes-novo">
-          <BtnNovo onClick={abrirCriar} label="Novo Cliente" />
-        </span>
+        {/* Com a tela vazia o convite já traz o botão, a tecla e a âncora do
+            tour — dois "Novo Cliente" na mesma tela seria ruído. */}
+        {semNenhum ? null : (
+          <span data-tour="clientes-novo">
+            <BtnNovo onClick={abrirCriar} label="Novo Cliente" />
+          </span>
+        )}
       </div>
 
+      {semNenhum ? (
+        <ConviteDeCriacao
+          plena
+          accent="#06b6d4"
+          icone={<UserCirclePlus size={34} weight="duotone" />}
+          titulo="Pronto para cadastrar seu primeiro cliente?"
+          texto="Aqui ficam as pessoas que procuram imóvel com você — com o que cada uma quer, o histórico de contato e o cruzamento automático com o seu acervo."
+          acaoLabel="Cadastrar cliente"
+          onAcao={abrirCriar}
+          tecla="N"
+          tourId="clientes-novo"
+        />
+      ) : (
+      <>
       {initialLoading ? <SkeletonStats count={4} /> : (
       <StatGrid>
         <StatCard label="Total" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
@@ -387,11 +438,10 @@ export function ClientesPage({ session }) {
       {initialLoading ? (
         <SkeletonListRows count={5} />
       ) : visiveis.length === 0 ? (
-        <EmptyState
-          mensagem={filtrando ? "Nenhum cliente encontrado com estes filtros." : "Nenhum cliente cadastrado."}
-          acaoLabel={filtrando ? undefined : "Cadastrar o primeiro cliente"}
-          onAcao={filtrando ? undefined : abrirCriar}
-        />
+        /* Aqui só resta o filtro que não achou: a coleção vazia já saiu por
+           cima, trocando a tela inteira pelo convite. Ali EXISTE cadastro, e um
+           convite a criar responderia outra pergunta. */
+        <EmptyState mensagem="Nenhum cliente encontrado com estes filtros." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {visiveis.map((c) => {
@@ -459,6 +509,8 @@ export function ClientesPage({ session }) {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   );

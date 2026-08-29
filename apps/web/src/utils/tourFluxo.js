@@ -140,6 +140,12 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
             "Busque por título ou filtre por tipo, cidade, preço e quartos. Com a carteira " +
             "cheia, é daqui que você parte.",
           lado: "bottom",
+          /* Com o acervo vazio a barra de filtros não é desenhada — filtrar
+             nada não é uma pergunta —, e este passo deixa de ter alvo. É o caso
+             COMUM aqui: o tour de primeiro acesso roda justamente numa conta
+             sem imóvel. Sem isto, ele ficaria os 3,5 s da espera padrão parado
+             olhando para o nada antes de seguir. */
+          esperaAlvoMs: 400,
         },
         {
           alvo: '[data-tour="nav-imoveis-novo"]',

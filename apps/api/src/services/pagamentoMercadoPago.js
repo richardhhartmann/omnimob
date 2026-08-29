@@ -541,7 +541,14 @@ export async function aplicarCobrancaAprovada(cobranca) {
     cobreDe: partida,
     cobreAte: vencimento,
     externoId: cobranca.cobrancaId,
-    reciboUrl: cobranca.reciboUrl || null,
+    /* SEM `reciboUrl`, e é deliberado: o Mercado Pago não tem página de
+       comprovante para Pix. O `ticket_url` que ele devolve é a tela do QR, e
+       depois de pago ela diz apenas "Este pagamento já foi realizado" — um
+       link que promete recibo e entrega um aviso. O comprovante desta cobrança
+       é o que a Omnimob emite, a partir desta linha (ver `ReciboDoPagamento`).
+
+       No Stripe é diferente: lá `hosted_invoice_url` é um recibo de verdade, e
+       o webhook continua guardando. Daí o campo existir. */
     pagoEm: cobranca.aprovadoEm || new Date(),
   });
 

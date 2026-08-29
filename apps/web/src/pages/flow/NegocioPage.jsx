@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import {
-  ArrowLeft, SealCheck, XCircle, FileText, Paperclip, Trash, CheckCircle,
-  Clock, Coins, LockKey,
+  SealCheck, XCircle, FileText, Paperclip, Trash, CheckCircle,
+  Clock, Coins, LockKey, Handshake,
 } from "@phosphor-icons/react";
+import { Trilha } from "../../components/Trilha.jsx";
+import { degrausAte } from "../../utils/trilhaDoPainel";
 import { api } from "../../api";
 import { uploadToCloudinary } from "../../utils/uploadToCloudinary";
 import {
@@ -150,9 +152,24 @@ export function NegocioPage({ session }) {
 
   return (
     <div data-tour="flow-negocio">
-      <button type="button" className="flow-voltar" onClick={() => navigate("/flow/funil")}>
-        <ArrowLeft size={14} weight="bold" /> Voltar ao funil
-      </button>
+      {/* A trilha no lugar do "Voltar ao funil". O negócio é alcançável pelo
+          funil E pela lista, então um botão só podia estar certo metade das
+          vezes; a trilha diz onde ele MORA, que é a lista, e o funil continua a
+          um clique na barra. Mesma troca que Configurações e Relatórios já
+          fizeram — ver o cabeçalho de `Trilha.jsx`. */}
+      <div style={{ marginBottom: "14px" }}>
+        <Trilha
+          itens={[
+            ...degrausAte("/flow/negocios", navigate),
+            {
+              chave: "negocio",
+              rotulo: `Negócio #${n.codigo}`,
+              Icone: Handshake,
+              aoIr: () => navigate(`/flow/negocios/${n.id}`),
+            },
+          ]}
+        />
+      </div>
 
       <div className="flow-neg-topo">
         <div>

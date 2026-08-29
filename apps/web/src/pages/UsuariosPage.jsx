@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
@@ -9,6 +9,11 @@ import { CargoEmLinha } from "../components/CargoEmLinha.jsx";
 import { FLOW, modulosDoTenant } from "../utils/modulos";
 import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
+import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
+import { UserPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
+import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
+import { useSaidaDaTela } from "../components/useSaidaDaTela";
 
 const FORM_EMPTY = {
   nome: "", login: "", email: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false,
@@ -102,6 +107,7 @@ function camposDeVitrine(form) {
 }
 
 export function UsuariosPage({ session }) {
+  const navigate = useNavigate();
   const tenantSlug = session?.tenant?.slug;
   /* Ninguém se desativa. Seria o único caminho para um tenant ficar sem
      administrador nenhum — o próprio se derruba, perde o acesso e não sobra
@@ -175,6 +181,9 @@ export function UsuariosPage({ session }) {
   // Lista vazia por FALTA DE CADASTRO ou por filtro? A resposta muda o texto e
   // decide se convidar a cadastrar faz sentido.
   const filtrando = Boolean(search) || statusFilter !== "all";
+  /* Vazio de verdade: nenhum usuário, e não é filtro escondendo. Troca a tela
+     inteira pelo convite — ver `ConviteDeCriacao`. */
+  const semNenhum = !initialLoading && usuarios.length === 0 && !filtrando;
 
   function abrirCriar() {
     setEditando(null);
@@ -302,10 +311,27 @@ export function UsuariosPage({ session }) {
     }
   }
 
+  /* Esc fecha o cadastro e volta à lista — o mesmo que o "Cancelar". A vista
+     trocou por estado e não por rota, então o atalho global não tinha o que
+     fazer aqui. */
+  useSaidaDaTela(() => setView("list"), view === "form");
+
   if (view === "form") {
     return (
       <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
-        <h2 style={{ marginBottom: "24px" }}>{editando ? "Editar Usuário" : "Novo Usuário"}</h2>
+        <div style={{ marginBottom: "24px" }}>
+          <Trilha
+            itens={[
+              ...degrausAte("/usuarios", navigate, () => setView("list")),
+              {
+                chave: "form",
+                rotulo: editando ? "Editar Usuário" : "Novo Usuário",
+                Icone: editando ? PencilSimple : PlusCircle,
+                aoIr: () => setView("form"),
+              },
+            ]}
+          />
+        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
           <input
@@ -535,16 +561,38 @@ export function UsuariosPage({ session }) {
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
+      {/* A trilha vale na lista também, e não só nas sub-telas: ela começa no
+          Dashboard, então até a tela de primeiro nível tem de onde ter descido. */}
+      <div style={{ marginBottom: "14px" }}>
+        <Trilha itens={degrausAte("/usuarios", navigate)} />
+      </div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <header data-tour="usuarios-cabecalho">
           <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Usuários</h1>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>Quem tem acesso ao painel e com qual cargo.</p>
         </header>
-        <span data-tour="usuarios-novo">
-          <BtnNovo onClick={abrirCriar} label="Novo Usuário" />
-        </span>
+        {/* Vazio: o convite já traz o botão, a tecla e a âncora do tour. */}
+        {semNenhum ? null : (
+          <span data-tour="usuarios-novo">
+            <BtnNovo onClick={abrirCriar} label="Novo Usuário" />
+          </span>
+        )}
       </div>
 
+      {semNenhum ? (
+        <ConviteDeCriacao
+          plena
+          accent="#f59e0b"
+          icone={<UserPlus size={34} weight="duotone" />}
+          titulo="Pronto para cadastrar seu primeiro usuário?"
+          texto="Cada pessoa da equipe entra com o próprio acesso, e o cargo dela decide o que alcança no painel."
+          acaoLabel="Cadastrar usuário"
+          onAcao={abrirCriar}
+          tecla="N"
+          tourId="usuarios-novo"
+        />
+      ) : (
+      <>
       {initialLoading ? <SkeletonStats count={4} /> : (
       <StatGrid>
         <StatCard label="Total" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>} />
@@ -566,11 +614,8 @@ export function UsuariosPage({ session }) {
       {initialLoading ? (
         <SkeletonListRows count={5} />
       ) : visiveis.length === 0 ? (
-        <EmptyState
-          mensagem={filtrando ? "Nenhum usuário encontrado com estes filtros." : "Nenhum usuário cadastrado."}
-          acaoLabel={filtrando ? undefined : "Cadastrar o primeiro usuário"}
-          onAcao={filtrando ? undefined : abrirCriar}
-        />
+        /* Só o filtro que não achou: a coleção vazia já saiu por cima. */
+        <EmptyState mensagem="Nenhum usuário encontrado com estes filtros." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {visiveis.map((u) => (
@@ -617,6 +662,8 @@ export function UsuariosPage({ session }) {
             </div>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );

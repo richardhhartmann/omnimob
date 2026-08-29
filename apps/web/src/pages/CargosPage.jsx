@@ -1,4 +1,4 @@
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
@@ -11,6 +11,11 @@ import {
 } from "../utils/permissoesCargo.jsx";
 import { GradeDePermissoes } from "../components/GradeDePermissoes.jsx";
 import { FLOW, modulosDoTenant } from "../utils/modulos";
+import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
+import { ShieldPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
+import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
+import { useSaidaDaTela } from "../components/useSaidaDaTela";
 
 /* Cada permissão carrega o ÍCONE do lugar que ela abre — o mesmo da barra
    lateral e do painel inicial. Marcar "Ver Relatórios" e reconhecer ali o
@@ -35,6 +40,7 @@ const LOCKED_NO_PROPRIO_CARGO = ["gerenciarCargos"];
 
 
 export function CargosPage({ session, onSessionUpdate }) {
+  const navigate = useNavigate();
   /* Aviso de sucesso no mesmo canal do resto do painel (o toast do
      AdminLayout, via contexto do Outlet). Antes esta tela só falava quando dava
      ERRADO — e um `alert()` do navegador no caso de exclusão. Salvar em
@@ -70,7 +76,10 @@ export function CargosPage({ session, onSessionUpdate }) {
   const [form, setForm] = useState(cargoVazio());
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  /* O form como estava ao abrir. É contra ele que se sabe se há algo a perder
+     — comparar com o cargo da lista não serviria, porque a lista guarda campos
+     que o form não tem. */
+  const [formOriginal, setFormOriginal] = useState(cargoVazio());
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   /* Concessão de `gerenciarCargos` esperando a ciência do administrador.
@@ -106,9 +115,15 @@ export function CargosPage({ session, onSessionUpdate }) {
     return cargos.filter((c) => c.descricao?.toLowerCase().includes(q));
   }, [cargos, search]);
 
+  /* Vazio de verdade: nenhum cargo, e não é a busca escondendo. Troca a tela
+     inteira pelo convite — ver `ConviteDeCriacao`. */
+  const semNenhum = !initialLoading && cargos.length === 0 && !search.trim();
+
   function abrirCriar() {
     setEditando(null);
-    setForm(cargoVazio());
+    const f = cargoVazio();
+    setForm(f);
+    setFormOriginal(f);
     setError("");
     setView("form");
   }
@@ -120,21 +135,40 @@ export function CargosPage({ session, onSessionUpdate }) {
 
        Duas razões, e as duas já produziram estrago:
 
-       1. Não `permissoesVisiveis`: o auto-save manda o form INTEIRO a cada
-          clique. Carregando só o que está à vista, uma permissão escondida pelo
-          plano viria ausente do form e o servidor a gravaria como false —
-          apagando, ao mexer em qualquer outra caixa, algo que a pessoa nem
-          sabia que estava lá.
+       1. Não `permissoesVisiveis`: o salvamento manda o form INTEIRO.
+          Carregando só o que está à vista, uma permissão escondida pelo plano
+          viria ausente do form e o servidor a gravaria como false — apagando,
+          ao salvar qualquer outra coisa, algo que a pessoa nem sabia que
+          estava lá.
 
        2. Não `PERMISSOES`: essa é a lista do HUB. As sete do Flow moram em
           `PERMISSOES_FLOW`, e ficavam de fora daqui — reabrir um cargo mostrava
           todas as caixas do Flow desmarcadas, mesmo com elas gravadas no banco.
-          E como o auto-save manda o form inteiro, o próximo clique em qualquer
-          caixa APAGAVA de verdade o que a tela tinha mentido não existir. */
+          E como o form inteiro é o que vai ao servidor, salvar APAGAVA de
+          verdade o que a tela tinha mentido não existir. */
     for (const p of TODAS_AS_PERMISSOES) f[p.key] = Boolean(c[p.key]);
     setForm(f);
+    setFormOriginal(f);
     setError("");
     setView("form");
+  }
+
+  /* Comparação por conteúdo: as chaves saem sempre da mesma lista, na mesma
+     ordem, então o JSON basta e não precisa de um laço à mão. */
+  const sujo = useMemo(
+    () => JSON.stringify(form) !== JSON.stringify(formOriginal),
+    [form, formOriginal],
+  );
+
+  /* Sair sem gravar. Antes não havia o que perder — tudo já estava no banco —,
+     então o "Cancelar" podia voltar direto. Agora ele é a única forma de
+     descartar, e descartar por engano é o estrago que o novo arranjo cria. */
+  async function sair() {
+    if (sujo && !await confirm(
+      "Você mexeu nas permissões e ainda não salvou. Deseja sair mesmo assim?",
+      "Sair sem salvar",
+    )) return;
+    setView("list");
   }
 
   function atualizarSessaoSeProprioCargoFoi(updatedCargo) {
@@ -146,68 +180,57 @@ export function CargosPage({ session, onSessionUpdate }) {
     }
   }
 
-  // Grava a permissão de fato. Separado do handler porque o modal de ciência
-  // precisa chamar exatamente isto depois do "estou ciente".
-  async function aplicarPermissao(key, value) {
-    const newForm = { ...form, [key]: value };
-    setForm(newForm);
-    setSaving(true);
-    try {
-      const updated = await api.updateCargo(tenantSlug, editando.id, newForm);
-      setCargos((prev) => prev.map((c) => c.id === updated.id ? updated : c));
-      atualizarSessaoSeProprioCargoFoi(updated);
-    } catch (err) {
-      setForm(form); // reverte
-      /* Era `alert()`. Aqui o toast importa mais que nos outros: a caixa de
-         seleção VOLTA sozinha ao estado anterior, e sem aviso a pessoa vê o
-         próprio clique se desfazer sem explicação. */
-      showToast?.(err.message, "error");
-    } finally {
-      setSaving(false);
-    }
-  }
+  /* ── A CAIXA MARCADA NÃO É UMA GRAVAÇÃO ──────────────────────────────────
 
-  // Auto-save ao tickar um checkbox (só quando editando)
-  async function handlePermissaoChange(key, value) {
+     Esta tela gravava a cada clique — o cargo saía do banco alterado antes de a
+     pessoa dizer "pronto". Três coisas vinham junto:
+
+     · não havia como desistir. "Cancelar" voltava para a lista com tudo já
+       gravado, e o botão só prometia salvar o NOME;
+     · quem abria um cargo para CONFERIR as permissões e esbarrava numa caixa
+       mudava o cargo sem querer, sem nada para desfazer;
+     · e cada clique mandava o form inteiro, então uma resposta perdida no meio
+       do caminho gravava um estado que ninguém tinha pedido.
+
+     Agora a marcação só mexe no `form`. Quem grava é o "Salvar Alterações",
+     uma vez, com tudo — igual a Clientes, Usuários e Tipos de Imóvel. */
+  function alternarPermissao(key, value) {
     const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
     if (LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario) return; // bloqueado
 
-    /* Conceder "Gerenciar Cargos" a OUTRO cargo para no modal de ciência.
-       Tirar não para: desfazer uma concessão de risco tem de ser tão fácil
-       quanto possível. E o próprio cargo também não — quem está editando já
-       tem a permissão, então não há nada sendo concedido ali. */
+    /* Conceder "Gerenciar Cargos" para no modal de ciência. Tirar não para:
+       desfazer uma concessão de risco tem de ser tão fácil quanto possível. E o
+       próprio cargo também não — quem está editando já tem a permissão, então
+       não há nada sendo concedido ali. */
     if (PERMISSOES_DE_RISCO[key] && value === true && !ehProprioCargoDoUsuario) {
-      setConcessaoPendente({ key, value, modo: "salvar" });
+      setConcessaoPendente({ key, value });
       return;
     }
-    await aplicarPermissao(key, value);
+    setForm((p) => ({ ...p, [key]: value }));
   }
 
-  /* Confirmação do modal. Os dois modos existem porque a tela grava de duas
-     formas: editando um cargo é auto-save a cada clique; criando, o valor só
-     entra no form e vai junto no "Criar Cargo". */
-  async function confirmarConcessao() {
+  /* O "estou ciente" do modal. Um caminho só desde que a tela parou de gravar
+     na hora: criando ou editando, o que a confirmação faz é marcar a caixa. */
+  function confirmarConcessao() {
     const pendente = concessaoPendente;
     setConcessaoPendente(null);
     if (!pendente) return;
-    if (pendente.modo === "form") {
-      setForm((p) => ({ ...p, [pendente.key]: true }));
-      return;
-    }
-    await aplicarPermissao(pendente.key, pendente.value);
+    setForm((p) => ({ ...p, [pendente.key]: true }));
   }
 
-  // Salva somente a descrição (ou cria novo cargo com tudo)
+  /* Uma gravação, com o cargo inteiro — nome e permissões. Editar mandava só a
+     descrição porque as permissões já tinham ido, uma a uma, no clique. */
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
       if (editando) {
-        const updated = await api.updateCargo(tenantSlug, editando.id, { descricao: form.descricao });
-        setCargos((prev) => prev.map((c) => c.id === updated.id ? { ...c, descricao: updated.descricao } : c));
-        atualizarSessaoSeProprioCargoFoi({ ...session?.usuario?.cargo, descricao: updated.descricao });
+        const updated = await api.updateCargo(tenantSlug, editando.id, form);
+        setCargos((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+        atualizarSessaoSeProprioCargoFoi(updated);
         showToast?.(`Cargo "${updated.descricao}" atualizado.`);
+        setFormOriginal(form);
         setView("list");
       } else {
         const created = await api.createCargo(tenantSlug, form);
@@ -235,6 +258,10 @@ export function CargosPage({ session, onSessionUpdate }) {
     }
   }
 
+  /* Esc pede a saída, e quem decide é o `sair`: com permissão mexida e não
+     salva, ele pergunta antes de descartar. */
+  useSaidaDaTela(() => sair(), view === "form");
+
   if (view === "form") {
     const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
     /* O nome do cargo, para o aviso falar dele e não de "este cargo". Sai do
@@ -248,6 +275,10 @@ export function CargosPage({ session, onSessionUpdate }) {
 
     return (
       <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+        {/* Aqui também, e não só na lista: é o "Cancelar" com alterações
+            pendentes que pergunta, e o modal precisa estar montado nesta tela
+            para a pergunta aparecer. */}
+        {confirmModal}
         <ModalCiencia
           aberto={Boolean(risco)}
           titulo={risco?.titulo}
@@ -258,7 +289,21 @@ export function CargosPage({ session, onSessionUpdate }) {
           aoConfirmar={confirmarConcessao}
           aoCancelar={() => setConcessaoPendente(null)}
         />
-        <h2 style={{ marginBottom: "24px" }}>{editando ? "Editar Cargo" : "Novo Cargo"}</h2>
+        <div style={{ marginBottom: "24px" }}>
+          <Trilha
+            itens={[
+              /* O primeiro degrau é o mesmo destino do "Cancelar" — e passa
+                 pela mesma pergunta quando há alteração pendente. */
+              ...degrausAte("/cargos", navigate, sair),
+              {
+                chave: "form",
+                rotulo: editando ? "Editar Cargo" : "Novo Cargo",
+                Icone: editando ? PencilSimple : PlusCircle,
+                aoIr: () => setView("form"),
+              },
+            ]}
+          />
+        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -271,9 +316,9 @@ export function CargosPage({ session, onSessionUpdate }) {
               style={{ flex: 1 }}
             />
             <button type="submit" data-tour="cargo-salvar" disabled={loading} style={{ width: "auto", padding: "10px 20px", flexShrink: 0 }}>
-              {editando ? "Salvar nome" : "Criar Cargo"}
+              {loading ? "Salvando…" : editando ? "Salvar Alterações" : "Criar Cargo"}
             </button>
-            <button type="button" className="button-secondary" onClick={() => setView("list")} disabled={loading} style={{ width: "auto", padding: "10px 16px", flexShrink: 0 }}>
+            <button type="button" className="button-secondary" onClick={sair} disabled={loading} style={{ width: "auto", padding: "10px 16px", flexShrink: 0 }}>
               Cancelar
             </button>
           </div>
@@ -281,9 +326,12 @@ export function CargosPage({ session, onSessionUpdate }) {
           <div style={{ marginTop: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
               <span style={{ fontSize: "14px", fontWeight: "600" }}>Permissões</span>
-              {editando && (
-                <span style={{ fontSize: "12px", opacity: 0.45 }}>
-                  {saving ? "Salvando…" : "Salvo automaticamente"}
+              {/* Era "Salvo automaticamente", e agora nada é. O aviso só aparece
+                  quando há o que perder — um rótulo permanente vira paisagem e
+                  ninguém o lê no momento em que importa. */}
+              {sujo && (
+                <span style={{ fontSize: "12px", color: "#fbbf24" }}>
+                  Alterações não salvas
                 </span>
               )}
             </div>
@@ -298,21 +346,14 @@ export function CargosPage({ session, onSessionUpdate }) {
                  funciona". Ver `gruposDePermissao`. */
               temFlow={temFlow}
               valores={form}
-              desabilitado={loading || saving}
+              desabilitado={loading}
               travadas={ehProprioCargoDoUsuario ? LOCKED_NO_PROPRIO_CARGO : []}
               motivoTravada="Você não pode remover esta permissão do seu próprio cargo"
               dataTour="cargo-permissoes"
-              aoAlternar={(key, marcado) => {
-                // Editando, cada clique já grava. Criando, só junta no form.
-                if (editando !== null) return handlePermissaoChange(key, marcado);
-                /* Criando um cargo, conceder a permissão de risco também passa
-                   pelo modal — senão bastava criar já com ela marcada para
-                   contornar o aviso inteiro. */
-                if (PERMISSOES_DE_RISCO[key] && marcado) {
-                  return setConcessaoPendente({ key, value: true, modo: "form" });
-                }
-                return setForm((p) => ({ ...p, [key]: marcado }));
-              }}
+              /* Criando ou editando, o caminho é o mesmo: junta no form. A
+                 permissão de risco passa pelo modal nos dois — senão bastava
+                 criar o cargo já com ela marcada para contornar o aviso. */
+              aoAlternar={alternarPermissao}
             />
           </div>
         </form>
@@ -323,16 +364,38 @@ export function CargosPage({ session, onSessionUpdate }) {
   return (
     <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
+      {/* A trilha vale na lista também, e não só nas sub-telas: ela começa no
+          Dashboard, então até a tela de primeiro nível tem de onde ter descido. */}
+      <div style={{ marginBottom: "14px" }}>
+        <Trilha itens={degrausAte("/cargos", navigate)} />
+      </div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <header data-tour="cargos-cabecalho">
           <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Cargos e Permissões</h1>
           <p style={{ color: "var(--text-muted)", margin: 0 }}>Defina o que cada cargo pode fazer no painel.</p>
         </header>
-        <span data-tour="cargos-novo">
-          <BtnNovo onClick={abrirCriar} label="Novo Cargo" />
-        </span>
+        {/* Vazio: o convite já traz o botão, a tecla e a âncora do tour. */}
+        {semNenhum ? null : (
+          <span data-tour="cargos-novo">
+            <BtnNovo onClick={abrirCriar} label="Novo Cargo" />
+          </span>
+        )}
       </div>
 
+      {semNenhum ? (
+        <ConviteDeCriacao
+          plena
+          accent="#e04212"
+          icone={<ShieldPlus size={34} weight="duotone" />}
+          titulo="Pronto para criar seu primeiro cargo?"
+          texto="O cargo é o que decide o que cada pessoa alcança: quem edita a vitrine, quem vê relatórios, quem mexe na cobrança."
+          acaoLabel="Cadastrar cargo"
+          onAcao={abrirCriar}
+          tecla="N"
+          tourId="cargos-novo"
+        />
+      ) : (
+      <>
       {initialLoading ? <SkeletonStats count={3} /> : (
       <StatGrid>
         <StatCard label="Cargos" value={stats.total} accent="#6366f1" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>} />
@@ -348,11 +411,8 @@ export function CargosPage({ session, onSessionUpdate }) {
       {initialLoading ? (
         <SkeletonListRows count={4} />
       ) : visiveis.length === 0 ? (
-        <EmptyState
-          mensagem={search ? "Nenhum cargo encontrado." : "Nenhum cargo cadastrado."}
-          acaoLabel={search ? undefined : "Cadastrar o primeiro cargo"}
-          onAcao={search ? undefined : abrirCriar}
-        />
+        /* Só a busca que não achou: a coleção vazia já saiu por cima. */
+        <EmptyState mensagem="Nenhum cargo encontrado." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {visiveis.map((c) => (
@@ -390,6 +450,8 @@ export function CargosPage({ session, onSessionUpdate }) {
             </div>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );

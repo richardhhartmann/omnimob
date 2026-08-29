@@ -952,7 +952,9 @@ export function SuperAdminPage({ session, onLogout }) {
 /* Só o que é DESTA aba. A moldura — fundo, topbar, sidebar — mora no
    `AdminShell`, junto do JSX que a usa. */
 const CSS = `
-/* ── O add-on do Flow, no formulario de tenant ──────────────────────────────
+/* ── O add-on do Flow, no formulario de tenant ──
+   No ROSA do modulo (#ec0b5b), e nao no jade que estava aqui: o Flow tem uma
+   cor so, e ela e a da palavra "flow" na arte.────────────────────────────
    Fora da grade de campos de proposito: e a unica escolha deste formulario que
    muda o PRODUTO, e nao um dado cadastral. Numa celula ao lado de "Valor
    mensal" ela leria como mais um campo de preenchimento.
@@ -960,7 +962,7 @@ const CSS = `
 .sa-addon {
   display: flex; align-items: flex-start; gap: 12px;
   margin-top: 18px; padding: 14px 16px; border-radius: 12px; cursor: pointer;
-  background: rgba(20,184,166,0.06); border: 1px solid rgba(20,184,166,0.22);
+  background: rgba(236,11,91,0.06); border: 1px solid rgba(236,11,91,0.24);
 }
 .sa-addon > span { display: flex; flex-direction: column; gap: 3px; }
 .sa-addon strong { font-size: 13.5px; }

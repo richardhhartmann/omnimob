@@ -305,6 +305,10 @@ export default function App() {
     return () => window.removeEventListener("focus", refreshPermissoes);
   }, []); // roda uma vez — usa ref para acessar sessão atual
 
+  /* A landing é o que aparece na raiz para quem não tem sessão — ver a rota de
+     fallback lá embaixo. Não é "a rota /": logado, a raiz é o Dashboard. */
+  const naLanding = !session && location.pathname === "/";
+
   function handleLogin(nextSession) {
     saveSession(nextSession);
     setSession(nextSession);
@@ -446,8 +450,14 @@ export default function App() {
     <>
     {/* Irmã do Suspense, nunca filha: dentro dele a barra seria desmontada
         junto com o fallback no instante em que a tela nova aparece, e o fecho
-        — o traço chegando a 100% — nunca chegaria a ser desenhado. */}
-    <BarraDeProgresso />
+        — o traço chegando a 100% — nunca chegaria a ser desenhado.
+
+        NÃO aparece na landing. Ali ela não informa nada: quem chega pela
+        primeira vez não está navegando entre telas, está abrindo um site — e um
+        traço correndo no topo de uma página de vendas lê como problema, não
+        como progresso. O painel, onde a pessoa clica de tela em tela, continua
+        com ela. */}
+    {naLanding ? null : <BarraDeProgresso />}
     <LimiteDeErro>
     <Suspense fallback={<Carregando />}>
     <Routes location={location}>

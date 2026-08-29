@@ -54,7 +54,7 @@ const semMovimento = () =>
 
 /**
  * @param {object} p
- * @param {Array<{chave, texto, imagem, acento, acentoSuave, atual, tagline}>} p.itens
+ * @param {Array<{chave, texto, imagem, acento, acentoSuave, tinta, atual, tagline}>} p.itens
  * @param {(chave: string) => void} p.aoEscolher
  * @param {number} p.segundos  duração de uma volta da faixa
  */
@@ -147,7 +147,7 @@ function ItemFluido({ item, aoEscolher, segundos }) {
       aria-selected={item.atual}
       ref={itemRef}
       className={`mf-item${item.atual ? " is-atual" : ""}`}
-      style={{ "--acento": item.acento, "--acento-suave": item.acentoSuave }}
+      style={{ "--acento": item.acento, "--acento-suave": item.acentoSuave, "--acento-tinta": item.tinta }}
       onMouseEnter={(e) => mover(e, true)}
       onMouseLeave={(e) => mover(e, false)}
       onClick={() => { if (!item.atual) aoEscolher?.(item.chave); }}

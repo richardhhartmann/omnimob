@@ -404,7 +404,7 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
           disabled={ocupado || faltando.size > 0}
           title={faltando.size ? `Falta preencher: ${rotuloDoQueFalta.join(", ")}` : undefined}
         >
-          {salvando ? "Salvando…" : "Salvar e começar"}
+          {salvando ? "Salvando…" : "Salvar e continuar"}
         </button>
       </div>
     </div>

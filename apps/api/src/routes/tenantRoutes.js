@@ -5,6 +5,7 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant, requireTenantMesmoSuspenso } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
 import { historicoDoTenant, ultimoPagamento, renovaSozinho } from "../services/pagamentos.js";
+import { catalogosPadraoDoTenant } from "../services/cargosPadrao.js";
 import {
   criarCobrancaPix,
   consultarCobranca,
@@ -253,6 +254,40 @@ tenantRouter.put("/me/configuracao", requireAuth, requireTenant, requirePermissa
     return res.status(500).json({ error: "Erro ao salvar configurações." });
   }
 });
+
+/* ── OS CATÁLOGOS DE PARTIDA, A PEDIDO ───────────────────────────────────────
+
+   Sete cargos e dezenove tipos de imóvel nasciam com toda conta. Serviam para
+   muita imobiliária — e para a que já tem o próprio arranjo, a primeira tarefa
+   no sistema era APAGAR o que veio, um por um, o que dá mais trabalho do que
+   criar. Agora quem decide é ela, no mesmo passo em que preenche a ficha.
+
+   Só o cargo Administrador continua nascendo no provisionamento: ele não é
+   catálogo, é a PORTA — sem um cargo, o usuário inicial não entra.
+
+   Permissão: as mesmas duas de `PUT /me/configuracao`, porque é o mesmo passo do
+   assistente e quem chega ali já as tem. Só ACRESCENTA — chamar duas vezes não
+   duplica, e quem já criou "Corretor" à mão não ganha um segundo.
+   ────────────────────────────────────────────────────────────────────────── */
+tenantRouter.post(
+  "/me/catalogos-padrao",
+  requireAuth,
+  requireTenant,
+  requirePermissao("editarPagina", "gerenciarUsuarios"),
+  async (req, res) => {
+    try {
+      const criados = await catalogosPadraoDoTenant(prisma, req.tenant.id, {
+        cargos: req.body?.cargos === true,
+        tipos: req.body?.tipos === true,
+        temFlow: (req.tenant.modulos || []).includes("FLOW"),
+      });
+      return res.json(criados);
+    } catch (err) {
+      console.error("[POST /tenants/me/catalogos-padrao]", err);
+      return res.status(500).json({ error: "Não foi possível criar os catálogos agora." });
+    }
+  },
+);
 
 tenantRouter.put("/me", requireAuth, requireTenant, requirePermissao("editarPagina"), async (req, res) => {
   try {
@@ -727,6 +762,11 @@ tenantRouter.get("/me/trial", requireAuthOuReativacao, requireTenantMesmoSuspens
       /* Quem paga já se cadastrou. Pedir de novo endereço e documento na hora
          de fechar o plano é a forma mais fácil de perder alguém no último
          passo — e a informação está a uma coluna de distância. */
+      /* Renova sozinho? A MESMA regra da seção de cobrança e do e-mail de
+         vencimento (`renovaSozinho`, em `pagamentos.js`). Vai daqui porque três
+         telas perguntam, e três respostas diferentes seriam o painel
+         contradizendo o e-mail. */
+      renovaSozinho: renovaSozinho(tenant),
       email: tenant.email || null,
       documento: tenant.cnpj || null,
       endereco: {
@@ -1122,10 +1162,24 @@ tenantRouter.post(
       return res.status(400).json({ error: "Plano inválido." });
     }
 
+    /* ── O PACOTE veio junto? ────────────────────────────────────────────────
+       A tela de planos passou a ter o interruptor do Flow dentro de cada
+       cartão, então "quero o Profissional COM Flow" é uma decisão só — e
+       precisa chegar aqui como uma chamada só.
+
+       Sem o campo, nada muda: o pacote continua sendo o que a conta já tem, e
+       toda chamada antiga (e o próprio `/me/modulos`, que segue existindo para
+       quem só quer ligar ou desligar o módulo) funciona igual.
+
+       Uma requisição e não duas porque cada uma mexe na assinatura do provedor:
+       trocar de plano e depois trocar o pacote produziria DOIS proporcionais na
+       mesma fatura, e o cliente somaria dois ajustes para uma decisão só. */
+    const pacotePedido = "pacote" in (req.body || {}) ? normalizarPacote(req.body.pacote) : null;
+
     try {
       const tenant = await prisma.tenant.findUnique({
         where: { id: req.tenant.id },
-        select: { id: true, plano: true, statusPagamento: true },
+        select: { id: true, plano: true, statusPagamento: true, modulos: true },
       });
       if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
 
@@ -1137,7 +1191,13 @@ tenantRouter.post(
           code: "EM_TRIAL",
         });
       }
-      if ((tenant.plano || "BASICO") === plano) {
+      /* Nada a fazer só quando plano E pacote são os que já valem. Com o
+         interruptor dentro do cartão, "mesmo plano, com o Flow" é uma mudança
+         legítima — e recusá-la como "este já é o seu plano" seria recusar
+         justamente a contratação do módulo. */
+      const pacoteAtual = modulosDoTenant(tenant).includes("FLOW") ? "HUB_FLOW" : "HUB";
+      const pacoteAlvo = pacotePedido || pacoteAtual;
+      if ((tenant.plano || "BASICO") === plano && pacoteAlvo === pacoteAtual) {
         return res.status(400).json({ error: "Este já é o seu plano atual." });
       }
 
@@ -1172,7 +1232,14 @@ tenantRouter.post(
 
       const atualizado = await prisma.tenant.update({
         where: { id: tenant.id },
-        data: { plano },
+        data: {
+          plano,
+          /* Os módulos só são reescritos quando o pacote veio na chamada.
+             Ausente significa "esta chamada não é sobre módulos" — a mesma
+             regra de `fidelizarTrial`, e o que impede uma troca de plano de
+             tirar o Flow de quem já pagava por ele. */
+          ...(pacotePedido ? { modulos: modulosDoPacote(pacoteAlvo) } : {}),
+        },
         select: { id: true, plano: true, statusPagamento: true, valorMensal: true, proximoVencimento: true, modulos: true, assinaturaId: true },
       });
 
@@ -1183,11 +1250,14 @@ tenantRouter.post(
          O pacote é o que a conta JÁ TEM — trocar de plano não mexe nos módulos,
          então quem tinha o Flow continua com ele e o preço-alvo é o do pacote
          completo no plano novo. */
-      const temFlow = modulosDoTenant(atualizado).includes("FLOW");
       const ajuste = await ajustarAssinatura({
         tenant: { id: tenant.id, assinaturaId: atualizado.assinaturaId },
         plano,
-        pacote: temFlow ? "HUB_FLOW" : "HUB",
+        /* O pacote JÁ GRAVADO, e não o pedido: se a escrita acima mexeu nos
+           módulos, é ela que manda; se não mexeu, é o que a conta tinha. Ler do
+           registro atualizado é o que garante que a fatura e o acesso contem a
+           mesma história. */
+        pacote: modulosDoTenant(atualizado).includes("FLOW") ? "HUB_FLOW" : "HUB",
       });
 
       const remendo = {};
@@ -1300,6 +1370,8 @@ tenantRouter.get(
       const tenant = await prisma.tenant.findUnique({
         where: { id: req.tenant.id },
         select: {
+          name: true,
+          cnpj: true,
           plano: true,
           modulos: true,
           statusPagamento: true,
@@ -1338,6 +1410,11 @@ tenantRouter.get(
 
       return res.json({
         situacao: {
+          /* Quem pagou, para o comprovante. Vai na mesma resposta porque o
+             recibo é montado no navegador a partir da linha do pagamento — sem
+             isto ele teria de buscar o cadastro numa segunda chamada, e o botão
+             "Recibo" abriria uma janela vazia enquanto ela não voltasse. */
+          imobiliaria: { nome: tenant.name, documento: tenant.cnpj || null },
           plano: tenant.plano,
           modulos: tenant.modulos,
           statusPagamento: tenant.statusPagamento,

@@ -144,6 +144,15 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  /* Os cargos e tipos de imóvel de partida, quando a pessoa os aceita no
+     assistente. Antes vinham de fábrica com toda conta. */
+  criarCatalogosPadrao: (tenantSlug, payload) =>
+    request("/api/tenants/me/catalogos-padrao", {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
   getTiposImovel: (tenantSlug) =>
     request("/api/properties/tipos", {
       headers: { "x-tenant-slug": tenantSlug },
@@ -1037,11 +1046,19 @@ export const api = {
 
   // Upgrade/downgrade de quem já é cliente. Muda o que o tenant USA; o valor da
   // próxima fatura ainda é acertado pelo time (ver a rota /me/plano).
-  trocarPlano: (tenantSlug, plano) =>
+  /* `pacote` é opcional: sem ele a rota mantém os módulos que a conta já tem,
+     e toda chamada antiga segue significando o que significava. Com ele, plano
+     e Flow mudam numa requisição só — duas produziriam dois proporcionais na
+     mesma fatura para uma decisão só. */
+  /* `confirmar` é a SEGUNDA chamada de uma descida de plano que desliga
+     recursos em uso: a primeira volta 409 com a lista do que se perde, e só
+     esta aplica. Mesmo desenho do ensaio da faxina — operação que tira o site
+     do ar não acontece num clique só. */
+  trocarPlano: (tenantSlug, plano, pacote, confirmar = false) =>
     request("/api/tenants/me/plano", {
       method: "POST",
       headers: { "x-tenant-slug": tenantSlug },
-      body: JSON.stringify({ plano }),
+      body: JSON.stringify({ plano, ...(pacote ? { pacote } : {}), ...(confirmar ? { confirmar: true } : {}) }),
     }),
 
   /* Cancela a assinatura no fim do período já pago.

@@ -2,7 +2,6 @@ import bcrypt from "bcryptjs";
 import { getGlobalPrisma } from "./tenantRegistry.js";
 import { garantirSubdominioDaCasa } from "./dominioService.js";
 import { criarCargosPadrao, CARGO_ADMIN } from "./cargosPadrao.js";
-import { criarTiposPadrao } from "./tiposPadrao.js";
 
 /**
  * ─── Provisioning Service ────────────────────────────────────────────────────
@@ -118,42 +117,23 @@ export async function provisionTenant(input = {}) {
      dali em diante as duas dividiam as mesmas permissões: mexer numa mexia na
      outra. Também dependia de o seed ter rodado, o que fazia a criação de
      tenant falhar em banco limpo. */
-  /* ── Cargos e tipos SÃO INDEPENDENTES, então vão juntos ────────────────────
-     Os dois só precisam do `tenant.id`, e nenhum lê o resultado do outro.
-     Em série, a imobiliária esperava a soma dos dois; juntos, espera o maior.
-
-     `allSettled` e não `all`: uma falha no catálogo de tipos não pode impedir a
-     criação dos cargos, que é o que decide se o administrador consegue entrar.
-     Cada um trata a própria falha abaixo. */
   let cargo = null;
-  const [resCargos, resTipos] = await Promise.allSettled([
-    /* O catálogo respeita o que a conta contratou: sem Flow, os três cargos
-       que só existem por causa dele ficam de fora. Ver `cargosDoCatalogo` —
-       "Corretor Flow" numa conta sem o módulo é um cargo que promete um
-       produto inexistente, e Jurídico/Financeiro seriam cargos que não
-       alcançam tela nenhuma. */
-    criarCargosPadrao(prisma, tenant.id, {
-      temFlow: (tenant.modulos || []).includes("FLOW"),
-    }),
-    criarTiposPadrao(prisma, tenant.id),
-  ]);
+  /* ── O QUE NASCE COM A CONTA, E O QUE É ESCOLHA ──────────────────────────
+     Só o cargo Administrador. Ele não é catálogo, é a PORTA: o usuário inicial
+     precisa de um cargo, e sem ele ninguém entra na conta recém-criada.
 
-  if (resCargos.status === "fulfilled") {
-    cargo = resCargos.value;
-  } else {
-    warning = `Tenant criado, mas falha ao criar os cargos: ${resCargos.reason?.message}`;
-  }
+     Os outros seis cargos e os dezenove tipos de imóvel viraram uma escolha do
+     assistente de primeiro acesso (`POST /me/catalogos-padrao`). Vinham de
+     fábrica, decididos por nós — e para a imobiliária que já tem o próprio
+     arranjo a primeira tarefa no sistema era APAGAR o que veio, que dá mais
+     trabalho do que criar.
 
-  /* Catálogo de tipos de imóvel da casa.
-
-     Enquanto `TipoImovel` era global, o cliente novo enxergava o catálogo dos
-     outros e ninguém percebia que o provisionamento não criava nenhum. Agora o
-     tipo tem dono: sem este passo, o primeiro cadastro de imóvel abriria com a
-     lista de tipos vazia. Falha não derruba o tenant — dá para recriar depois,
-     e é melhor um catálogo faltando que um cadastro perdido. */
-  if (resTipos.status === "rejected") {
-    console.warn(`[provisionamento] falha ao criar tipos de imóvel de ${slug}: ${resTipos.reason?.message}`);
-    warning = warning || `Tenant criado, mas falha ao criar os tipos de imóvel: ${resTipos.reason?.message}`;
+     Efeito colateral bem-vindo: o provisionamento ficou mais curto. Os
+     dezenove tipos eram o grosso da espera do botão "Salvando…". */
+  try {
+    cargo = await criarCargosPadrao(prisma, tenant.id, { apenasAdministrador: true });
+  } catch (err) {
+    warning = `Tenant criado, mas falha ao criar os cargos: ${err?.message}`;
   }
 
   if (!cargo) {

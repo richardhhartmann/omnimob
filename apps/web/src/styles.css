@@ -108,6 +108,12 @@ body {
   margin: 0 auto;
 }
 
+/* O índice de Configurações. Ele desenha a MESMA grade de cartões que
+   Relatórios e Gerenciar Imóveis, e aqueles não passam por `.main-content` — o
+   resultado era a mesma tela parecendo apertada num lugar só. As SEÇÕES
+   continuam com o respiro, que é onde ele serve. */
+.main-content--indice { padding: 0; max-width: none; }
+
 /* Editor da vitrine: usa toda a largura da coluna ao lado da sidebar (sem cap a 1200px).
 
    Sem respiro nenhum, e isso é deliberado: o editor é uma ferramenta de tela
@@ -6267,6 +6273,63 @@ main[data-tema="claro"] .inicio-atalho:hover {
   box-shadow: 0 14px 34px -14px var(--pg-accent-borda), 0 10px 24px -16px rgba(15, 23, 42, 0.3);
 }
 
+/* O selo da tecla DENTRO do botão de novo registro. Sobre o fundo do acento,
+   ele não pode usar a caixa cinza do selo de canto — vira um borrão. Aqui é só
+   a letra, num véu claro. */
+.tecla-atalho--no-botao {
+  position: static; margin-left: 4px; padding: 1px 5px;
+  background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.28);
+  color: #fff; opacity: 0.9;
+}
+
+/* ── Paginação da grade de índices ──────────────────────────────────────────
+   Aparece só quando os cartões passam de nove — ver `GradeDeMenu`. Discreta de
+   propósito: é navegação de apoio, e competir com os cartões seria inverter a
+   hierarquia da tela. */
+/* Centralizada, e em duas linhas: as setas no meio da grade — que é o eixo do
+   que elas controlam — e a nota embaixo. Alinhada à esquerda com a nota jogada
+   para a direita, a barra parecia o rodapé de uma tabela, e as setas ficavam a
+   uma tela de distância do ponto onde o olho estava. */
+.menu-paginas {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  margin-top: 24px;
+}
+.menu-paginas__linha { display: flex; align-items: center; gap: 10px; }
+.menu-paginas__seta {
+  width: auto; display: inline-flex; align-items: center; justify-content: center;
+  padding: 7px 10px; border-radius: 9px; cursor: pointer;
+  background: var(--sup-04, rgba(255,255,255,0.04));
+  border: 1px solid var(--linha-08, rgba(255,255,255,0.08));
+  color: var(--text-muted); box-shadow: none; transform: none;
+}
+.menu-paginas__seta:hover:not(:disabled) { color: var(--text-main); background: var(--sup-08, rgba(255,255,255,0.08)); transform: none; }
+.menu-paginas__seta:disabled { opacity: 0.35; cursor: default; }
+.menu-paginas__pontos { display: inline-flex; align-items: center; gap: 7px; }
+/* Alvo de clique de 18px com um ponto de 7px desenhado dentro: o ponto precisa
+   ser pequeno para não competir, e o alvo precisa ser grande para o dedo. */
+.menu-paginas__ponto {
+  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: none; transform: none;
+}
+/* O ponto é um SPAN, e não um `::after` do botão.
+
+   `.ds-shell button::after` já existe e é o brilho que todo botão do painel
+   tem — e vence por especificidade (uma classe + um tipo contra uma classe só).
+   O ponto desenhado ali dentro simplesmente não aparecia dentro do painel, e
+   aparecia num teste isolado, que é o pior jeito de descobrir. Elemento de
+   verdade não disputa nada. */
+.menu-paginas__ponto > span {
+  width: 7px; height: 7px; border-radius: 50%; display: block;
+  background: var(--linha-20, rgba(255,255,255,0.2));
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+.menu-paginas__ponto:hover > span { background: var(--text-muted); }
+.menu-paginas__ponto.is-on > span { background: var(--accent, #6366f1); transform: scale(1.15); }
+.menu-paginas__nota { font-size: 12px; color: var(--text-muted); }
+@media (max-width: 560px) { .menu-paginas__nota { display: none; } }
+
 /* ── Cartões de índice (.menu-cartao) ────────────────────────────────────────
    Relatórios, Configurações e Gerenciar Imóveis. Mesma mecânica; o que muda é
    a escala — cartão maior, elevação maior. No escuro o realce continua branco,
@@ -6376,6 +6439,31 @@ html[data-tema-painel="claro"] {
   --menu-sombra: 0 22px 48px -16px rgba(15, 23, 42, 0.28);
   --menu-cor: #0f172a;
   --menu-realce: rgba(15, 23, 42, 0.06);
+  /* A barra de rolagem da lista. No escuro ela é clara sobre fundo escuro e o
+     navegador acerta sozinho; no claro, a barra padrão do sistema desenha um
+     bloco cinza-escuro grosso encostado na borda arredondada do cartão — some
+     o arredondamento e sobra um retângulo. Fina e discreta, como a dos campos
+     de texto do painel (`.input-scroll`). */
+  --menu-barra: rgba(15, 23, 42, 0.22);
+  --menu-barra-hover: rgba(15, 23, 42, 0.38);
+}
+
+/* ── A rolagem da lista ──────────────────────────────────────────────────────
+   Na raiz pelo mesmo motivo do resto: a lista é portal, e `main[data-tema]` não
+   a alcança. As variáveis têm reserva para o tema escuro, então a regra vale
+   nos dois sem duplicar seletor. */
+.sel-menu {
+  scrollbar-width: thin;
+  scrollbar-color: var(--menu-barra, rgba(255, 255, 255, 0.22)) transparent;
+}
+.sel-menu::-webkit-scrollbar { width: 6px; height: 6px; }
+.sel-menu::-webkit-scrollbar-track { background: transparent; }
+.sel-menu::-webkit-scrollbar-thumb {
+  background: var(--menu-barra, rgba(255, 255, 255, 0.18));
+  border-radius: 999px;
+}
+.sel-menu::-webkit-scrollbar-thumb:hover {
+  background: var(--menu-barra-hover, rgba(255, 255, 255, 0.3));
 }
 
 /* ── Ladrilho de adicionar foto ──────────────────────────────────────────────
@@ -9240,8 +9328,11 @@ button.gr-funil__linha:hover { background: color-mix(in srgb, var(--strong) 6%, 
   letter-spacing: .04em;
   line-height: 1;
   padding: 0 10px;
-  /* Sobre o acento cheio: preto le melhor que branco no rosa e no indigo. */
-  color: #0b0d12;
+  /* Sobre o acento cheio, e a cor certa MUDA com o acento: no rosa do Flow o
+     preto le melhor; no indigo do Hub a palavra fica pesada e a marca pede
+     branco. Cada modulo declara a sua (`tinta`, em utils/modulos.js) e o preto
+     fica de reserva para quem nao declarar. */
+  color: var(--acento-tinta, #0b0d12);
 }
 /* 26px contra os 200px do original — que ocupariam sozinhos a largura util do
    balao inteiro. */

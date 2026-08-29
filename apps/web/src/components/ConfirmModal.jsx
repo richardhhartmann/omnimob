@@ -90,6 +90,12 @@ export function ConfirmModal({ open, message, confirmLabel = "Confirmar", tone =
             lineHeight: "1.6",
             color: "#e2e8f0",
             fontWeight: 400,
+            /* Quebra de linha é obedecida. Os chamadores já escreviam mensagens
+               em parágrafos — e em listas, desde a confirmação de descida de
+               plano — e todas chegavam coladas numa parede de texto. `pre-line`
+               e não `pre`: espaços continuam colapsando, então indentação do
+               código-fonte não vira recuo na tela. */
+            whiteSpace: "pre-line",
           }}>
             {message}
           </p>

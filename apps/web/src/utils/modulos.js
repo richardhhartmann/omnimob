@@ -98,6 +98,12 @@ export const MODULOS = [
       "interessados e organiza a equipe.",
     acento: "#6366f1",
     acentoSuave: "rgba(99,102,241,0.14)",
+    /* A tinta que vai SOBRE o acento cheio — hoje, a faixa que corre no menu de
+       módulos. Preto tem mais contraste matemático nos dois acentos, mas no
+       índigo a palavra fica pesada e some do conjunto; branco é o que a marca
+       usa. Declarada por módulo, e não fixa no CSS, porque a resposta muda com
+       a cor: no rosa do Flow o preto continua sendo o melhor. */
+    tinta: "#ffffff",
     /* Para onde a pessoa vai ao entrar neste módulo. Função e não string: no
        Hub o destino depende de `verPainelGestor`, e cravar "/" mandaria o
        gestor para a tela errada toda vez que ele trocasse de módulo. */
@@ -116,6 +122,7 @@ export const MODULOS = [
     /* O rosa da palavra "flow" no wordmark. Ver a nota sobre o acento, acima. */
     acento: "#ec0b5b",
     acentoSuave: "rgba(236,11,91,0.14)",
+    tinta: "#0b0d12",
     inicial: () => "/flow",
     porta: "acessarFlow",
   },

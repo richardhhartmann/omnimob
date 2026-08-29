@@ -24,6 +24,16 @@ import { planoLiberaFunil } from "./planos";
    Funil/Comissões começam no Profissional.
    ──────────────────────────────────────────────────────────────────────────── */
 
+/* ── As cores dos cartões ────────────────────────────────────────────────────
+   Todas eram #94a3b8, um cinza só, e isso vinha do desenho antigo: disco grande
+   e tudo centralizado, onde a cor teria competido com o título. Com o cartão do
+   Dashboard — ícone num quadrado tingido, à esquerda — o cinza vira ausência: a
+   grade inteira fica sem ponto de referência e os cartões deixam de se
+   distinguir de relance.
+
+   As cores não são decorativas: elas ECOAM as do Dashboard, onde a mesma ideia
+   já tem uma. Quem aprendeu que Relatórios é verde na tela inicial reencontra o
+   verde aqui dentro. */
 export const RELATORIOS = [
   {
     chave: "LEADS",
@@ -31,7 +41,8 @@ export const RELATORIOS = [
     param: "leads",
     title: "Leads",
     desc: "Quem entrou em contato pela vitrine, com o imóvel de origem e o histórico.",
-    accent: "#94a3b8",
+    /* Ciano, como Clientes no Dashboard: os dois são gente. */
+    accent: "#06b6d4",
     // Sem `liberado`: Leads faz parte do Básico.
   },
   {
@@ -40,7 +51,8 @@ export const RELATORIOS = [
     param: "mensal",
     title: "Relatório mensal",
     desc: "Visitas, leads, vendas e conversão do mês — na tela ou por e-mail.",
-    accent: "#94a3b8",
+    /* O verde de Relatórios na tela inicial. */
+    accent: "#10b981",
     /* Sem `liberado`: o relatório mensal NA TELA é do Básico — ele é
        "Relatórios e métricas de desempenho". O que começa no Profissional é
        MANDÁ-LO por e-mail, e essa trava fica no botão, dentro da tela. */
@@ -51,7 +63,8 @@ export const RELATORIOS = [
     param: "funil",
     title: "Funil de vendas",
     desc: "De visita a lead, de lead a fechamento — e onde o caminho aperta.",
-    accent: "#94a3b8",
+    /* Roxo — é o único cartão sobre PROCESSO, não sobre números. */
+    accent: "#8b5cf6",
     liberado: planoLiberaFunil,
   },
   {
@@ -60,7 +73,8 @@ export const RELATORIOS = [
     param: "comissoes",
     title: "Comissões",
     desc: "Quanto cada corretor fechou no período e quanto tem a receber.",
-    accent: "#94a3b8",
+    /* Âmbar: dinheiro, como o valor em negociação no Flow. */
+    accent: "#f59e0b",
     /* Comissões saem das mesmas vendas do funil e moram no mesmo arquivo
        (`components/FunilVendas.jsx`), então é a mesma porta de plano. */
     liberado: planoLiberaFunil,

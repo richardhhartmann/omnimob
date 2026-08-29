@@ -26,32 +26,46 @@ import { FLOW, modulosDoTenant } from "./modulos";
    a três centímetros um do outro se leem como o mesmo item.
    ──────────────────────────────────────────────────────────────────────────── */
 
+/* ── As cores dos cartões ────────────────────────────────────────────────────
+   Todas eram #94a3b8, um cinza só, e isso vinha do desenho antigo: disco grande
+   e tudo centralizado, onde a cor teria competido com o título. Com o cartão do
+   Dashboard — ícone num quadrado tingido, à esquerda — o cinza vira ausência: a
+   grade inteira fica sem ponto de referência e os cartões deixam de se
+   distinguir de relance.
+
+   As cores não são decorativas: elas ECOAM as do Dashboard, onde a mesma ideia
+   já tem uma. Quem aprendeu que Relatórios é verde na tela inicial reencontra o
+   verde aqui dentro. */
 export const ABAS_CONFIG = [
   {
     key: "perfil",
     label: "Perfil",
-    cor: "#94a3b8",
+    /* Índigo, a cor da casa. */
+    cor: "#6366f1",
     Icon: IdentificationCard,
     desc: "Nome, contato, endereço e os dados que aparecem para quem procura a imobiliária.",
   },
   {
     key: "aparencia",
     label: "Aparência",
-    cor: "#94a3b8",
+    /* Roxo: é a seção sobre aparência. */
+    cor: "#8b5cf6",
     Icon: Palette,
     desc: "Logotipo, cores da marca e a logo aplicada nas fotos dos imóveis.",
   },
   {
     key: "atalhos",
     label: "Atalhos de teclado",
-    cor: "#94a3b8",
+    /* Ciano. */
+    cor: "#06b6d4",
     Icon: Keyboard,
     desc: "As teclas que valem para a imobiliária inteira. Cada pessoa ainda pode ter as suas.",
   },
   {
     key: "redes",
     label: "Redes Sociais",
-    cor: "#94a3b8",
+    /* Azul, do lado de fora — é o que sai da imobiliária. */
+    cor: "#0ea5e9",
     Icon: ShareNetwork,
     desc: "Conecte o Facebook e o Instagram para publicar imóveis direto do painel.",
   },
@@ -61,7 +75,8 @@ export const ABAS_CONFIG = [
        navegação diária custaria atenção todo dia por uma tarefa de uma semana. */
     key: "dados",
     label: "Dados",
-    cor: "#94a3b8",
+    /* Verde: importação é ganho de acervo. */
+    cor: "#10b981",
     Icon: Database,
     desc: "Traga imóveis, clientes e usuários do sistema que você usava antes — pelo feed XML dele ou pela nossa API.",
   },
@@ -76,7 +91,8 @@ export const ABAS_CONFIG = [
        `/configuracoes?ver=flow`: mesmo destino, âncora diferente. */
     key: "flow",
     label: "Omnimob Flow",
-    cor: "#94a3b8",
+    /* O ACENTO DO MÓDULO. A única cor desta lista que não é escolha estética. */
+    cor: "#ec0b5b",
     Icon: Kanban,
     desc: "Assinatura digital dos contratos e a política de comissão da casa.",
   },
@@ -91,14 +107,16 @@ export const ABAS_CONFIG = [
        o quê, por qual meio). Juntas, a decisão ficava enterrada num extrato. */
     key: "cobranca",
     label: "Cobrança e pagamentos",
-    cor: "#94a3b8",
+    /* Âmbar: dinheiro, como Comissões. */
+    cor: "#f59e0b",
     Icon: Receipt,
     desc: "Quando vence, o que já foi pago e por qual forma — com o recibo de cada cobrança.",
   },
   {
     key: "plano",
     label: "Plano e recursos",
-    cor: "#94a3b8",
+    /* O dourado da coroa, que já marca o plano no painel. */
+    cor: "#d4af37",
     Icon: Crown,
     desc: "O que seu plano inclui, o que ele consome e como mudar de faixa.",
   },

@@ -72,6 +72,28 @@ export const ACOES = [
   { id: "relatorios.funil",     tela: "relatorios", rotulo: "Funil de vendas",  padrao: "3", exige: "verRelatorios", destino: "/relatorios?ver=funil" },
   { id: "relatorios.comissoes", tela: "relatorios", rotulo: "Comissões",        padrao: "4", exige: "verRelatorios", destino: "/relatorios?ver=comissoes" },
 
+  /* ── Configurações ───────────────────────────────────────────────────────
+     Uma por seção, na ordem em que os cartões aparecem. A tela existia sem
+     atalho nenhum — era a única das quatro telas de índice sem teclas, e quem
+     aprendeu o hábito nas outras batia numa que não respondia.
+
+     `destino` com query, e não uma rota por seção: cada seção JÁ é um endereço
+     (`/configuracoes?ver=perfil`), lido por `searchParams.get("ver")`. Inventar
+     rotas próprias criaria um segundo jeito de chegar no mesmo lugar.
+
+     Sem `exige` nas que dependem do PLANO (Redes, Dados): `mapaDeAtalhos` só
+     sabe filtrar por permissão de cargo, e a tela já resolve o resto — a seção
+     escondida simplesmente não abre. Cobrança tem `verCobranca` porque ali o
+     gate é de cargo, e é o mesmo da rota. */
+  { id: "configuracoes.perfil",    tela: "configuracoes", rotulo: "Perfil",              padrao: "1", exige: "verConfiguracoes", destino: "/configuracoes?ver=perfil" },
+  { id: "configuracoes.aparencia", tela: "configuracoes", rotulo: "Aparência",           padrao: "2", exige: "verConfiguracoes", destino: "/configuracoes?ver=aparencia" },
+  { id: "configuracoes.atalhos",   tela: "configuracoes", rotulo: "Atalhos de teclado",  padrao: "3", exige: "verConfiguracoes", destino: "/configuracoes?ver=atalhos" },
+  { id: "configuracoes.redes",     tela: "configuracoes", rotulo: "Redes sociais",       padrao: "4", exige: "verConfiguracoes", destino: "/configuracoes?ver=redes" },
+  { id: "configuracoes.dados",     tela: "configuracoes", rotulo: "Dados",               padrao: "5", exige: "verConfiguracoes", destino: "/configuracoes?ver=dados" },
+  { id: "configuracoes.flow",      tela: "configuracoes", rotulo: "Omnimob Flow",        padrao: "6", exige: "verConfiguracoes", destino: "/configuracoes?ver=flow" },
+  { id: "configuracoes.cobranca",  tela: "configuracoes", rotulo: "Cobrança e pagamentos", padrao: "7", exige: "verCobranca",     destino: "/configuracoes?ver=cobranca" },
+  { id: "configuracoes.plano",     tela: "configuracoes", rotulo: "Plano e recursos",    padrao: "8", exige: "verConfiguracoes", destino: "/configuracoes?ver=plano" },
+
   /* ── Global: "novo alguma coisa" ────────────────────────────────────────
      Uma tecla só para todas as telas de cadastro, e não uma por tela. O gesto
      é o mesmo em todas — "criar o que esta tela cria" — e uma tecla por tela
@@ -91,6 +113,27 @@ export function telaDosAtalhos(pathname) {
   if (pathname === "/relatorios") return "relatorios";
   if (pathname === "/configuracoes") return "configuracoes";
   return null;
+}
+
+/* ── Para onde o Esc leva ────────────────────────────────────────────────────
+
+   A página MÃE da atual, e não a anterior do histórico. A diferença aparece no
+   caminho real: quem estava em /relatorios, foi para /imoveis e abriu
+   /imoveis/novo esperava voltar para /imoveis ao apertar Esc — voltava para
+   /relatorios, porque o histórico não sabe o que é "acima", só o que foi
+   "antes". O gesto é "subir um nível", e ele precisa ser previsível: a mesma
+   tela sempre leva ao mesmo lugar, independentemente de como se chegou nela.
+
+   Sobe UM segmento por vez. `/imoveis/portfolio` → `/imoveis`; `/flow/negocios/x`
+   → `/flow/negocios`. Quem já está num primeiro nível (`/clientes`) vai para a
+   casa — que depende do cargo, e por isso vem de fora.
+
+   As telas do Flow sobem dentro do Flow: `/flow/funil` → `/flow`, e não a raiz
+   do Hub. Cai do próprio recorte por segmento, sem regra especial. */
+export function paiDaRota(pathname, casa = "/") {
+  const partes = String(pathname || "/").split("/").filter(Boolean);
+  if (partes.length <= 1) return casa;
+  return `/${partes.slice(0, -1).join("/")}`;
 }
 
 /** Tecla legível para desenhar na tela: `"1"`, `"N"`, `"Esc"`. */

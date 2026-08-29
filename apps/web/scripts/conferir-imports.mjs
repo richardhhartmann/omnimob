@@ -294,8 +294,34 @@ function conferirConstantes(arquivo, s) {
    saída de falso positivo, e um verificador barulhento é um verificador
    desligado. */
 
+/* ── OS ÍCONES ─────────────────────────────────────────────────────────────
+
+   O resto deste arquivo confere import RELATIVO, e por isso deixou passar o
+   defeito mais caro que ele já viu: `HousePlus` não existe no Phosphor
+   instalado. O módulo resolve, o Vite serve, e o navegador recusa a página
+   INTEIRA com "does not provide an export named" — tela branca no app todo por
+   causa de um nome de ícone.
+
+   Errar aqui é fácil de um jeito específico: os nomes seguem um padrão
+   (`UserPlus`, `ShieldPlus`, `UserCirclePlus`), então `HousePlus` parece existir
+   — e sete em cada oito palpites acertam. O catálogo é a única autoridade. */
+const icones = await import("@phosphor-icons/react");
+
+function conferirIcones(arquivo, s) {
+  for (const m of s.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']@phosphor-icons\/react["']/g)) {
+    for (const parte of m[1].split(",")) {
+      const nome = parte.trim().split(/\s+as\s+/)[0].trim();
+      if (!nome) continue;
+      if (!icones[nome]) {
+        problemas.push(`${arquivo}: importa o ícone "${nome}", que não existe no Phosphor instalado`);
+      }
+    }
+  }
+}
+
 for (const arquivo of arquivos(RAIZ)) {
   const s = fs.readFileSync(arquivo, "utf8");
+  conferirIcones(arquivo, s);
   conferirReexports(arquivo, s);
   conferirConstantes(arquivo, s);
   problemas.push(...problemasDeOrdem(arquivo, s));

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { ClockCounterClockwise, PlusCircle, PencilSimple, Trash, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { api } from "../api";
+import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Trilha de auditoria.
@@ -138,6 +140,7 @@ function Registro({ r, aberto, aoAlternar }) {
 }
 
 export function AuditoriaPage({ session }) {
+  const navigate = useNavigate();
   const tenantSlug = session?.tenant?.slug || "";
   const showToast = useOutletContext()?.showToast;
 
@@ -205,6 +208,7 @@ export function AuditoriaPage({ session }) {
 
   return (
     <div className="main-content" style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "20px" }}>
+      <Trilha itens={degrausAte("/auditoria", navigate)} />
       <header data-tour="auditoria-cabecalho">
         <h2 style={{ margin: "0 0 4px 0", fontSize: "24px", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
           <ClockCounterClockwise size={24} weight="duotone" />

@@ -188,7 +188,10 @@ export function gruposDoFlow(ctx) {
            inicial pelo NOME que aprendeu no outro lado, e não achava. Dois
            nomes para a mesma função em dois módulos da mesma moldura obrigam a
            reaprender o mapa a cada troca. */
-        { key: "flow-inicio", Icon: ChartPieSlice, label: "Dashboard", active: p === "/flow", onClick: () => navigate("/flow") },
+        /* E o mesmo ÍCONE do Hub, pela mesma razão do rótulo: a casinha é o
+           sinal de "tela inicial" que a pessoa aprendeu do outro lado. Um
+           gráfico de pizza aqui a faria procurar o começo em outro item. */
+        { key: "flow-inicio", Icon: House, label: "Dashboard", active: p === "/flow", onClick: () => navigate("/flow") },
       ],
     },
     {

@@ -227,6 +227,7 @@ export function SeletorDeModulo({ atual, disponiveis, aoTrocar, aoAlternarAberto
                   imagem: SIMBOLO_OMNIMOB,
                   acento: m.acento,
                   acentoSuave: m.acentoSuave,
+                  tinta: m.tinta,
                   atual: m.key === atual,
                   conteudo: (
                     <>

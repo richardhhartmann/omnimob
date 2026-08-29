@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
-import { CartaoDeMenu } from "../components/CartaoDeMenu.jsx";
+import { useOutletContext, useSearchParams, useNavigate } from "react-router-dom";
+import { GradeDeMenu } from "../components/GradeDeMenu.jsx";
 import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
 import { abasVisiveis, ICONES_CONFIG, ehAbaDeConfig, rotuloDaAba } from "../utils/abasConfiguracoes";
 import { GearSix } from "@phosphor-icons/react";
 import { api } from "../api";
@@ -170,44 +171,9 @@ function Campo({ label, hint, children }) {
 /* Classes em vez de só estilo inline: o tema claro precisa de um gancho para
    trocar fundo e borda, e `rgba(255,255,255,α)` inline é invisível sobre fundo
    claro. O layout continua inline; virou classe só o que muda com o tema. */
-/* ── O cartão do Omnimob Flow na aba de Plano ────────────────────────────────
-
-   Dois estados, e o texto muda inteiro entre eles: quem NÃO tem precisa saber o
-   que o módulo faz; quem TEM precisa de uma saída sem falar com ninguém.
-
-   Não aparece em conta de teste. Lá o pacote é escolhido na assinatura, e
-   oferecer "contratar" a quem ainda não paga nada seria vender duas vezes.
-
-   ⚠ O valor da fatura NÃO é ajustado aqui — a resposta do servidor traz
-   `cobrancaAjustada: false` e o aviso que a tela exibe diz isso em português.
-   É a mesma limitação da troca de plano, pela mesma razão: o id da assinatura
-   no Stripe não é guardado em lugar nenhum do schema. */
-function CartaoDoFlow({ temFlow, ocupado, pode, aoAlternar }) {
-  /* O MESMO interruptor da landing, do assinar e da parede de reativação.
-
-     Aqui ele grava de IMEDIATO — não existe um botão de confirmar depois —, e é
-     por isso que a `nota` carrega o aviso que as outras três telas não precisam
-     dar: nas outras a escolha ainda vai passar pelo cartão; nesta ela já vale, e
-     a fatura acompanha. */
-  return (
-    <div className="cfg-flow">
-      <ToggleDoFlow
-        id="pkg-config"
-        ligado={temFlow}
-        ocupado={ocupado}
-        desabilitado={!pode}
-        aoAlternar={aoAlternar}
-        nota={
-          !pode
-            ? "Só quem administra a conta pode contratar ou dispensar módulos."
-            : temFlow
-              ? "Ativo. Ao desmarcar, os negócios e contratos continuam guardados — o que se fecha é o acesso, e o crédito proporcional entra na próxima fatura."
-              : "Ao marcar, o módulo é liberado na hora e a diferença proporcional aos dias que faltam entra na sua próxima fatura."
-        }
-      />
-    </div>
-  );
-}
+/* O cartão avulso do Omnimob Flow morava aqui e foi REMOVIDO: o interruptor
+   passou para dentro de cada cartão de plano, onde o preço do módulo já está do
+   lado. Ver o comentário na aba de Plano. */
 
 function Secao({ icone, titulo, cor, children }) {
   const accent = cor || "rgba(99,102,241,0.7)";
@@ -865,6 +831,7 @@ const TOPOLOGIA_REDES_CSS = `
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function ConfiguracaoPage({ session, onSessionUpdate }) {
+  const navigate = useNavigate();
   /* Toast SÓ NO ERRO, e é decisão, não esquecimento.
 
      Esta tela salva sozinha 1,5s depois de a digitação parar, e já tem
@@ -949,8 +916,31 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   /* O add-on do Flow, nesta tela. Separado de `trocandoPlano` porque são duas
      operações distintas com duas rotas distintas — juntá-las num estado só
      desabilitaria os cartões de plano enquanto o Flow grava, e vice-versa. */
-  const [mexendoNoFlow, setMexendoNoFlow] = useState(false);
   const [planoMsg, setPlanoMsg] = useState(null);  // { tipo, texto }
+  /* Em que PERÍODO os cartões mostram o preço. Só afeta a exibição: esta tela
+     troca o que a conta USA, e quem decide o ciclo de cobrança é a assinatura
+     (cartão) ou o próximo Pix. Mostrar só o mensal escondia metade da tabela de
+     preços de quem já paga anual — e a conta anual é justamente a que compensa
+     comparar antes de subir de plano. */
+  const [periodoPreco, setPeriodoPreco] = useState("mensal");
+  /* ── O Flow, agora dentro de cada cartão ──────────────────────────────────
+
+     Era um cartão só, acima da grade, e ele respondia "quero o Flow?" antes de
+     "em qual plano?" — a ordem inversa da decisão. O preço do módulo depende do
+     plano, então a pergunta separada mostrava um número que valia para a faixa
+     atual e mudava assim que a pessoa trocasse de faixa.
+
+     Um mapa `{ BASICO: true, ... }` e não um booleano só: cada cartão compõe o
+     SEU alvo, e é isso que deixa comparar "Profissional sem Flow" com
+     "Premium com Flow" lado a lado, que é a comparação que a pessoa faz.
+
+     O interruptor NÃO age sozinho — ele só muda o preço e o que o botão vai
+     fazer. Um switch que contrata no clique, ao lado de um botão que também
+     contrata, dá duas portas para a mesma decisão. */
+  const [pacotes, setPacotes] = useState({});
+  /* Existe cobrança anual de verdade para ALGUM plano? Enquanto as variáveis do
+     Stripe não existirem, não existe — e o alternador some sozinho, sem erro. */
+  const temPrecoAnual = Object.values(cobranca?.precos || {}).some((p) => p?.anual);
   /* Cancelamento em duas etapas, espelhando a rota: `confirmarCancelamento`
      guarda o que o servidor respondeu no ensaio (até quando o acesso vale) e é
      o que abre o modal. Nulo = modal fechado. */
@@ -1021,59 +1011,94 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   /* Troca de plano de cliente pagante. O aviso sobre a cobrança está no texto da
      confirmação porque é a única hora em que a pessoa ainda pode desistir — e é
      verdade que o produto muda agora e a fatura não. */
-  async function alternarFlow(querFlow) {
-    if (mexendoNoFlow) return;
-    if (!querFlow && !window.confirm(
-      "Desativar o Omnimob Flow? Os negócios, contratos e comissões continuam guardados — " +
-      "o que se fecha é o acesso, e ele volta se você contratar de novo."
-    )) return;
-
-    setMexendoNoFlow(true);
-    setPlanoMsg(null);
-    try {
-      const r = await api.contratarFlow(tenantSlug, querFlow);
-      /* A sessão carrega os módulos, e é ela que decide o seletor da barra
-         lateral. Sem repassar, a pessoa contrataria o Flow e continuaria sem
-         ver o seletor até sair e entrar. */
-      onSessionUpdate?.({
-        ...session,
-        tenant: { ...session.tenant, modulos: r.modulos },
-      });
-      setCobranca((c) => (c ? { ...c, modulos: r.modulos } : c));
-      setPlanoMsg({ tipo: "ok", texto: r.aviso });
-    } catch (e) {
-      setPlanoMsg({ tipo: "error", texto: e.message || "Não consegui alterar os módulos." });
-    } finally {
-      setMexendoNoFlow(false);
-    }
-  }
-
-  async function trocarPlano(destino) {
+  async function trocarPlano(destino, comFlow) {
     const de = planoInfo(plano);
     const para = planoInfo(destino);
     const subindo = para.nivel > de.nivel;
+    const temFlowHoje = (cobranca?.modulos || []).includes("FLOW");
+    const mesmoPlano = destino === plano;
+
+    /* O que muda no dinheiro depende de COMO a conta é cobrada — quem paga por
+       Pix não tem próxima fatura para receber o proporcional. */
+    const sobreCobranca = cobranca?.renovaSozinho
+      ? "A diferença proporcional aos dias que faltam entra na sua próxima fatura."
+      : "O período que você já pagou continua até o fim, e o novo valor passa a valer no próximo pagamento.";
+
+    /* Três frases possíveis, porque agora são três decisões diferentes: mudar
+       de faixa, ligar o módulo na faixa atual, ou as duas coisas. */
+    const oQueMuda = mesmoPlano
+      ? comFlow
+        ? `Contratar o Omnimob Flow no plano ${para.nome}? O módulo é liberado na hora. `
+        : `Dispensar o Omnimob Flow? O acesso ao módulo fecha imediatamente — os negócios e contratos continuam guardados. `
+      : `Trocar do plano ${de.nome} para o ${para.nome}${comFlow && !temFlowHoje ? ", com o Omnimob Flow" : ""}? ` +
+        (subindo
+          ? `Os recursos do ${para.nome} passam a valer imediatamente. `
+          : `Os recursos exclusivos do ${de.nome} deixam de aparecer imediatamente. `);
+
     const ok = await confirm(
-      `Trocar do plano ${de.nome} para o ${para.nome}? ` +
-      (subindo
-        ? `Os recursos do ${para.nome} passam a valer imediatamente. `
-        : `Os recursos exclusivos do ${de.nome} deixam de aparecer imediatamente. `) +
-      "A diferença proporcional aos dias que faltam entra na sua próxima fatura.",
-      subindo ? "Fazer upgrade" : "Fazer downgrade",
-      // Downgrade tira recurso de quem está usando; upgrade não é perigo nenhum.
-      subindo ? "primary" : "danger",
+      oQueMuda + sobreCobranca,
+      mesmoPlano ? (comFlow ? "Contratar o Flow" : "Dispensar o Flow") : subindo ? "Fazer upgrade" : "Fazer downgrade",
+      // Tirar recurso de quem está usando pede vermelho; acrescentar, não.
+      subindo || (mesmoPlano && comFlow) ? "primary" : "danger",
     );
     if (!ok) return;
 
     setTrocandoPlano(destino);
     setPlanoMsg(null);
     try {
-      const r = await api.trocarPlano(tenantSlug, destino);
+      /* ── A DESCIDA QUE DESLIGA COISAS EM USO ──────────────────────────────
+         A rota recusa a primeira chamada com 409 e a lista do que se perde —
+         domínio próprio saindo do ar, publicação em redes fechando, fotos 360°
+         virando imagem comum. Só a segunda, com `confirmar`, aplica.
+
+         A tela não tratava esse código: mostrava a recusa como erro vermelho, e
+         quem tinha domínio próprio simplesmente não conseguia descer de plano
+         pela interface. O ensaio existia e não tinha para onde ir.
+
+         Duas perguntas seguidas é de propósito, e não excesso de cerimônia: a
+         primeira é sobre a TROCA, a segunda é sobre o ESTRAGO — e a segunda só
+         aparece quando há estrago, listado item a item, com o que acontece com
+         cada um. Um "tem certeza?" genérico ensina a clicar em sim sem ler. */
+      const r = await api
+        .trocarPlano(tenantSlug, destino, comFlow ? "HUB_FLOW" : "HUB")
+        .catch(async (erro) => {
+          if (erro?.body?.code !== "CONFIRMAR_PERDAS") throw erro;
+
+          const perdas = erro.body.perdas || [];
+          /* Uma linha por perda, com o detalhe embaixo. Texto e não JSX porque
+             `confirm` é um diálogo de texto — e a lista precisa caber nele sem
+             virar um segundo componente de modal. */
+          const lista = perdas.map((p) => `• ${p.titulo}\n   ${p.detalhe}`).join("\n\n");
+          const quantos =
+            perdas.length === 1 ? "um recurso que você usa" : `${perdas.length} recursos que você usa`;
+
+          const cienteDoEstrago = await confirm(
+            `Descer para o ${para.nome} desliga ${quantos}:\n\n${lista}\n\n` +
+              "Isso vale a partir do momento em que você confirmar.",
+            "Entendi, descer mesmo assim",
+            "danger",
+          );
+          if (!cienteDoEstrago) return null;
+
+          return api.trocarPlano(tenantSlug, destino, comFlow ? "HUB_FLOW" : "HUB", true);
+        });
+
+      /* Desistiu na segunda pergunta: nada foi trocado, e não há o que dizer —
+         a tela continua exatamente como estava. */
+      if (!r) return;
       setPlano(destino);
       // A sessão carrega o plano e é ela que libera recursos nas outras telas;
       // sem sincronizar, o painel só mudaria no próximo login.
       if (onSessionUpdate && session?.tenant) {
-        onSessionUpdate({ ...session, tenant: { ...session.tenant, plano: destino } });
+        /* Os MÓDULOS vão junto do plano: a sessão é quem decide o seletor do
+           Flow na barra lateral, e sem isto quem contratasse o módulo aqui
+           continuaria sem vê-lo até sair e entrar. */
+        onSessionUpdate({
+          ...session,
+          tenant: { ...session.tenant, plano: destino, modulos: r?.tenant?.modulos || session.tenant.modulos },
+        });
       }
+      setCobranca((c) => (c ? { ...c, modulos: r?.tenant?.modulos || c.modulos } : c));
       /* ── A MENSAGEM SEGUE O QUE O SERVIDOR FEZ ──────────────────────────
          Ela dizia "vamos ajustar a cobrança" em todos os casos, porque o ajuste
          nunca acontecia. Agora acontece na maioria — e continuar prometendo
@@ -1085,9 +1110,23 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
          repetir a árvore de decisão do servidor no navegador. */
       setPlanoMsg({
         tipo: "success",
-        texto: r?.cobrancaAjustada
-          ? `Plano alterado para ${para.nome}. A diferença proporcional entra na sua próxima fatura.`
-          : `Plano alterado para ${para.nome}. ${r?.motivoCobranca || "O valor será acertado pelo nosso time."}`,
+        /* Três desfechos, e cada um é uma conversa diferente. O do meio é o
+           que faltava: quem paga por Pix não tem fatura para ajustar, e a
+           mensagem genérica ("o time acerta") deixava a pessoa esperando um
+           contato que não vem. */
+        texto: `${
+          mesmoPlano
+            ? comFlow
+              ? "Omnimob Flow contratado."
+              : "Omnimob Flow dispensado."
+            : `Plano alterado para ${para.nome}.`
+        } ${
+          r?.cobrancaAjustada
+            ? "A diferença proporcional entra na sua próxima fatura."
+            : cobranca?.renovaSozinho === false
+              ? "O novo valor passa a valer no seu próximo pagamento — o período já pago continua até o fim."
+              : r?.motivoCobranca || "O valor será acertado pelo nosso time."
+        }`,
       });
     } catch (err) {
       setPlanoMsg({ tipo: "error", texto: err.message || "Não foi possível trocar o plano." });
@@ -1370,7 +1409,15 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   };
 
   return (
-    <div className="main-content" style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "24px" }}>
+    /* `main-content` dá 40px de respiro e um teto de 1200px — certos para os
+       FORMULÁRIOS das seções, que são colunas de campos e não devem esticar
+       pela tela inteira. No ÍNDICE ele estava sobrando: os cartões nasciam mais
+       estreitos que os de Relatórios e de Gerenciar Imóveis, que não passam por
+       essa moldura, e a mesma grade aparecia apertada só aqui. */
+    <div
+      className={`main-content${tab === "MENU" ? " main-content--indice" : ""}`}
+      style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "24px" }}
+    >
       {confirmModal}
 
       {/* A data vem do servidor (do provedor de pagamento, na verdade), não de
@@ -1401,41 +1448,22 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
            encostadas, competindo pelo mesmo canto do olho. Agora a tela abre
            como Relatórios e como Gerenciar Imóveis: cartões grandes, um por
            destino, e o submenu da barra leva direto a cada um. */
-        <div data-tour="config-cabecalho" className="glass-panel" style={{ textAlign: "center", padding: "56px 40px" }}>
-          <h2 style={{ marginBottom: "8px", fontSize: "28px", fontWeight: "700" }}>Configurações</h2>
-          <p style={{ marginBottom: "48px", color: "var(--text-muted)", fontSize: "16px" }}>
-            Tudo que vale para a imobiliária inteira — dados, identidade visual, redes e plano.
-          </p>
-          <div
-            style={{
-              display: "grid",
-              /* Duas colunas na largura de trabalho e uma no celular, sem
-                 media query: `min(300px, 100%)` impede a coluna de ficar mais
-                 larga que a tela, que é o que estourava a grade fixa. */
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))",
-              gap: "32px", maxWidth: "820px", margin: "0 auto",
-            }}
-          >
-            {abas.map((a, i) => {
-              /* Número ímpar de cartões: o último ocupa a linha inteira em vez
-                 de deixar um buraco do lado. Acontece de verdade — a seção de
-                 Dados some para quem não pode importar. */
-              const sozinho = abas.length % 2 === 1 && i === abas.length - 1;
-              const cartao = (
-                <CartaoDeMenu
-                  icon={<a.Icon size={40} weight="duotone" />}
-                  title={a.label}
-                  desc={a.desc}
-                  accent={a.cor}
-                  onClick={() => setTab(a.key)}
-                />
-              );
-              return sozinho
-                ? <div key={a.key} style={{ gridColumn: "1 / -1" }}>{cartao}</div>
-                : <div key={a.key} style={{ display: "contents" }}>{cartao}</div>;
-            })}
-          </div>
-        </div>
+        <GradeDeMenu
+          tourId="config-cabecalho"
+          titulo="Configurações"
+          subtitulo="Tudo que vale para a imobiliária inteira — dados, identidade visual, redes e plano."
+          cards={abas.map((a) => ({
+            title: a.label,
+            desc: a.desc,
+            accent: a.cor,
+            /* A tecla de cada seção. O id segue a chave da aba, então uma seção
+               nova ganha atalho acrescentando UMA linha em `ACOES` — e, se
+               esquecerem, `TeclaDeAtalho` devolve null e o cartão fica igual. */
+            acao: `configuracoes.${a.key}`,
+            icon: <a.Icon size={32} weight="duotone" />,
+            onClick: () => setTab(a.key),
+          }))}
+        />
       ) : (
         <>
         {/* ── Cabeçalho da seção ─── */}
@@ -1445,7 +1473,9 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               cartões do índice e o submenu. */}
           <Trilha
             itens={[
-              { chave: "indice", rotulo: "Configurações", Icone: GearSix, aoIr: () => setTab("MENU") },
+              /* A cadeia até Configurações vem do catálogo, e traz o Dashboard
+                 na frente — o degrau que faltava aqui. */
+              ...degrausAte("/configuracoes", navigate, () => setTab("MENU")),
               { chave: tab, rotulo: rotuloDaAba(tab), Icone: ICONES_CONFIG[tab], aoIr: () => setTab(tab) },
             ]}
           />
@@ -1978,14 +2008,17 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               CONFIGURAR o módulo (provedor de assinatura, comissão) e só existe
               para quem já o tem. A decisão de contratar é uma decisão de plano,
               e mora ao lado das outras. */}
-          {tab === "plano" && cobranca && !cobranca.emTrial ? (
-            <CartaoDoFlow
-              temFlow={(cobranca.modulos || []).includes("FLOW")}
-              ocupado={mexendoNoFlow}
-              pode={podeTrocarPlano}
-              aoAlternar={alternarFlow}
-            />
-          ) : null}
+          {/* O CARTÃO AVULSO DO FLOW SAIU DAQUI.
+
+              Ele perguntava "quer o Flow?" antes de "em qual plano?", que é a
+              ordem inversa da decisão — e mostrava um preço que valia só para a
+              faixa atual, mudando de valor no instante em que a pessoa trocasse
+              de faixa. Agora o interruptor mora DENTRO de cada cartão de plano,
+              onde o preço já está do lado.
+
+              Contratar e dispensar o módulo passaram a ser feitos por
+              `trocarPlano`, que resolve plano e pacote numa chamada só — duas
+              produziriam dois proporcionais na mesma fatura. */}
 
           {/* Cobrança: componente próprio pelo mesmo motivo do Flow — tem
               estado seu (busca o extrato) e engordaria em duzentas linhas uma
@@ -2012,6 +2045,9 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             {(() => {
               const atual = planoInfo(plano);
               const emTrial = Boolean(cobranca?.emTrial);
+              /* O que a conta TEM hoje — é o ponto de partida de cada cartão e
+                 o que diz se o interruptor representa uma mudança. */
+              const temFlowHoje = (cobranca?.modulos || []).includes("FLOW");
               return (
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -2068,9 +2104,17 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "4px", paddingTop: "18px", borderTop: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
                       <div>
                         <div style={{ fontSize: "13px", fontWeight: 600 }}>Mudar de plano</div>
+                        {/* ── O QUE ACONTECE COM O DINHEIRO depende de COMO a
+                            conta é cobrada ────────────────────────────────────
+                            Havia uma frase só, falando em "próxima fatura", e
+                            ela virou mentira no dia em que o Pix entrou: quem
+                            paga por Pix não tem fatura seguinte nenhuma — tem um
+                            código que gera quando quiser. Prometer um ajuste que
+                            nunca chega é pior do que não explicar nada. */}
                         <p style={{ margin: "5px 0 0", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-                          A mudança vale na hora dentro do painel. O valor da próxima fatura é
-                          ajustado pelo nosso time — nada é cobrado por esta tela.
+                          {cobranca?.renovaSozinho
+                            ? "A mudança vale na hora dentro do painel, e a diferença proporcional aos dias que faltam entra na sua próxima fatura."
+                            : "A mudança vale na hora dentro do painel. Como seu pagamento é por Pix, o período que você já pagou continua valendo até o fim — o novo valor passa a valer no próximo pagamento."}
                         </p>
                       </div>
 
@@ -2085,15 +2129,66 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                         </p>
                       )}
 
+                      {/* Mensal | Anual. Só aparece quando existe preço anual
+                          cadastrado de verdade — enquanto não existir, oferecer
+                          a escolha seria vender o que a cobrança recusa. É a
+                          mesma regra da landing. */}
+                      {temPrecoAnual ? (
+                        <div role="radiogroup" aria-label="Período do preço" style={{ display: "flex", gap: "6px" }}>
+                          {[
+                            { chave: "mensal", rotulo: "Mensal" },
+                            { chave: "anual", rotulo: "Anual" },
+                          ].map((op) => (
+                            <label
+                              key={op.chave}
+                              style={{
+                                display: "inline-flex", alignItems: "center", cursor: "pointer",
+                                padding: "6px 14px", borderRadius: "999px", fontSize: "12px", fontWeight: 600,
+                                background: periodoPreco === op.chave ? "var(--sup-08, rgba(255,255,255,0.08))" : "transparent",
+                                border: `1px solid ${periodoPreco === op.chave ? "var(--linha-14, rgba(255,255,255,0.14))" : "transparent"}`,
+                                color: periodoPreco === op.chave ? "var(--text-main)" : "var(--text-muted)",
+                              }}
+                            >
+                              <input
+                                type="radio"
+                                name="cfg-periodo-preco"
+                                checked={periodoPreco === op.chave}
+                                onChange={() => setPeriodoPreco(op.chave)}
+                                style={{ position: "absolute", opacity: 0, width: 0, height: 0, padding: 0, margin: 0, border: 0 }}
+                              />
+                              {op.rotulo}
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
+
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: "10px" }}>
                         {PLANOS.map((p) => {
                           const ehAtual = p.key === atual.key;
                           const subindo = p.nivel > atual.nivel;
-                          /* Sempre o mensal, mesmo para quem assinou o anual:
-                             esta tela troca o que o tenant USA, não o que ele
-                             paga (ver a rota /me/plano), e o valor mensal é a
-                             única forma de comparar três planos numa linha. */
-                          const preco = cobranca?.precos?.[p.key]?.mensal?.rotulo;
+                          /* O pacote DESTE cartão. Começa no que a conta já
+                             tem — abrir com o Flow ligado para quem não o
+                             contratou anunciaria um preço que não é o dela. */
+                          const comFlow = pacotes[p.key] ?? temFlowHoje;
+                          /* O preço do período escolhido, no pacote do cartão,
+                             com queda para o mensal quando aquele plano não tem
+                             anual cadastrado: some a vantagem, não o plano.
+
+                             O Hub mora na raiz do plano e o Hub+Flow em `.flow`
+                             — a assimetria está explicada em `precosDosPlanos`,
+                             no servidor. */
+                          const bruto = cobranca?.precos?.[p.key];
+                          const doPlano = comFlow ? bruto?.flow : bruto;
+                          const preco = (doPlano?.[periodoPreco] || doPlano?.mensal)?.rotulo;
+                          /* Existe preço do Flow para este plano? Sem ele o
+                             interruptor não aparece: oferecer o módulo numa
+                             faixa que a cobrança não sabe faturar é vender o
+                             que o provedor recusa. */
+                          const temPrecoFlow = Boolean(bruto?.flow?.mensal);
+                          /* O que este cartão faria se clicado. Só há ação
+                             quando o alvo difere do que a conta tem hoje. */
+                          const mudaPlano = !ehAtual;
+                          const mudaFlow = comFlow !== temFlowHoje;
                           const ocupado = Boolean(trocandoPlano);
                           return (
                             <div
@@ -2117,17 +2212,58 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                               <span style={{ fontSize: "11.5px", color: "var(--text-muted)", lineHeight: 1.55, flex: 1 }}>
                                 {p.descricao}
                               </span>
-                              {!ehAtual && (
+                              {/* ── O Flow, no cartão ────────────────────────
+                                  Ele muda o PREÇO acima e o que o botão abaixo
+                                  vai fazer — e fica entre os dois porque é esse
+                                  o caminho do olho: vê quanto custa, decide se
+                                  quer o módulo, confirma.
+
+                                  Não age sozinho. Um switch que contrata no
+                                  clique ao lado de um botão que também contrata
+                                  daria duas portas para a mesma decisão. */}
+                              {/* O MESMO interruptor das outras três telas de
+                                  pagamento. Desenhar um aqui seria a quarta
+                                  versão dele — e este projeto já teve três ao
+                                  mesmo tempo, com preços diferentes na mesma
+                                  compra. `test/toggleDoFlow.test.jsx` guarda
+                                  isso. */}
+                              {temPrecoFlow ? (
+                                <ToggleDoFlow
+                                  id={`cfg-flow-${p.key.toLowerCase()}`}
+                                  ligado={comFlow}
+                                  /* Compacto porque aqui ele aparece TRÊS vezes
+                                     lado a lado, em colunas estreitas: a mesma
+                                     descrição repetida em cada cartão deixa de
+                                     informar e vira parede. */
+                                  compacto
+                                  desabilitado={!podeTrocarPlano}
+                                  ocupado={ocupado}
+                                  aoAlternar={(on) =>
+                                    setPacotes((atuais) => ({ ...atuais, [p.key]: on }))
+                                  }
+                                  nota={
+                                    ehAtual && temFlowHoje && !comFlow
+                                      ? "Ao dispensar, os negócios e contratos continuam guardados — o que fecha é o acesso."
+                                      : undefined
+                                  }
+                                />
+                              ) : null}
+
+                              {(mudaPlano || mudaFlow) && (
                                 <button
                                   type="button"
                                   disabled={ocupado || !podeTrocarPlano}
                                   title={podeTrocarPlano ? undefined : "Só quem gerencia usuários pode trocar o plano."}
-                                  onClick={() => trocarPlano(p.key)}
+                                  onClick={() => trocarPlano(p.key, comFlow)}
                                   style={{
                                     width: "100%", marginTop: "4px", padding: "8px 12px", borderRadius: "9px",
-                                    border: subindo ? "none" : "1px solid var(--linha-14, rgba(255,255,255,0.14))",
-                                    background: subindo ? p.cor : "transparent",
-                                    color: subindo ? "#0c0f1a" : "var(--text-muted)",
+                                    /* Acrescentar o Flow no plano atual é uma
+                                       ação positiva: pintá-la como downgrade
+                                       diria à pessoa que ela está perdendo algo
+                                       ao contratar. */
+                                    border: subindo || (!mudaPlano && comFlow) ? "none" : "1px solid var(--linha-14, rgba(255,255,255,0.14))",
+                                    background: subindo ? p.cor : !mudaPlano && comFlow ? "#ec0b5b" : "transparent",
+                                    color: subindo ? "#0c0f1a" : !mudaPlano && comFlow ? "#fff" : "var(--text-muted)",
                                     fontSize: "12.5px", fontWeight: 600,
                                     cursor: ocupado || !podeTrocarPlano ? "not-allowed" : "pointer",
                                     opacity: ocupado || !podeTrocarPlano ? 0.55 : 1,
@@ -2136,7 +2272,9 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                                 >
                                   {trocandoPlano === p.key
                                     ? "Trocando…"
-                                    : subindo ? "Fazer upgrade" : "Fazer downgrade"}
+                                    : !mudaPlano
+                                      ? comFlow ? "Contratar o Flow" : "Dispensar o Flow"
+                                      : subindo ? "Fazer upgrade" : "Fazer downgrade"}
                                 </button>
                               )}
                             </div>
@@ -2156,27 +2294,41 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                       sem botão, ninguém tropeça na dúvida. */}
                   {cobranca && !emTrial && podeTrocarPlano && (
                     <div style={{ marginTop: "6px", paddingTop: "18px", borderTop: "1px solid var(--linha-07, rgba(255,255,255,0.07))" }}>
-                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#fca5a5" }}>Cancelar assinatura</div>
+                      {/* ── QUEM PAGA POR PIX NÃO TEM O QUE CANCELAR ────────
+                          Não há assinatura recorrente: o plano simplesmente
+                          vence na data e não se renova sozinho. Oferecer um
+                          botão de cancelar ali é oferecer uma ação sem efeito —
+                          e o pior tipo dela, porque a pessoa clica achando que
+                          precisava clicar para não ser cobrada de novo. */}
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#fca5a5" }}>
+                        {cobranca?.renovaSozinho ? "Cancelar assinatura" : "Deixar de renovar"}
+                      </div>
                       <p style={{ margin: "5px 0 12px", fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-                        Você continua com acesso normal até o fim do período já pago — nada é
-                        interrompido hoje, e nenhuma nova cobrança é feita depois disso.
+                        {cobranca?.renovaSozinho
+                          ? "Você continua com acesso normal até o fim do período já pago — nada é interrompido hoje, e nenhuma nova cobrança é feita depois disso."
+                          : "Seu pagamento é por Pix e não se renova sozinho: para encerrar, basta não gerar o próximo código. O acesso continua normal até o fim do período já pago, e nada é cobrado depois disso."}
                       </p>
-                      <button
-                        type="button"
-                        onClick={pedirCancelamento}
-                        disabled={cancelando}
-                        style={{
-                          width: "auto", padding: "9px 16px", borderRadius: "9px",
-                          border: "1px solid rgba(239,68,68,0.35)",
-                          background: "rgba(239,68,68,0.10)",
-                          color: "#fca5a5", fontSize: "12.5px", fontWeight: 600,
-                          cursor: cancelando ? "not-allowed" : "pointer",
-                          opacity: cancelando ? 0.6 : 1,
-                          boxShadow: "none", transform: "none",
-                        }}
-                      >
-                        {cancelando ? "Cancelando…" : "Cancelar minha assinatura"}
-                      </button>
+                      {/* O botão só existe quando há assinatura para cancelar.
+                          Sem ela a rota recusaria, e a recusa chegaria como
+                          erro vermelho para quem não fez nada de errado. */}
+                      {cobranca?.renovaSozinho ? (
+                        <button
+                          type="button"
+                          onClick={pedirCancelamento}
+                          disabled={cancelando}
+                          style={{
+                            width: "auto", padding: "9px 16px", borderRadius: "9px",
+                            border: "1px solid rgba(239,68,68,0.35)",
+                            background: "rgba(239,68,68,0.10)",
+                            color: "#fca5a5", fontSize: "12.5px", fontWeight: 600,
+                            cursor: cancelando ? "not-allowed" : "pointer",
+                            opacity: cancelando ? 0.6 : 1,
+                            boxShadow: "none", transform: "none",
+                          }}
+                        >
+                          {cancelando ? "Cancelando…" : "Cancelar minha assinatura"}
+                        </button>
+                      ) : null}
                     </div>
                   )}
                 </>

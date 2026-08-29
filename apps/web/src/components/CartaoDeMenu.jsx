@@ -4,46 +4,96 @@ import { TeclaDeAtalho } from "./ContextoDeAtalhos.jsx";
 /* ────────────────────────────────────────────────────────────────────────────
    O cartão dos índices do painel.
 
-   Três telas do produto fazem a mesma pergunta — "para onde vou daqui?" —, e a
-   resposta precisa ter sempre a mesma cara: Gerenciar Imóveis, Relatórios e
-   Configurações. Eram três cópias do mesmo bloco de estilos, com os mesmos
-   valores de transform, borda, sombra e gradiente repetidos linha a linha.
-   Idênticas hoje; a primeira a divergir seria aquela em que alguém ajustasse um
-   raio sem lembrar das outras duas.
+   Quatro telas fazem a mesma pergunta — "para onde vou daqui?" — e a resposta
+   precisa ter sempre a mesma cara: Dashboard, Gerenciar Imóveis, Relatórios e
+   Configurações.
 
-   O `pg-follow` e o `spawnRipple` são o mesmo par usado nos atalhos da tela
-   inicial: o gradiente segue o ponteiro (variáveis --px/--py alimentadas por um
-   listener global) e o clique solta a onda na cor do cartão.
+   ── POR QUE O DESENHO É O DO DASHBOARD ──
+
+   Havia dois: o do Dashboard (ícone num quadrado com a cor do cartão, título e
+   descrição alinhados à esquerda) e o das outras três (disco grande e tudo
+   centralizado). Duas respostas para a mesma pergunta, e a pessoa atravessava
+   as duas na mesma sessão.
+
+   Ficou o do Dashboard porque ele é o que a pessoa vê primeiro, todo dia, e
+   porque alinhar à esquerda deixa a descrição legível em duas linhas — no
+   centralizado ela vira um bloco simétrico que se lê pior. Os estilos moram em
+   `.inicio-atalho`, no styles.css, com tema claro e escuro já resolvidos.
+
+   O `pg-follow` e o `spawnRipple` são o par de sempre: o gradiente segue o
+   ponteiro (variáveis --px/--py alimentadas por um listener global) e o clique
+   solta a onda na cor do cartão.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function CartaoDeMenu({ icon, title, desc, accent, onClick, tourId, acao }) {
+export function CartaoDeMenu({
+  icon, title, desc, description, accent, onClick, tourId, acao, tecla,
+}) {
+  /* `desc` e `description` porque as telas chamavam de dois jeitos — as três de
+     índice usavam `desc`, o Dashboard usava `description`. Aceitar os dois foi
+     mais barato (e menos arriscado) do que renomear em quatro arquivos. */
+  const texto = desc ?? description;
+  const cor = accent || "#94a3b8";
+
   return (
     <button
       type="button"
       onClick={onClick}
       data-tour={tourId}
-      className="pg-follow menu-cartao"
-      /* Repouso e hover moram no CSS (`.menu-cartao`), não aqui. Escritos nos
-         handlers de mouse, eles eram brancos translúcidos fixos — corretos no
-         escuro e invisíveis no claro, sem forma de o tema alcançá-los. */
-      style={{ "--pg-accent": accent || "#94a3b8" }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-6px)"; }}
+      className="pg-follow inicio-atalho"
+      /* O realce do hover é COR, e cor pertence ao CSS — este cartão já teve o
+         dele escrito nos handlers de mouse, e o preço apareceu no tema claro: a
+         folha precisava de `!important` para clarear o fundo, e o `!important`
+         matava junto o brilho do hover.
+
+         Aqui o JS só entrega a cor em variáveis (o accent com as três
+         opacidades que o gradiente usa) e cuida do movimento. */
+      style={{
+        "--pg-accent": cor,
+        "--pg-accent-borda": `${cor}55`,
+        "--pg-accent-brilho": `${cor}33`,
+        "--pg-accent-veu": `${cor}18`,
+        padding: "28px",
+        borderRadius: "16px",
+        textAlign: "left",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-4px)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
       onMouseDown={(e) => {
-        spawnRipple(e, accent || "rgba(255,255,255,0.85)");
-        e.currentTarget.style.transform = "translateY(-1px) scale(0.98)";
+        spawnRipple(e, cor);
+        e.currentTarget.style.transform = "translateY(-1px) scale(0.975)";
       }}
-      onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(-6px)"; }}
+      onMouseUp={(e) => { e.currentTarget.style.transform = "translateY(-4px)"; }}
     >
-      {/* A tecla no canto. `acao` é opcional: cartão sem atalho não desenha
-          nada, e cartão com atalho desligado também não. */}
-      {acao ? <TeclaDeAtalho acao={acao} className="tecla-atalho--canto" /> : null}
-      <div className="menu-cartao__disco">
+      {/* A tecla, no canto. Duas origens possíveis:
+
+          · `tecla` — o número POSICIONAL, quando a grade está paginada. Ele
+            pertence ao lugar, não à ação, e por isso vem pronto de fora.
+          · `acao` — a tecla configurada para aquela ação. `TeclaDeAtalho`
+            devolve `null` quando a imobiliária desligou os atalhos ou a pessoa
+            desligou aquele, e o cartão fica igual, sem buraco. */}
+      {tecla ? (
+        <kbd className="tecla-atalho tecla-atalho--canto" aria-hidden="true">{tecla}</kbd>
+      ) : acao ? (
+        <TeclaDeAtalho acao={acao} className="tecla-atalho--canto" />
+      ) : null}
+
+      <div
+        style={{
+          padding: "12px",
+          borderRadius: "12px",
+          background: `${cor}22`,
+          color: cor,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         {icon}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px", textAlign: "center" }}>
-        <span style={{ fontSize: "22px", fontWeight: "600", letterSpacing: "-0.5px" }}>{title}</span>
-        <span style={{ fontSize: "14px", opacity: 0.7, fontWeight: "400", lineHeight: "1.5" }}>{desc}</span>
+
+      <div>
+        <div style={{ fontWeight: 600, fontSize: "16px", marginBottom: "6px" }}>{title}</div>
+        <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>{texto}</div>
       </div>
     </button>
   );

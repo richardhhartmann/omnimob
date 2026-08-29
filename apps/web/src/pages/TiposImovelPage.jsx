@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { api } from "../api";
-import { BtnEditar, BtnExcluir, BtnGerenciar, BtnNovo, BtnVoltar } from "../components/ActionIcons";
+import { BtnEditar, BtnExcluir, BtnGerenciar, BtnNovo } from "../components/ActionIcons";
 import { useConfirm } from "../components/ConfirmModal";
 
 import { TIPOS_CONTRATO, TIPOS_CONTRATO_KEYS } from "../utils/tiposContrato.js";
 import { IconeEstrela } from "../components/Icones.jsx";
+import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
+import { Tag, PlusCircle, PencilSimple, ListChecks } from "@phosphor-icons/react";
+import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
+import { useSaidaDaTela } from "../components/useSaidaDaTela";
 
 const AREA_OPTIONS = [
   { key: "areaTerreno",    label: "Área do terreno" },
@@ -172,6 +177,7 @@ function TiposContratoCard({ tenantSlug }) {
 }
 
 export function TiposImovelPage({ session }) {
+  const navigate = useNavigate();
   // Mesmo canal de aviso do resto do painel. Ver o comentário em CargosPage.
   const showToast = useOutletContext()?.showToast;
   const tenantSlug = session?.tenant?.slug;
@@ -317,11 +323,32 @@ export function TiposImovelPage({ session }) {
 
   // ─── Formulário de Tipo ───────────────────────────────────────────────────
 
+  /* Esc sobe UM degrau da trilha, e não sempre até a lista: de "Novo Atributo"
+     ele volta aos atributos do tipo, que é de onde se veio. As vistas trocam por
+     estado dentro de `/tipos-imovel`, então o atalho global não alcança nenhuma
+     delas. */
+  useSaidaDaTela(
+    () => setView(view === "atributoForm" ? "atributos" : "list"),
+    view === "tipoForm" || view === "atributos" || view === "atributoForm",
+  );
+
   if (view === "tipoForm") {
     return (
       <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {confirmModal}
-        <h2 style={{ marginBottom: "24px" }}>{editandoTipo ? "Editar Tipo de Imóvel" : "Novo Tipo de Imóvel"}</h2>
+        <div style={{ marginBottom: "24px" }}>
+          <Trilha
+            itens={[
+              ...degrausAte("/tipos-imovel", navigate, () => setView("list")),
+              {
+                chave: "tipoForm",
+                rotulo: editandoTipo ? "Editar Tipo de Imóvel" : "Novo Tipo de Imóvel",
+                Icone: editandoTipo ? PencilSimple : PlusCircle,
+                aoIr: () => setView("tipoForm"),
+              },
+            ]}
+          />
+        </div>
         {error ? <div className="error">{error}</div> : null}
         <form onSubmit={handleTipoSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           <div>
@@ -366,8 +393,27 @@ export function TiposImovelPage({ session }) {
     return (
       <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {confirmModal}
-        <h2 style={{ marginBottom: "4px" }}>{editandoAtributo ? "Editar Atributo" : "Novo Atributo"}</h2>
-        <p style={{ fontSize: "13px", opacity: 0.5, marginBottom: "24px" }}>Tipo: {tipoAtivo?.descricao}</p>
+        {/* Três degraus: o atributo mora DENTRO de um tipo, e a linha "Tipo:
+            Casa" que ficava embaixo do título dizia isso sem deixar voltar. */}
+        <div style={{ marginBottom: "24px" }}>
+          <Trilha
+            itens={[
+              ...degrausAte("/tipos-imovel", navigate, () => setView("list")),
+              {
+                chave: "atributos",
+                rotulo: tipoAtivo?.descricao || "Atributos",
+                Icone: ListChecks,
+                aoIr: () => setView("atributos"),
+              },
+              {
+                chave: "atributoForm",
+                rotulo: editandoAtributo ? "Editar Atributo" : "Novo Atributo",
+                Icone: editandoAtributo ? PencilSimple : PlusCircle,
+                aoIr: () => setView("atributoForm"),
+              },
+            ]}
+          />
+        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleAtributoSubmit}>
           <input
@@ -407,22 +453,49 @@ export function TiposImovelPage({ session }) {
 
   if (view === "atributos" && tipoAtivo) {
     const grupos = [...new Set((tipoAtivo.atributos || []).map((a) => a.grupo || "Geral"))];
+    const semAtributos = (tipoAtivo.atributos || []).length === 0;
 
     return (
-      <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+      <section
+        key={view}
+        className={semAtributos ? undefined : "glass-panel"}
+        style={{ animation: "fadeIn 0.3s ease-in-out" }}
+      >
         {confirmModal}
+        {/* A trilha no lugar do botão "voltar" — é a troca que Configurações e
+            Relatórios já fizeram, e o motivo está no cabeçalho de `Trilha.jsx`:
+            ela diz onde a página MORA, e não por onde a pessoa passou. */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
-          <BtnVoltar onClick={() => setView("list")} label="Tipos" />
-          <h2 style={{ margin: 0 }}>Atributos — {tipoAtivo.descricao}</h2>
+          <Trilha
+            itens={[
+              ...degrausAte("/tipos-imovel", navigate, () => setView("list")),
+              {
+                chave: "atributos",
+                rotulo: tipoAtivo.descricao,
+                Icone: ListChecks,
+                aoIr: () => setView("atributos"),
+              },
+            ]}
+          />
           <div style={{ marginLeft: "auto" }}>
-            <BtnNovo onClick={abrirCriarAtributo} label="Novo Atributo" />
+            {semAtributos ? null : <BtnNovo onClick={abrirCriarAtributo} label="Novo Atributo" />}
           </div>
         </div>
 
-        {(tipoAtivo.atributos || []).length === 0 ? (
-          <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "48px 0" }}>
-            Nenhum atributo cadastrado para este tipo.
-          </p>
+        {semAtributos ? (
+          /* O convite carrega o botão que saiu do topo — e com ele a tecla "N".
+             Uma frase cinza dizendo que não há nada, num tipo recém-criado que
+             nunca terá nada até alguém agir, é a informação menos útil da tela. */
+          <ConviteDeCriacao
+            plena
+            accent="#8b5cf6"
+            icone={<ListChecks size={34} weight="duotone" />}
+            titulo={`Pronto para criar o primeiro atributo de ${tipoAtivo.descricao}?`}
+            texto="Atributo é o que este tipo pode ter — piscina, churrasqueira, portaria 24h. É por eles que o cliente filtra na vitrine."
+            acaoLabel="Cadastrar atributo"
+            onAcao={abrirCriarAtributo}
+            tecla="N"
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {grupos.map((grupo) => {
@@ -459,17 +532,41 @@ export function TiposImovelPage({ session }) {
   // ─── Lista de Tipos ───────────────────────────────────────────────────────
 
   return (
-    <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
+    /* Sem nenhum tipo, o painel de vidro sai e fica só a moldura do convite —
+       duas caixas empilhadas para um conteúdo só. */
+    <section
+      key={view}
+      className={tipos.length === 0 ? undefined : "glass-panel"}
+      style={{ animation: "fadeIn 0.3s ease-in-out" }}
+    >
       {confirmModal}
+      <div style={{ marginBottom: "14px" }}>
+        <Trilha itens={degrausAte("/tipos-imovel", navigate)} />
+      </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
         <h2 style={{ margin: 0 }}>Tipos de Imóvel e Atributos</h2>
-        <BtnNovo onClick={abrirCriarTipo} label="Novo Tipo" />
+        {/* Vazio: o convite já traz o botão e a tecla. */}
+        {tipos.length === 0 ? null : <BtnNovo onClick={abrirCriarTipo} label="Novo Tipo" />}
       </div>
 
-      <TiposContratoCard tenantSlug={tenantSlug} />
+      {/* A tira de tipos de contrato sai enquanto não houver nenhum tipo de
+          imóvel: sem categoria não se cadastra imóvel nenhum, e decidir se
+          "Aluguel" está ativo antes disso é uma pergunta sem consequência. Ela
+          volta assim que existir o primeiro tipo, e o convite fica com a área
+          inteira em vez de espremido embaixo de um painel de ajuste. */}
+      {tipos.length > 0 ? <TiposContratoCard tenantSlug={tenantSlug} /> : null}
 
       {tipos.length === 0 ? (
-        <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "48px 0" }}>Nenhum tipo de imóvel cadastrado.</p>
+        <ConviteDeCriacao
+          plena
+          accent="#8b5cf6"
+          icone={<Tag size={34} weight="duotone" />}
+          titulo="Pronto para criar seu primeiro tipo de imóvel?"
+          texto="O tipo é o que organiza o acervo — Apartamento, Casa, Terreno — e é nele que moram os atributos que cada categoria pede."
+          acaoLabel="Cadastrar tipo"
+          onAcao={abrirCriarTipo}
+          tecla="N"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {tipos.map((t) => {

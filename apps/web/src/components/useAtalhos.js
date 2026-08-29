@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { criarNovo } from "../utils/registroDeNovo";
 import { useLocation, useNavigate } from "react-router-dom";
 import { mapaDeAtalhos, telaDosAtalhos } from "../utils/atalhos";
 
@@ -44,12 +45,8 @@ export function useAtalhos({ cargo, doTenant, doUsuario, aoNovo, inicial = "/", 
   const navigate = useNavigate();
   const location = useLocation();
 
-  /* A profundidade da navegação DESTA sessão. `history.length` não serve: ele
-     conta a aba inteira, inclusive as páginas antes do login. Sem isto, o Esc
-     na primeira tela levaria a pessoa para fora do painel. */
-  const profundidade = useRef(0);
-
-  useEffect(() => { profundidade.current += 1; }, [location.key]);
+  /* A contagem de profundidade da navegação saiu daqui junto com o `navigate(-1)`:
+     o Esc não anda mais no histórico, ele SOBE um nível na rota. Ver `paiDaRota`. */
 
   /* Refs porque o ouvinte é registrado uma vez: sem elas, cada troca de tela
      removeria e recolocaria o `keydown` da janela. */
@@ -66,8 +63,11 @@ export function useAtalhos({ cargo, doTenant, doUsuario, aoNovo, inicial = "/", 
            tratar. Sair da tela no meio de um formulário perderia o trabalho. */
         if (escrevendo(e.target)) return;
         e.preventDefault();
-        if (profundidade.current > 1) navigate(-1);
-        else if (pathname !== casa) navigate(casa);
+        /* SOBE um nível, e não volta no histórico. Ver `paiDaRota`: o gesto é
+           "sair desta tela para a de cima", e ele tem de dar no mesmo lugar
+           independentemente do caminho que trouxe a pessoa até aqui. */
+        const acima = paiDaRota(pathname, casa);
+        if (acima !== pathname) navigate(acima);
         return;
       }
 
@@ -77,6 +77,11 @@ export function useAtalhos({ cargo, doTenant, doUsuario, aoNovo, inicial = "/", 
          perder o botão de voltar. */
       if (!ligados) return;
       if (escrevendo(e.target)) return;
+      /* Alguém já tratou esta tecla na fase de captura. Hoje é a grade de
+         índices paginada (`GradeDeMenu`), onde as teclas 1 a 9 pertencem à
+         POSIÇÃO na página e não à ação — e agir aqui em cima faria a mesma
+         tecla navegar para dois lugares. */
+      if (e.defaultPrevented) return;
 
       const tela = telaDosAtalhos(pathname);
       const mapa = mapaDeAtalhos({ tela, cargo: c, doTenant: t, doUsuario: u });
@@ -85,10 +90,18 @@ export function useAtalhos({ cargo, doTenant, doUsuario, aoNovo, inicial = "/", 
 
       e.preventDefault();
       if (acao.destino) { navigate(acao.destino); return; }
-      /* Ação sem rota é da tela — hoje só "novo registro". A tela informa o que
-         fazer por `aoNovo`; sem isso, a tecla simplesmente não faz nada, que é
-         melhor do que adivinhar. */
-      if (acao.id === "global.novo") novo?.();
+      /* Ação sem rota é da tela — hoje só "novo registro". Quem responde é o
+         botão de "novo" da tela aberta, que se registra sozinho (ver
+         `registroDeNovo.js`). `aoNovo` continua aceito para o caso de uma tela
+         precisar responder sem ter o botão compartilhado; sem nenhum dos dois,
+         a tecla não faz nada, que é melhor do que adivinhar.
+
+         Antes só existia o `aoNovo`, e ninguém o passava: a tecla não fazia
+         nada em tela nenhuma desde que foi criada. */
+      if (acao.id === "global.novo") {
+        if (novo) novo();
+        else criarNovo();
+      }
     }
 
     window.addEventListener("keydown", aoTeclar);

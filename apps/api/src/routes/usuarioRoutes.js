@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -210,15 +211,73 @@ usuarioRouter.put("/:id", async (req, res) => {
 
 /* DESATIVAR — o caminho reversível, e o que o painel oferece primeiro.
    Mantido em DELETE /:id por já ser o contrato usado pelo front. */
+
+/* ── A CONTA NÃO PODE FICAR SEM ADMINISTRADOR ────────────────────────────────
+
+   Duas recusas, e as duas existem porque o estrago é do tipo que só se descobre
+   do lado de fora da porta trancada.
+
+   1. O ÚLTIMO Administrador ativo. Sem ninguém nesse cargo some o acesso a
+      Configurações e à gestão de cargos — e `verConfiguracoes` é DERIVADA do
+      nome do cargo, então não há como devolvê-la pela interface. A checagem que
+      já existia aqui olhava `gerenciarUsuarios`, e ela não fecha o buraco: o
+      cargo Gerente também tem essa permissão, então dava para apagar o último
+      Administrador e continuar com "um gestor" — sem Configurações para
+      ninguém.
+
+   2. O PRIMEIRO Administrador, a conta que nasceu com a imobiliária. É a conta
+      que responde pelo tenant: a que recebe a cobrança, a que o suporte reemite
+      senha, a que o super-admin usa para entrar. Outro administrador apagá-la,
+      por engano ou não, é o cenário que o pedido descreve.
+
+      Reconhecida pela mais antiga com o cargo Administrador — não há coluna
+      marcando-a, e criar uma exigiria migração para uma regra que a data já
+      responde. Quem quiser reaproveitar a conta troca nome, login e senha; o
+      que não dá é apagá-la.
+   ────────────────────────────────────────────────────────────────────────── */
+async function recusaPorSerAdministrador(tenantId, alvo) {
+  const ehAdmin = alvo?.cargo?.descricao === CARGO_ADMIN;
+  if (!ehAdmin) return null;
+
+  const primeiro = await prisma.usuario.findFirst({
+    where: { tenantId, cargo: { descricao: CARGO_ADMIN } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (primeiro?.id === alvo.id) {
+    return (
+      "Esta é a conta de Administrador que nasceu com a imobiliária, e ela não pode ser " +
+      "removida. Se ela mudou de dono, troque o nome, o login e a senha em vez de excluí-la."
+    );
+  }
+
+  const outros = await prisma.usuario.count({
+    where: { tenantId, ativo: true, id: { not: alvo.id }, cargo: { descricao: CARGO_ADMIN } },
+  });
+  if (outros === 0) {
+    return (
+      "Este é o único Administrador ativo. Sem ele, ninguém alcança Configurações nem a " +
+      "gestão de cargos — e não há como devolver esse acesso pela interface. Promova outra " +
+      "pessoa a Administrador antes."
+    );
+  }
+  return null;
+}
+
 usuarioRouter.delete("/:id", async (req, res) => {
   try {
     const current = await prisma.usuario.findFirst({
       where: { id: req.params.id, tenantId: req.tenant.id },
+      include: { cargo: { select: { descricao: true } } },
     });
     if (!current) return res.status(404).json({ error: "Usuário não encontrado." });
     if (current.id === req.authUserId) {
       return res.status(400).json({ error: "Você não pode desativar o seu próprio usuário." });
     }
+    /* Desativar tranca a porta do mesmo jeito que excluir: quem está inativo
+       não entra, e a conta continua sem Administrador. */
+    const recusa = await recusaPorSerAdministrador(req.tenant.id, current);
+    if (recusa) return res.status(400).json({ error: recusa });
     await prisma.usuario.update({ where: { id: req.params.id }, data: { ativo: false } });
     // Desativado sai da vitrine junto: a consulta da equipe filtra por `ativo`.
     limparCacheDaVitrine(req.tenant.id);
@@ -249,13 +308,16 @@ usuarioRouter.delete("/:id/permanente", async (req, res) => {
   try {
     const alvo = await prisma.usuario.findFirst({
       where: { id: req.params.id, tenantId: req.tenant.id },
-      include: { cargo: { select: { gerenciarUsuarios: true } } },
+      include: { cargo: { select: { gerenciarUsuarios: true, descricao: true } } },
     });
     if (!alvo) return res.status(404).json({ error: "Usuário não encontrado." });
 
     if (alvo.id === req.authUserId) {
       return res.status(400).json({ error: "Você não pode excluir o seu próprio usuário." });
     }
+
+    const recusaAdmin = await recusaPorSerAdministrador(req.tenant.id, alvo);
+    if (recusaAdmin) return res.status(400).json({ error: recusaAdmin });
 
     if (alvo.cargo?.gerenciarUsuarios) {
       const outrosGestores = await prisma.usuario.count({

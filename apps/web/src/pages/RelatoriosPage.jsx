@@ -1,10 +1,11 @@
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { LeadsPage } from "./LeadsPage";
 import { RelatorioMensal } from "../components/RelatorioMensal";
 import { FunilDeVendas, Comissoes } from "../components/FunilVendas";
 import { ICONES_RELATORIOS, IconeRelatorios } from "../utils/iconesRelatorios";
-import { CartaoDeMenu } from "../components/CartaoDeMenu.jsx";
+import { GradeDeMenu } from "../components/GradeDeMenu.jsx";
 import { Trilha } from "../components/Trilha.jsx";
+import { degrausAte } from "../utils/trilhaDoPainel";
 import { relatoriosVisiveis, relatorioLiberado, TITULO_RELATORIO, PARAMETRO_DE, POR_PARAMETRO } from "../utils/relatorios";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ import { relatoriosVisiveis, relatorioLiberado, TITULO_RELATORIO, PARAMETRO_DE, 
 
 
 export function RelatoriosPage({ session }) {
+  const navigate = useNavigate();
   /* ── A view mora na URL ────────────────────────────────────────────────────
      Era `useState`, e o preço disso era não conseguir mandar "olha o funil" por
      mensagem, nem deixar o menu lateral abrir um relatório específico — ele só
@@ -66,28 +68,22 @@ export function RelatoriosPage({ session }) {
       style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}
     >
       {view === "MENU" ? (
-        <div data-tour="relatorios-indice" className="glass-panel" style={{ textAlign: "center", padding: "56px 40px" }}>
-          <h2 style={{ marginBottom: "8px", fontSize: "28px", fontWeight: "700" }}>Relatórios</h2>
-          <p style={{ marginBottom: "48px", color: "var(--text-muted)", fontSize: "16px" }}>
-            Tudo que conta o que aconteceu na sua imobiliária, num lugar só.
-          </p>
-          <div className="grid grid-2" style={{ gap: "32px", maxWidth: "800px", margin: "0 auto" }}>
-            {visiveis.map((c) => {
-              const Icone = ICONES_RELATORIOS[c.chave];
-              return (
-                <CartaoDeMenu
-                  key={c.chave}
-                  icon={<Icone size={40} weight="duotone" />}
-                  title={c.title}
-                  desc={c.desc}
-                  accent={c.accent}
-                  acao={c.acao}
-                  onClick={() => setView(c.chave)}
-                />
-              );
-            })}
-          </div>
-        </div>
+        <GradeDeMenu
+          tourId="relatorios-indice"
+          titulo="Relatórios"
+          subtitulo="Tudo que conta o que aconteceu na sua imobiliária, num lugar só."
+          cards={visiveis.map((c) => {
+            const Icone = ICONES_RELATORIOS[c.chave];
+            return {
+              title: c.title,
+              desc: c.desc,
+              accent: c.accent,
+              acao: c.acao,
+              icon: <Icone size={32} weight="duotone" />,
+              onClick: () => setView(c.chave),
+            };
+          })}
+        />
       ) : (
         <>
           {/* Os ícones saem da MESMA fonte que desenha os cartões do índice e o
@@ -95,7 +91,9 @@ export function RelatoriosPage({ session }) {
               aqui daria um funil de um jeito na barra e de outro na trilha. */}
           <Trilha
             itens={[
-              { chave: "indice", rotulo: "Relatórios", Icone: IconeRelatorios, aoIr: () => setView("MENU") },
+              /* A cadeia até Relatórios vem do catálogo, e é ela que traz o
+                 Dashboard na frente — o degrau que faltava aqui. */
+              ...degrausAte("/relatorios", navigate, () => setView("MENU")),
               { chave: view, rotulo: TITULO_RELATORIO[view], Icone: ICONES_RELATORIOS[view], aoIr: () => setView(view) },
             ]}
           />

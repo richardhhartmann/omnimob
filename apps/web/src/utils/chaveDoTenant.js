@@ -89,6 +89,14 @@ export const CHAVES = {
      em momentos diferentes (um no primeiro acesso ao painel, outro na primeira
      entrada no módulo), e uma marca só faria concluir um silenciar o outro. */
   tourFlowResolvido: "domus_tour_flow_resolvido",
+  /* A última tela aberta em CADA módulo, para a volta cair onde a pessoa
+     parou. Prefixo, não chave: o módulo entra no fim (`..._HUB`, `..._FLOW`),
+     porque são duas memórias independentes — sair do Flow não pode apagar onde
+     se estava no Hub.
+
+     Por usuário, como `moduloAtivo` e pelo mesmo motivo: num computador de
+     recepção, a última tela de um não é a do outro. */
+  ultimaTelaDoModulo: "domus_ultima_tela_modulo",
 };
 
 /* ── Chave da PESSOA, e não da imobiliária ───────────────────────────────────

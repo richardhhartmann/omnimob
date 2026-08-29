@@ -12,6 +12,8 @@
    renomeia e apaga o que quiser sem tocar em ninguém.
    ──────────────────────────────────────────────────────────────────────────── */
 
+import { criarTiposPadrao } from "./tiposPadrao.js";
+
 export const CARGO_ADMIN = "Administrador";
 
 /* ── As permissões do segundo módulo ─────────────────────────────────────────
@@ -265,9 +267,24 @@ export function cargosDoCatalogo({ temFlow = false } = {}) {
  * @param {{ temFlow?: boolean }} [opcoes] a imobiliária contratou o Flow?
  * @returns {Promise<{ id: number, descricao: string }>} o cargo Administrador
  */
-export async function criarCargosPadrao(prisma, tenantId, { temFlow = false } = {}) {
+export async function criarCargosPadrao(prisma, tenantId, { temFlow = false, apenasAdministrador = false } = {}) {
+  /* ── SÓ O ADMINISTRADOR, quando o catálogo é opcional ─────────────────────
+     O provisionamento passou a criar apenas ele: os outros seis viraram uma
+     ESCOLHA, feita no assistente de primeiro acesso (ver a rota
+     `/me/catalogos-padrao`). O Administrador continua vindo de fábrica porque
+     não é catálogo — é a porta: o usuário inicial precisa de um cargo, e sem
+     ele ninguém entra na conta recém-criada. */
+  const catalogo = apenasAdministrador
+    ? CARGOS_PADRAO.filter((c) => c.descricao === CARGO_ADMIN)
+    : cargosDoCatalogo({ temFlow });
+
+  /* Esta função passou a poder rodar DUAS vezes na vida de uma conta: uma no
+     provisionamento (só o Administrador) e outra quando a pessoa aceita o
+     catálogo no assistente. `Cargo` não tem chave única em `descricao` — o
+     banco aceitaria dois "Administrador" sem reclamar —, então quem chama a
+     segunda vez é que filtra o que já existe. Ver `catalogosPadraoDoTenant`. */
   await prisma.cargo.createMany({
-    data: cargosDoCatalogo({ temFlow }).map((c) => dadosDoCargo(c, tenantId)),
+    data: catalogo.map((c) => dadosDoCargo(c, tenantId)),
   });
   /* Relido em vez de deduzido do createMany: o Postgres não devolve os ids
      criados em lote, e inventar um "o primeiro é o Administrador" a partir da
@@ -276,4 +293,46 @@ export async function criarCargosPadrao(prisma, tenantId, { temFlow = false } = 
     where: { tenantId, descricao: CARGO_ADMIN },
     select: { id: true, descricao: true },
   });
+}
+
+/**
+ * Preenche os catálogos que o assistente de primeiro acesso oferece.
+ *
+ * ── POR QUE ISTO SAIU DO PROVISIONAMENTO ──
+ * Sete cargos e dezenove tipos de imóvel nasciam com toda conta, decididos por
+ * nós. Para muita imobiliária eles servem; para a que já tem o próprio arranjo,
+ * a primeira tarefa no sistema virava APAGAR o que veio — e apagar dá mais
+ * trabalho do que criar. Agora a pessoa escolhe, no mesmo passo em que preenche
+ * a ficha da imobiliária.
+ *
+ * Só ACRESCENTA o que falta: quem já criou "Corretor" à mão não ganha um
+ * segundo, e chamar duas vezes não duplica nada.
+ *
+ * @returns {Promise<{ cargos: number, tipos: number }>} quantos foram criados
+ */
+export async function catalogosPadraoDoTenant(prisma, tenantId, { cargos = false, tipos = false, temFlow = false } = {}) {
+  const criados = { cargos: 0, tipos: 0 };
+
+  if (cargos) {
+    const existentes = await prisma.cargo.findMany({
+      where: { tenantId },
+      select: { descricao: true },
+    });
+    const jaTem = new Set(existentes.map((c) => c.descricao));
+    const faltando = cargosDoCatalogo({ temFlow }).filter((c) => !jaTem.has(c.descricao));
+    if (faltando.length) {
+      await prisma.cargo.createMany({ data: faltando.map((c) => dadosDoCargo(c, tenantId)) });
+      criados.cargos = faltando.length;
+    }
+  }
+
+  if (tipos) {
+    /* `criarTiposPadrao` já é idempotente à sua maneira — ver o cabeçalho dele.
+       O que se conta aqui é o que passou a existir. */
+    const antes = await prisma.tipoImovel.count({ where: { tenantId } });
+    await criarTiposPadrao(prisma, tenantId);
+    criados.tipos = (await prisma.tipoImovel.count({ where: { tenantId } })) - antes;
+  }
+
+  return criados;
 }

@@ -3,6 +3,7 @@ import { Receipt, ArrowSquareOut } from "@phosphor-icons/react";
 import { api } from "../api";
 import { Skeleton } from "./Skeleton";
 import { CodigoPix, useEsperaDoPix, CODIGO_PIX_CSS } from "./CodigoPix.jsx";
+import { ReciboDoPagamento } from "./ReciboDoPagamento.jsx";
 import { planoInfo } from "../utils/planos";
 
 /* ── Cobrança e pagamentos ───────────────────────────────────────────────────
@@ -68,6 +69,9 @@ export function SecaoCobranca({ session, Secao }) {
   const [pix, setPix] = useState(null);
   const [gerando, setGerando] = useState(false);
   const [periodo, setPeriodo] = useState(null);
+  /* Qual pagamento está com o recibo aberto. Guarda a LINHA inteira, e não o
+     id: o comprovante é montado com o que já está na tela, sem nova consulta. */
+  const [recibo, setRecibo] = useState(null);
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -149,6 +153,30 @@ export function SecaoCobranca({ session, Secao }) {
 
   const { situacao, pagamentos = [], ultimo, antecipacao } = dados;
   const doPeriodo = (antecipacao?.periodos || []).find((p) => p.periodo === periodo);
+
+  /* ── Os dois totais ────────────────────────────────────────────────────────
+     Só o que foi PAGO entra: estorno não é dinheiro que a imobiliária gastou, e
+     somá-lo daria um número que não bate com o extrato dela.
+
+     O do ano vem primeiro na leitura porque é o que se pede ao contador; o
+     total desde o início é o que responde "há quanto tempo somos clientes". */
+  const anoAtual = new Date().getFullYear();
+  const pagos = pagamentos.filter((p) => p.status === "PAGO");
+  const totalGeral = pagos.reduce((soma, p) => soma + Number(p.valor || 0), 0);
+  const totalDoAno = pagos
+    .filter((p) => new Date(p.pagoEm).getFullYear() === anoAtual)
+    .reduce((soma, p) => soma + Number(p.valor || 0), 0);
+
+  /* Agrupado por ano, do mais recente para o mais antigo. Uma lista corrida de
+     doze pagamentos mensais vira uma parede; com o ano como cabeçalho, o olho
+     encontra o período que procura sem ler linha por linha. */
+  const porAno = [];
+  for (const p of pagamentos) {
+    const ano = new Date(p.pagoEm).getFullYear();
+    const grupo = porAno.find((g) => g.ano === ano);
+    if (grupo) grupo.itens.push(p);
+    else porAno.push({ ano, itens: [p] });
+  }
   const estado = SITUACAO[situacao?.statusPagamento] || SITUACAO.TRIAL;
   const faltam = diasAte(situacao?.proximoVencimento);
   const info = planoInfo(situacao?.plano);
@@ -319,17 +347,51 @@ export function SecaoCobranca({ session, Secao }) {
           /* Vazio com MOTIVO. "Nenhum pagamento" sozinho faz a pessoa procurar
              o que quebrou; dizer que ainda não houve cobrança responde. */
           <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Nenhuma cobrança ainda. Quando a primeira for paga, ela aparece aqui com o recibo.
+            {situacao?.statusPagamento === "TRIAL"
+              ? "Nada cobrado até aqui — você está em teste. Quando assinar, cada pagamento aparece nesta lista com o comprovante."
+              : "Nenhuma cobrança registrada ainda. Assim que a primeira for paga, ela aparece aqui com o comprovante."}
           </p>
         ) : (
-          pagamentos.map((p) => <LinhaDePagamento key={p.id} p={p} />)
+          <>
+            {/* Os totais, antes da lista: é a pergunta que se faz olhando um
+                extrato antes de olhar as linhas dele. */}
+            <div style={{ display: "flex", gap: "22px", flexWrap: "wrap", paddingBottom: "4px" }}>
+              <Numero rotulo={`Pago em ${anoAtual}`}>{dinheiro(totalDoAno)}</Numero>
+              <Numero rotulo="Desde o início">{dinheiro(totalGeral)}</Numero>
+              <Numero rotulo="Cobranças">{pagos.length}</Numero>
+            </div>
+
+            {porAno.map((grupo) => (
+              <div key={grupo.ano} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {/* O ano só aparece quando há mais de um: com um ano só, o
+                    cabeçalho é ruído — a data já está em cada linha. */}
+                {porAno.length > 1 ? (
+                  <span style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--text-muted)", marginTop: "6px" }}>
+                    {grupo.ano}
+                  </span>
+                ) : null}
+                {grupo.itens.map((p) => (
+                  <LinhaDePagamento key={p.id} p={p} aoVerRecibo={() => setRecibo(p)} />
+                ))}
+              </div>
+            ))}
+          </>
         )}
       </div>
 
       <p style={{ margin: 0, fontSize: "11.5px", color: "var(--placeholder, #64748b)", lineHeight: 1.6 }}>
-        O recibo é emitido por quem processou o pagamento. A Omnimob não emite nota fiscal —
-        se você precisar de uma, responda o e-mail da cobrança que a gente resolve.
+        O recibo comprova o pagamento e não é nota fiscal — a Omnimob não emite NF-e no
+        momento. Se a sua contabilidade precisar de uma, responda o e-mail da cobrança.
       </p>
+
+      {recibo ? (
+        <ReciboDoPagamento
+          pagamento={recibo}
+          imobiliaria={situacao?.imobiliaria}
+          planoNome={planoInfo(recibo.plano)?.nome || recibo.plano}
+          aoFechar={() => setRecibo(null)}
+        />
+      ) : null}
     </Secao>
   );
 }
@@ -359,7 +421,7 @@ const CORES_STATUS = {
   ESTORNADO: "#94a3b8",
 };
 
-function LinhaDePagamento({ p }) {
+function LinhaDePagamento({ p, aoVerRecibo }) {
   const cor = CORES_STATUS[p.status] || "#94a3b8";
   /* O período coberto é o que responde "este pagamento valeu por quanto
      tempo?" — e é ele que explica um valor de R$ 891 num plano de R$ 99. */
@@ -406,16 +468,36 @@ function LinhaDePagamento({ p }) {
         ) : null}
       </span>
 
-      {p.reciboUrl ? (
-        <a
-          href={p.reciboUrl}
-          target="_blank"
-          rel="noreferrer"
-          style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", color: "#a5b4fc" }}
+      <span style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {/* O comprovante da Omnimob existe para TODA linha — inclusive para a
+            ativação manual, que não tem provedor nenhum por trás. */}
+        <button
+          type="button"
+          onClick={aoVerRecibo}
+          style={{
+            cursor: "pointer", padding: "7px 12px", borderRadius: "9px", font: "inherit",
+            fontSize: "12.5px", fontWeight: 600, color: "var(--text-main)",
+            background: "var(--sup-05, rgba(255,255,255,0.05))",
+            border: "1px solid var(--linha-10, rgba(255,255,255,0.1))",
+          }}
         >
-          Recibo <ArrowSquareOut size={13} />
-        </a>
-      ) : null}
+          Recibo
+        </button>
+
+        {/* O documento do PROVEDOR, quando ele existe de verdade. Só o Stripe
+            tem: o Mercado Pago não emite comprovante de Pix, e o link que ele
+            devolve é a tela do QR já pago. */}
+        {p.reciboUrl && p.provedor === "STRIPE" ? (
+          <a
+            href={p.reciboUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", color: "#a5b4fc" }}
+          >
+            Fatura <ArrowSquareOut size={13} />
+          </a>
+        ) : null}
+      </span>
     </div>
   );
 }
