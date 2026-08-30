@@ -1,140 +1,260 @@
 import { api } from "../api";
 import { TEMAS } from "../utils/temaDoPainel";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { IdentificationBadge, Keyboard, Palette, Compass, Sun, Moon, CircleHalf, GoogleLogo, Buildings } from "@phosphor-icons/react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  IdentificationBadge,
+  Keyboard,
+  Palette,
+  Compass,
+  Sun,
+  Moon,
+  CircleHalf,
+  GoogleLogo,
+  Buildings,
+  X,
+  Check,
+  CheckCircle,
+  WarningCircle,
+  ShieldCheck,
+  UserCircle,
+  Info,
+} from "@phosphor-icons/react";
 import { EditorDeAtalhos } from "./EditorDeAtalhos.jsx";
 import { apenasMudancas } from "../utils/atalhos";
 import { TODAS_AS_PERMISSOES } from "../utils/permissoesCargo.jsx";
 
-/* O ícone de cada tema. Estava no AdminLayout, junto do atalho da barra; veio
-   com ele quando a escolha virou uma linha só, aqui. */
 const ICONE_DO_TEMA = { claro: Sun, escuro: Moon, auto: CircleHalf };
 
-/* Quanto dura a despedida. Casa com `mpVeuSai`/`mpModalSai`, no styles.css —
-   mudar aqui sem mudar lá corta o fim ou deixa a caixa parada depois de a
-   animação acabar. */
-const SAIDA_MS = 170;
+const META_DO_TEMA = {
+  claro: { descricao: "Sempre claro" },
+  escuro: { descricao: "Sempre escuro" },
+  auto: { descricao: "Segue seu dispositivo" },
+};
+
+const SAIDA_MS = 180;
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Os dois modais que o menu do perfil abre.
+   Modal base
 
-   ── A LINHA QUE OS SEPARA DE "CONFIGURAÇÕES" ──
-
-   Configurações (a tela) é da IMOBILIÁRIA: plano, cobrança, domínio, cores da
-   marca, dados legais. Tudo ali vale para a empresa inteira e é o administrador
-   quem mexe.
-
-   Isto aqui é da PESSOA: o tema que ELA vê, se a barra abre recolhida para ELA,
-   se ELA quer ser guiada por tours. Um corretor mexe nisto sem pedir licença, e
-   nada do que ele mudar aparece para o colega ao lado.
-
-   Ter os dois com o mesmo nome em lugares diferentes seria confuso; ter um só
-   seria pior — o corretor precisaria de permissão de administrador para
-   escolher o próprio tema.
+   A nova camada visual usa o prefixo `mpx-*` para ficar isolada do CSS antigo
+   do menu de perfil (`mp-*`). Assim a modernização não interfere nos botões,
+   balões e submenus que compartilham o arquivo de estilos.
    ──────────────────────────────────────────────────────────────────────────── */
-
-/* `abas` é opcional: modal simples continua recebendo só `children`, e é o caso
-   de "Meus dados". Quando há abas, elas ficam à ESQUERDA e não no topo — a
-   lista cresce (aparência, atalhos, e o que vier), e abas no topo de um modal
-   estreito viram duas fileiras ou rolagem horizontal. */
 function Modal({ titulo, subtitulo, onClose, abas, abaAtiva, aoTrocarAba, children }) {
-  /* ── O FUNDO NÃO FECHA ─────────────────────────────────────────
-
-     Ele fechava, e aqui dentro mora o editor de atalhos, que grava sozinho meio
-     segundo depois de cada tecla. Um clique fora por engano no meio disso
-     fechava a caixa com uma gravação em voo — e a pessoa não via nem o "Salvo."
-
-     É a mesma decisão do `BoasVindasModal`, e pela mesma razão: sair continua
-     sendo o ✕ e o Esc, os dois explícitos. */
-
-  /* Desmonta só depois da animação — quem tira do DOM é o pai, então o aviso
-     espera. Mesmo arranjo do `TourGuiado` e do `BoasVindasModal`. */
   const [saindo, setSaindo] = useState(false);
-  /* A trava é um ref e não o próprio estado: o updater do `setSaindo` teria de
-     ser puro, e o StrictMode o executa duas vezes em dev — agendar o
-     `onClose` lá dentro o dispararia em dobro. */
+
+  const modalRef = useRef(null);
   const saindoRef = useRef(false);
+  const timerRef = useRef(null);
+  const focoAnteriorRef = useRef(null);
+
+  const tituloId = useId();
+  const subtituloId = useId();
+
   const fechar = useCallback(() => {
-    if (saindoRef.current) return; // clique duplo não reinicia a saída
+    if (saindoRef.current) return;
+
     saindoRef.current = true;
     setSaindo(true);
-    setTimeout(onClose, SAIDA_MS);
+
+    timerRef.current = window.setTimeout(onClose, SAIDA_MS);
   }, [onClose]);
 
-  /* Esc fecha. Ele não pode subir: o ouvinte global lê Esc como "voltar uma
-     tela", e sem o `stopPropagation` fechar a caixa levaria a pessoa embora da
-     página junto. Fase de captura para chegar antes de qualquer campo. */
+  /* Esc fecha, Tab fica preso dentro do diálogo e o foco volta para quem abriu
+     o modal quando ele sai. É o comportamento esperado de um diálogo de
+     configurações e evita o teclado "andar" pela tela que está atrás. */
   useEffect(() => {
+    focoAnteriorRef.current = document.activeElement;
+
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const seletorFocavel = [
+      "button:not([disabled])",
+      "a[href]",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(",");
+
+    const modal = modalRef.current;
+    modal?.querySelector(seletorFocavel)?.focus();
+
     function aoTeclar(e) {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      fechar();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        fechar();
+        return;
+      }
+
+      if (e.key !== "Tab" || !modalRef.current) return;
+
+      const focaveis = [...modalRef.current.querySelectorAll(seletorFocavel)].filter(
+        (el) => !el.hasAttribute("hidden") && el.getAttribute("aria-hidden") !== "true"
+      );
+
+      if (!focaveis.length) return;
+
+      const primeiro = focaveis[0];
+      const ultimo = focaveis[focaveis.length - 1];
+
+      if (e.shiftKey && document.activeElement === primeiro) {
+        e.preventDefault();
+        ultimo.focus();
+      } else if (!e.shiftKey && document.activeElement === ultimo) {
+        e.preventDefault();
+        primeiro.focus();
+      }
     }
+
     document.addEventListener("keydown", aoTeclar, true);
-    return () => document.removeEventListener("keydown", aoTeclar, true);
+
+    return () => {
+      document.removeEventListener("keydown", aoTeclar, true);
+      document.body.style.overflow = overflowAnterior;
+
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+      }
+
+      focoAnteriorRef.current?.focus?.();
+    };
   }, [fechar]);
 
   return (
     <>
-      <div className={`mp-veu${saindo ? " is-saindo" : ""}`} />
       <div
-        className={`mp-modal${abas?.length ? " mp-modal--abas" : ""}${saindo ? " is-saindo" : ""}`}
+        className={`mpx-veu${saindo ? " is-saindo" : ""}`}
+        aria-hidden="true"
+      />
+
+      <div
+        ref={modalRef}
+        className={`mpx-modal${abas?.length ? " mpx-modal--abas" : ""}${saindo ? " is-saindo" : ""}`}
         role="dialog"
         aria-modal="true"
-        aria-label={titulo}
+        aria-labelledby={tituloId}
+        aria-describedby={subtitulo ? subtituloId : undefined}
       >
-        <header className="mp-modal__cab">
-          <div>
-            <h2>{titulo}</h2>
-            {subtitulo ? <p>{subtitulo}</p> : null}
+        <header className="mpx-modal__cab">
+          <div className="mpx-modal__titulo">
+            <h2 id={tituloId}>{titulo}</h2>
+            {subtitulo ? <p id={subtituloId}>{subtitulo}</p> : null}
           </div>
-          <button type="button" className="mp-modal__fechar" onClick={fechar} aria-label="Fechar">×</button>
+
+          <button
+            type="button"
+            className="mpx-fechar"
+            onClick={fechar}
+            aria-label="Fechar"
+            title="Fechar"
+          >
+            <X size={20} />
+          </button>
         </header>
 
-        <div className="mp-modal__area">
+        <div className="mpx-modal__area">
           {abas?.length ? (
-            <nav className="mp-abas" aria-label="Seções">
-              {abas.map((aba) => (
-                <button
-                  key={aba.id}
-                  type="button"
-                  className={`mp-aba${abaAtiva === aba.id ? " is-on" : ""}`}
-                  onClick={() => aoTrocarAba(aba.id)}
-                  aria-current={abaAtiva === aba.id ? "true" : undefined}
-                >
-                  <aba.Icone size={16} />
-                  <span>{aba.rotulo}</span>
-                </button>
-              ))}
-            </nav>
+            <aside className="mpx-sidebar">
+              <nav className="mpx-abas" aria-label="Seções das preferências">
+                {abas.map((aba) => {
+                  const ativa = abaAtiva === aba.id;
+
+                  return (
+                    <button
+                      key={aba.id}
+                      type="button"
+                      className={`mpx-aba${ativa ? " is-on" : ""}`}
+                      onClick={() => aoTrocarAba(aba.id)}
+                      aria-current={ativa ? "page" : undefined}
+                    >
+                      <span className="mpx-aba__icone" aria-hidden="true">
+                        <aba.Icone size={19} weight={ativa ? "fill" : "regular"} />
+                      </span>
+                      <span>{aba.rotulo}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="mpx-sidebar__rodape">
+                <ShieldCheck size={16} />
+                <div>
+                  <strong>Só para você</strong>
+                  <small>Estas escolhas não alteram a conta da imobiliária.</small>
+                </div>
+              </div>
+            </aside>
           ) : null}
-          <div className="mp-modal__corpo">{children}</div>
+
+          <div className="mpx-modal__corpo">
+            <div className="mpx-modal__conteudo">{children}</div>
+          </div>
         </div>
       </div>
     </>
   );
 }
 
-function Secao({ Icone, titulo, descricao, children }) {
+function CabecalhoDePagina({ titulo, descricao, children }) {
   return (
-    <section className="mp-secao">
-      <div className="mp-secao__cab">
-        <span className="mp-secao__icone"><Icone size={17} /></span>
-        <div>
-          <strong>{titulo}</strong>
-          {descricao ? <small>{descricao}</small> : null}
-        </div>
+    <div className="mpx-pagina-cab">
+      <div>
+        <h3>{titulo}</h3>
+        {descricao ? <p>{descricao}</p> : null}
       </div>
-      {children}
+      {children ? <div className="mpx-pagina-cab__acao">{children}</div> : null}
+    </div>
+  );
+}
+
+function Secao({ Icone, titulo, descricao, children, acao = null }) {
+  return (
+    <section className="mpx-secao">
+      <div className="mpx-secao__cab">
+        <div className="mpx-secao__identidade">
+          {Icone ? (
+            <span className="mpx-secao__icone" aria-hidden="true">
+              <Icone size={19} />
+            </span>
+          ) : null}
+
+          <div>
+            <h4>{titulo}</h4>
+            {descricao ? <p>{descricao}</p> : null}
+          </div>
+        </div>
+
+        {acao ? <div className="mpx-secao__acao">{acao}</div> : null}
+      </div>
+
+      <div className="mpx-secao__conteudo">{children}</div>
     </section>
   );
 }
 
-/* Só os atalhos que EXISTEM de verdade. Uma lista bonita com atalhos que o
-   produto não tem é pior que nenhuma lista: quem tenta e não funciona passa a
-   desconfiar dos outros. Hoje todos vivem no editor de vitrine — quando
-   nascerem atalhos globais, eles entram aqui. */
+function LinhaDeDados({ rotulo, valor, mono = false }) {
+  return (
+    <div className="mpx-dado">
+      <dt>{rotulo}</dt>
+      <dd className={mono ? "is-mono" : undefined}>{valor || "—"}</dd>
+    </div>
+  );
+}
+
+function Aviso({ tipo = "info", children }) {
+  const Icone = tipo === "erro" ? WarningCircle : Info;
+
+  return (
+    <div className={`mpx-aviso mpx-aviso--${tipo}`} role={tipo === "erro" ? "alert" : "status"}>
+      <Icone size={17} weight={tipo === "erro" ? "fill" : "regular"} />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 const ATALHOS = [
   { onde: "Editor de vitrine", teclas: "Ctrl + Z", faz: "Desfaz o último movimento" },
   { onde: "Editor de vitrine", teclas: "Ctrl + Y", faz: "Refaz" },
@@ -142,8 +262,6 @@ const ATALHOS = [
   { onde: "Editor de vitrine", teclas: "Ctrl + roda", faz: "Aproxima e afasta a prancheta" },
   { onde: "Editor de vitrine", teclas: "Ctrl + 0", faz: "Volta ao tamanho original" },
   { onde: "Qualquer modal", teclas: "Esc", faz: "Fecha" },
-  /* Esc não é configurável, e por isso mora aqui e não no editor: é o gesto de
-     "sair daqui" que o sistema inteiro respeita. */
   { onde: "Qualquer tela", teclas: "Esc", faz: "Volta para a tela anterior" },
 ];
 
@@ -156,29 +274,27 @@ export function ModalPreferencias({ onClose, tema, aoTrocarTema, session, onSess
   const [aba, setAba] = useState("aparencia");
   const [meus, setMeus] = useState(() => session?.usuario?.atalhos || {});
   const [salvando, setSalvando] = useState(false);
-  const [aviso, setAviso] = useState("");
+  const [aviso, setAviso] = useState(null);
 
   const cargo = session?.usuario?.cargo;
-  /* O que a IMOBILIÁRIA definiu. É por baixo da escolha desta pessoa — a casa
-     estabelece a convenção, quem trabalha o dia inteiro pode discordar. */
   const daCasa = session?.tenant?.atalhos || {};
 
-  /* Sem botão: o editor chama isto com um respiro depois de cada tecla. */
   const salvarAtalhos = useCallback(async (config) => {
     setSalvando(true);
-    setAviso("");
+    setAviso(null);
+
     try {
       const enxuto = apenasMudancas(config);
       await api.salvarMeusAtalhos(enxuto);
-      /* A sessão acompanha na hora: o ouvinte do teclado e os selos ao lado dos
-         botões leem dela, e sem isto a tecla nova só valeria ao recarregar. */
+
       onSessionUpdate?.({
         ...session,
         usuario: { ...session.usuario, atalhos: enxuto },
       });
-      setAviso("Salvo.");
+
+      setAviso({ tipo: "sucesso", texto: "Alterações salvas" });
     } catch (e) {
-      setAviso(e.message || "Não consegui salvar.");
+      setAviso({ tipo: "erro", texto: e.message || "Não consegui salvar." });
     } finally {
       setSalvando(false);
     }
@@ -187,61 +303,134 @@ export function ModalPreferencias({ onClose, tema, aoTrocarTema, session, onSess
   return (
     <Modal
       titulo="Suas preferências"
-      subtitulo="Valem só para você — ninguém da equipe vê estas escolhas."
+      subtitulo="Personalize sua experiência no Omnimob."
       onClose={onClose}
       abas={ABAS_PREFERENCIAS}
       abaAtiva={aba}
       aoTrocarAba={setAba}
     >
       {aba === "aparencia" ? (
-        <Secao Icone={Palette} titulo="Tema do painel" descricao="Automático segue o tema do seu sistema operacional.">
-          <div className="mp-opcoes">
-            {TEMAS.map((t) => {
-              const Icone = ICONE_DO_TEMA[t.id] || CircleHalf;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`mp-opcao mp-opcao--icone${tema === t.id ? " is-on" : ""}`}
-                  onClick={() => aoTrocarTema(t.id)}
-                  aria-pressed={tema === t.id}
-                >
-                  <Icone size={15} weight={tema === t.id ? "fill" : "regular"} />
-                  {t.rotulo}
-                </button>
-              );
-            })}
+        <>
+          <CabecalhoDePagina
+            titulo="Aparência"
+            descricao="Escolha como o painel deve aparecer para você. A alteração é aplicada na hora."
+          />
+
+          <Secao
+            Icone={Palette}
+            titulo="Tema do painel"
+            descricao="Automático acompanha a preferência do seu sistema operacional."
+          >
+            <div className="mpx-temas">
+              {TEMAS.map((t) => {
+                const Icone = ICONE_DO_TEMA[t.id] || CircleHalf;
+                const selecionado = tema === t.id;
+                const meta = META_DO_TEMA[t.id] || {};
+
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`mpx-tema${selecionado ? " is-on" : ""}`}
+                    onClick={() => aoTrocarTema(t.id)}
+                    aria-pressed={selecionado}
+                  >
+                    <span
+                      className={`mpx-tema__preview mpx-tema__preview--${t.id}`}
+                      aria-hidden="true"
+                    >
+                      <i className="mpx-tema__barra" />
+                      <span className="mpx-tema__pagina">
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    </span>
+
+                    <span className="mpx-tema__rodape">
+                      <span className="mpx-tema__icone" aria-hidden="true">
+                        <Icone size={18} weight={selecionado ? "fill" : "regular"} />
+                      </span>
+
+                      <span className="mpx-tema__texto">
+                        <strong>{t.rotulo}</strong>
+                        <small>{meta.descricao}</small>
+                      </span>
+
+                      <span className={`mpx-radio${selecionado ? " is-on" : ""}`} aria-hidden="true">
+                        {selecionado ? <Check size={11} weight="bold" /> : null}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Secao>
+
+          <div className="mpx-dica">
+            <CircleHalf size={18} />
+            <p>
+              No modo <strong>Automático</strong>, o painel muda junto com o tema do
+              dispositivo, sem você precisar voltar aqui.
+            </p>
           </div>
-        </Secao>
+        </>
       ) : (
         <>
+          <CabecalhoDePagina
+            titulo="Atalhos"
+            descricao="Personalize comandos de teclado para trabalhar mais rápido sem alterar a experiência da equipe."
+          >
+            {salvando ? (
+              <span className="mpx-status is-salvando">
+                <span className="mpx-spinner" />
+                Salvando
+              </span>
+            ) : aviso?.tipo === "sucesso" ? (
+              <span className="mpx-status is-salvo">
+                <CheckCircle size={15} weight="fill" />
+                {aviso.texto}
+              </span>
+            ) : null}
+          </CabecalhoDePagina>
+
+          {aviso?.tipo === "erro" ? <Aviso tipo="erro">{aviso.texto}</Aviso> : null}
+
           <Secao
             Icone={Keyboard}
             titulo="Seus atalhos"
-            descricao="Começam no que a imobiliária definiu. O que você mudar aqui vale só para você."
+            descricao="Eles começam no padrão da imobiliária. Suas mudanças valem apenas para o seu usuário."
           >
-            <EditorDeAtalhos
-              cargo={cargo}
-              herdados={daCasa}
-              valor={meus}
-              aoMudar={setMeus}
-              aoSalvar={salvarAtalhos}
-              estado={salvando ? "Salvando…" : aviso}
-            />
+            <div className="mpx-editor-atalhos">
+              <EditorDeAtalhos
+                cargo={cargo}
+                herdados={daCasa}
+                valor={meus}
+                aoMudar={setMeus}
+                aoSalvar={salvarAtalhos}
+                estado={salvando ? "Salvando…" : aviso?.texto || ""}
+              />
+            </div>
           </Secao>
 
-          <Secao Icone={Keyboard} titulo="Os que não mudam" descricao="Fixos no sistema inteiro.">
-            <table className="mp-atalhos">
-              <tbody>
-                {ATALHOS.map((a) => (
-                  <tr key={a.teclas + a.onde}>
-                    <td><kbd>{a.teclas}</kbd></td>
-                    <td>{a.faz}</td>
-                    <td><small>{a.onde}</small></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <Secao
+            Icone={ShieldCheck}
+            titulo="Atalhos do sistema"
+            descricao="Estes comandos são universais e não podem ser alterados."
+          >
+            <div className="mpx-atalhos">
+              {ATALHOS.map((a) => (
+                <div className="mpx-atalho" key={a.teclas + a.onde}>
+                  <div className="mpx-atalho__tecla">
+                    <kbd>{a.teclas}</kbd>
+                  </div>
+                  <div className="mpx-atalho__texto">
+                    <strong>{a.faz}</strong>
+                    <small>{a.onde}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
           </Secao>
         </>
       )}
@@ -254,15 +443,14 @@ export function ModalMeusDados({ onClose, session, onSessionUpdate }) {
   const t = session?.tenant || {};
   const cargo = u.cargo || {};
   const google = u.google || null;
+
   const [desvinculando, setDesvinculando] = useState(false);
   const [erro, setErro] = useState("");
 
-  /* Desvincular é reversível e sem perda: o acesso por login e senha nunca
-     deixou de existir. Por isso não há confirmação — pedir "tem certeza?" para
-     uma ação que se desfaz em dois cliques é cerimônia. */
   async function desvincular() {
     setDesvinculando(true);
     setErro("");
+
     try {
       await api.desvincularGoogle(t.slug);
       onSessionUpdate?.({ ...session, usuario: { ...u, google: null } });
@@ -273,104 +461,169 @@ export function ModalMeusDados({ onClose, session, onSessionUpdate }) {
     }
   }
 
-  /* ── As permissões do cargo, do CATÁLOGO ───────────────────────────────────
-
-     Era uma lista escrita à mão aqui dentro, com rótulos próprios — e o
-     comentário dela dizia vir "do mesmo objeto que o painel usa", o que nunca
-     foi verdade. Era a terceira cópia da mesma lista no projeto.
-
-     O preço apareceu com o Flow: as sete permissões do módulo não estavam
-     nela, então "O que o seu cargo permite" simplesmente não mencionava o Flow.
-     Quem tinha o módulo lia a própria ficha e concluía que não tinha.
-
-     Agora sai de `TODAS_AS_PERMISSOES`, a mesma lista que desenha a tela de
-     cargos: permissão nova aparece aqui sozinha, e os dois lugares usam as
-     mesmas palavras para a mesma coisa. */
   const permissoesDoCargo = TODAS_AS_PERMISSOES.filter((p) => cargo[p.key]);
 
+  const plano =
+    t.plano
+      ? t.plano.charAt(0).toUpperCase() + t.plano.slice(1).toLowerCase()
+      : "Básico";
+
   return (
-    <Modal titulo="Meus dados" subtitulo="O que o sistema sabe sobre o seu acesso." onClose={onClose}>
-      {/* ── A conta Google ────────────────────────────────────────────────
-          Primeiro porque é o que muda: o resto desta tela é o cadastro, que a
-          pessoa não edita daqui. */}
+    <Modal
+      titulo="Meus dados"
+      subtitulo="Conta, acesso e informações vinculadas ao seu usuário."
+      onClose={onClose}
+    >
+      <div className="mpx-perfil">
+        <div className="mpx-perfil__avatar">
+          {google?.foto ? (
+            <img src={google.foto} alt="" referrerPolicy="no-referrer" />
+          ) : (
+            <UserCircle size={34} weight="duotone" />
+          )}
+        </div>
+
+        <div className="mpx-perfil__texto">
+          <h3>{google?.nome || u.nome || "Seu perfil"}</h3>
+          <p>{u.email || u.login || "Usuário Omnimob"}</p>
+        </div>
+      </div>
+
       <Secao
         Icone={GoogleLogo}
-        titulo={google ? "Conta Google vinculada" : "Conta Google"}
+        titulo="Conta Google"
         descricao={
           google
-            ? "Você pode entrar pelo Google. Nome e foto de lá aparecem no painel."
-            : "Ainda não vinculada. Vincule pelo menu do seu perfil."
+            ? "Use sua conta Google para entrar no Omnimob sem digitar a senha."
+            : "Nenhuma conta Google está vinculada ao seu usuário."
+        }
+        acao={
+          google ? (
+            <span className="mpx-badge is-ok">
+              <CheckCircle size={14} weight="fill" />
+              Vinculada
+            </span>
+          ) : null
         }
       >
         {google ? (
           <>
-            <div className="mp-google">
-              {google.foto ? (
-                <img src={google.foto} alt="" referrerPolicy="no-referrer" />
-              ) : null}
-              <div>
-                <strong>{google.nome || "—"}</strong>
-                <small>{google.email || "—"}</small>
+            <div className="mpx-google">
+              <div className="mpx-google__avatar">
+                {google.foto ? (
+                  <img src={google.foto} alt="" referrerPolicy="no-referrer" />
+                ) : (
+                  <GoogleLogo size={23} />
+                )}
               </div>
-            </div>
-            {google.vinculadoEm ? (
-              <p className="mp-nota">
-                Vinculada em {new Date(google.vinculadoEm).toLocaleDateString("pt-BR")}.
-              </p>
-            ) : null}
-            <div className="mp-opcoes">
-              <button type="button" className="mp-opcao" onClick={desvincular} disabled={desvinculando}>
+
+              <div className="mpx-google__texto">
+                <strong>{google.nome || "Conta Google"}</strong>
+                <span>{google.email || "—"}</span>
+                {google.vinculadoEm ? (
+                  <small>
+                    Vinculada em {new Date(google.vinculadoEm).toLocaleDateString("pt-BR")}
+                  </small>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                className="mpx-acao-texto is-perigo"
+                onClick={desvincular}
+                disabled={desvinculando}
+              >
                 {desvinculando ? "Desvinculando…" : "Desvincular"}
               </button>
             </div>
-            <p className="mp-nota">
-              Desvincular não tira o seu acesso: login e senha continuam valendo.
-            </p>
+
+            <div className="mpx-dica mpx-dica--interna">
+              <ShieldCheck size={17} />
+              <p>
+                Desvincular <strong>não remove seu acesso</strong>. Login e senha
+                continuam funcionando normalmente.
+              </p>
+            </div>
           </>
         ) : (
-          <p className="mp-nota">
-            Vinculando, você entra sem digitar senha e o painel passa a mostrar sua
-            foto do Google.
-          </p>
+          <div className="mpx-vazio">
+            <span className="mpx-vazio__icone">
+              <GoogleLogo size={23} />
+            </span>
+            <div>
+              <strong>Nenhuma conta vinculada</strong>
+              <p>
+                Vincule pelo menu do perfil para entrar mais rápido e usar sua foto
+                do Google no painel.
+              </p>
+            </div>
+          </div>
         )}
-        {erro ? <p className="mp-nota" style={{ color: "#fca5a5" }}>{erro}</p> : null}
+
+        {erro ? <Aviso tipo="erro">{erro}</Aviso> : null}
       </Secao>
 
-      {/* ── O cadastro na Omnimob ─────────────────────────────────────────
-          Separado do bloco acima de propósito: são coisas diferentes e a tela
-          precisa deixar isso claro. O nome do Google é o que a PESSOA vê no
-          painel; o nome daqui é o que a IMOBILIÁRIA publica — na vitrine, nas
-          listas, no widget de Equipe. Mostrar os dois juntos, sem rótulo,
-          faria parecer que um substituiu o outro. */}
-      <Secao Icone={IdentificationBadge} titulo="Seu cadastro na Omnimob" descricao={cargo.descricao || "Operador"}>
-        <dl className="mp-ficha">
-          <dt>Nome</dt><dd>{u.nome || "—"}</dd>
-          <dt>Login</dt><dd>{u.login || "—"}</dd>
-          <dt>E-mail</dt><dd>{u.email || "—"}</dd>
+      <Secao
+        Icone={IdentificationBadge}
+        titulo="Cadastro na Omnimob"
+        descricao={cargo.descricao || "Dados cadastrados pela imobiliária."}
+      >
+        <dl className="mpx-dados">
+          <LinhaDeDados rotulo="Nome" valor={u.nome} />
+          <LinhaDeDados rotulo="Login" valor={u.login} mono />
+          <LinhaDeDados rotulo="E-mail" valor={u.email} />
         </dl>
       </Secao>
 
-      <Secao Icone={Buildings} titulo={t.name || "Imobiliária"} descricao="A conta a que o seu acesso pertence.">
-        <dl className="mp-ficha">
-          <dt>Plano</dt><dd style={{ textTransform: "capitalize" }}>{(t.plano || "básico").toLowerCase()}</dd>
-          <dt>Endereço</dt><dd>{t.slug ? `${t.slug}.omnimob.app` : "—"}</dd>
+      <Secao
+        Icone={Buildings}
+        titulo={t.name || "Imobiliária"}
+        descricao="Organização à qual este acesso pertence."
+      >
+        <dl className="mpx-dados">
+          <LinhaDeDados rotulo="Plano" valor={plano} />
+          <LinhaDeDados
+            rotulo="Endereço"
+            valor={t.slug ? `${t.slug}.omnimob.app` : "—"}
+            mono
+          />
         </dl>
       </Secao>
 
-      <Secao Icone={Compass} titulo="O que o seu cargo permite" descricao="Definido por quem administra a conta.">
+      <Secao
+        Icone={Compass}
+        titulo="Permissões do seu cargo"
+        descricao="Definidas por quem administra a conta."
+      >
         {permissoesDoCargo.length ? (
-          <ul className="mp-permissoes">
-            {permissoesDoCargo.map((p) => <li key={p.key}>{p.label}</li>)}
-          </ul>
+          <div className="mpx-permissoes">
+            {permissoesDoCargo.map((p) => (
+              <span className="mpx-permissao" key={p.key}>
+                <Check size={12} weight="bold" />
+                {p.label}
+              </span>
+            ))}
+          </div>
         ) : (
-          <p className="mp-nota">Nenhuma permissão marcada neste cargo.</p>
+          <div className="mpx-vazio mpx-vazio--compacto">
+            <span className="mpx-vazio__icone">
+              <ShieldCheck size={22} />
+            </span>
+            <div>
+              <strong>Nenhuma permissão marcada</strong>
+              <p>Este cargo não possui permissões específicas habilitadas.</p>
+            </div>
+          </div>
         )}
       </Secao>
 
-      <p className="mp-nota">
-        Para trocar nome, e-mail ou senha do cadastro, fale com quem administra a
-        conta — estes dados são gerenciados em <strong>Usuários</strong>.
-      </p>
+      <div className="mpx-rodape-nota">
+        <IdentificationBadge size={18} />
+        <p>
+          Para trocar nome, e-mail ou senha do cadastro, fale com quem administra
+          a conta. Esses dados são gerenciados em <strong>Usuários</strong>.
+        </p>
+      </div>
     </Modal>
   );
 }
