@@ -28,11 +28,11 @@ export const PORTA_DO_FLOW = {
 
 export const PERMISSOES_FLOW = [
   PORTA_DO_FLOW,
+  { key: "validarFinanceiro",  label: "Validar (Financeiro)", Icon: CurrencyCircleDollar },
+  { key: "validarJuridico",    label: "Validar (Jurídico)",   Icon: Scales },
   { key: "gerenciarNegocios",  label: "Gerenciar Negócios",   Icon: Kanban },
   { key: "gerenciarContratos", label: "Gerenciar Contratos",  Icon: FileText },
   { key: "gerenciarCaptacao",  label: "Configurar Captação",  Icon: Broadcast },
-  { key: "validarJuridico",    label: "Validar (Jurídico)",   Icon: Scales },
-  { key: "validarFinanceiro",  label: "Validar (Financeiro)", Icon: CurrencyCircleDollar },
   { key: "verComissoes",       label: "Ver Comissões",        Icon: Coins },
 ];
 
