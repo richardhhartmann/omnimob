@@ -115,10 +115,13 @@ Fonte única em `utils/modulos.js` (tela) e `services/modulos.js` (servidor, que
 o acento (índigo → rosa). Um segundo layout seria a armadilha em que o editor de
 vitrine já caiu duas vezes.
 
-Pendente: os **6 preços novos do Flow no Stripe** (a matriz é 3 planos × 2
-pacotes × 2 períodos = 12; os 6 do Hub existem). Sem eles o pacote Hub+Flow não é
-vendável e o alternador some da landing — sem erro nenhum, como o preço anual fez
-quando entrou.
+**Preços (conferido em 2026-08-29):** as 12 combinações (3 planos × 2 pacotes ×
+2 períodos) existem e estão ativas — **em modo TESTE**. O anual é sempre 9× o
+mensal, ou seja três meses grátis, e o Flow custa +R$ 50 em qualquer degrau.
+
+Pendente: recriar as 12 em modo **LIVE** e apontar as variáveis do Render para
+elas. Sem isso o pacote Hub+Flow não é vendável em produção e o alternador some
+da landing — sem erro nenhum, como o preço anual fez quando entrou.
 
 ---
 
@@ -288,9 +291,11 @@ Em ordem de quem está bloqueando quem.
 1. **App Review da Meta.** Sem ele, publicação em Facebook/Instagram só funciona
    para quem tem papel no app — o recurso está vendido e não entrega. Começa
    pela verificação do negócio, que leva semanas.
-2. **Os 6 preços do Flow no Stripe.** O código já lê
-   `STRIPE_PRICE_{BASICO,PROFISSIONAL,PREMIUM}_FLOW[_ANUAL]`; enquanto não
-   existirem, o módulo não é vendável.
+2. **Os 12 preços em modo LIVE no Stripe.** Em teste já existem todos e o
+   código os lê. Falta criá-los na conta live e apontar as variáveis do Render.
+   Atenção ao **nome do produto**: em teste eles foram criados com o nome da
+   variável (`STRIPE_PRICE_BASICO_FLOW`), e esse nome aparece na fatura e no
+   recibo do cliente.
 3. **Mercado Livre verificado contra a API real.** Escrito contra a
    documentação, com os pontos duvidosos marcados `REVISAR`. Exige app
    registrado, conta de vendedor e pacote de anúncios contratado.
