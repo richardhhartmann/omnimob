@@ -6,7 +6,7 @@ import {
 } from "./helpers.js";
 import { usuarioRouter } from "../src/routes/usuarioRoutes.js";
 import { cargoRouter } from "../src/routes/cargoRoutes.js";
-import { CARGO_ADMIN } from "../src/services/cargosPadrao.js";
+import { CARGO_ADMIN, CHAVES_DA_CASA } from "../src/services/cargosPadrao.js";
 
 /* ── A porta que só se descobre trancada do lado de fora ─────────────────────
 
@@ -56,6 +56,104 @@ async function criarOutroAdmin(A, sufixo = "2") {
   );
   return { usuario, token };
 }
+
+/* ── AS CHAVES DA CASA NÃO SAEM DO ADMINISTRADOR ─────────────────────────────
+
+   A tela trava as caixas, mas trava é cortesia — quem garante é o servidor, e
+   um PUT feito à mão passa por fora da tela inteira.
+
+   O teste afirma a GARANTIA, e não o mecanismo, e a diferença apareceu ao
+   escrevê-lo: existem DOIS guardas sobrepostos e eles respondem coisas
+   diferentes. Quem edita o PRÓPRIO cargo esbarra em `NAO_REMOVIVEIS_DO_PROPRIO`
+   e leva 400; quem edita o Administrador de fora esbarra na derivação e leva
+   200 com os valores de volta. Um teste preso a um dos dois passaria a falhar
+   no dia em que a ordem mudasse, sem nada de errado ter acontecido.
+
+   O que não pode variar é o desfecho: depois da tentativa, as quatro continuam
+   ligadas no BANCO. */
+test("as chaves da casa nao saem do Administrador, nem por PUT direto", async () => {
+  const A = await criarImobiliariaDeTeste();
+  const como = api.comoTenant({ token: A.token, slug: A.slug });
+
+  /* PRIMEIRO a auto-cura, que e metade da razao de derivar em vez de recusar.
+     O andaime cria um "Administrador" ao qual falta `verPainelGestor` — uma
+     linha torta, como as que existem em bancos antigos. Uma gravacao qualquer
+     tem de devolver as QUATRO, e nao so a que foi enviada. */
+  const cura = await como.put(`/api/cargos/${A.cargoAdmin.id}`, { verCobranca: true });
+  assert.equal(cura.status, 200);
+  for (const chave of CHAVES_DA_CASA) {
+    assert.equal(cura.json[chave], true, `${chave} nao foi curada na gravacao`);
+  }
+
+  // E agora a tentativa de tirar as quatro.
+  const desligarTudo = {};
+  for (const chave of CHAVES_DA_CASA) desligarTudo[chave] = false;
+
+  const r = await como.put(`/api/cargos/${A.cargoAdmin.id}`, desligarTudo);
+  assert.ok([200, 400].includes(r.status), `status inesperado: ${r.status}`);
+  if (r.status === 200) {
+    for (const chave of CHAVES_DA_CASA) {
+      assert.equal(r.json[chave], true, `a resposta devolveu ${chave} desligada`);
+    }
+  }
+
+  const noBanco = await prisma.cargo.findUnique({ where: { id: A.cargoAdmin.id } });
+  for (const chave of CHAVES_DA_CASA) {
+    assert.equal(noBanco[chave], true, `o banco ficou com ${chave} desligada`);
+  }
+
+  await apagarImobiliaria(A.tenant.id);
+});
+
+/* O caminho que passa por FORA do guarda do proprio cargo: renomear. Renomear o
+   Administrador o rebaixa (a regra e pelo NOME — ver `cargoRoutes`), e renomea-lo
+   de volta tem de devolver as chaves sem ninguem marcar caixa nenhuma. E este
+   ida-e-volta que prova a DERIVACAO, e nao a recusa. */
+test("renomear de volta para Administrador devolve as chaves da casa", async () => {
+  const A = await criarImobiliariaDeTeste();
+  const como = api.comoTenant({ token: A.token, slug: A.slug });
+
+  const fora = await como.put(`/api/cargos/${A.cargoAdmin.id}`, {
+    descricao: "Coordenador de teste",
+    verCobranca: false,
+    verPainelGestor: false,
+  });
+  assert.equal(fora.status, 200);
+  assert.equal(fora.json.verCobranca, false);
+  assert.equal(fora.json.verPainelGestor, false);
+
+  const volta = await como.put(`/api/cargos/${A.cargoAdmin.id}`, { descricao: CARGO_ADMIN });
+  assert.equal(volta.status, 200);
+  for (const chave of CHAVES_DA_CASA) {
+    assert.equal(volta.json[chave], true, `${chave} nao voltou ao promover`);
+  }
+
+  await apagarImobiliaria(A.tenant.id);
+});
+
+/* O outro lado da regra: fora do Administrador as mesmas permissões são
+   escolha normal. Sem isto, a trava poderia virar "ninguém desliga isso nunca"
+   sem ninguém notar — e aí o Gerente perderia `gerenciarUsuarios` de vez. */
+test("as mesmas permiss\u00f5es continuam desmarc\u00e1veis em qualquer outro cargo", async () => {
+  const A = await criarImobiliariaDeTeste();
+  const como = api.comoTenant({ token: A.token, slug: A.slug });
+
+  const criado = await como.post("/api/cargos", {
+    descricao: "Supervisor de teste",
+    ...Object.fromEntries(CHAVES_DA_CASA.map((c) => [c, true])),
+  });
+  assert.equal(criado.status, 201);
+
+  const r = await como.put(`/api/cargos/${criado.json.id}`,
+    Object.fromEntries(CHAVES_DA_CASA.map((c) => [c, false])));
+  assert.equal(r.status, 200);
+
+  for (const chave of CHAVES_DA_CASA) {
+    assert.equal(r.json[chave], false, `${chave} deveria ter sido desligada`);
+  }
+
+  await apagarImobiliaria(A.tenant.id);
+});
 
 test("o cargo Administrador não pode ser excluído", async () => {
   const A = await criarImobiliariaDeTeste();
