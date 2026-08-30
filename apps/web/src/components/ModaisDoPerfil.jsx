@@ -1,6 +1,6 @@
 import { api } from "../api";
 import { TEMAS } from "../utils/temaDoPainel";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IdentificationBadge, Keyboard, Palette, Compass, Sun, Moon, CircleHalf, GoogleLogo, Buildings } from "@phosphor-icons/react";
 import { EditorDeAtalhos } from "./EditorDeAtalhos.jsx";
 import { apenasMudancas } from "../utils/atalhos";
@@ -9,6 +9,11 @@ import { TODAS_AS_PERMISSOES } from "../utils/permissoesCargo.jsx";
 /* O ícone de cada tema. Estava no AdminLayout, junto do atalho da barra; veio
    com ele quando a escolha virou uma linha só, aqui. */
 const ICONE_DO_TEMA = { claro: Sun, escuro: Moon, auto: CircleHalf };
+
+/* Quanto dura a despedida. Casa com `mpVeuSai`/`mpModalSai`, no styles.css —
+   mudar aqui sem mudar lá corta o fim ou deixa a caixa parada depois de a
+   animação acabar. */
+const SAIDA_MS = 170;
 
 /* ────────────────────────────────────────────────────────────────────────────
    Os dois modais que o menu do perfil abre.
@@ -33,11 +38,48 @@ const ICONE_DO_TEMA = { claro: Sun, escuro: Moon, auto: CircleHalf };
    lista cresce (aparência, atalhos, e o que vier), e abas no topo de um modal
    estreito viram duas fileiras ou rolagem horizontal. */
 function Modal({ titulo, subtitulo, onClose, abas, abaAtiva, aoTrocarAba, children }) {
+  /* ── O FUNDO NÃO FECHA ─────────────────────────────────────────
+
+     Ele fechava, e aqui dentro mora o editor de atalhos, que grava sozinho meio
+     segundo depois de cada tecla. Um clique fora por engano no meio disso
+     fechava a caixa com uma gravação em voo — e a pessoa não via nem o "Salvo."
+
+     É a mesma decisão do `BoasVindasModal`, e pela mesma razão: sair continua
+     sendo o ✕ e o Esc, os dois explícitos. */
+
+  /* Desmonta só depois da animação — quem tira do DOM é o pai, então o aviso
+     espera. Mesmo arranjo do `TourGuiado` e do `BoasVindasModal`. */
+  const [saindo, setSaindo] = useState(false);
+  /* A trava é um ref e não o próprio estado: o updater do `setSaindo` teria de
+     ser puro, e o StrictMode o executa duas vezes em dev — agendar o
+     `onClose` lá dentro o dispararia em dobro. */
+  const saindoRef = useRef(false);
+  const fechar = useCallback(() => {
+    if (saindoRef.current) return; // clique duplo não reinicia a saída
+    saindoRef.current = true;
+    setSaindo(true);
+    setTimeout(onClose, SAIDA_MS);
+  }, [onClose]);
+
+  /* Esc fecha. Ele não pode subir: o ouvinte global lê Esc como "voltar uma
+     tela", e sem o `stopPropagation` fechar a caixa levaria a pessoa embora da
+     página junto. Fase de captura para chegar antes de qualquer campo. */
+  useEffect(() => {
+    function aoTeclar(e) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      fechar();
+    }
+    document.addEventListener("keydown", aoTeclar, true);
+    return () => document.removeEventListener("keydown", aoTeclar, true);
+  }, [fechar]);
+
   return (
     <>
-      <div className="mp-veu" onMouseDown={(e) => e.target === e.currentTarget && onClose()} />
+      <div className={`mp-veu${saindo ? " is-saindo" : ""}`} />
       <div
-        className={`mp-modal${abas?.length ? " mp-modal--abas" : ""}`}
+        className={`mp-modal${abas?.length ? " mp-modal--abas" : ""}${saindo ? " is-saindo" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
@@ -47,7 +89,7 @@ function Modal({ titulo, subtitulo, onClose, abas, abaAtiva, aoTrocarAba, childr
             <h2>{titulo}</h2>
             {subtitulo ? <p>{subtitulo}</p> : null}
           </div>
-          <button type="button" className="mp-modal__fechar" onClick={onClose} aria-label="Fechar">×</button>
+          <button type="button" className="mp-modal__fechar" onClick={fechar} aria-label="Fechar">×</button>
         </header>
 
         <div className="mp-modal__area">

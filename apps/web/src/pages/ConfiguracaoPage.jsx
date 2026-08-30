@@ -18,6 +18,7 @@ import { CentralDeCanais } from "../components/CentralDeCanais.jsx";
 import { MarcaDaguaConfig } from "../components/MarcaDaguaConfig.jsx";
 import { OPACIDADE_PADRAO } from "../utils/marcaDagua";
 import { TEMAS } from "../utils/temaDoPainel";
+import { WhatsappMarca } from "../utils/marcasDeRede.jsx";
 import { EditorDeAtalhos } from "../components/EditorDeAtalhos.jsx";
 import { apenasMudancas } from "../utils/atalhos";
 import { Keyboard } from "@phosphor-icons/react";
@@ -384,12 +385,30 @@ function ReverTour({ tenantSlug }) {
   `CentralDeCanais`; esta página não duplica a regra do componente nem inventa
   estado de portal. Neles o card funciona como atalho para a configuração XML.
 */
-function TopologiaDeRedes({ socialStatus, carregando, erro, aoIrParaConfiguracao }) {
+function TopologiaDeRedes({ socialStatus, carregando, erro, aoIrParaConfiguracao, nome, logoUrl }) {
   const facebookAtivo = Boolean(socialStatus?.facebook?.connected);
   const instagramAtivo = Boolean(socialStatus?.instagram?.connected);
 
+  /* ── O CENTRO É A IMOBILIÁRIA, NÃO NÓS ───────────────────────────────
+
+     O nó dizia "Omnimob" com o nosso "O" no disco, e a leitura ficava errada:
+     o desenho responde "de onde saem os meus anúncios?", e a resposta é a
+     imobiliária — nós somos o encanamento. Com a marca do cliente no meio, o
+     mapa passa a ser o dele.
+
+     `logoQuebrou` existe porque a URL do logotipo é digitada à mão num campo
+     das Configurações: ela pode apontar para um endereço que morreu. Sem isto
+     o disco ficaria vazio, sem nada — e um buraco no centro do mapa parece
+     defeito do mapa. Falhando, volta a inicial. */
+  const [logoQuebrou, setLogoQuebrou] = useState(false);
+  const temLogo = Boolean(logoUrl) && !logoQuebrou;
+  const rotulo = (nome || "").trim() || "Sua imobiliária";
+  /* A inicial do nome, e não o "O" fixo: ele era a marca da Omnimob, e sobrar
+     ali numa conta chamada "Alfa Imóveis" seria a mesma troca de dono. */
+  const inicial = rotulo.charAt(0).toUpperCase();
+
   /*
-    No desktop, os canais formam uma topologia radial ao redor da Omnimob:
+    No desktop, os canais formam uma topologia radial ao redor da imobiliária:
     WhatsApp fica fixo à esquerda do hub, redes sociais Meta na parte superior
     e portais distribuídos nas laterais/parte inferior. Em telas estreitas o CSS troca para uma composição em grade para
     preservar legibilidade sem sobrepor os cards.
@@ -403,7 +422,12 @@ function TopologiaDeRedes({ socialStatus, carregando, erro, aoIrParaConfiguracao
       sempreAtivo: true,
       monitorado: false,
       alvo: null,
-      icone: <IconeCelular size={18} />,
+      /* A MARCA, e não um celular genérico. Ao lado do "f" do Facebook e da
+         câmera do Instagram — que são as marcas de verdade —, um telefone
+         desenhado à mão era o único nó que não se reconhecia de relance. Sai do
+         mesmo arquivo que a landing e o cadastro de imóvel usam
+         (`utils/marcasDeRede.jsx`), então o glífo é um só no produto inteiro. */
+      icone: <WhatsappMarca size={18} />,
     },
     {
       key: "facebook",
@@ -553,9 +577,16 @@ function TopologiaDeRedes({ socialStatus, carregando, erro, aoIrParaConfiguracao
         </svg>
 
         <div className="cfg-topologia__node cfg-topologia__node--omnimob">
-          <div className="cfg-topologia__omni-icone" aria-hidden="true">O</div>
+          <div
+            className={`cfg-topologia__omni-icone${temLogo ? " cfg-topologia__omni-icone--logo" : ""}`}
+            aria-hidden="true"
+          >
+            {temLogo
+              ? <img src={logoUrl} alt="" onError={() => setLogoQuebrou(true)} />
+              : inicial}
+          </div>
           <div className="cfg-topologia__node-texto">
-            <strong>Omnimob</strong>
+            <strong title={rotulo}>{rotulo}</strong>
             <span>Central de publicação</span>
           </div>
         </div>
@@ -744,6 +775,17 @@ const TOPOLOGIA_REDES_CSS = `
   display: grid; place-items: center; font-size: 17px; font-weight: 800;
   color: #fff; background: linear-gradient(135deg, #6366f1, #8b5cf6);
   box-shadow: 0 6px 16px rgba(99,102,241,0.28);
+  overflow: hidden;
+}
+/* Com logotipo, o disco sai da frente: superficie neutra e sem halo colorido.
+   O gradiente indigo por tras de uma marca alheia disputaria com ela, e o halo
+   pintaria de roxo a sombra de uma logo que pode ser de qualquer cor. */
+.cfg-topologia__omni-icone--logo {
+  background: var(--sup-06, rgba(255,255,255,0.06));
+  box-shadow: none; padding: 4px;
+}
+.cfg-topologia__omni-icone img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
 }
 .cfg-topologia__marca {
   width: 31px; height: 31px; border-radius: 8px; flex: 0 0 auto;
@@ -756,7 +798,13 @@ const TOPOLOGIA_REDES_CSS = `
 .cfg-topologia__marca--vivareal { background: linear-gradient(135deg, #22c7e8, #2563eb); }
 .cfg-topologia__marca--olx { background: linear-gradient(135deg, #6d28d9, #ec4899); }
 .cfg-topologia__node-texto { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.cfg-topologia__node-texto strong { font-size: 12px; font-weight: 650; line-height: 1.2; }
+/* Reticencias porque o nome do cliente entrou aqui: os nomes dos canais sao
+   curtos e fixos, o da imobiliaria nao — e um no de 240px com "Imobiliaria
+   Santa Rita Negocios Imobiliarios" derrubaria a composicao radial inteira. */
+.cfg-topologia__node-texto strong {
+  font-size: 12px; font-weight: 650; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .cfg-topologia__node-texto span {
   display: block; max-width: 100%; font-size: 9.5px; color: var(--text-muted); line-height: 1.35;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1675,6 +1723,40 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             />
           </Secao>
 
+          {/* ── O cadastro por IA ────────────────────────────────────────────
+              Veio da seção do Plano, onde era o único controle no meio de
+              cartões de compra. Aqui está entre as outras preferências de como
+              a imobiliária trabalha, que é o que ele é.
+
+              Só aparece para quem TEM IA no plano. Um interruptor desabilitado
+              a 55% seria ruído: a pessoa não pode mexer, e o convite para subir
+              de plano já é feito em `?ver=plano`, onde ela pode agir. */}
+          {planoInfo(plano).ia ? (
+            <Secao cor="#a78bfa" titulo="Cadastro por IA" icone={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+                <circle cx="12" cy="12" r="3.2" />
+              </svg>
+            }>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))", cursor: "pointer", opacity: 1 }}>
+                <input
+                  type="checkbox"
+                  className="sw"
+                  checked={Boolean(form.autoGerarIA)}
+                  onChange={(e) => set("autoGerarIA", e.target.checked)}
+                  style={{ marginTop: "2px" }}
+                />
+                <span style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 600 }}>Preencher imóvel por IA automaticamente</span>
+                  <span style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                    Ao lançar a primeira foto no cadastro, a IA já preenche título, descrição, tipo e demais campos.
+                    {!form.autoGerarIA && <> Desativado — nada é preenchido sozinho, mas o botão "Gerar com IA" continua disponível.</>}
+                  </span>
+                </span>
+              </label>
+            </Secao>
+          ) : null}
+
           {/* Fica no Perfil porque é uma preferência de QUEM está logado, não
               da imobiliária: o reinício vale só para o próprio usuário. */}
           <Secao cor="#818cf8" titulo="Tour guiado" icone={
@@ -1851,11 +1933,17 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           {/* A topologia é uma leitura rápida do estado real das integrações.
               Não substitui nenhum controle abaixo: ela só resume visualmente o
               mesmo status que já alimenta "Contas conectadas". */}
+          {/* Nome e logotipo saem do FORM, e nao da sessao: e o mesmo estado que
+              os campos de Perfil e Aparencia editam nesta pagina, entao trocar
+              a logo ali ja troca a marca no centro do mapa — sem esperar o
+              salvamento e a sessao se atualizarem. */}
           <TopologiaDeRedes
             socialStatus={socialStatus}
             carregando={socialLoading}
             erro={socialErro}
             aoIrParaConfiguracao={irParaConfiguracaoDaRede}
+            nome={form.name || session?.tenant?.name}
+            logoUrl={form.logoUrl}
           />
 
           {/* ── Onde os imóveis aparecem ──────────────────────────────────────
@@ -1962,7 +2050,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
             </div>
 
             <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)", opacity: 0.6, lineHeight: "1.6" }}>
-              <strong>Pré-requisito:</strong> a conta do Instagram deve ser do tipo Business ou Creator, vinculada à Página do Facebook. A autenticação usa o Meta Graph API v19.0 com permissões <code>pages_manage_posts</code> e <code>instagram_content_publish</code>.
+              <strong>Pré-requisito:</strong> a conta do Instagram deve ser do tipo Business ou Creator, vinculada à Página do Facebook. Quem conectar precisa ser administrador dessa Página. O Instagram aceita até 100 publicações por API a cada 24 horas.
             </p>
           </Secao>
           </>)}
@@ -2074,29 +2162,12 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                     </p>
                   )}
 
-                  {/* Toggle de IA: só existe para quem tem IA. Antes ele
-                      aparecia desabilitado a 55% para todo mundo, e um controle
-                      que a pessoa nunca vai poder mexer é ruído — a mensagem de
-                      "disponível no Premium" já é dada pelos cartões de plano
-                      logo abaixo, onde ela pode fazer algo a respeito. */}
-                  {atual.ia && (
-                    <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px", borderRadius: "12px", background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))", cursor: "pointer", opacity: 1 }}>
-                      <input
-                        type="checkbox"
-                        className="sw"
-                        checked={Boolean(form.autoGerarIA)}
-                        onChange={(e) => set("autoGerarIA", e.target.checked)}
-                        style={{ marginTop: "2px" }}
-                      />
-                      <span style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                        <span style={{ fontSize: "13px", fontWeight: 600 }}>Preencher imóvel por IA automaticamente</span>
-                        <span style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.5 }}>
-                          Ao lançar a primeira foto no cadastro, a IA já preenche título, descrição, tipo e demais campos.
-                          {!form.autoGerarIA && <> Desativado — nada é preenchido sozinho, mas o botão "Gerar com IA" continua disponível.</>}
-                        </span>
-                      </span>
-                    </label>
-                  )}
+                  {/* O interruptor da IA automática mudou-se para o Perfil.
+                      Aqui ele era um CONTROLE no meio de uma tela de compra: a
+                      seção do plano existe para dizer o que a conta tem e como
+                      trocar, e a única coisa clicável que não levava a lugar
+                      nenhum era justamente ele. Ver "Cadastro por IA", em
+                      `?ver=perfil`. */}
 
                   {/* Upgrade / downgrade: só para quem já é cliente. Em teste a
                       troca de plano não existe — o que existe é assinar. */}

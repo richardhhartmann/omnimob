@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { tourAtivo } from "../utils/tourAtivo";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O Esc de uma SUB-TELA.
@@ -53,6 +54,9 @@ export function useSaidaDaTela(aoSair, ativo = true) {
       if (e.key !== "Escape") return;
       if (e.defaultPrevented) return;
       if (temCaixaPorCima()) return;
+      /* Com um tour no ar o Esc é dele — encerra o tutorial. Sair da tela junto
+         levaria embora o formulário que o tour está ensinando a preencher. */
+      if (tourAtivo()) return;
       e.preventDefault();
       acao.current?.();
     }

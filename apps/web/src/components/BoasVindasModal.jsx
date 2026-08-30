@@ -107,6 +107,39 @@ const ROTULO_ITEM = {
 };
 const IMPORTAVEIS = ["imoveis", "clientes", "usuarios"];
 
+/* ── O cabeçalho de um passo, com a saída para trás ──────────────────────────
+
+   A recepção tem até cinco passos e nenhum tinha volta: quem passasse da ficha
+   sem querer — o "Preencher depois" fica a um dedo do "Continuar" — não tinha
+   como reabri-la sem terminar o modal e procurar a mesma coisa em Configurações.
+
+   O botão mora no cabeçalho, e não ao lado do "Continuar" de cada passo: os
+   passos são componentes diferentes (`PerfilInicialPasso`, `CatalogosPasso`,
+   `DominioVitrine`), cada um com o próprio rodapé, e enfiar um "Voltar" em três
+   rodapés daria três desenhos. Aqui é UM lugar, e o passo novo herda.
+
+   Voltar não desfaz o que já foi gravado — cada passo grava ao concluir, e a
+   ficha reabre com o que a pessoa acabou de salvar. É o comportamento certo:
+   "voltar" aqui quer dizer "quero rever aquilo", não "desfaça".
+
+   Sem `aoVoltar` o botão não aparece, e o primeiro passo continua sem saída
+   para trás — de onde não se veio, não se volta. */
+function CabecalhoDoPasso({ numero, total, aoVoltar }) {
+  return (
+    <div className="bv-passo-topo">
+      {aoVoltar ? (
+        <button type="button" className="bv-voltar" onClick={aoVoltar}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Voltar
+        </button>
+      ) : null}
+      <span className="bv-eyebrow bv-eyebrow--teste">● PASSO {numero} DE {total}</span>
+    </div>
+  );
+}
+
 function listar(itens) {
   if (itens.length === 1) return itens[0];
   return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
@@ -309,7 +342,7 @@ ${CATALOGOS_CSS}`}</style>
       <div className={`bv-caixa${saindo ? " is-saindo" : ""}`} role="dialog" aria-modal="true" aria-labelledby="bv-titulo">
         {passo === "perfil" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 2 DE {totalPassos}</span>
+            <CabecalhoDoPasso numero={2} total={totalPassos} aoVoltar={() => setPasso("boas-vindas")} />
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">A ficha da sua imobiliária</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               É o que a sua vitrine mostra para quem chega de fora. Já trouxemos o que você
@@ -323,7 +356,7 @@ ${CATALOGOS_CSS}`}</style>
           </>
         ) : passo === "catalogos" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 3 DE {totalPassos}</span>
+            <CabecalhoDoPasso numero={3} total={totalPassos} aoVoltar={() => setPasso("perfil")} />
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">Começar com o que já está pronto</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               É possível fazer com que o sistema já nasça com os cargos e as categorias que a maioria das
@@ -334,7 +367,7 @@ ${CATALOGOS_CSS}`}</style>
           </>
         ) : passo === "dominio" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 4 DE {totalPassos}</span>
+            <CabecalhoDoPasso numero={4} total={totalPassos} aoVoltar={() => setPasso("catalogos")} />
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">O endereço da sua vitrine</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               Sua vitrine já está no ar no endereço da Omnimob. Se a sua imobiliária tem
@@ -374,7 +407,7 @@ ${CATALOGOS_CSS}`}</style>
           </>
         ) : passo === "dados" ? (
           <>
-            <span className="bv-eyebrow bv-eyebrow--teste">● PASSO 5 DE {totalPassos}</span>
+            <CabecalhoDoPasso numero={5} total={totalPassos} aoVoltar={() => setPasso("dominio")} />
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">Falta trazer a sua base</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               Quando você pediu o teste, disse que tem{" "}
@@ -681,6 +714,32 @@ const CSS = `
 /* Depois da regra base de propósito: mesma especificidade, então quem vem por
    último vence — invertido, o dourado do teste perdia para o verde. */
 .bv-eyebrow--teste { color: #d4af37; }
+
+/* A linha do passo: o Voltar à esquerda, o "PASSO 3 DE 5" à direita.
+   Sem crase e sem fim-de-comentario aqui dentro: isto e template literal.
+
+   O rotulo do passo perde a margem de baixo para a linha nao empurrar o titulo
+   mais do que ele ja empurrava sozinho. */
+.bv-passo-topo {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px;
+}
+.bv-passo-topo .bv-eyebrow { margin-bottom: 0; }
+
+/* Discreto de proposito. Ele e uma saida, nao um caminho: competir com o
+   Continuar faria parecer que voltar e o que se espera da pessoa. */
+.ds-shell .bv-voltar, .bv-voltar {
+  width: auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px 4px 6px; border-radius: 8px;
+  background: transparent; border: 1px solid transparent;
+  color: #94a3b8; font-size: 12px; font-weight: 600;
+  cursor: pointer; box-shadow: none; transform: none;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.ds-shell .bv-voltar:hover, .bv-voltar:hover {
+  color: #e2e8f0; background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.1); box-shadow: none; transform: none;
+}
 .bv-titulo {
   margin: 0 0 10px; font-size: 21px; font-weight: 700; letter-spacing: -0.02em;
   color: #f1f5f9; line-height: 1.28;

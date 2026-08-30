@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Plus } from "@phosphor-icons/react";
 import { registrarNovo } from "../utils/registroDeNovo";
+import { useTeclaDe } from "./ContextoDeAtalhos.jsx";
+import { rotuloDaTecla } from "../utils/atalhos";
 
 /* ── O convite da lista vazia ────────────────────────────────────────────────
 
@@ -40,7 +42,7 @@ import { registrarNovo } from "../utils/registroDeNovo";
    ────────────────────────────────────────────────────────────────────────── */
 
 export function ConviteDeCriacao({
-  icone, titulo, texto, acaoLabel, onAcao, accent = "#6366f1", tecla, plena = false, tourId,
+  icone, titulo, texto, acaoLabel, onAcao, accent = "#6366f1", plena = false, tourId,
 }) {
   /* ── O CONVITE ASSUME AS DUAS HERANÇAS DO BOTÃO DE CIMA ──────────────────
 
@@ -57,9 +59,33 @@ export function ConviteDeCriacao({
 
      Mesmo `useRef` do `BtnNovo`, e pelo mesmo motivo: a página passa uma arrow
      nova a cada render, e sem ele o registro se desfaria em todo ciclo. */
+  /* ── A TECLA TAMBÉM É HERDADA, E NÃO DITADA PELA PÁGINA ──────────────────
+
+     Ela era uma propriedade — `tecla="N"` escrito à mão em cada chamada —, e
+     das seis telas que usam o convite, uma esqueceu: o portfólio vazio
+     anunciava o botão sem o atalho, com o "N" funcionando do mesmo jeito.
+
+     É o defeito que o registro logo acima já tinha evitado para o clique. A
+     página não sabe qual é a tecla: quem sabe é o catálogo, e a pessoa pode ter
+     trocado por outra em Configurações. Um "N" fixo no JSX mentiria em silêncio
+     para quem trocou.
+
+     `useTeclaDe` devolve `null` quando a imobiliária desligou os atalhos ou a
+     pessoa desligou este — e aí o botão fica igual ao de antes, sem buraco. É a
+     mesma fonte que o `BtnNovo` usa, então os dois nunca divergem. */
+  const tecla = useTeclaDe("global.novo");
+
   const acao = useRef(onAcao);
   acao.current = onAcao;
-  useEffect(() => registrarNovo(() => acao.current?.()), []);
+  /* A tecla CLICA o botão em vez de chamar a função — o tour ouve o DOM, e uma
+     chamada direta não produz evento nenhum. Ver `BtnNovo` para o defeito que
+     isso corrige; aqui importa em dobro, porque o convite é justamente o que
+     está na tela durante o tour de primeiro acesso (conta vazia). */
+  const botaoRef = useRef(null);
+  useEffect(() => registrarNovo(() => {
+    if (botaoRef.current) botaoRef.current.click();
+    else acao.current?.();
+  }), []);
 
   return (
     <div className={`convite${plena ? " convite--plena" : ""}`} style={{ "--convite-cor": accent }}>
@@ -76,12 +102,12 @@ export function ConviteDeCriacao({
       {texto ? <p className="convite__texto">{texto}</p> : null}
 
       {acaoLabel && onAcao ? (
-        <button type="button" className="convite__botao" data-tour={tourId} onClick={onAcao}>
+        <button type="button" ref={botaoRef} className="convite__botao" data-tour={tourId} onClick={onAcao}>
           <Plus size={15} weight="bold" />
           {acaoLabel}
-          {/* A tecla, quando a tela tem uma. Aqui ela ensina o atalho no
-              momento em que a pessoa vai usar a ação pela primeira vez. */}
-          {tecla ? <kbd className="convite__tecla">{tecla}</kbd> : null}
+          {/* A tecla, quando há uma. Aqui ela ensina o atalho no momento em que
+              a pessoa vai usar a ação pela primeira vez. */}
+          {tecla ? <kbd className="convite__tecla">{rotuloDaTecla(tecla)}</kbd> : null}
         </button>
       ) : null}
     </div>

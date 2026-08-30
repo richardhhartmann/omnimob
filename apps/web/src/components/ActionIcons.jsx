@@ -119,18 +119,37 @@ export function BtnGerenciar({ onClick, disabled, title = "Gerenciar" }) {
 
    O selo da tecla vai DENTRO do botão: um atalho que ninguém descobre não é
    atalho. `TeclaDeAtalho` devolve `null` quando a imobiliária desligou os
-   atalhos ou a pessoa desligou este, e aí o botão fica igual ao de antes. */
+   atalhos ou a pessoa desligou este, e aí o botão fica igual ao de antes.
+
+   ── A TECLA CLICA O BOTÃO, E NÃO CHAMA A FUNÇÃO ──
+
+   Parece a mesma coisa e não é. Chamando `onClick` direto, a tela abre o
+   formulário e NENHUM evento de clique acontece — quem estiver ouvindo o botão
+   pelo DOM não fica sabendo de nada.
+
+   Quem estava ouvindo é o tour: o passo "Clique em Novo Cliente" espera um
+   `click` no alvo para liberar o próximo. Apertar "N" abria o formulário e
+   deixava o tour parado, cobrando um clique que, para ele, nunca houve.
+
+   `el.click()` dispara um evento real, que borbulha — o `onClick` do botão roda
+   igual, e o `<span data-tour="…">` em volta também escuta. A função continua
+   como reserva para o caso de o nó ainda não estar montado. */
 export function BtnNovo({ onClick, label = "Novo" }) {
   /* `useRef` para o efeito não depender da identidade da função: quase toda
      página passa uma arrow nova a cada render, e sem isto o registro seria
      desfeito e refeito em todo ciclo. */
   const acao = useRef(onClick);
   acao.current = onClick;
-  useEffect(() => registrarNovo(() => acao.current?.()), []);
+  const botaoRef = useRef(null);
+  useEffect(() => registrarNovo(() => {
+    if (botaoRef.current) botaoRef.current.click();
+    else acao.current?.();
+  }), []);
 
   return (
     <button
       type="button"
+      ref={botaoRef}
       title={label}
       onClick={onClick}
       style={{

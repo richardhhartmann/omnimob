@@ -174,6 +174,21 @@ function marcarPendencia(origem) {
   gravar({ ...ler(), pendencia: { origem, em: Date.now(), rota } });
 }
 
+/* Devolve a pendência à gaveta, marcada na rota de AGORA.
+
+   Existe para o encontro com o tour: a troca de rota cobra a pendência e a
+   apaga no mesmo gesto, então quem recusa a pergunta depois disso a perde para
+   sempre — a pessoa faria o trabalho todo e nunca seria perguntada. Remarcando,
+   ela volta a valer e é cobrada na PRÓXIMA saída de tela, que é exatamente o
+   comportamento normal dela.
+
+   A rota gravada é a atual de propósito: adiar não pode virar "pergunta agora
+   mesmo, nesta tela" — seria a porta dos fundos que o gatilho único fechou. */
+export function remarcarPendencia(origem) {
+  if (!origem) return;
+  marcarPendencia(origem);
+}
+
 /**
  * Havia trabalho pendente, feito em OUTRA página? Devolve a origem e apaga a
  * marca — o mesmo trabalho não pode render duas perguntas.

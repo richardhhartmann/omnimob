@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";
 import { mapaDeAtalhos, telaDosAtalhos, rotuloDaTecla } from "../utils/atalhos";
+import { assinarTour, filtrarNoTour, tourAtivo } from "../utils/tourAtivo";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Qual tecla este botão tem — e se ele tem alguma.
@@ -27,26 +28,40 @@ import { mapaDeAtalhos, telaDosAtalhos, rotuloDaTecla } from "../utils/atalhos";
    Desligado, o mapa sai VAZIO. Não é só o selo que some: `useAtalhos` lê o mesmo
    mapa, então nenhuma tecla dispara. Um lugar só decide as duas coisas, e é o
    que impede a tela de desenhar um selo para uma tecla que não funciona mais.
+
+   ── O TOUR É UM SEGUNDO INTERRUPTOR ──
+
+   Enquanto um tour está no ar, `filtrarNoTour` corta o mapa até sobrar só o que
+   `ACOES_NO_TOUR` libera (hoje, o "N"). Vale a mesma regra de cima e pelo mesmo
+   motivo: os selos de 1 a 9 somem dos cartões junto com as teclas, em vez de
+   ficarem anunciando um atalho que o tour engole.
+
+   O estado do tour mora FORA do React — ele é global e quem o marca está abaixo
+   deste provedor (ver `utils/tourAtivo.js`) —, então quem avisa a re-renderizar
+   é `useSyncExternalStore`. Ler o registro dentro do `useMemo` sem assinar
+   deixaria os selos congelados como estavam quando o tour abriu.
    ──────────────────────────────────────────────────────────────────────────── */
 
 const Contexto = createContext({ mapa: new Map(), ativos: false });
 
 export function ProvedorDeAtalhos({ session, children }) {
   const { pathname } = useLocation();
+  const emTour = useSyncExternalStore(assinarTour, tourAtivo, () => false);
 
   const valor = useMemo(() => {
     const ativos = session?.tenant?.atalhosAtivos !== false;
     if (!ativos) return { mapa: new Map(), ativos: false };
 
-    const mapa = mapaDeAtalhos({
+    const mapa = filtrarNoTour(mapaDeAtalhos({
       tela: telaDosAtalhos(pathname),
       cargo: session?.usuario?.cargo,
       doTenant: session?.tenant?.atalhos || undefined,
       doUsuario: session?.usuario?.atalhos || undefined,
-    });
+    }));
     return { mapa, ativos: true };
   }, [
     pathname,
+    emTour,
     session?.tenant?.atalhosAtivos,
     session?.usuario?.cargo,
     session?.tenant?.atalhos,

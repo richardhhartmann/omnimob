@@ -223,7 +223,66 @@ export function PrivacidadePage() {
         </p>
       </Secao>
 
-      <Secao titulo="10. Cookies e armazenamento local">
+      {/* ── SEÇÃO EXIGIDA PELA META ───────────────────────────────────
+
+          Todo aplicativo que usa Login do Facebook precisa declarar no painel de
+          desenvolvedor UMA das duas: uma URL de callback que a Meta chama para
+          pedir a exclusão, ou uma URL de INSTRUÇÕES explicando à pessoa como
+          pedir. Sem uma delas o app não passa na revisão — e sem a revisão as
+          imobiliárias não conseguem publicar nas próprias redes.
+
+          Escolhemos as instruções, e não o callback, porque o callback prometeria
+          o que não podemos cumprir sozinhos: o que guardamos do Facebook é o
+          token da Página DA IMOBILIÁRIA, e quem decide desconectar aquela conta é
+          ela, no painel dela. Um callback apagaria a integração de uma empresa a
+          pedido de uma pessoa física que talvez nem trabalhe mais lá.
+
+          O `id` existe para o endereço ser direto ao ponto:
+          https://omnimob.app/privacidade#exclusao-de-dados — é ele que vai no
+          campo "Data Deletion Instructions URL" do painel da Meta. Mudar este
+          `id` quebra o cadastro lá, em silêncio. */}
+      <Secao id="exclusao-de-dados" titulo="10. Excluir os dados vindos do Facebook e do Instagram">
+        <p>
+          Quando uma imobiliária conecta a Página do Facebook e a conta do Instagram para
+          publicar os imóveis dela, a Omnimob guarda apenas o necessário para essa publicação:
+          o identificador da Página, o identificador da conta do Instagram e um token de acesso
+          — este último <strong>cifrado em repouso</strong> e nunca exibido de volta. Não lemos
+          mensagens, lista de amigos, seguidores nem qualquer dado pessoal dos seguidores.
+        </p>
+
+        <p><strong>Para apagar esses dados agora, sem falar com ninguém:</strong></p>
+        <ol>
+          <li>Entre no painel da Omnimob e abra <strong>Configurações &rsaquo; Redes sociais</strong>.</li>
+          <li>Clique em <strong>Desconectar</strong> na conta do Facebook ou do Instagram.</li>
+          <li>
+            O token e os identificadores são apagados na hora. Os anúncios já publicados
+            continuam nas suas redes — eles são seus, e ficam sob o seu controle no
+            Facebook e no Instagram.
+          </li>
+        </ol>
+
+        <p>
+          Você também pode remover o acesso pelo outro lado, em{" "}
+          <strong>Facebook &rsaquo; Configurações &rsaquo; Aplicativos e sites</strong>, retirando a
+          Omnimob da lista. Isso invalida o token imediatamente; a integração para de funcionar
+          e o registro morto é descartado no acesso seguinte.
+        </p>
+
+        <p>
+          <strong>Se você não tem mais acesso ao painel</strong> — saiu da imobiliária, a conta
+          foi encerrada, ou não sabe quem administra — escreva para{" "}
+          <a href="mailto:privacidade@omnimob.app">privacidade@omnimob.app</a> dizendo o nome da
+          imobiliária e da Página. Apagamos e confirmamos por e-mail em até 15 dias. Podemos
+          pedir informações que confirmem a sua identidade, pelo mesmo motivo da seção 9.
+        </p>
+
+        <p>
+          Encerrando a conta da imobiliária na Omnimob, esses dados vão junto com o restante,
+          nos prazos da seção 7 — não é preciso desconectar antes.
+        </p>
+      </Secao>
+
+      <Secao titulo="11. Cookies e armazenamento local">
         <p>
           A plataforma não usa cookies de publicidade nem de rastreamento entre sites. Usamos o
           armazenamento local do navegador para manter você conectado, guardar preferências de
@@ -232,14 +291,14 @@ export function PrivacidadePage() {
         </p>
       </Secao>
 
-      <Secao titulo="11. Mudanças nesta política">
+      <Secao titulo="12. Mudanças nesta política">
         <p>
           Quando esta política mudar de forma relevante, avisamos por e-mail e atualizamos a data no
           topo. Continuar usando a plataforma depois disso significa concordar com a versão vigente.
         </p>
       </Secao>
 
-      <Secao titulo="12. Fale conosco">
+      <Secao titulo="13. Fale conosco">
         <p>
           Dúvidas sobre esta política, pedidos relativos aos seus dados ou comunicação de incidente:{" "}
           <a href="mailto:privacidade@omnimob.app">privacidade@omnimob.app</a>. Para assuntos gerais,

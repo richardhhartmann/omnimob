@@ -2717,6 +2717,41 @@ html[data-tema-painel="claro"] {
   --ed-accent-soft: rgba(129, 140, 248, 0.14);
   --ed-danger: #f87171;
 
+  /* ── OS QUATRO DEGRAUS DE SUPERFÍCIE ────────────────────────────────
+
+     Eles existem por uma razão só: o chrome inteiro pintava com
+     `rgba(255,255,255,α)` escrito à mão — branco translucido sobre o painel
+     escuro. No tema claro isso vira BRANCO SOBRE BRANCO, e o controle
+     desaparece em vez de mudar de cor.
+
+     Era invisível na revisão e óbvio na tela: o alternador Desktop/Mobile e o
+     Escuro/Claro tinham contraste medido de 1.00 — texto branco sobre fundo
+     branco. O botão ATIVO era o único que sumia, que é o pior caso possível:
+     some justamente o que diz onde você está.
+
+     Com token, o tema claro inverte os quatro degraus num lugar só e nenhum
+     controle novo precisa lembrar de nada.
+
+     Os valores escuros são os que já estavam espalhados; os poucos que usavam
+     0.05, 0.07 e 0.08 caem no degrau vizinho — a diferença entre 6% e 7% de
+     branco não é visível, e seis cinzas quase iguais eram acidente de
+     digitação, não desenho. */
+  --ed-fill-sutil: rgba(255, 255, 255, 0.02);
+  --ed-fill: rgba(255, 255, 255, 0.04);
+  --ed-fill-hover: rgba(255, 255, 255, 0.06);
+  --ed-fill-forte: rgba(255, 255, 255, 0.09);
+  /* A tinta sobre `--ed-fill-forte` (controle selecionado) e sobre
+     `--ed-accent-soft` (aba e chip ativos). Duas por serem fundos diferentes:
+     o primeiro é neutro, o segundo já tem o roxo do acento. */
+  --ed-sel-ink: #ffffff;
+  --ed-accent-ink: #c3c8fc;
+  /* Os pontos da prancheta e o polegar das barras de rolagem. */
+  --ed-grade: rgba(255, 255, 255, 0.05);
+  --ed-scroll: rgba(255, 255, 255, 0.12);
+  /* O fundo e o traço das miniaturas da biblioteca. */
+  --ed-preview-bg: rgba(0, 0, 0, 0.3);
+  --ed-preview-ink: #8b94a8;
+
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -2805,9 +2840,18 @@ html[data-tema-painel="claro"] {
   opacity: 0.5;
 }
 
-.editor-save-status.is-salvando { color: #cbd5e1; }
+/* Token, e não o #cbd5e1 que estava aqui: no painel claro aquele cinza quase
+   branco sobre branco dava contraste 1.48 — a única palavra da barra que
+   informa que há algo acontecendo era a que sumia. */
+.editor-save-status.is-salvando { color: var(--ed-text); }
 .editor-save-status.is-salvando .editor-save-dot { animation: editorPulse 1.1s ease-in-out infinite; opacity: 1; }
 .editor-save-status.is-salvo { color: #4ade80; }
+/* O verde claro do "Salvo" foi escolhido para o fundo preto; sobre a barra
+   branca ele mede 1.74. Mesmo verde, escurecido até ser lido. O `is-erro` já
+   usava `--ed-danger`, que o tema claro redefine — era o único dos três
+   estados com token. */
+main[data-tema="claro"] .editor-save-status.is-salvo,
+html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
 .editor-save-status.is-erro { color: var(--ed-danger); }
 
 @keyframes editorPulse {
@@ -2822,7 +2866,7 @@ html[data-tema-painel="claro"] {
   padding: 2px;
   border-radius: 9px;
   border: 1px solid var(--ed-line);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--ed-fill-sutil);
 }
 
 .editor-zoom-valor {
@@ -2851,7 +2895,7 @@ html[data-tema-painel="claro"] {
 }
 
 .editor-icon-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--ed-fill-hover);
   color: var(--ed-text);
 }
 
@@ -2878,13 +2922,13 @@ html[data-tema-painel="claro"] {
   font-weight: 600;
   border-radius: 8px;
   border: 1px solid var(--ed-line-strong);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--ed-fill);
   color: var(--ed-text);
   cursor: pointer;
   white-space: nowrap;
 }
 
-.editor-button:hover { background: rgba(255, 255, 255, 0.08); }
+.editor-button:hover { background: var(--ed-fill-forte); }
 
 .editor-button.is-primary {
   background: var(--ed-accent);
@@ -2907,7 +2951,7 @@ html[data-tema-painel="claro"] {
   font-weight: 500;
 }
 
-.editor-button.is-quiet:hover { color: var(--ed-text); background: rgba(255, 255, 255, 0.05); }
+.editor-button.is-quiet:hover { color: var(--ed-text); background: var(--ed-fill); }
 
 .editor-button.is-danger {
   background: rgba(248, 113, 113, 0.08);
@@ -2948,7 +2992,7 @@ html[data-tema-painel="claro"] {
   padding: 2px;
   border-radius: 9px;
   border: 1px solid var(--ed-line);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--ed-fill-sutil);
 }
 
 .editor-segmented button {
@@ -2968,8 +3012,8 @@ html[data-tema-painel="claro"] {
 .editor-segmented button:hover { color: var(--ed-text); }
 
 .editor-segmented button.is-active {
-  background: rgba(255, 255, 255, 0.09);
-  color: #fff;
+  background: var(--ed-fill-forte);
+  color: var(--ed-sel-ink);
   font-weight: 600;
 }
 
@@ -3005,7 +3049,7 @@ html[data-tema-painel="claro"] {
   cursor: pointer;
 }
 
-.editor-menu-item:hover { background: rgba(255, 255, 255, 0.06); }
+.editor-menu-item:hover { background: var(--ed-fill-hover); }
 .editor-menu-item.is-danger { color: #fca5a5; }
 .editor-menu-item.is-danger:hover { background: rgba(248, 113, 113, 0.12); }
 .editor-menu-spacer { width: 13px; }
@@ -3065,11 +3109,11 @@ html[data-tema-painel="claro"] {
   cursor: pointer;
 }
 
-.editor-rail-tab:hover { background: rgba(255, 255, 255, 0.05); color: var(--ed-text); }
+.editor-rail-tab:hover { background: var(--ed-fill); color: var(--ed-text); }
 
 .editor-rail-tab.is-active {
   background: var(--ed-accent-soft);
-  color: #c3c8fc;
+  color: var(--ed-accent-ink);
   font-weight: 600;
 }
 
@@ -3084,7 +3128,7 @@ html[data-tema-painel="claro"] {
   cursor: pointer;
 }
 
-.editor-rail-toggle:hover { background: rgba(255, 255, 255, 0.05); color: var(--ed-text); }
+.editor-rail-toggle:hover { background: var(--ed-fill); color: var(--ed-text); }
 
 .editor-rail-body,
 .editor-inspector-body {
@@ -3093,7 +3137,7 @@ html[data-tema-painel="claro"] {
   overflow-y: auto;
   padding: 12px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: var(--ed-scroll) transparent;
 }
 
 .editor-hint {
@@ -3131,7 +3175,7 @@ html[data-tema-painel="claro"] {
   padding: 9px;
   border-radius: 10px;
   border: 1px solid var(--ed-line);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--ed-fill-sutil);
   color: var(--ed-muted);
   cursor: grab;
   text-align: left;
@@ -3143,13 +3187,16 @@ html[data-tema-painel="claro"] {
   color: var(--ed-text);
 }
 
+/* A miniatura da peça. O fundo era `rgba(0,0,0,0.3)` cravado — um quadrado
+   escuro no meio de um painel branco, com o desenho cinza por cima somindo
+   (contraste medido de 1.44 no "+" do FAQ). Tokens resolvem os dois temas. */
 .editor-lib-preview {
   display: block;
   height: 34px;
   padding: 7px;
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.3);
-  color: #8b94a8;
+  background: var(--ed-preview-bg);
+  color: var(--ed-preview-ink);
   overflow: hidden;
   pointer-events: none;
 }
@@ -3172,7 +3219,7 @@ html[data-tema-painel="claro"] {
   border: 1px solid transparent;
 }
 
-.editor-layer:hover { background: rgba(255, 255, 255, 0.04); }
+.editor-layer:hover { background: var(--ed-fill); }
 
 .editor-layer.is-active {
   background: var(--ed-accent-soft);
@@ -3220,7 +3267,7 @@ html[data-tema-painel="claro"] {
   padding: 9px;
   border-radius: 11px;
   border: 1px solid var(--ed-line);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--ed-fill-sutil);
   cursor: pointer;
   text-align: left;
 }
@@ -3279,7 +3326,7 @@ html[data-tema-painel="claro"] {
   flex-shrink: 0;
 }
 
-.editor-inspector-toggle:hover { background: rgba(255, 255, 255, 0.06); color: var(--ed-text); }
+.editor-inspector-toggle:hover { background: var(--ed-fill-hover); color: var(--ed-text); }
 
 .editor-inspector-vertical {
   writing-mode: vertical-rl;
@@ -3359,7 +3406,7 @@ html[data-tema-painel="claro"] {
 }
 
 .editor-input:focus { border-color: var(--ed-accent); }
-.editor-input[readonly] { color: var(--ed-muted); background: rgba(255, 255, 255, 0.02); }
+.editor-input[readonly] { color: var(--ed-muted); background: var(--ed-fill-sutil); }
 
 .editor-number { position: relative; display: block; }
 
@@ -3408,7 +3455,7 @@ html[data-tema-painel="claro"] {
   padding: 0 8px;
   border-radius: 8px;
   border: 1px solid var(--ed-line);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--ed-fill-sutil);
   font-size: 11px;
   color: var(--ed-muted);
   cursor: pointer;
@@ -3419,7 +3466,7 @@ html[data-tema-painel="claro"] {
 .editor-theme-chip.is-active {
   border-color: var(--ed-accent);
   background: var(--ed-accent-soft);
-  color: #fff;
+  color: var(--ed-accent-ink);
   font-weight: 600;
 }
 
@@ -3452,7 +3499,7 @@ html[data-tema-painel="claro"] {
   padding: 8px;
   border-radius: 9px;
   border: 1px solid var(--ed-line);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--ed-fill-sutil);
 }
 
 .editor-subitem-head {
@@ -3485,7 +3532,7 @@ html[data-tema-painel="claro"] {
   /* Pontos discretos: dizem "isto é uma área de montagem" sem competir com o
      conteúdo. Mais contraste que isto e a grade aparece através dos blocos de
      fundo translúcido da própria vitrine. */
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--ed-grade) 1px, transparent 1px);
   background-size: 22px 22px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
@@ -4531,6 +4578,14 @@ html[data-tema-painel="claro"] {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* O contador "1/2" dentro da alça. A alça já tinha versão clara logo abaixo;
+   o `em` dentro dela não — ficava com o cinza do escuro sobre a alça branca,
+   a 2.94. É o pedacinho que diz QUANTAS seções aquela peça tem. */
+.showcase-theme-light .builder-pseudo-section__handle em {
+  color: #64748b;
+  border-left-color: rgba(15, 23, 42, 0.14);
+}
+
 .builder-pseudo-section.is-dragging .builder-pseudo-section__handle em { color: rgba(9, 10, 16, 0.66); border-color: rgba(9, 10, 16, 0.2); }
 
 .builder-pseudo-section__handle:disabled {
@@ -5142,6 +5197,24 @@ html[data-tema-painel="claro"] {
   color: #6ee7b7;
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* ── O selo na vitrine CLARA ───────────────────────────────────────
+   Vermelho e verde CLAROS foram escolhidos para o fundo preto; sobre a página
+   branca eles somem — "Fechado agora" media 1.61, e essa é justamente a
+   informação que o widget existe para dar. Os mesmos matizes, escurecidos.
+
+   O cabeçalho da regra acima diz que cor E texto carregam a informação; aqui a
+   cor volta a carregar a parte dela. */
+.showcase-theme-light .widget-hours__selo {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(185, 28, 28, 0.3);
+}
+.showcase-theme-light .widget-hours__selo.is-aberto {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(4, 120, 87, 0.32);
 }
 .widget-hours__ponto {
   width: 6px;
@@ -6202,15 +6275,71 @@ main[data-tema="claro"] .editor-shell {
   --ed-accent: #4f46e5;
   --ed-accent-soft: rgba(79, 70, 229, 0.12);
   --ed-danger: #dc2626;
+
+  /* Os quatro degraus invertidos: tinta escura translucida sobre o branco do
+     painel. Ver o bloco de tokens em `.editor-shell` para o defeito que isto
+     conserta — controle ativo com contraste 1.00, branco sobre branco.
+
+     As opacidades sobem um pouco em relação ao escuro: 2% de preto sobre
+     branco separa menos que 2% de branco sobre preto, porque o olho enxerga
+     diferença de luminancia melhor no escuro. */
+  --ed-fill-sutil: rgba(15, 23, 42, 0.03);
+  --ed-fill: rgba(15, 23, 42, 0.05);
+  --ed-fill-hover: rgba(15, 23, 42, 0.07);
+  --ed-fill-forte: rgba(15, 23, 42, 0.10);
+  --ed-sel-ink: #0f172a;
+  --ed-accent-ink: #4338ca;
+  --ed-grade: rgba(15, 23, 42, 0.07);
+  --ed-scroll: rgba(15, 23, 42, 0.18);
+  --ed-preview-bg: rgba(15, 23, 42, 0.06);
+  --ed-preview-ink: #64748b;
+
+  /* O selo BETA é âmbar claro sobre âmbar translúcido — desenhado para o
+     fundo preto. Sobre branco dá 1.51, e ele fica ao lado do título da tela.
+     O mesmo âmbar, dois degraus mais escuro, mantém a mesma leitura. */
+}
+main[data-tema="claro"] .selo-beta,
+html[data-tema-painel="claro"] .selo-beta {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(180, 83, 9, 0.32);
 }
 
-/* A FOLHA não segue o painel: ela é a vitrine, e a vitrine tem o próprio modo
-   claro/escuro. O fundo em volta dela vem do `--ed-bg` acima; o que está dentro
-   é governado por `showcase-theme-light`, como na página publicada. */
-main[data-tema="claro"] .editor-canvas-surface:not(.showcase-theme-light) {
+/* ── A FOLHA NÃO SEGUE O PAINEL ─────────────────────────────────────
+   Ela é a vitrine, e a vitrine tem o próprio modo claro/escuro. O fundo em
+   volta vem do `--ed-bg`; o de dentro é do documento.
+
+   ── O QUE ESTAVA ERRADO ──
+
+   `.editor-canvas-surface` pinta com `var(--bg-gradient-1)`, e
+   `main[data-tema="claro"]` redefine essa variável para um cinza claro — para
+   o PAINEL, com toda razão. Só que a folha herda dali, então uma vitrine
+   ESCURA aberta num painel claro era pintada de claro.
+
+   A passada anterior tratou o sintoma pela metade: forçou o texto a claro e
+   deixou o fundo claro. O resultado foi branco sobre branco — contraste medido
+   de 1.07 no título do hero, ou seja, a folha inteira ilegível. Meio conserto
+   ficou pior que nenhum.
+
+   A cura é a folha DECLARAR os próprios tokens em vez de herdá-los. Declaração
+   no próprio elemento vence herança sempre, independentemente de especificidade
+   — por isso isto não precisa (e não deve) começar com `main[data-tema]`: vale
+   nos dois temas do painel, e nenhum tema novo volta a vazar para dentro. */
+.editor-canvas-surface:not(.showcase-theme-light) {
+  --bg-gradient-1: #0a0a0b;
+  --bg-gradient-2: #0b0c11;
+  --bg-gradient-3: #0e1018;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  color: #f8fafc;
+  color: var(--text-main);
+}
+.editor-canvas-surface.showcase-theme-light {
+  --bg-gradient-1: #f8fafc;
+  --bg-gradient-2: #f2f5f9;
+  --bg-gradient-3: #eef2f7;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  color: var(--text-main);
 }
 
 /* O alternador de fonte de conteúdo e os campos do inspetor leem `--ed-*`, mas
@@ -6329,6 +6458,47 @@ main[data-tema="claro"] .inicio-atalho:hover {
 .menu-paginas__ponto.is-on > span { background: var(--accent, #6366f1); transform: scale(1.15); }
 .menu-paginas__nota { font-size: 12px; color: var(--text-muted); }
 @media (max-width: 560px) { .menu-paginas__nota { display: none; } }
+
+/* ── A passagem de página ────────────────────────────────────────────────────
+   A grade entra DO LADO de onde veio: avançou, vem da direita; voltou, da
+   esquerda. Sem isso os nove cartões trocavam no mesmo quadro e a tela só
+   piscava — não dava para saber se tinha avançado ou voltado.
+
+   Quem replica a animação a cada passagem é a `key` na grade (ver
+   `GradeDeMenu.jsx`); o CSS aqui só descreve a entrada.
+
+   Anima `transform` e `opacity`, e nada mais: são as duas propriedades que o
+   compositor resolve sozinho. Animar `left` obrigaria o layout de nove cartões
+   a ser refeito a cada quadro.
+
+   `both` para segurar o estado inicial antes do primeiro quadro — sem ele a
+   grade aparece na posição final e só depois pula para o começo da animação. */
+.menu-grade--vem-da-direita { animation: menuPaginaDireita 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.menu-grade--vem-da-esquerda { animation: menuPaginaEsquerda 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes menuPaginaDireita {
+  from { opacity: 0; transform: translateX(32px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes menuPaginaEsquerda {
+  from { opacity: 0; transform: translateX(-32px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-grade--vem-da-direita, .menu-grade--vem-da-esquerda { animation: none; }
+}
+
+/* Os cartões que guardam o lugar na última página, para os controles não
+   subirem meia tela quando ela tem menos de nove. Ver `GradeDeMenu.jsx`.
+
+   `visibility: hidden` faz mais do que esconder: tira o cartão da ordem do Tab
+   e da árvore de acessibilidade. Com `opacity: 0` a página ganharia oito
+   destinos fantasmas, alcançáveis pelo teclado e anunciados pelo leitor de
+   tela — e o pior tipo de defeito é o que só existe para quem não vê a tela.
+
+   `pointer-events` por cima disso é cinto e suspensório: `visibility: hidden`
+   já barra o ponteiro, e a linha continua aqui para o dia em que alguém trocar
+   a regra por uma que não barra. */
+.menu-grade__reserva { visibility: hidden; pointer-events: none; }
 
 /* ── Cartões de índice (.menu-cartao) ────────────────────────────────────────
    Relatórios, Configurações e Gerenciar Imóveis. Mesma mecânica; o que muda é
@@ -6913,6 +7083,36 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
   position: fixed; inset: 0; z-index: 9000;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+  animation: mpVeu 180ms ease both;
+}
+
+/* ── A entrada e a saída ─────────────────────────────────────────
+   O modal aparecia e sumia no mesmo quadro, e sem clique fora para fechá-lo
+   (ver `ModaisDoPerfil.jsx`) a saída seca ficava pior ainda: nada liga o ✕
+   clicado à tela que volta.
+
+   Anima só `opacity` e `transform`, as duas que o compositor resolve sozinho.
+   O `translate(-50%, -50%)` da centralização entra em TODOS os quadros — sem
+   ele o modal salta para o canto superior esquerdo no primeiro. */
+@keyframes mpVeu { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mpVeuSai { from { opacity: 1; } to { opacity: 0; } }
+@keyframes mpModal {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96) translateY(10px); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1) translateY(0); }
+}
+@keyframes mpModalSai {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1) translateY(0); }
+  to   { opacity: 0; transform: translate(-50%, -50%) scale(0.96) translateY(8px); }
+}
+.mp-veu.is-saindo { animation: mpVeuSai 170ms ease forwards; }
+.mp-modal.is-saindo { animation: mpModalSai 170ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+/* Durante a saída nada mais responde: um clique nos 170ms da despedida
+   pareceria travamento. */
+.mp-veu.is-saindo, .mp-modal.is-saindo { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-veu, .mp-modal { animation: none; }
+  .mp-veu.is-saindo, .mp-modal.is-saindo { animation: none; opacity: 0; }
 }
 .mp-modal {
   position: fixed; z-index: 9001; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -6923,6 +7123,7 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
   box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.85);
   font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
   color: #e2e8f0;
+  animation: mpModal 220ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 .mp-modal__cab {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
@@ -7376,6 +7577,53 @@ main[data-tema="claro"] .exi-aviso, html[data-tema-painel="claro"] .exi-aviso { 
 .perm-item.is-on svg { color: #a5b4fc; }
 main[data-tema="claro"] .perm-item.is-on svg,
 html[data-tema-painel="claro"] .perm-item.is-on svg { color: #4f46e5; }
+
+/* ── As permissões que abrem o modal de ciência ──────────────────────────────
+   Seis das vinte e tantas caixas são de RISCO (ver `PERMISSOES_DE_RISCO`), e
+   eram idênticas às outras: a diferença só aparecia depois do clique, quando a
+   escolha já estava feita e o aviso lê como obstáculo.
+
+   O traço é âmbar e mora num `box-shadow` interno, não numa `border-left`:
+   engrossar a borda de um lado só empurraria o texto três pixels e as caixas
+   de risco desalinhariam da grade inteira. Sombra não ocupa espaço.
+
+   Ligada, ela vence o índigo. É a leitura certa: uma permissão sensível
+   CONCEDIDA é o que mais precisa saltar numa revisão de cargo — e um item
+   âmbar no meio de dez índigos é exatamente onde o olho para primeiro. */
+.perm-item.is-risco {
+  border-color: rgba(245, 158, 11, 0.32);
+  box-shadow: inset 2px 0 0 rgba(245, 158, 11, 0.7);
+}
+.perm-item.is-risco:hover:not(.is-travada) {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.07);
+}
+.perm-item.is-risco.is-on {
+  border-color: rgba(245, 158, 11, 0.58);
+  background: rgba(245, 158, 11, 0.11);
+}
+.perm-item.is-risco.is-on svg { color: #fbbf24; }
+.perm-item.is-risco.is-on .perm-marca { color: #fbbf24; }
+.perm-item.is-risco input { accent-color: #f59e0b; }
+
+/* Empurrado para a direita da caixa: o rótulo continua colado no ícone da
+   permissão, e o triângulo fica na margem, onde a coluna inteira se lê de
+   relance. `margin-left: auto` e não `justify-content`, que mexeria no resto. */
+.perm-alerta { margin-left: auto; flex: none; display: inline-flex; align-items: center; }
+/* Depois das regras de `svg` acima e com uma classe a mais: sem isto o
+   triângulo herdava o cinza do item desligado e sumia justamente onde precisa
+   ser visto. */
+.perm-item.is-risco .perm-alerta svg { color: #f59e0b; }
+main[data-tema="claro"] .perm-item.is-risco .perm-alerta svg,
+html[data-tema-painel="claro"] .perm-item.is-risco .perm-alerta svg { color: #b45309; }
+main[data-tema="claro"] .perm-item.is-risco.is-on svg,
+html[data-tema-painel="claro"] .perm-item.is-risco.is-on svg { color: #b45309; }
+
+/* Na prévia o realce de hover não existe (nada ali clica), mas o traço fica:
+   quem confere o cargo de alguém precisa ver o que é sensível tanto quanto
+   quem o monta. */
+.perm-grade.is-previa .perm-item.is-risco:hover { background: var(--sup-03, rgba(255, 255, 255, 0.03)); }
+.perm-grade.is-previa .perm-item.is-risco.is-on:hover { background: rgba(245, 158, 11, 0.11); }
 
 /* ── Os dois grupos: Hub e Flow ──────────────────────────────────────────────
    O segundo só existe quando a imobiliária contratou o Omnimob Flow. O título
@@ -7934,44 +8182,170 @@ main[data-tema="claro"] .ig-destaque__texto em { color: #0369a1; }
 }
 main[data-tema="claro"] .ea-conflito, html[data-tema-painel="claro"] .ea-conflito { color: #b91c1c; }
 
-.ea-grupo h4 {
-  margin: 0 0 8px; font-size: 11.5px; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--text-muted);
-}
-.ea-grupo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.ea-grupo li {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 10px; border-radius: 9px;
-  background: var(--sup-02, rgba(255, 255, 255, 0.02));
-}
-.ea-rotulo { font-size: 13px; min-width: 0; }
+/* ── A MAQUETE DE UMA TELA ──────────────────────────────────────────
+   Cada grupo de atalhos vira o quadro da tela em que ele vale. Era uma lista de
+   rótulo + campo, e ela escondia justamente o que decide a escolha: ONDE a
+   tecla funciona. Ver o cabeçalho de `EditorDeAtalhos.jsx`.
 
-/* A tecla é um <kbd> clicável: parece tecla, e é o que a pessoa aperta. */
-.ea-tecla {
-  flex: none; width: auto; min-width: 54px;
-  padding: 6px 12px; border-radius: 8px;
+   Um degrau mais escura que a página, com a barra de título por cima: é o que
+   faz o bloco ser lido como "uma tela" e não como mais uma seção do
+   formulário. */
+.ea-tela {
+  border-radius: 14px; overflow: hidden;
+  background: var(--sup-02, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+.ea-tela__barra {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 13px;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+  border-bottom: 1px solid var(--linha-07, rgba(255, 255, 255, 0.07));
+}
+/* Os três pontos da janela. Puramente citação — não fecham nada, e por isso
+   são elementos sem semântica e o pai leva `aria-hidden`. */
+.ea-tela__pontos { display: inline-flex; gap: 4px; flex: none; }
+.ea-tela__pontos i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--linha-14, rgba(255, 255, 255, 0.14));
+}
+.ea-tela__nome {
+  font-size: 12px; font-weight: 650; letter-spacing: -0.01em;
+  color: var(--tinta-88, rgba(255, 255, 255, 0.88));
+}
+.ea-tela__rota {
+  margin-left: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; color: var(--text-muted);
+  padding: 2px 8px; border-radius: 6px;
+  background: var(--sup-04, rgba(255, 255, 255, 0.04));
+}
+.ea-tela__rota--todas { font-family: inherit; font-style: italic; background: transparent; }
+
+/* A grade dos cartões. `auto-fill` com um mínimo pequeno: é uma maquete, então
+   ela encolhe para caber no modal de 560px sem virar uma coluna só. */
+.ea-tela__palco {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px; padding: 12px 13px 14px;
+}
+
+/* ── O cartão ────────────────────────────────────────────────────────
+   O cartão INTEIRO é o alvo, e não um campo ao lado dele: na tela real quem se
+   clica é o cartão, e separar as duas coisas ensinaria um gesto que a tela de
+   verdade não tem.
+
+   `--ea-cor` chega do JSX com o acento daquele cartão na tela real — o mesmo
+   índigo de Imóveis, o mesmo verde de Relatórios. */
+.ds-shell .ea-cartao, .ea-cartao {
+  position: relative; width: 100%;
+  display: flex; align-items: center; gap: 9px;
+  padding: 11px 12px; padding-right: 40px;
+  border-radius: 11px; cursor: pointer; text-align: left;
+  /* Pela mesma razão do `.mp-aba`: o `button` global é
+     `justify-content: center`, e um seletor de TIPO vence para tudo que a
+     classe não declara. Ícone e rótulo flutuavam no meio do cartão em vez de
+     começarem na margem, e a coluna de ícones da maquete não alinhava com nada.
+     `text-align: left` acima não resolve: num flex quem alinha é o
+     `justify-content`. */
+  justify-content: flex-start;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  color: inherit; box-shadow: none; transform: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ea-cartao:hover:not(:disabled) {
+  background: var(--sup-07, rgba(255, 255, 255, 0.07));
+  border-color: var(--linha-14, rgba(255, 255, 255, 0.14));
+  transform: none; box-shadow: none;
+}
+.ea-cartao__icone {
+  flex: none; width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center;
+  color: var(--ea-cor, #6366f1);
+  background: color-mix(in srgb, var(--ea-cor, #6366f1) 16%, transparent);
+}
+.ea-cartao__rotulo {
+  min-width: 0; font-size: 12.5px; font-weight: 600; line-height: 1.3;
+  /* Duas linhas no máximo: rótulo longo não pode fazer um cartão da grade
+     ficar mais alto que os vizinhos e quebrar o alinhamento da maquete. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* No MESMO canto em que a tela real desenha o selo (`.tecla-atalho--canto`).
+   É o que faz a maquete ser reconhecida antes de ser lida. */
+.ea-cartao__tecla {
+  position: absolute; top: 9px; right: 9px;
+  min-width: 22px; height: 21px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px; font-weight: 700; cursor: pointer;
+  font-size: 11px; font-weight: 700; line-height: 1;
   background: var(--sup-08, rgba(255, 255, 255, 0.08));
   border: 1px solid var(--linha-12, rgba(255, 255, 255, 0.12));
   border-bottom-width: 2px;
-  color: inherit;
+  color: var(--tinta-72, rgba(255, 255, 255, 0.72));
 }
-.ea-tecla:hover:not(:disabled) { background: var(--sup-10, rgba(255, 255, 255, 0.1)); }
-.ea-tecla.is-ouvindo {
+
+/* Esperando a tecla: o cartão inteiro acende. O realce é do CARTÃO e não só do
+   selo porque é ele que está capturando — um contorno no selo pareceria um
+   campo de texto em foco, que é o gesto errado. */
+.ea-cartao.is-ouvindo {
   border-color: var(--tenant-primary, #6366f1);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tenant-primary, #6366f1) 22%, transparent);
+  background: color-mix(in srgb, var(--tenant-primary, #6366f1) 12%, transparent);
 }
-.ea-tecla.is-conflito { border-color: #ef4444; color: #fca5a5; }
-main[data-tema="claro"] .ea-tecla.is-conflito { color: #b91c1c; }
-/* Desligado é texto miúdo, e não uma tecla vazia: caixa vazia parece defeito. */
-.ea-tecla.is-vazio {
-  font-family: inherit; font-weight: 400; font-size: 11.5px;
+.ea-cartao.is-ouvindo .ea-cartao__tecla {
+  border-color: var(--tenant-primary, #6366f1);
+  color: var(--tenant-primary, #6366f1);
+}
+.ea-cartao.is-conflito { border-color: rgba(239, 68, 68, 0.55); }
+.ea-cartao.is-conflito .ea-cartao__tecla { border-color: #ef4444; color: #fca5a5; }
+main[data-tema="claro"] .ea-cartao.is-conflito .ea-cartao__tecla,
+html[data-tema-painel="claro"] .ea-cartao.is-conflito .ea-cartao__tecla { color: #b91c1c; }
+/* Desligado: o selo esmaece em vez de sumir. Um canto vazio leria como cartão
+   pela metade; um traço diz "aqui não há tecla, e foi escolha". */
+.ea-cartao.is-vazio .ea-cartao__tecla {
+  background: transparent; border-style: dashed; border-bottom-width: 1px;
   color: var(--tinta-42, rgba(255, 255, 255, 0.42));
-  border-bottom-width: 1px;
 }
-.ea-tecla:disabled { opacity: 0.5; cursor: not-allowed; }
+.ea-cartao:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* O grupo que não é uma tela. Tracejada porque ela não existe como página —
+   o que está ali dentro vale em todas. */
+.ea-tela--global { border-style: dashed; }
+
+/* ── Modo claro ───────────────────────────────────────────────────
+   Os dois seletores porque a maquete aparece em Configurações (dentro de
+   `main[data-tema]`) e no modal do perfil (que não está dentro do main e se
+   guia pelo `html[data-tema-painel]`). Mesma dupla que o resto do `.ea-*`. */
+main[data-tema="claro"] .ea-tela,
+html[data-tema-painel="claro"] .ea-tela {
+  background: rgba(15, 23, 42, 0.02); border-color: rgba(15, 23, 42, 0.1);
+}
+main[data-tema="claro"] .ea-tela__barra,
+html[data-tema-painel="claro"] .ea-tela__barra {
+  background: rgba(15, 23, 42, 0.04); border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+main[data-tema="claro"] .ea-tela__pontos i,
+html[data-tema-painel="claro"] .ea-tela__pontos i { background: rgba(15, 23, 42, 0.16); }
+main[data-tema="claro"] .ea-tela__nome,
+html[data-tema-painel="claro"] .ea-tela__nome { color: #0f172a; }
+main[data-tema="claro"] .ea-cartao,
+html[data-tema-painel="claro"] .ea-cartao {
+  background: #ffffff; border-color: rgba(15, 23, 42, 0.12);
+}
+main[data-tema="claro"] .ea-cartao:hover:not(:disabled),
+html[data-tema-painel="claro"] .ea-cartao:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.2);
+}
+main[data-tema="claro"] .ea-cartao__tecla,
+html[data-tema-painel="claro"] .ea-cartao__tecla {
+  background: rgba(15, 23, 42, 0.05); border-color: rgba(15, 23, 42, 0.14); color: #475569;
+}
+main[data-tema="claro"] .ea-cartao.is-vazio .ea-cartao__tecla,
+html[data-tema-painel="claro"] .ea-cartao.is-vazio .ea-cartao__tecla {
+  background: transparent; color: #94a3b8;
+}
+main[data-tema="claro"] .ea-tela__rota,
+html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.05); }
 
 .ea-restaurar {
   align-self: flex-start; width: auto;
@@ -7997,6 +8371,12 @@ main[data-tema="claro"] .ea-tecla.is-conflito { color: #b91c1c; }
   width: 100%; padding: 9px 11px; border-radius: 9px;
   font-size: 13px; text-align: left; cursor: pointer;
   background: transparent; border: 0; color: var(--tinta-72, rgba(255, 255, 255, 0.72));
+  /* O `button` global é `justify-content: center`, e um seletor de TIPO vence
+     para tudo que a classe não declara — o ícone e o rótulo ficavam no meio dos
+     178px da coluna, longe da margem, e a tira de abas lia como botões soltos.
+     `text-align: left` acima não alcança: num flex quem alinha é o
+     `justify-content`. */
+  justify-content: flex-start;
 }
 .mp-aba:hover { background: var(--sup-05, rgba(255, 255, 255, 0.05)); }
 .mp-aba.is-on {
@@ -8022,7 +8402,6 @@ main[data-tema="claro"] .ea-tecla.is-conflito { color: #b91c1c; }
     border-right: 0; border-bottom: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
   }
   .mp-aba { width: auto; white-space: nowrap; }
-  .ea-grupo li { flex-wrap: wrap; }
 }
 
 /* ── O selo da tecla, ao lado do botão ───────────────────────────────────────

@@ -588,7 +588,6 @@ export function UsuariosPage({ session }) {
           texto="Cada pessoa da equipe entra com o próprio acesso, e o cargo dela decide o que alcança no painel."
           acaoLabel="Cadastrar usuário"
           onAcao={abrirCriar}
-          tecla="N"
           tourId="usuarios-novo"
         />
       ) : (

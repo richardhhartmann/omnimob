@@ -3,7 +3,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
-import { PERMISSOES, alcancaOHub } from "../services/cargosPadrao.js";
+import { PERMISSOES, alcancaOHub, CHAVES_DA_CASA } from "../services/cargosPadrao.js";
 
 export const cargoRouter = Router();
 cargoRouter.use(requireAuth);
@@ -82,6 +82,12 @@ cargoRouter.post("/", async (req, res) => {
        `ehAdministrador`); `acessarPainel` é sempre true — existir como cargo já
        significa entrar no painel. */
     data.verConfiguracoes = ehAdministrador({ descricao });
+    /* Na criação também: um cargo novo batizado de "Administrador" nasceria
+       sem as chaves e a tela o desenharia com elas travadas e marcadas —
+       mostrando um estado que o banco não tem. */
+    if (ehAdministrador({ descricao })) {
+      for (const chave of CHAVES_DA_CASA) data[chave] = true;
+    }
     data.acessarPainel = alcancaOHub(data);
 
     const cargo = await prisma.cargo.create({ data });
@@ -127,6 +133,23 @@ cargoRouter.put("/:id", async (req, res) => {
        DEFININDO (renomear um cargo para "Administrador" o promove; renomear o
        Administrador para outra coisa o rebaixa), e não o nome antigo. */
     data.verConfiguracoes = ehAdministrador({ descricao: data.descricao ?? cargo.descricao });
+
+    /* ── AS CHAVES DA CASA, DERIVADAS ────────────────────────────────
+
+       Mesmo tratamento de `verConfiguracoes`, e pelo mesmo motivo: DERIVAR em
+       vez de recusar. Recusar com 400 exigiria a tela adivinhar a regra para
+       não mandar o que seria negado, e deixaria de pé qualquer linha que já
+       tenha ficado torta. Derivando, toda gravação conserta a linha sozinha e a
+       tela nunca mostra marcado o que o banco tem desmarcado.
+
+       Vale sobre o nome RESULTANTE: renomear um cargo para "Administrador"
+       entrega as chaves a ele, e renomear o Administrador para outra coisa as
+       devolve. É a mesma fragilidade que o cabeçalho deste arquivo assume para
+       `verConfiguracoes`, e não vale um segundo mecanismo. */
+    if (ehAdministrador({ descricao: data.descricao ?? cargo.descricao })) {
+      for (const chave of CHAVES_DA_CASA) data[chave] = true;
+    }
+
     /* Derivada, e sobre o cargo INTEIRO — não só sobre o que veio no corpo.
        O PUT desta tela é parcial (um clique manda uma permissão), e olhar só o
        `data` faria um cargo perder o Hub ao desmarcar uma caixa qualquer,

@@ -397,7 +397,6 @@ export function ClientesPage({ session }) {
           texto="Aqui ficam as pessoas que procuram imóvel com você — com o que cada uma quer, o histórico de contato e o cruzamento automático com o seu acervo."
           acaoLabel="Cadastrar cliente"
           onAcao={abrirCriar}
-          tecla="N"
           tourId="clientes-novo"
         />
       ) : (

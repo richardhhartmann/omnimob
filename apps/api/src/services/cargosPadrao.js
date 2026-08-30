@@ -105,6 +105,35 @@ export const PERMISSOES = [
    Os cargos "Jurídico" e "Financeiro" entram no catálogo por isso: eles são a
    forma DESENHADA de usar o recurso, e um catálogo que não a oferece obriga
    toda imobiliária a descobri-la sozinha. */
+/* ── AS CHAVES DA CASA, QUE O ADMINISTRADOR NÃO ENTREGA ───────────────────
+
+   `gerenciarCargos` já era intocável no PRÓPRIO cargo de quem edita, e a razão
+   valia igual aqui: tirá-la do Administrador deixa a imobiliária sem ninguém
+   capaz de reabrir a porta — nem quem a fechou. As outras três são da mesma
+   família: aparecem só neste cargo, e um Administrador sem elas é uma conta que
+   perdeu quem responde por ela.
+
+   ── POR QUE AS DUAS VALIDAÇÕES DO FLOW NÃO ESTÃO AQUI ──
+
+   `validarJuridico` e `validarFinanceiro` também são permissões de risco, e ficam
+   de fora de propósito: o Administrador NÃO as recebe de fábrica (ver o
+   comentário do catálogo, logo abaixo). Forçá-las aqui inverteria justamente a
+   decisão que aquele comentário explica — numa imobiliária com um administrador
+   só, ele passaria a aprovar o próprio negócio com dois cliques, e a trava do
+   fechamento deixaria de significar alguma coisa.
+
+   A regra, dita de uma vez: trava-se o que o Administrador TEM de fábrica e
+   mais ninguém tem. Não se trava o que ele nunca teve.
+
+   `verConfiguracoes` não entra porque já é derivada do nome do cargo — não
+   existe caixa para desmarcar. Ver `cargoRoutes.js`. */
+export const CHAVES_DA_CASA = [
+  "gerenciarCargos",
+  "gerenciarUsuarios",
+  "verCobranca",
+  "verPainelGestor",
+];
+
 export const CARGOS_PADRAO = [
   {
     descricao: CARGO_ADMIN,

@@ -1,4 +1,4 @@
-import { gruposDePermissao } from "../utils/permissoesCargo.jsx";
+import { gruposDePermissao, PERMISSOES_DE_RISCO } from "../utils/permissoesCargo.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    As caixas de permissão de um cargo. Uma só, para as duas telas.
@@ -43,7 +43,42 @@ import { gruposDePermissao } from "../utils/permissoesCargo.jsx";
    O ✕ importa tanto quanto o ✓. Quem escolhe o cargo de alguém precisa ver o
    que aquela pessoa NÃO vai alcançar — uma lista só do que está ligado deixa a
    pergunta "e o resto?" sem resposta na tela.
+
+   ── AS PERMISSÕES DE RISCO SE ANUNCIAM ──
+
+   Seis das caixas abrem um modal de ciência ao serem marcadas (ver
+   `PERMISSOES_DE_RISCO`) e nada as distinguia das outras vinte: eram
+   idênticas, e a diferença só aparecia DEPOIS do clique. Quem monta um cargo
+   às pressas descobria que "Painel do Gestor" era grave no instante em que já
+   tinha decidido marcar — e a essa altura o modal lê como obstáculo, não como
+   aviso.
+
+   Agora elas nascem com o traço âmbar e o triângulo. É a mesma informação que
+   o modal dá, entregue enquanto ainda é escolha: dá para montar o cargo
+   inteiro sem esbarrar num único aviso, porque as caixas que abririam um
+   estão visíveis desde o começo.
+
+   Quem decide o que é de risco continua sendo o catálogo, não este arquivo —
+   permissão nova entra no destaque sozinha, no dia em que ganhar o texto do
+   modal. Um segundo `Set` aqui divergiria dele no primeiro esquecimento.
    ──────────────────────────────────────────────────────────────────────────── */
+
+/* O triângulo. `aria-hidden` porque o estado por extenso vem no `sr-only` ao
+   lado — cor e desenho não chegam a quem ouve a página. */
+function MarcaDeRisco() {
+  return (
+    <span
+      className="perm-alerta"
+      title="Permissão sensível: pede uma confirmação por escrito antes de ser concedida."
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      <span className="sr-only">. Permissão sensível</span>
+    </span>
+  );
+}
 
 export function GradeDePermissoes({
   plano,
@@ -170,8 +205,12 @@ function GradeDeUmGrupo({
         /* Só na prévia o item apagado ganha marca própria. Na grade de edição a
            ausência de marca já é a caixa desmarcada, e apagar o item ali faria
            parecer indisponível em vez de desligado. */
+        /* Do catálogo, e não de uma lista local: ver o cabeçalho. */
+        const deRisco = Boolean(PERMISSOES_DE_RISCO[key]);
+
         const classe = `perm-item${marcada ? " is-on" : somenteLeitura ? " is-off" : ""}`
-          + (travada ? " is-travada" : "");
+          + (travada ? " is-travada" : "")
+          + (deRisco ? " is-risco" : "");
 
         if (somenteLeitura) {
           /* `<div>` e não `<label>`: rótulo sem controle é rótulo apontando
@@ -184,6 +223,7 @@ function GradeDeUmGrupo({
               {/* O estado por extenso, só para quem ouve a tela: o ✓/✕ é
                   decorativo e a cor não chega a ninguém. */}
               <span className="sr-only">{marcada ? ": tem acesso" : ": sem acesso"}</span>
+              {deRisco ? <MarcaDeRisco /> : null}
             </div>
           );
         }
@@ -202,6 +242,7 @@ function GradeDeUmGrupo({
             />
             {Icon ? <Icon size={16} weight={marcada ? "fill" : "regular"} /> : null}
             <span>{label}</span>
+            {deRisco ? <MarcaDeRisco /> : null}
           </label>
         );
       })}

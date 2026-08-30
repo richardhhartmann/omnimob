@@ -8,9 +8,11 @@ import {
   definirTenantDoPulso,
   pedirTelaDeAssinatura,
   consumirPendencia,
+  remarcarPendencia,
   lerMemoria,
 } from "../utils/pulsoTrial";
 import { IconeCheck } from "./Icones.jsx";
+import { tourAtivo } from "../utils/tourAtivo";
 
 /* ────────────────────────────────────────────────────────────────────────────
    "Como está sendo?" — a pergunta que aparece sozinha durante o teste.
@@ -180,6 +182,22 @@ export function PulsoTrialModal({ tenantSlug, tenantId, pronto = true }) {
   const avaliarEAbrir = useCallback((qualOrigem, espera = ESPERA_MS) => {
     const atual = estadoRef.current;
     if (!atual.tenantSlug || atual.aberto || !atual.pronto || atual.noEditor) return;
+    /* ── TOUR NA TELA, PERGUNTA NENHUMA ───────────────────────────────
+
+       `pronto` chega como `contaResolvida && !tourGlobalAtivo`, e o nome mente
+       um pouco: ele só conhece o tour GLOBAL. Os tours de TELA — o do cadastro
+       de cliente, o do editor de vitrine — e o do Flow passavam por baixo, e a
+       pergunta subia por cima do holofote: a lâmina do tour barra o clique,
+       então o modal aparecia inalcançável e o tour ficava apontando para o que
+       o véu dele cobria.
+
+       `tourAtivo()` é o registro que os três marcam ao montar (ver
+       `utils/tourAtivo.js`), então esta linha cobre os três — e o próximo.
+
+       ADIA, não engole: quem chamou já consumiu a pendência, e recusar sem
+       devolver faria a pessoa perder a única pergunta que o produto lhe faria.
+       Ela volta na próxima troca de tela, quando o tour já acabou. */
+    if (tourAtivo()) { remarcarPendencia(qualOrigem); return; }
     // Já tem uma pergunta a caminho: a segunda ação não marca outro encontro.
     if (timerRef.current) return;
 
@@ -201,6 +219,14 @@ export function PulsoTrialModal({ tenantSlug, tenantId, pronto = true }) {
              antes de aparecer. */
           const agora = estadoRef.current;
           if (agora.aberto || !agora.pronto || agora.noEditor) return;
+          /* De novo aqui, e não só lá em cima — este é o caso REAL do defeito.
+
+             Os dois disparam na mesma troca de rota: o tour de tela abre em
+             450ms, a pergunta em 2400ms. Quando a guarda de cima roda ainda não
+             há tour nenhum; quando o temporizador vence, o holofote já está no
+             ar. O comentario abaixo já dizia "o tour subiu" como caso a
+             reconferir, e a conferência nunca existiu. */
+          if (tourAtivo()) { remarcarPendencia(qualOrigem); return; }
           /* Marcado ao APARECER, não ao responder: quem fecha a aba com o
              modal na tela já teve o seu encontro, e o próximo salvamento não
              deve trazê-lo de volta. Fica dentro do temporizador porque uma
@@ -239,6 +265,10 @@ export function PulsoTrialModal({ tenantSlug, tenantId, pronto = true }) {
      O respiro é o maior dos dois que existiam: a pessoa acabou de navegar, e a
      tela de destino ainda está montando os dados dela. */
   useEffect(() => {
+    /* Com tour na tela a pendência nem chega a ser cobrada: `consumirPendencia`
+       APAGA ao devolver, e cobrar para depois recusar seria gastar a vez.
+       Ela fica guardada e vale na próxima saída de tela. */
+    if (tourAtivo()) return;
     const pendente = consumirPendencia(pathname);
     if (pendente) avaliarEAbrir(pendente, ESPERA_SAIDA_MS);
   }, [pathname, avaliarEAbrir]);

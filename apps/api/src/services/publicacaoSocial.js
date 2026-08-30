@@ -35,7 +35,26 @@ export function tokenDaPagina(tenant) {
   return decifrar(tenant?.facebookPageToken) || null;
 }
 
-const META_API_VERSION = "v19.0";
+/* ── A VERSÃO DA GRAPH API, E O ÚNICO LUGAR QUE A DECLARA ─────────────────
+
+   Ela já esteve escrita em três lugares — aqui, no `socialRoutes.js` e na prosa
+   de uma tela de Configurações — e as três envelheceram juntas sem ninguém
+   notar. Agora é exportada: quem precisa, importa.
+
+   ── POR QUE ISTO PRECISA DE MANUTENÇÃO ──
+
+   A Meta mantém cada versão por cerca de DOIS ANOS e depois a aposenta. A v19.0
+   que estava aqui saiu em janeiro de 2024 e expirou em 21 de maio de 2026 — ou
+   seja, ficou vencida em produção.
+
+   E o modo de falhar é o pior possível: chamada a versão expirada NÃO dá erro. A
+   Meta encaminha em silêncio para a versão mais antiga ainda disponível, então o
+   código passa a rodar contra outra API sem nada no log dizendo isso. Não existe
+   alarme para este vencimento; só a data abaixo.
+
+   Próxima revisão: julho de 2028 (v26.0 saiu em 29/07/2026). */
+const META_API_VERSION = "v26.0";
+export { META_API_VERSION };
 export const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 
 

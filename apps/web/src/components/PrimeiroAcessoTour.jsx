@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { PrimeiroAcessoModal } from "./PrimeiroAcessoModal";
@@ -82,10 +82,27 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
      tour por pessoa; era só este atalho que era da casa — e com ele, o
      administrador concluir o tour silenciava o convite para todo mundo que
      entrasse depois NAQUELE navegador. A pessoa não via o tour global e não
-     tinha como descobrir que ele existia. */
-  const [decidido, setDecidido] = useState(
-    () => (usuarioId && lerDoUsuario(CHAVES.tourResolvido, tenantId, usuarioId) === "1" ? "oculto" : null),
-  ); // null = ainda perguntando
+     tinha como descobrir que ele existia.
+
+     ── O ATALHO SÓ ESCONDE O VÉU, E NÃO DECIDE NADA ──
+
+     Ele já morou dentro do `decidido`, e ali era uma SEGUNDA fonte da verdade
+     disputando com o banco — contra o que o cabeçalho deste arquivo promete.
+     O estrago: `fase` fecha em "oculto" no primeiro quadro e o updater abaixo
+     só promove quem ainda está em "carregando", então a resposta do servidor
+     chegava depois da porta fechada e não abria mais.
+
+     Quem pagava era o "Rever o tour" das Configurações: ele apaga o progresso
+     no banco e recarrega, mas a marca local continuava ali dizendo "resolvido".
+     O tour sumia daquele navegador para sempre, sem erro nenhum no console.
+
+     Agora o atalho faz só o que sempre quis fazer — calar o véu de "Preparando
+     seu painel…" no recarregamento de quem já viu tudo. Quem decide se aparece
+     continua sendo, sozinho, o banco. */
+  const atalhoSilencia = useRef(
+    Boolean(usuarioId) && lerDoUsuario(CHAVES.tourResolvido, tenantId, usuarioId) === "1",
+  );
+  const [decidido, setDecidido] = useState(null); // null = ainda perguntando
 
   useEffect(() => {
     if (!tenantSlug || !fluxo.length) return undefined;
@@ -221,7 +238,7 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
      disso quem segura a tela é o modal de boas-vindas, e dois véus empilhados
      escureceriam a página duas vezes. */
   if (fase === "carregando") {
-    if (!pronto || decidido) return null;
+    if (!pronto || decidido || atalhoSilencia.current) return null;
     return (
       <div className="pat-espera" role="status" aria-live="polite">
         <style>{CSS_ESPERA}</style>

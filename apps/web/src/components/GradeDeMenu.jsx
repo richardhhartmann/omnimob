@@ -4,6 +4,7 @@ import { Trilha } from "./Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { CartaoDeMenu } from "./CartaoDeMenu.jsx";
+import { tourAtivo } from "../utils/tourAtivo";
 
 /* ── A grade dos índices do painel ───────────────────────────────────────────
 
@@ -33,6 +34,49 @@ import { CartaoDeMenu } from "./CartaoDeMenu.jsx";
    Nesse modo a grade escuta as teclas ela mesma, na fase de CAPTURA, e marca o
    evento como tratado. O ouvinte global (`useAtalhos`) respeita essa marca e
    não age em cima — senão "1" navegaria para dois lugares ao mesmo tempo.
+
+   ── A PASSAGEM TEM DIREÇÃO ──
+
+   Trocar de página trocava os nove cartões no mesmo quadro, sem nada dizendo o
+   que aconteceu — a tela pisca e a pessoa não sabe se avançou, voltou ou se os
+   cartões só mudaram de nome. A grade entra deslizando DO LADO de onde veio:
+   avançou, ela vem da direita; voltou, da esquerda. É a mesma informação que o
+   gesto de virar página dá no papel.
+
+   Quem replica a animação é a `key` na grade: mudar de página remonta o nó e a
+   entrada roda de novo. Mesmo truque que a `RelatoriosPage` usa com `key={view}`
+   — sem ele, o CSS anima uma vez e nunca mais.
+
+   `direcao` começa em ZERO, e é isso que evita a grade deslizar sozinha na
+   primeira pintura: sem clique não há de onde vir, e a tela já entra pela
+   animação da página inteira.
+
+   ── A GRADE GUARDA O LUGAR DA PÁGINA CHEIA ──
+
+   A última página quase nunca tem nove cartões, e com a grade encolhendo junto
+   os controles subiam meia tela: a pessoa clicava na seta e a própria seta
+   fugia de debaixo do dedo. Duas passadas e o ponteiro já não estava mais em
+   cima de nada.
+
+   A grade reserva SEMPRE a altura de uma página cheia, e a reserva são CARTÕES
+   DE VERDADE, invisíveis, ocupando os lugares que sobraram. Nada de medir.
+
+   A primeira tentativa mediu, e errou: colunas do `gridTemplateColumns`, altura
+   da linha do cartão mais alto NA TELA, e o resto por aritmética. O furo é o
+   "na tela" — a última página só tem os cartões dela, todos podendo ser mais
+   baixos que os da primeira (descrição de uma linha contra duas). A conta dava
+   três linhas curtas onde a página cheia tinha três linhas altas, e a barra
+   continuava subindo, só que menos.
+
+   Com cartões ocupando os lugares, a pergunta "qual a altura de nove destes?"
+   é respondida por quem já sabe respondê-la: o próprio grid. Sai de graça em
+   qualquer largura de tela — três colunas ou uma, a reserva acompanha, porque
+   é o mesmo cálculo que desenha a página cheia.
+
+   Quais cartões: os que ESTARIAM naquele lugar numa página cheia
+   (`itens[i]` para o lugar `i`). Repetir os primeiros da lista seria mais
+   simples e deslocaria as linhas — o lugar 4 ganharia a altura do cartão 1, e
+   as três linhas dariam outro total.
    ────────────────────────────────────────────────────────────────────────── */
 
 const POR_PAGINA = 9;
@@ -54,6 +98,18 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
   const itens = useMemo(() => (cards || []).filter(Boolean), [cards]);
   const paginas = Math.ceil(itens.length / POR_PAGINA) || 1;
   const [pagina, setPagina] = useState(0);
+  // -1 veio da esquerda · 0 sem passagem (primeira pintura) · 1 veio da direita
+  const [direcao, setDirecao] = useState(0);
+
+  /* Uma porta só para trocar de página — setas, bolinhas e o que vier depois.
+     A direção é decidida AQUI, e não dentro do updater do `setPagina`: updater
+     tem de ser função pura, e o StrictMode o executa duas vezes. */
+  function irPara(proxima) {
+    const alvo = Math.max(0, Math.min(paginas - 1, proxima));
+    if (alvo === pagina) return;
+    setDirecao(alvo > pagina ? 1 : -1);
+    setPagina(alvo);
+  }
 
   /* A página volta ao começo quando a LISTA muda de tamanho: um cargo que
      perde permissão, ou uma tela que carrega os cartões depois dos dados,
@@ -64,12 +120,21 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
   const paginado = paginas > 1;
   const visiveis = paginado ? itens.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA) : itens;
 
+  /* Os lugares que sobraram nesta página, preenchidos pelos cartões que
+     estariam neles se ela estivesse cheia. Vazio na página cheia. */
+  const reserva = paginado ? itens.slice(visiveis.length, POR_PAGINA) : [];
+
   /* As teclas posicionais. Só existem no modo paginado — ver o cabeçalho. */
   useEffect(() => {
     if (!paginado) return undefined;
 
     function aoTeclar(e) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      /* Tour aberto, a grade não responde. Estas teclas escapam do ouvinte
+         global de propósito (fase de captura), então a trava de lá não as
+         alcança — sem esta linha o "3" continuaria trocando de tela com o
+         holofote apontando para a anterior. Ver `utils/tourAtivo.js`. */
+      if (tourAtivo()) return;
       /* Digitando num campo, número é número. Mesma guarda do ouvinte global. */
       const alvo = e.target;
       const tag = alvo?.tagName?.toLowerCase();
@@ -107,7 +172,12 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
       ) : null}
 
       <div
+        /* A `key` é a página: trocá-la remonta a grade e a entrada roda de
+           novo. Sem ela o CSS animaria uma vez, na primeira pintura, e as
+           passagens seguintes seriam saltos secos. */
+        key={pagina}
         data-tour={tourId}
+        className={direcao === 0 ? undefined : `menu-grade--vem-da-${direcao > 0 ? "direita" : "esquerda"}`}
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(auto-fill, minmax(${colunaMinima}px, 1fr))`,
@@ -123,6 +193,20 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
             acao={paginado ? undefined : card.acao}
           />
         ))}
+
+        {/* A reserva. `visibility: hidden` e não `opacity: 0`: além de sumir,
+            ele tira o cartão da ordem do Tab e da árvore de acessibilidade — a
+            página não ganha oito destinos fantasmas para quem navega por
+            teclado ou ouve a tela.
+
+            O invólucro existe para o `aria-hidden` e a classe não precisarem
+            entrar no `CartaoDeMenu`, que não tem nada com isto. Ele é a célula
+            da grade; a altura continua sendo a do cartão lá dentro. */}
+        {reserva.map((card, i) => (
+          <div key={`reserva-${i}`} className="menu-grade__reserva" aria-hidden="true">
+            <CartaoDeMenu {...card} tecla={undefined} acao={undefined} />
+          </div>
+        ))}
       </div>
 
       {paginado ? (
@@ -135,7 +219,7 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
             <button
               type="button"
               className="menu-paginas__seta"
-              onClick={() => setPagina((p) => Math.max(0, p - 1))}
+              onClick={() => irPara(pagina - 1)}
               disabled={pagina === 0}
               aria-label="Página anterior"
             >
@@ -151,7 +235,7 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
                   key={i}
                   type="button"
                   className={`menu-paginas__ponto${i === pagina ? " is-on" : ""}`}
-                  onClick={() => setPagina(i)}
+                  onClick={() => irPara(i)}
                   aria-label={`Página ${i + 1}`}
                   aria-current={i === pagina ? "page" : undefined}
                 >
@@ -165,7 +249,7 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
             <button
               type="button"
               className="menu-paginas__seta"
-              onClick={() => setPagina((p) => Math.min(paginas - 1, p + 1))}
+              onClick={() => irPara(pagina + 1)}
               disabled={pagina === paginas - 1}
               aria-label="Próxima página"
             >

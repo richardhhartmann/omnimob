@@ -4,7 +4,7 @@ import { api } from "../api";
 import { TourGuiado } from "./TourGuiado";
 import { totalDePassos } from "../utils/tourFluxo";
 import { ETAPA_BOAS_VINDAS_FLOW, chavesDoFlow, montarFluxoFlow } from "../utils/tourFlow";
-import { lerDoUsuario, gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
+import { gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
 import { IconeChapeuFormatura } from "./Icones.jsx";
 import { PRIMEIRO_ACESSO_CSS } from "./PrimeiroAcessoModal.jsx";
 
@@ -55,9 +55,12 @@ export function PrimeiroAcessoFlow({ session, pronto = true, aoMudarEstado }) {
      de rodar um tour ruim, não grava nada e deixa pendente. */
   const LARGURA_MINIMA = 900;
 
-  const [decidido, setDecidido] = useState(
-    () => (usuarioId && lerDoUsuario(CHAVES.tourFlowResolvido, tenantId, usuarioId) === "1" ? "oculto" : null),
-  );
+  /* Sem atalho local nenhum: aqui "carregando" já não desenha nada (ver o
+     render), então a marca no navegador não tinha véu para evitar — só o efeito
+     colateral de fechar `fase` em "oculto" antes de o banco responder, e nunca
+     mais abrir. Era o mesmo defeito do tour do Hub, sem nem o benefício. Quem
+     decide é o servidor. */
+  const [decidido, setDecidido] = useState(null);
 
   useEffect(() => {
     if (!tenantSlug || !fluxo.length) return undefined;

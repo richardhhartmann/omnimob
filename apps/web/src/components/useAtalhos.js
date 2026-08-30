@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { criarNovo } from "../utils/registroDeNovo";
 import { useLocation, useNavigate } from "react-router-dom";
-import { mapaDeAtalhos, telaDosAtalhos } from "../utils/atalhos";
+import { mapaDeAtalhos, paiDaRota, telaDosAtalhos } from "../utils/atalhos";
+import { filtrarNoTour, tourAtivo } from "../utils/tourAtivo";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O ouvido do teclado.
@@ -31,6 +32,20 @@ import { mapaDeAtalhos, telaDosAtalhos } from "../utils/atalhos";
    Um cuidado: modal aberto trata o próprio Esc e chama `stopPropagation`. Este
    hook escuta na fase de BORBULHA justamente por isso — o modal fecha, o evento
    não chega aqui, e a pessoa não é jogada para trás junto.
+
+   ── TOUR ABERTO CALA O TECLADO ──
+
+   Com um tour no ar, este hook não faz NADA — nem o Esc, que é a única tecla
+   que o interruptor mestre não desliga. O motivo é diferente do da imobiliária
+   que desliga os atalhos: ali é preferência, aqui é integridade. O tour aponta
+   para elementos de UMA tela, e qualquer tecla que troque de tela o deixa
+   falando de uma página que não está mais ali — o holofote fica no vazio e a
+   pessoa fugiu do tour sem ter pedido nada.
+
+   A exceção é o "N", e ela não é um furo: `global.novo` faz exatamente o que o
+   passo está pedindo ("Clique em Novo Cliente"), sem sair de lugar nenhum. Quem
+   decide isso é `ACOES_NO_TOUR`, em `utils/tourAtivo.js`, e o mesmo filtro
+   governa o selo desenhado no botão — nunca uma tecla anunciada e morta.
    ──────────────────────────────────────────────────────────────────────────── */
 
 /** O foco está num lugar onde se escreve? */
@@ -62,6 +77,10 @@ export function useAtalhos({ cargo, doTenant, doUsuario, aoNovo, inicial = "/", 
         /* Escrevendo, Esc é "abandonar o que estou digitando" — deixa o campo
            tratar. Sair da tela no meio de um formulário perderia o trabalho. */
         if (escrevendo(e.target)) return;
+        /* Com o tour aberto o Esc é DELE — encerra o tutorial, e só. Antes as
+           duas coisas aconteciam de uma vez: o tour fechava e a pessoa era
+           levada um nível acima junto, saindo do formulário pela metade. */
+        if (tourAtivo()) return;
         e.preventDefault();
         /* SOBE um nível, e não volta no histórico. Ver `paiDaRota`: o gesto é
            "sair desta tela para a de cima", e ele tem de dar no mesmo lugar
@@ -84,7 +103,7 @@ export function useAtalhos({ cargo, doTenant, doUsuario, aoNovo, inicial = "/", 
       if (e.defaultPrevented) return;
 
       const tela = telaDosAtalhos(pathname);
-      const mapa = mapaDeAtalhos({ tela, cargo: c, doTenant: t, doUsuario: u });
+      const mapa = filtrarNoTour(mapaDeAtalhos({ tela, cargo: c, doTenant: t, doUsuario: u }));
       const acao = mapa.get(String(e.key).toLowerCase());
       if (!acao) return;
 

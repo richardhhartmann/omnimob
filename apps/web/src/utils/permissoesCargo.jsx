@@ -6,59 +6,19 @@ import {
 import { planoLiberaRedes } from "./planos";
 import { IconeRelatorios } from "./iconesRelatorios";
 
-/* ────────────────────────────────────────────────────────────────────────────
-   As permissões de cargo, num lugar só.
-
-   Estavam dentro de `CargosPage`. Saíram de lá quando o cadastro de usuário
-   ganhou a criação de cargo em linha — e duas telas passaram a precisar da
-   mesma lista.
-
-   Uma cópia seria a quarta vez neste projeto que uma lista duplicada diverge:
-   já aconteceu com os cargos no servidor, com o ícone do WhatsApp e com as
-   permissões da rota. O padrão é sempre o mesmo — a cópia envelhece na primeira
-   permissão nova, e o sintoma é uma caixa que a tela mostra e o servidor
-   ignora.
-   ──────────────────────────────────────────────────────────────────────────── */
-
 export const PERMISSOES = [
   { key: "verPainelGestor",   label: "Painel do Gestor",      Icon: ChartPieSlice },
+  { key: "gerenciarUsuarios", label: "Gerenciar Usuários",    Icon: UserSquare },
+  { key: "gerenciarCargos",   label: "Gerenciar Cargos",      Icon: Shield },
+  { key: "verCobranca",       label: "Cobrança e Pagamentos", Icon: Receipt },
   { key: "gerenciarImoveis",  label: "Gerenciar Imóveis",     Icon: Buildings },
   { key: "verRelatorios",     label: "Ver Relatórios",        Icon: IconeRelatorios },
   { key: "gerenciarClientes", label: "Gerenciar Clientes",    Icon: UserCircle },
-  { key: "gerenciarUsuarios", label: "Gerenciar Usuários",    Icon: UserSquare },
-  { key: "gerenciarCargos",   label: "Gerenciar Cargos",      Icon: Shield },
   { key: "verAuditoria",      label: "Registro de Atividade", Icon: ClockCounterClockwise },
-  /* Cobrança é a única "chave da casa" que se pode conceder — ver o comentário
-     em `cargosPadrao.js`. Ela abre o extrato e o botão de adiantar pagamento,
-     e não abre plano, domínio nem cancelamento, que seguem sendo consequência
-     de ser o Administrador. */
-  { key: "verCobranca",       label: "Cobrança e Pagamentos", Icon: Receipt },
   { key: "editarPagina",      label: "Editar Página",         Icon: PencilSimple },
-  /* "Ver Relatórios" absorveu o antigo "Gerenciar Leads": ela abre a página
-     Relatórios inteira — leads, relatório mensal, funil e comissões. */
   { key: "publicarRedes",     label: "Publicar em Redes",     Icon: ShareNetwork },
 ];
 
-/* ── AS PERMISSÕES DO OMNIMOB FLOW ───────────────────────────────────────────
-
-   Lista separada, e não sete itens a mais na de cima. Duas razões:
-
-   1. Elas só existem para quem CONTRATOU o módulo. Uma imobiliária só de Hub
-      não deve nem ver estas caixas — oferecer o que a conta não tem produz a
-      pior conversa possível com o suporte ("marquei e não funciona").
-
-   2. Dezessete caixas numa lista corrida deixam de ser uma tela e viram um
-      formulário de imposto de renda. Agrupadas, a pessoa lê "o que ele faz no
-      Hub" e "o que ele faz no Flow" — que é como ela pensa ao montar o cargo.
-
-   `acessarFlow` está aqui e `acessarPainel` não está na lista do Hub, e a
-   diferença é real: entrar no Hub é consequência de existir como cargo (o
-   servidor força em toda gravação); entrar no Flow é uma DECISÃO, e é
-   exatamente a decisão que o cliente pediu para poder tomar pessoa a pessoa. */
-/* A porta do módulo. Continua dentro de `PERMISSOES_FLOW` — é ela que diz quais
-   colunas existem, e quem percorre a lista para zerar um cargo em branco
-   (`cargoVazio`) precisa dela ali. O que muda é só o DESENHO: `gruposDePermissao`
-   a separa das outras para virar o interruptor do grupo. */
 export const PORTA_DO_FLOW = {
   key: "acessarFlow",
   label: "Acessar o Omnimob Flow",
@@ -76,25 +36,10 @@ export const PERMISSOES_FLOW = [
   { key: "verComissoes",       label: "Ver Comissões",        Icon: Coins },
 ];
 
-/* `acessarPainel` também não está, e pelo mesmo motivo: ela não é uma escolha.
-   Criar um cargo é dizer que aquelas pessoas entram no painel — a pergunta que
-   sobra é O QUE elas alcançam lá dentro.
-
-   Como caixa, ela só produzia um estado sem sentido: um cargo com quatro
-   permissões marcadas e a porta fechada. E o sintoma não explicava nada — a
-   pessoa era mandada para a vitrine ao entrar, sem uma palavra sobre o porquê.
-   O servidor a força em toda gravação (ver `cargoRoutes`). */
-
-/* `verConfiguracoes` NÃO está na lista, e é de propósito: ela não é uma
-   escolha, é uma consequência de ser o Administrador. O servidor a recalcula a
-   cada gravação a partir do nome do cargo (ver `cargoRoutes`), então não há o
-   que marcar, desmarcar ou exibir — nem para o Administrador. */
-
 const DEPENDE_DO_PLANO = {
   publicarRedes: planoLiberaRedes,
 };
 
-/** As permissões que fazem sentido oferecer neste plano. */
 export function permissoesDoPlano(plano) {
   return PERMISSOES.filter((p) => {
     const exige = DEPENDE_DO_PLANO[p.key];
@@ -102,32 +47,6 @@ export function permissoesDoPlano(plano) {
   });
 }
 
-/* ── Os DOIS grupos que a tela desenha ───────────────────────────────────────
-
-   Devolve `[{ titulo, itens }]`. O grupo do Flow só aparece quando a conta
-   contratou o módulo — ver `PERMISSOES_FLOW`.
-
-   Por que uma função e não os dois arrays exportados soltos: quem desenha
-   (`GradeDePermissoes`) não deve precisar saber que existe módulo, nem cruzar
-   `tenant.modulos` por conta própria. Ele recebe grupos e desenha grupos; a
-   regra de quais existem mora aqui, num lugar só. */
-/* ── `acessarFlow` DEIXOU DE SER UMA CAIXA ENTRE AS OUTRAS ───────────────────
-
-   Ela é a PORTA do módulo, não uma permissão irmã das outras seis — e desenhá-la
-   como mais um quadradinho na mesma grade produzia dois estados incoerentes que
-   a tela oferecia de bandeja:
-
-     · "Gerenciar Negócios" marcado com "Acessar o Flow" desmarcado — o cargo
-       tem poder sobre uma coisa que não alcança;
-     · e o contrário, que não faz mal, mas também não faz sentido.
-
-   Como INTERRUPTOR do grupo, a hierarquia fica dita pelo desenho: liga o
-   módulo, e só então há o que escolher lá dentro. Desligado, as seis abaixo
-   ficam desabilitadas — os valores permanecem, então religar devolve o arranjo
-   anterior em vez de obrigar a remarcar tudo.
-
-   `porta` viaja com o grupo para `GradeDePermissoes` não precisar saber o nome
-   dessa permissão. Ele desenha grupos; quem sabe o que é o Flow é este arquivo. */
 export function gruposDePermissao(plano, { temFlow = false } = {}) {
   const grupos = [{ titulo: null, itens: permissoesDoPlano(plano) }];
   if (temFlow) {
@@ -140,29 +59,6 @@ export function gruposDePermissao(plano, { temFlow = false } = {}) {
   return grupos;
 }
 
-/** Um cargo em branco, com todas as permissões desmarcadas — as dos dois
- *  módulos. Zerar só as do Hub deixaria as do Flow como `undefined`, e o
- *  servidor as gravaria como `false` de qualquer jeito; o problema seria na
- *  TELA, onde uma caixa controlada que começa `undefined` vira não-controlada e
- *  o React reclama no console a cada clique. */
-/* ── TODAS as permissões, numa lista só ──────────────────────────────────────
-
-   `PERMISSOES` é a lista do HUB e `PERMISSOES_FLOW` a do módulo. Quem precisa
-   percorrer "tudo que um cargo guarda" tem de usar esta, e não uma das duas.
-
-   Existe porque a distração foi cometida duas vezes seguidas, com sintomas
-   diferentes e a mesma causa:
-
-     · os selos da lista de cargos percorriam só o Hub — o Administrador
-       aparecia com 8 permissões em vez de 14, e um cargo só-Flow saía rotulado
-       "Sem permissões";
-     · e o FORMULÁRIO de edição também — reabrir um cargo mostrava todas as
-       caixas do Flow desmarcadas, porque os valores nunca eram copiados para o
-       `form`. Salvar em seguida apagava de verdade o que a tela mentiu ter.
-
-   O segundo é o pior dos dois: ele não só mostra errado, ele DESTRÓI. Uma lista
-   nomeada é mais difícil de esquecer do que um spread escrito à mão em cada
-   lugar. */
 export const TODAS_AS_PERMISSOES = [...PERMISSOES, ...PERMISSOES_FLOW];
 
 export function cargoVazio() {
@@ -171,29 +67,14 @@ export function cargoVazio() {
   return f;
 }
 
-/* ── As permissões que pedem ciência antes de serem concedidas ───────────────
+export const TRAVADAS_NO_ADMINISTRADOR = [
+  "gerenciarCargos",
+  "gerenciarUsuarios",
+  "verCobranca",
+  "verPainelGestor",
+];
 
-   Duas, e por motivos diferentes. `gerenciarCargos` é a chave de todas as
-   outras portas: quem a tem edita o próprio cargo e se dá qualquer permissão
-   que falte. `gerenciarUsuarios` não muda permissão nenhuma — muda QUEM as
-   tem: desativa, exclui e altera os dados de qualquer pessoa da imobiliária,
-   inclusive de quem está concedendo.
-
-   Mora aqui, e não na tela de Cargos: o `+` do cadastro de usuário cria cargo
-   com as mesmas permissões, e sem o aviso ele era um caminho para conceder
-   `gerenciarCargos` por fora do modal.
-
-   Um catálogo em vez de uma constante porque o texto é DIFERENTE em cada uma.
-   Um aviso genérico ("esta permissão é sensível") ensina a clicar em confirmar
-   sem ler — e aí o modal deixa de proteger e vira só um passo a mais. */
 export const PERMISSOES_DE_RISCO = {
-  /* ── A conta da própria imobiliária ──────────────────────────────────────
-     Aqui o risco não é de acesso indevido a dado de cliente: é de DINHEIRO. A
-     tela mostra quanto a casa paga e tem um botão que gera cobrança de
-     verdade — quem adianta doze meses adianta doze meses.
-
-     E há o outro lado, menos óbvio: o valor do plano é uma informação que o
-     dono da imobiliária pode não querer que a equipe veja. */
   verCobranca: {
     titulo: "Dar acesso à cobrança da imobiliária?",
     verbo: "ver o que a imobiliária paga e adiantar pagamentos",
@@ -205,15 +86,6 @@ export const PERMISSOES_DE_RISCO = {
     ],
     textoCiencia: "Estou ciente de que este cargo poderá ver a cobrança da imobiliária e gerar pagamentos, e quero conceder assim mesmo.",
   },
-  /* ── As duas travas do Flow ───────────────────────────────────────────────
-     Elas não concedem acesso a nada: concedem o poder de dizer "conferi, pode
-     fechar". É a permissão mais silenciosa do produto — quem a tem não vê
-     nenhuma tela nova, só ganha um botão —, e por isso é a mais fácil de
-     conceder por engano ao montar um cargo às pressas.
-
-     O aviso existe porque o estrago é assimétrico: dar `gerenciarImoveis` a
-     mais faz alguém editar um anúncio; dar `validarFinanceiro` a mais faz um
-     negócio de setecentos mil fechar sem ninguém do financeiro ter olhado. */
   validarJuridico: {
     titulo: "Conceder a validação jurídica?",
     verbo: "o poder de liberar juridicamente um negócio para fechamento",

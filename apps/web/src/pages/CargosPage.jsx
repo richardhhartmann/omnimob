@@ -7,7 +7,7 @@ import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { useConfirm } from "../components/ConfirmModal";
 import { ModalCiencia } from "../components/ModalCiencia";
 import {
-  TODAS_AS_PERMISSOES, PERMISSOES_DE_RISCO, gruposDePermissao, cargoVazio,
+  TODAS_AS_PERMISSOES, PERMISSOES_DE_RISCO, TRAVADAS_NO_ADMINISTRADOR, gruposDePermissao, cargoVazio,
 } from "../utils/permissoesCargo.jsx";
 import { GradeDePermissoes } from "../components/GradeDePermissoes.jsx";
 import { FLOW, modulosDoTenant } from "../utils/modulos";
@@ -194,9 +194,22 @@ export function CargosPage({ session, onSessionUpdate }) {
 
      Agora a marcação só mexe no `form`. Quem grava é o "Salvar Alterações",
      uma vez, com tudo — igual a Clientes, Usuários e Tipos de Imóvel. */
+  /* O cargo em edição é o Administrador?
+
+     `ehAdministrador` vem CALCULADO do servidor (`cargoRoutes` o anexa a cada
+     cargo devolvido), e não de uma comparação de nome aqui. O próprio arquivo
+     de rotas pede isso: a regra de quem é o Administrador é decidida lá, e a
+     tela tem de ler a MESMA resposta. Comparar `descricao === "Administrador"`
+     por conta própria seria a segunda definição da mesma coisa. */
+  const ehOCargoAdministrador = Boolean(editando?.ehAdministrador);
+
   function alternarPermissao(key, value) {
     const ehProprioCargoDoUsuario = editando?.id === session?.usuario?.cargo?.id;
     if (LOCKED_NO_PROPRIO_CARGO.includes(key) && ehProprioCargoDoUsuario) return; // bloqueado
+    /* As chaves da casa não saem do Administrador. O servidor as deriva a cada
+       gravação (ver `cargoRoutes`), então o clique seria desfeito na resposta —
+       o form pisca desmarcado e volta marcado, que é pior que não responder. */
+    if (ehOCargoAdministrador && TRAVADAS_NO_ADMINISTRADOR.includes(key)) return;
 
     /* Conceder "Gerenciar Cargos" para no modal de ciência. Tirar não para:
        desfazer uma concessão de risco tem de ser tão fácil quanto possível. E o
@@ -347,8 +360,19 @@ export function CargosPage({ session, onSessionUpdate }) {
               temFlow={temFlow}
               valores={form}
               desabilitado={loading}
-              travadas={ehProprioCargoDoUsuario ? LOCKED_NO_PROPRIO_CARGO : []}
-              motivoTravada="Você não pode remover esta permissão do seu próprio cargo"
+              /* Duas travas somadas, com motivos diferentes. A do Administrador
+                 vem primeiro na mensagem porque é a mais ampla: quando as duas
+                 valem — o administrador editando o próprio cargo — ela é a que
+                 explica por que a caixa nunca vai abrir, para ninguém. */
+              travadas={[
+                ...(ehOCargoAdministrador ? TRAVADAS_NO_ADMINISTRADOR : []),
+                ...(ehProprioCargoDoUsuario ? LOCKED_NO_PROPRIO_CARGO : []),
+              ]}
+              motivoTravada={
+                ehOCargoAdministrador
+                  ? "O Administrador não abre mão desta permissão — sem ela, a imobiliária fica sem ninguém para reabrir a porta"
+                  : "Você não pode remover esta permissão do seu próprio cargo"
+              }
               dataTour="cargo-permissoes"
               /* Criando ou editando, o caminho é o mesmo: junta no form. A
                  permissão de risco passa pelo modal nos dois — senão bastava
@@ -391,7 +415,6 @@ export function CargosPage({ session, onSessionUpdate }) {
           texto="O cargo é o que decide o que cada pessoa alcança: quem edita a vitrine, quem vê relatórios, quem mexe na cobrança."
           acaoLabel="Cadastrar cargo"
           onAcao={abrirCriar}
-          tecla="N"
           tourId="cargos-novo"
         />
       ) : (

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { totalDePassos } from "../utils/tourFluxo";
+import { marcarTourAberto } from "../utils/tourAtivo";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Motor do tour guiado — holofote em quatro painéis + cartão flutuante.
@@ -23,6 +24,10 @@ import { totalDePassos } from "../utils/tourFluxo";
 // Quanto esperamos um alvo aparecer antes de desistir do passo. A tela pode
 // estar montando, buscando na API ou animando a entrada de rota.
 const ESPERA_ALVO_MS = 3500;
+/* Quanto dura a despedida. Casa com as animações `tgVeuSai`/`tgCartaoSai` lá
+   embaixo — mudar aqui sem mudar lá corta o fim ou deixa a tela escura parada
+   depois de a animação acabar. */
+const SAIDA_MS = 220;
 const RESPIRO_PADRAO = 12;
 const ORDEM_PADRAO = ["bottom", "top", "right", "left", "centro"];
 
@@ -81,6 +86,8 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
   // Passo que exige ação: "Próximo" fica trancado até a pessoa fazer o que foi
   // pedido. Começa liberado; o efeito de espera tranca quando for o caso.
   const [liberado, setLiberado] = useState(true);
+  /* O tour está se despedindo. Ver `sair`, abaixo. */
+  const [saindo, setSaindo] = useState(false);
 
   const cartaoRef = useRef(null);
   const rafRef = useRef(0);
@@ -90,6 +97,15 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
   // precisar de updater de estado, que precisa ser puro).
   const posRef = useRef(pos);
   posRef.current = pos;
+
+  /* ── O TECLADO DO PAINEL FICA MUDO ENQUANTO ISTO ESTIVER NO AR ───────────
+
+     Estar montado JÁ é a resposta: os três tours só montam este componente
+     quando há roteiro para mostrar. Marcar aqui, e não em cada um deles, é o
+     que faz tour novo nascer protegido sem ninguém ligar nada.
+
+     Ver `utils/tourAtivo.js` para o que continua valendo (o "N") e por quê. */
+  useEffect(() => marcarTourAberto(), []);
 
   const etapa = fluxo[pos.etapa] || null;
   const passo = etapa?.passos?.[pos.passo] || null;
@@ -569,11 +585,30 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
 
   /* ── Navegação entre passos ─────────────────────────────────────────────── */
 
-  const encerrar = useCallback((motivo) => {
+  /* ── A SAÍDA TEM QUADRO ──────────────────────────────────────────────────
+
+     O tour entra animado — véu, anel e cartão têm cada um a sua curva — e saía
+     de uma vez: quem clicava no ✕ via a tela escura virar tela normal no mesmo
+     quadro, o que lê como falha de renderização, não como "acabou".
+
+     Quem tira do DOM é o PAI (ele desmonta o componente ao receber
+     `aoTerminar`), então o aviso precisa esperar a animação terminar — como o
+     `BoasVindasModal` já faz com o `saindo` dele. A trava `encerradoRef` sobe
+     na hora, e não depois: ela é o que impede dois cliques em `Finalizar`
+     gravarem o progresso duas vezes enquanto a despedida roda.
+
+     `motivo` e `info` viajam guardados porque `pos` pode não ser mais o mesmo
+     quando o temporizador disparar. */
+  const sair = useCallback((motivo, info) => {
     if (encerradoRef.current) return;
     encerradoRef.current = true;
-    aoTerminar?.(motivo, { chave: etapa?.chave, passo: pos.passo + 1, total: totalPassos });
-  }, [aoTerminar, etapa, pos.passo, totalPassos]);
+    setSaindo(true);
+    setTimeout(() => aoTerminar?.(motivo, info), SAIDA_MS);
+  }, [aoTerminar]);
+
+  const encerrar = useCallback((motivo) => {
+    sair(motivo, { chave: etapa?.chave, passo: pos.passo + 1, total: totalPassos });
+  }, [sair, etapa, pos.passo, totalPassos]);
 
   /* Decide o próximo passo FORA do `setPos`. Um updater de estado tem que ser
      função pura: o StrictMode do React o executa duas vezes em dev, e gravar
@@ -592,8 +627,10 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
       if (atual.etapa < fluxo.length - 1) {
         setPos({ etapa: atual.etapa + 1, passo: 0 });
       } else {
-        encerradoRef.current = true;
-        aoTerminar?.("concluiu");
+        /* Concluir sai pela MESMA porta que desistir. Eram dois caminhos, e o
+           bom deles — chegar ao fim — era justamente o que sumia sem quadro
+           nenhum. */
+        sair("concluiu", undefined);
         return;
       }
     }
@@ -602,7 +639,7 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
       setTrocando(true);
       setTimeout(() => setTrocando(false), 220);
     }
-  }, [fluxo, aoRegistrar, aoTerminar]);
+  }, [fluxo, aoRegistrar, sair]);
 
   const voltar = useCallback(() => {
     setPos((atual) => {
@@ -731,12 +768,12 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
       <style>{CSS}</style>
 
       {paineis.map((estilo, i) => (
-        <div key={i} style={estilo} className="tg-painel" aria-hidden="true" />
+        <div key={i} style={estilo} className={`tg-painel${saindo ? " is-saindo" : ""}`} aria-hidden="true" />
       ))}
 
       {retangulo ? (
         <div
-          className={`tg-anel${interativo ? " is-interativo" : ""}`}
+          className={`tg-anel${interativo ? " is-interativo" : ""}${saindo ? " is-saindo" : ""}`}
           style={{ top: y1, left: x1, width: x2 - x1, height: y2 - y1 }}
           aria-hidden="true"
         />
@@ -758,7 +795,7 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
       {(interativo && retangulo ? paineis : [{ position: "fixed", inset: 0 }]).map((geo, i) => (
         <div
           key={`lam-${i}`}
-          className="tg-lamina"
+          className={`tg-lamina${saindo ? " is-saindo" : ""}`}
           aria-hidden="true"
           style={{
             position: "fixed",
@@ -774,7 +811,7 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
 
       <div
         ref={cartaoRef}
-        className={`tg-cartao${trocando ? " is-trocando" : ""}`}
+        className={`tg-cartao${trocando ? " is-trocando" : ""}${saindo ? " is-saindo" : ""}`}
         data-seta={caixa?.seta || "none"}
         style={{
           top: caixa?.top ?? -9999,
@@ -853,6 +890,38 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
 const CSS = `
 .tg-painel { animation: tgVeu 260ms ease both; }
 @keyframes tgVeu { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── A DESPEDIDA ────────────────────────────────────────────────────────────
+   Sem crase e sem fim-de-comentario aqui dentro: isto e template literal.
+
+   As tres pecas saem juntas e com pesos diferentes: o veu so desbota, o anel
+   abre um pouco antes de sumir (o gesto de soltar o que estava segurando) e o
+   cartao afunda de volta para dentro de si.
+
+   O forwards em todas: sem ele o ultimo quadro devolve tudo ao estado cheio,
+   e a tela pisca escura no exato instante em que deveria ter acabado.
+
+   As tres duram 220ms, o mesmo SAIDA_MS que o componente espera antes de
+   avisar o pai. Mudar uma sem mudar a outra corta o fim ou deixa a tela
+   escura parada. */
+.tg-painel.is-saindo { animation: tgVeuSai 220ms ease forwards; }
+@keyframes tgVeuSai { from { opacity: 1; } to { opacity: 0; } }
+
+.tg-anel.is-saindo { animation: tgAnelSai 220ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+@keyframes tgAnelSai {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.06); }
+}
+
+.tg-cartao.is-saindo { animation: tgCartaoSai 220ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+@keyframes tgCartaoSai {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: scale(0.93) translateY(10px); }
+}
+
+/* A lamina para de barrar assim que a saida comeca: nos 220ms da despedida a
+   tela ja e da pessoa de novo, e um clique engolido ali parece travamento. */
+.tg-lamina.is-saindo { pointer-events: none; }
 
 /* Entre o anel (99992) e o cartão (99995): cobre tudo, aparece nada. O cursor
    de seta em cima do que está bloqueado evita a mãozinha que promete um clique
@@ -1015,6 +1084,9 @@ const CSS = `
 
 @media (prefers-reduced-motion: reduce) {
   .tg-painel, .tg-cartao { animation: none; }
+  /* A saida vira um corte seco, mas continua existindo: a opacidade zerada
+     mantem a tela limpa durante os 220ms que o componente ainda espera. */
+  .tg-painel.is-saindo, .tg-anel.is-saindo, .tg-cartao.is-saindo { animation: none; opacity: 0; }
   .tg-anel { animation: none; transition: none; }
   .tg-cartao { transition: none; }
   .tg-cartao.is-trocando .tg-corpo, .tg-cartao.is-trocando .tg-titulo { animation: none; }

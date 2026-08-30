@@ -494,7 +494,6 @@ export function TiposImovelPage({ session }) {
             texto="Atributo é o que este tipo pode ter — piscina, churrasqueira, portaria 24h. É por eles que o cliente filtra na vitrine."
             acaoLabel="Cadastrar atributo"
             onAcao={abrirCriarAtributo}
-            tecla="N"
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -565,7 +564,6 @@ export function TiposImovelPage({ session }) {
           texto="O tipo é o que organiza o acervo — Apartamento, Casa, Terreno — e é nele que moram os atributos que cada categoria pede."
           acaoLabel="Cadastrar tipo"
           onAcao={abrirCriarTipo}
-          tecla="N"
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>

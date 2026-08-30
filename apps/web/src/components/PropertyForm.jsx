@@ -3578,7 +3578,21 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
             </>
           )}
 
-          {displayStep < 3 && (
+          {/* ── O PASSO 1 COM AUTO-IA NÃO TEM "CONTINUAR" ────────────────────
+              Enquanto não há foto, `stepComplete(0)` é falso e o `handleNext`
+              recusa — o botão ficava lá, do tamanho da tela, e não levava a
+              lugar nenhum. Clicar nele não dava nem erro: nada acontecia, o que
+              faz a pessoa clicar de novo.
+
+              E a escolha que o passo pede não é "seguir": é ENVIAR A FOTO ou
+              dizer "Continuar sem IA". Duas saídas, as duas desenhadas ali em
+              cima. Um terceiro botão, maior que os dois e inerte, só disputava
+              a atenção com as que funcionam.
+
+              Some só no passo 1 — nos outros o `bloquearSemFoto` nem chega a
+              ser verdadeiro, mas amarrar ao passo deixa isso dito em vez de
+              subentendido. */}
+          {displayStep < 3 && !(displayStep === 0 && bloquearSemFoto) && (
             <div style={{ display: "flex", gap: "12px", marginTop: "8px", flexWrap: "wrap" }}>
               {displayStep > 0 && (
                 <button type="button" className="button-secondary" onClick={handleBack} disabled={disabled} style={{ display: "flex", alignItems: "center", gap: "6px" }}>

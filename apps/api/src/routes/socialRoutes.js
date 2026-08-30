@@ -11,7 +11,7 @@ import { cifrar, decifrar } from "../services/cofre.js";
    daqui. A rota ainda usa alguns (reconciliar, apagar post), e importá-los é
    melhor que manter duas cópias que divergem na primeira mudança da API. */
 import {
-  publicarNasRedes, tokenDaPagina, META_BASE, isRealMetaRef,
+  publicarNasRedes, tokenDaPagina, META_BASE, META_API_VERSION, isRealMetaRef,
   deleteFacebookPost, checkPostExists, fetchPostInsights,
   reconcilePublications, deleteOnePublication,
 } from "../services/publicacaoSocial.js";
@@ -21,7 +21,10 @@ const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
 const META_CALLBACK_URL = process.env.META_CALLBACK_URL || "https://api.omnimob.app/api/social/oauth/callback";
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://omnimob.app";
-const META_API_VERSION = "v19.0";
+/* A versão vem do serviço, e não de uma segunda constante aqui: as duas
+   precisam concordar, e a cópia que morava neste arquivo já ficou para trás uma
+   vez. O diálogo de OAuth usa `www.facebook.com` e a Graph usa
+   `graph.facebook.com`, mas a versão é a mesma. */
 
 export const socialRouter = Router();
 

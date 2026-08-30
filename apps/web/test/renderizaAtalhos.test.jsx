@@ -40,7 +40,15 @@ test("EditorDeAtalhos monta vazio", () => {
     <EditorDeAtalhos cargo={CARGO} valor={{}} aoMudar={() => {}} />,
   );
   assert.match(html, /Gerenciar imóveis/);
-  assert.match(html, /ea-tecla/);
+  /* A maquete: cada grupo é o quadro de uma tela, e cada ação é um cartão com o
+     selo da tecla no canto. Ver o cabeçalho de `EditorDeAtalhos.jsx`. */
+  assert.match(html, /ea-tela__palco/, "os grupos viram quadros de tela");
+  assert.match(html, /ea-cartao__tecla/, "cada cartão carrega o selo da tecla");
+  /* O ícone vem de `faceDaAcao`, que cruza três catálogos. Um `id` que deixe de
+     casar devolve o interrogatão cinza em vez de estourar — mas se a função
+     inteira quebrar, é aqui que aparece. */
+  assert.match(html, /ea-cartao__icone/, "o cartão tem o rosto da ação");
+  assert.match(html, /\/relatorios/, "a barra do quadro diz onde a tecla vale");
 });
 
 test("EditorDeAtalhos monta com escolha, herdado e conflito", () => {
@@ -56,7 +64,7 @@ test("EditorDeAtalhos monta com escolha, herdado e conflito", () => {
     />,
   );
   assert.match(html, /is-conflito/, "a colisão herdada precisa aparecer marcada");
-  assert.match(html, /desligado/, "tecla vazia é 'desligado', não caixa vazia");
+  assert.match(html, /is-vazio/, "atalho desligado tem marca própria, não selo em branco");
   assert.match(html, /Salvo\./);
 });
 
