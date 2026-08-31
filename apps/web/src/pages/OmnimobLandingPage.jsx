@@ -3637,17 +3637,6 @@ function ConteudoDaLanding() {
               O layout do mobile é independente do desktop — e, se preferir, você copia um para o outro num
               clique. Tudo salva sozinho enquanto você edita.
             </p>
-            {/* Pequena de proposito. A seccao ja tem a tela do editor animada ao
-                lado, e o briefing foi explicito: aqui a ilustracao e apoio do
-                texto, nunca substituta da tela. */}
-            <img
-              className="dl-editor__desenho"
-              src="/ilustracoes/vitrine-montando.png"
-              alt="Pessoa encaixando um bloco numa página que está sendo montada"
-              width={600}
-              height={400}
-              loading="lazy"
-            />
           </Reveal>
 
           <EditorAoVivo />
@@ -7723,4 +7712,225 @@ ${editorCSS()}
   .dl-root .dl-plan__recursos > .dl-plan__list li,
   .dl-root .dl-plan__mais svg { transition: none; }
 }
+
+/* OMNIMOB_COMPOSICAO_ILUSTRACOES_V2_1_INICIO */
+/*
+   Composicao editorial das ilustracoes da landing.
+   A ideia aqui nao e aumentar desenho: e dar uma ancora visual para cada cena,
+   preservar a alternancia direita/esquerda e usar o vao entre colunas como parte
+   da composicao. Em tablet e celular tudo volta ao fluxo para nao parecer erro.
+*/
+
+@media (min-width: 1025px) {
+  /* DESAFIO
+     A cena deixa de ficar pousada no rodape e passa a ocupar a coluna inteira.
+     O centro visual dela encosta no miolo do texto, enquanto a borda direita
+     continua sangrando para fora do container. */
+  #desafio .dl-desafio__grade {
+    grid-template-columns: minmax(0, 0.98fr) minmax(420px, 1.02fr);
+    gap: clamp(18px, 2.2vw, 34px);
+  }
+  #desafio .dl-desafio__conteudo {
+    padding-bottom: clamp(12px, 1.6vw, 24px);
+  }
+  #desafio .dl-desafio__arte {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    translate: none;
+  }
+  #desafio .dl-desafio__arte img {
+    width: clamp(430px, 41vw, 610px);
+    max-width: none;
+    margin: 0;
+    transform: translate(clamp(18px, 3.5vw, 58px), clamp(8px, 1.2vw, 18px));
+    transform-origin: 56% 68%;
+  }
+
+  /* EDITOR — hotfix 2.1
+     A versao anterior posicionava a ilustracao de forma absoluta sem reservar
+     altura para ela; dependendo da quebra do paragrafo, a personagem subia por
+     cima das ultimas linhas. Agora o espaco dela existe no fluxo: o wrapper
+     reserva uma faixa inferior e a arte ocupa essa faixa, ainda apontando para
+     a demonstracao ao lado. */
+  #editor .dl-editor {
+    position: relative;
+    grid-template-columns: minmax(0, 0.92fr) minmax(470px, 1.08fr);
+    gap: clamp(46px, 5vw, 74px);
+    align-items: center;
+    padding-bottom: 0;
+  }
+  #editor .dl-editor > div:first-child {
+    position: relative;
+    z-index: 2;
+    /* Esta faixa e a "casa" da ilustracao. Ela impede qualquer colisao com o
+       dl-body mesmo quando o texto quebra uma linha a mais. */
+    padding-bottom: clamp(128px, 10.5vw, 156px);
+  }
+  #editor .dl-editor__desenho {
+    position: absolute;
+    z-index: 3;
+    right: clamp(-52px, -3.2vw, -24px);
+    bottom: 0;
+    width: clamp(205px, 17vw, 255px);
+    max-width: none;
+    margin: 0;
+    translate: none;
+    transform: rotate(-0.8deg);
+    transform-origin: 70% 80%;
+    pointer-events: none;
+  }
+  #editor .dl-ed {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* FLOW — ABERTURA
+     A imagem desce um pouco e vai para a quina externa. O titulo ganha um eixo
+     diagonal: texto sobe pela esquerda, personagem fecha pela direita. */
+  .dl-manifesto__cabeca {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.76fr);
+    align-items: end;
+    gap: clamp(12px, 2vw, 30px);
+  }
+  .dl-manifesto__desenho {
+    justify-self: end;
+    width: clamp(320px, 31vw, 430px);
+    max-width: 100%;
+    translate: clamp(8px, 1.8vw, 24px) clamp(18px, 2.2vw, 34px);
+  }
+  .dl-manifesto__corpo {
+    margin-top: clamp(44px, 5vw, 64px);
+  }
+
+  /* FLOW — FECHAMENTO
+     A segunda cena cruza o eixo da primeira: entra pela esquerda e invade de
+     leve a linha divisoria, como um desfecho, sem virar uma segunda coluna dura. */
+  .dl-manifesto__remate {
+    grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+    gap: clamp(12px, 2.6vw, 34px);
+    max-width: 1000px;
+    align-items: center;
+  }
+  .dl-manifesto__remate-img {
+    justify-self: start;
+    width: clamp(320px, 30vw, 420px);
+    max-width: 100%;
+    translate: clamp(-30px, -2vw, -10px) -14px;
+  }
+
+  /* APP
+     A personagem passa a ter linha de chao: desce e sangra pela quina direita.
+     O texto fica um pouco mais alto, criando uma diagonal oposta ao Flow. */
+  #aplicativo .dl-app-soon__grid {
+    grid-template-columns: minmax(0, 0.90fr) minmax(470px, 1.10fr);
+    gap: clamp(16px, 2.5vw, 38px);
+    align-items: center;
+  }
+  #aplicativo .dl-app-soon__copy {
+    padding-bottom: clamp(18px, 3vw, 48px);
+  }
+  #aplicativo .dl-app-soon__visual {
+    align-self: end;
+    justify-content: flex-end;
+  }
+  #aplicativo .dl-app-soon__visual img {
+    width: min(100%, 780px);
+    translate: clamp(26px, 4vw, 62px) clamp(26px, 3.5vw, 52px);
+    transform: rotate(-1deg);
+    transform-origin: 60% 80%;
+  }
+
+  /* TEXTURAS DE CANTO
+     Mantem o arco e o predio como assinatura, mas em lados opostos para nao
+     repetir a mesma quina duas vezes perto do fim da pagina. */
+  .dl-numeros__forma {
+    left: auto;
+    right: clamp(-74px, -4vw, -34px);
+    top: clamp(-54px, -3vw, -22px);
+    transform: rotate(18deg);
+  }
+  .dl-footer__predio {
+    right: clamp(-24px, -1vw, -6px);
+    bottom: -38px;
+    width: clamp(132px, 14vw, 215px);
+  }
+}
+
+
+/* DESKTOP ESTREITO
+   Entre 1025 e 1180px o vao e menor; a personagem recua um pouco para nao
+   tangenciar demais a moldura do editor. */
+@media (min-width: 1025px) and (max-width: 1180px) {
+  #editor .dl-editor > div:first-child { padding-bottom: 132px; }
+  #editor .dl-editor__desenho { right: -18px; width: 220px; }
+}
+
+/* TABLET
+   Mantem a alternancia sem sobreposicao. A arte continua deslocada para um lado,
+   mas usa margem normal para nunca sair da tela. */
+@media (min-width: 761px) and (max-width: 1024px) {
+  #desafio .dl-desafio__arte img,
+  #editor .dl-editor__desenho,
+  .dl-manifesto__desenho {
+    margin-left: auto;
+    margin-right: 0;
+  }
+  .dl-manifesto__remate-img {
+    margin-left: 0;
+    margin-right: auto;
+  }
+  #desafio .dl-desafio__arte img {
+    width: min(70vw, 440px);
+  }
+  #editor .dl-editor__desenho {
+    width: min(54vw, 310px);
+  }
+  .dl-manifesto__desenho,
+  .dl-manifesto__remate-img {
+    width: min(60vw, 350px);
+  }
+}
+
+/* CELULAR
+   Corrige tambem a ordem da ilustracao do editor: como o wrapper vira
+   display:contents, a imagem sem order podia aparecer antes do titulo. Aqui a
+   leitura fica texto -> desenho -> editor. No app, texto vem antes da cena. */
+@media (max-width: 760px) {
+  #editor .dl-editor .dl-eyebrow { order: 1; }
+  #editor .dl-editor .dl-h2 { order: 2; }
+  #editor .dl-editor .dl-lead { order: 3; }
+  #editor .dl-editor .dl-body { order: 4; }
+  #editor .dl-editor__desenho {
+    order: 5;
+    position: static;
+    width: min(76vw, 270px);
+    margin: 10px auto 6px;
+    translate: none;
+    transform: none;
+  }
+  #editor .dl-ed {
+    order: 6;
+    margin-top: 18px;
+  }
+
+  #aplicativo .dl-app-soon__copy { order: 1; }
+  #aplicativo .dl-app-soon__visual {
+    order: 2;
+    margin-top: 6px;
+  }
+  #aplicativo .dl-app-soon__visual img {
+    width: min(100%, 540px);
+    translate: none;
+    transform: none;
+  }
+
+  .dl-manifesto__desenho,
+  .dl-manifesto__remate-img {
+    margin-top: 18px;
+  }
+}
+
+/* OMNIMOB_COMPOSICAO_ILUSTRACOES_V2_1_FIM */
 `;
