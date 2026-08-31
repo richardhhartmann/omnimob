@@ -221,6 +221,7 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
   const [slug, setSlug] = useState(SLUG_VAZIO);
   const caixaRef = useRef(null);
   const primeiroRef = useRef(null); // campo do nome da imobiliária
+  const focoAnteriorRef = useRef(null); // devolve o foco ao gatilho quando o modal fecha
 
   useEffect(() => {
     if (!aberto) return;
@@ -296,9 +297,13 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
 
   useEffect(() => {
     if (!aberto) return undefined;
+    focoAnteriorRef.current = document.activeElement;
     const anterior = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = anterior; };
+    return () => {
+      document.body.style.overflow = anterior;
+      focoAnteriorRef.current?.focus?.();
+    };
   }, [aberto]);
 
   // O foco entra no primeiro campo quando o passo de dados abre — não na
@@ -312,10 +317,15 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
   useEffect(() => {
     if (!aberto) return undefined;
     function aoTeclar(evento) {
-      if (evento.key === "Escape") aoFechar();
+      if (evento.key === "Escape") {
+        evento.preventDefault();
+        evento.stopPropagation();
+        aoFechar();
+        return;
+      }
       if (evento.key !== "Tab") return;
       const alvos = caixaRef.current?.querySelectorAll(
-        "button, input, textarea, [href], [tabindex]:not([tabindex='-1'])",
+        "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
       );
       if (!alvos?.length) return;
       const primeiro = alvos[0];
@@ -335,6 +345,8 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
   if (!aberto) return null;
 
   const planoEscolhido = planos.find((p) => p.key === form.plano) || null;
+  const recursosDoPlano = planoEscolhido?.linhas?.filter((l) => l.incluso) || [];
+  const totalPassos = perfil === "existente" ? 3 : 2;
 
   function definir(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -424,52 +436,54 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
 
   /* O véu não fecha ao clique. Aqui dentro a pessoa está digitando dados de
      cadastro; um clique fora por engano apagaria tudo. Para sair existem o ✕,
-     o Cancelar e o Esc — três saídas deliberadas. */
+     os botões de voltar/cancelar e o Esc — saídas deliberadas. */
   return (
     <div className="pm-veu">
       <style>{CSS}</style>
-      {/* No celular a caixa é a tela inteira, e no passo do perfil ela vira
-          coluna flexível para os dois cartões dividirem entre si toda a altura
-          que sobra (ver .tm-caixa--perfil). Nos outros passos ela segue sendo
-          um bloco que rola. */}
+
       <div
-        className={`pm-caixa dl-glass${!enviado && passo === "perfil" ? " tm-caixa--perfil" : ""}`}
+        className={`pm-caixa dl-glass tm-caixa-v2 tm-caixa--${enviado ? "pronto" : passo}`}
         ref={caixaRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="tm-titulo"
       >
         <button type="button" className="pm-fechar" onClick={aoFechar} aria-label="Fechar">
-          ✕
+          <span aria-hidden="true">✕</span>
         </button>
 
         {enviado ? (
           <div className="tm-pronto">
-            <span className="tm-envelope" aria-hidden="true"><IconeEnvelope size={24} /></span>
-            <h2 id="tm-titulo" className="pm-titulo">Confira seu e-mail</h2>
+            <div className="tm-pronto__halo" aria-hidden="true" />
+            <span className="tm-envelope" aria-hidden="true"><IconeEnvelope size={26} /></span>
+            <span className="dl-mono pm-eyebrow tm-eyebrow">● LINK DE CONFIRMAÇÃO ENVIADO</span>
+            <h2 id="tm-titulo" className="pm-titulo">Seu próximo passo está no e-mail.</h2>
             <p className="pm-sub">
-              Mandamos um link de confirmação para <strong>{form.email}</strong>. Abrir esse link
-              cria o ambiente da {form.imobiliaria} na hora.
+              Mandamos o link para <strong>{form.email}</strong>. Ao abrir, o ambiente da{" "}
+              <strong>{form.imobiliaria}</strong> é criado na hora.
             </p>
-            <p className="tm-aviso">
-              O link vale por 30 minutos. Se não aparecer em alguns instantes, confira a caixa de
-              spam.
-            </p>
-            {perfil === "existente" ? (
-              <p className="tm-aviso tm-aviso--migracao">
-                Sobre trazer a sua base: um especialista vai responder nesse mesmo e-mail para
-                combinar a importação. Você pode ir montando o ambiente enquanto isso — nada do que
-                fizer se perde.
-              </p>
-            ) : null}
-            {/* O próximo passo de quem acabou de pedir um link de confirmação é
-                abrir a caixa de entrada — então o botão principal faz isso, em
-                vez de só fechar o modal.
 
-                Só quando reconhecemos o provedor. Para domínio próprio
-                (contato@imobiliaria.com.br) não há webmail que se possa
-                adivinhar, e aí o botão neutro continua sendo o certo. */}
-            <div className="pm-acoes tm-acoes">
+            <div className="tm-pronto__cartoes">
+              <div className="tm-aviso">
+                <span className="tm-aviso__num">30</span>
+                <span>
+                  <strong>minutos de validade</strong>
+                  Se não aparecer em alguns instantes, confira também a caixa de spam.
+                </span>
+              </div>
+
+              {perfil === "existente" ? (
+                <div className="tm-aviso tm-aviso--migracao">
+                  <span className="tm-aviso__num">↗</span>
+                  <span>
+                    <strong>Sua migração já entrou na conversa</strong>
+                    Um especialista responde nesse mesmo e-mail para combinar a importação com você.
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="pm-acoes tm-acoes tm-pronto__acoes">
               {provedor ? (
                 <>
                   <BotaoModal onClick={aoFechar}>Entendi</BotaoModal>
@@ -488,593 +502,1949 @@ export function TrialModal({ aberto, aoFechar, planos = [], planoDesejado = "" }
                 <BotaoModal primario onClick={aoFechar}>Entendi</BotaoModal>
               )}
             </div>
+
+            <p className="tm-rodape">Sem cartão. O ambiente só nasce depois que você confirma o e-mail.</p>
           </div>
         ) : passo === "perfil" ? (
-          <>
-            <span className="dl-mono pm-eyebrow tm-eyebrow">● TESTE GRÁTIS POR 14 DIAS</span>
-            <h2 id="tm-titulo" className="pm-titulo">Antes de começar: como está a sua imobiliária hoje?</h2>
-            <p className="pm-sub">
-              A resposta muda o que preparamos para você. Leva um clique.
-            </p>
+          <div className="tm-painel tm-painel--perfil">
+            <section className="tm-intro">
+              <span className="dl-mono pm-eyebrow tm-eyebrow">● TESTE GRÁTIS POR 14 DIAS</span>
+              <h2 id="tm-titulo" className="pm-titulo">
+                Vamos preparar a Omnimob para o seu momento.
+              </h2>
+              <p className="pm-sub">
+                Primeiro, conte onde a sua operação está hoje. Isso muda o caminho do teste — e evita
+                perguntas que não fazem sentido para você.
+              </p>
 
-            <div className="tm-escolha">
-              {PERFIS.map((p) => (
-                <OpcaoPerfil key={p.chave} onClick={() => escolherPerfil(p.chave)}>
-                  {/* Marca-d'água: o mesmo desenho do ícone, gigante e sangrando
-                      pelo canto. Idioma emprestado do cartão de canal da landing
-                      (.bc-canal__marca), e existe só no celular — é lá que o
-                      cartão vira meia tela e sobra o vazio que ela preenche. */}
-                  <span className="tm-opcao__marca" aria-hidden="true">
-                    <Desenho tipo={p.chave} tamanho={190} />
-                  </span>
-                  <span className="tm-opcao__icone" aria-hidden="true">
-                    <Desenho tipo={p.chave} tamanho={22} />
-                  </span>
-                  <span className="dl-mono tm-opcao__tag">{p.tag}</span>
-                  <span className="tm-opcao__titulo">{p.titulo}</span>
-                  <span className="tm-opcao__texto">{p.texto}</span>
-                  <span className="tm-opcao__acao">
-                    <span className="tm-opcao__rotulo">{p.acao}</span>
-                    <span className="tm-opcao__seta" aria-hidden="true">→</span>
-                  </span>
-                </OpcaoPerfil>
-              ))}
-            </div>
+              <div className="tm-sinais" aria-label="Informações do teste">
+                <span><b>14 dias</b><small>para explorar</small></span>
+                <span><b>Sem cartão</b><small>para começar</small></span>
+                <span><b>Seu ambiente</b><small>com vitrine própria</small></span>
+              </div>
+            </section>
 
-            <p className="tm-rodape">
-              Sem cartão, sem instalar nada. Você pode mudar de ideia a qualquer momento.
-            </p>
-          </>
+            <section className="tm-escolha-wrap" aria-label="Escolha o seu momento">
+              <div className="tm-escolha">
+                {PERFIS.map((p) => (
+                  <OpcaoPerfil key={p.chave} onClick={() => escolherPerfil(p.chave)}>
+                    <span className="tm-opcao__marca" aria-hidden="true">
+                      <Desenho tipo={p.chave} tamanho={190} />
+                    </span>
+                    <span className="tm-opcao__icone" aria-hidden="true">
+                      <Desenho tipo={p.chave} tamanho={22} />
+                    </span>
+                    <span className="dl-mono tm-opcao__tag">{p.tag}</span>
+                    <span className="tm-opcao__titulo">{p.titulo}</span>
+                    <span className="tm-opcao__texto">{p.texto}</span>
+                    <span className="tm-opcao__acao">
+                      <span className="tm-opcao__rotulo">{p.acao}</span>
+                      <span className="tm-opcao__seta" aria-hidden="true">→</span>
+                    </span>
+                  </OpcaoPerfil>
+                ))}
+              </div>
+
+              <p className="tm-rodape">
+                Você não fica preso à escolha: ela só personaliza os próximos passos.
+              </p>
+            </section>
+          </div>
         ) : passo === "migracao" ? (
-          <>
-            <span className="dl-mono pm-eyebrow tm-eyebrow">● TRAZER A SUA BASE</span>
-            <h2 id="tm-titulo" className="pm-titulo">O que você já tem, e como trazemos para cá.</h2>
-            <p className="pm-sub">
-              Ninguém troca de sistema para redigitar a carteira inteira. Conte o que existe hoje e
-              um especialista responde no seu e-mail com o caminho — <strong>a importação é feita
-              junto com você</strong>, dentro do próprio teste.
-            </p>
-
-            <div className="pm-form">
-              <label className="pm-campo">
-                <span className="pm-rotulo">
-                  Qual sistema você usa hoje? <em className="tm-opcional">opcional</em>
-                </span>
-                <input
-                  className="pm-entrada"
-                  value={migracao.sistemaAtual}
-                  onChange={(e) => setMigracao((m) => ({ ...m, sistemaAtual: e.target.value }))}
-                  placeholder="Nome do sistema, ou “planilhas do Excel”"
-                  maxLength={120}
-                />
-              </label>
-
-              <div className="pm-campo">
-                <span className="pm-rotulo">O que você quer trazer?</span>
-                <div className="tm-fichas">
-                  {ITENS_MIGRACAO.map((item) => (
-                    <button
-                      key={item.valor}
-                      type="button"
-                      className={`tm-ficha${migracao.itens.includes(item.valor) ? " is-on" : ""}`}
-                      aria-pressed={migracao.itens.includes(item.valor)}
-                      onClick={() => alternarItem(item.valor)}
-                    >
-                      {item.rotulo}
-                    </button>
-                  ))}
-                </div>
+          <div className="tm-painel tm-painel--etapa">
+            <aside className="tm-etapa__aside">
+              <div>
+                <span className="dl-mono pm-eyebrow tm-eyebrow">● TRAZER A SUA BASE</span>
+                <span className="tm-passo">ETAPA 3 DE 3</span>
+                <h2 id="tm-titulo" className="pm-titulo">
+                  Sua carteira vem junto. Você não recomeça do zero.
+                </h2>
+                <p className="pm-sub">
+                  Conte o que existe hoje. Um especialista responde no seu e-mail com o melhor caminho
+                  para importar a base dentro do próprio teste.
+                </p>
               </div>
 
-              <div className="pm-campo">
-                <span className="pm-rotulo">Quantos imóveis, mais ou menos?</span>
-                <div className="tm-fichas">
-                  {VOLUMES.map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      className={`tm-ficha${migracao.volume === v ? " is-on" : ""}`}
-                      aria-pressed={migracao.volume === v}
-                      onClick={() => setMigracao((m) => ({ ...m, volume: m.volume === v ? "" : v }))}
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
+              <div className="tm-etapas" aria-label="Progresso do cadastro">
+                <span className="is-ok"><b>1</b><small>Momento</small></span>
+                <span className="is-ok"><b>2</b><small>Dados</small></span>
+                <span className="is-on"><b>3</b><small>Migração</small></span>
               </div>
 
-              <div className="pm-campo">
-                <span className="pm-rotulo">Como os dados podem sair de lá?</span>
-                <div className="tm-fichas">
-                  {FORMATOS.map((f) => (
-                    <button
-                      key={f.valor}
-                      type="button"
-                      className={`tm-ficha${migracao.formato === f.valor ? " is-on" : ""}`}
-                      aria-pressed={migracao.formato === f.valor}
-                      onClick={() => setMigracao((m) => ({ ...m, formato: m.formato === f.valor ? "" : f.valor }))}
-                    >
-                      {f.rotulo}
-                    </button>
-                  ))}
-                </div>
+              <div className="tm-aside-card">
+                <span className="dl-mono">SEU CAMINHO</span>
+                <strong>Imobiliária em operação</strong>
+                <p>Você pode pular esta etapa e começar o teste normalmente.</p>
+              </div>
+            </aside>
+
+            <div className="tm-etapa__corpo">
+              <div className="tm-form-cab">
+                <strong>Sobre a sua base atual</strong>
+                <span>Tudo aqui é opcional.</span>
               </div>
 
-              <label className="pm-campo">
-                <span className="pm-rotulo">
-                  Mais alguma coisa? <em className="tm-opcional">opcional</em>
-                </span>
-                <textarea
-                  className="pm-entrada tm-area"
-                  rows={3}
-                  maxLength={500}
-                  value={migracao.observacao}
-                  onChange={(e) => setMigracao((m) => ({ ...m, observacao: e.target.value }))}
-                  placeholder="Prazos, quem cuida do sistema atual, o que não pode parar…"
-                />
-              </label>
-
-              {falha ? <p className="pm-falha">{falha}</p> : null}
-
-              <div className="pm-acoes pm-acoes--tres">
-                <BotaoModal onClick={() => setPasso("dados")} disabled={criando}>
-                  Voltar
-                </BotaoModal>
-                {/* Pular não pode custar o teste: quem não sabe responder agora
-                    ainda assim merece o ambiente. O time pergunta depois. */}
-                <BotaoModal onClick={() => criar(false)} disabled={criando}>
-                  Pular por enquanto
-                </BotaoModal>
-                <BotaoModal primario onClick={() => criar(true)} disabled={criando}>
-                  {criando ? "Preparando ambiente…" : "Começar o teste"}
-                </BotaoModal>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="dl-mono pm-eyebrow tm-eyebrow">● TESTE GRÁTIS POR 14 DIAS</span>
-            <h2 id="tm-titulo" className="pm-titulo">Veja a Omnimob funcionando com a sua cara.</h2>
-            <p className="pm-sub">
-              Criamos um ambiente completo em segundos, com o plano que você escolher liberado e a
-              sua vitrine já no ar. Sem cartão, sem instalar nada.
-            </p>
-
-            <form className="pm-form" onSubmit={seguirDosDados} noValidate>
-              {/* O plano vem escolhido quando a pessoa clicou num cartão da
-                  tabela de preços, e em branco quando ela entrou pelo CTA do
-                  fim da página. Nos dois casos o campo é obrigatório: é ele que
-                  define o que o ambiente de teste vai liberar.
-
-                  Não é <label> porque o gatilho do combo é um <button> — o
-                  clique no rótulo chegaria nele e abriria a lista sozinho. */}
-              <div className="pm-campo">
-                <span className="pm-rotulo">Plano que você quer testar</span>
-                <SelectCustom
-                  id="tm-plano"
-                  ariaLabel="Plano do teste"
-                  value={form.plano}
-                  placeholder="Escolha um plano…"
-                  invalid={Boolean(erros.plano)}
-                  options={planos.map((p) => ({
-                    value: p.key,
-                    label: p.name,
-                    description: `${p.price}${p.per || ""}`,
-                  }))}
-                  onChange={(v) => definir("plano", v)}
-                />
-                {erros.plano ? <span className="pm-erro">{erros.plano}</span> : null}
-              </div>
-
-              {/* Lembrete do que o plano entrega: quem chegou pelo CTA final
-                  não passou pela tabela, e quem passou já rolou para longe. */}
-              {planoEscolhido ? (
-                <div className="pm-resumo">
-                  <p className="pm-resumo__desc">{planoEscolhido.desc}</p>
-                  <ul className="pm-resumo__lista">
-                    {planoEscolhido.linhas.filter((l) => l.incluso).map((l) => (
-                      <li key={l.label}>{l.label}</li>
-                    ))}
-                  </ul>
-                  <span className="dl-mono pm-resumo__nota">
-                    // 14 dias com estes recursos, sem cartão
-                  </span>
-                </div>
-              ) : null}
-
-              {/* O nome não é só um rótulo: é dele que sai o endereço da
-                  vitrine, que precisa ser único entre todas as imobiliárias.
-                  Por isso o campo mostra o endereço se formando e diz na hora
-                  se ele está livre. */}
-              <label className="pm-campo">
-                <span className="pm-rotulo">Nome da imobiliária</span>
-                <input
-                  ref={primeiroRef}
-                  className={`pm-entrada${erros.imobiliaria || slug.estado === "indisponivel" ? " is-erro" : ""}`}
-                  value={form.imobiliaria}
-                  onChange={(e) => definir("imobiliaria", e.target.value)}
-                  placeholder="Imobiliária Centro"
-                  autoComplete="organization"
-                  aria-describedby={form.imobiliaria.trim() ? "tm-endereco" : undefined}
-                />
-                {erros.imobiliaria ? <span className="pm-erro">{erros.imobiliaria}</span> : null}
-
-                {/* Só existe depois que há um nome: com o campo vazio, o bloco
-                    mostrava um endereço de mentira ("sua-imobiliaria") e uma
-                    frase sobre uma vitrine que ainda não tem nome — ruído antes
-                    de a pessoa ter feito qualquer coisa. */}
-                {form.imobiliaria.trim() ? (
-                  <span className={`tm-endereco is-${slug.estado}`} id="tm-endereco" aria-live="polite">
-                    <span className="tm-endereco__linha">
-                      <span className="dl-mono tm-endereco__url">
-                        <b>{enderecoVisivel(slug.valor)}</b>
-                      </span>
-                      <span className="tm-endereco__selo">{SELO_SLUG[slug.estado]}</span>
-                    </span>
-                    <span className="tm-endereco__nota">
-                      {slug.mensagem || "Este será o endereço padrão da sua vitrine pública."}
-                    </span>
-
-                    {/* Quem escolheu Profissional ou Premium tem direito a
-                        apontar o domínio da própria imobiliária, e este é o
-                        momento em que a informação vale mais: a pessoa está
-                        justamente olhando o endereço e decidindo se ele serve.
-
-                        Só aparece quando o plano libera — para quem está no
-                        Básico isso seria anunciar algo que ele não pode usar,
-                        no exato instante em que ele acabou de escolher o plano.
-                        Venda a mais na hora errada vira frustração. */}
-                    {planoLiberaDominio(form.plano) ? (
-                      <span className="tm-endereco__bonus">
-                        Se a sua imobiliária já tem domínio próprio, dá para usá-lo no lugar
-                        deste — o plano {planoInfo(form.plano).nome} inclui isso, e você
-                        configura depois, dentro do painel.
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
-              </label>
-
-              <div className="pm-dupla">
+              <div className="pm-form">
                 <label className="pm-campo">
-                  <span className="pm-rotulo">E-mail</span>
+                  <span className="pm-rotulo">
+                    Qual sistema você usa hoje? <em className="tm-opcional">opcional</em>
+                  </span>
                   <input
-                    type="email"
-                    className={`pm-entrada${erros.email ? " is-erro" : ""}`}
-                    value={form.email}
-                    onChange={(e) => definir("email", e.target.value)}
-                    placeholder="voce@imobiliaria.com.br"
-                    autoComplete="email"
+                    className="pm-entrada"
+                    value={migracao.sistemaAtual}
+                    onChange={(e) => setMigracao((m) => ({ ...m, sistemaAtual: e.target.value }))}
+                    placeholder="Nome do sistema, ou “planilhas do Excel”"
+                    maxLength={120}
                   />
-                  {erros.email ? <span className="pm-erro">{erros.email}</span> : null}
                 </label>
+
+                <div className="pm-campo">
+                  <span className="pm-rotulo">O que você quer trazer?</span>
+                  <div className="tm-fichas">
+                    {ITENS_MIGRACAO.map((item) => (
+                      <button
+                        key={item.valor}
+                        type="button"
+                        className={`tm-ficha${migracao.itens.includes(item.valor) ? " is-on" : ""}`}
+                        aria-pressed={migracao.itens.includes(item.valor)}
+                        onClick={() => alternarItem(item.valor)}
+                      >
+                        <span className="tm-ficha__check" aria-hidden="true">✓</span>
+                        {item.rotulo}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pm-campo">
+                  <span className="pm-rotulo">Quantos imóveis, mais ou menos?</span>
+                  <div className="tm-fichas">
+                    {VOLUMES.map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        className={`tm-ficha${migracao.volume === v ? " is-on" : ""}`}
+                        aria-pressed={migracao.volume === v}
+                        onClick={() => setMigracao((m) => ({ ...m, volume: m.volume === v ? "" : v }))}
+                      >
+                        <span className="tm-ficha__radio" aria-hidden="true" />
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pm-campo">
+                  <span className="pm-rotulo">Como os dados podem sair de lá?</span>
+                  <div className="tm-fichas tm-fichas--formatos">
+                    {FORMATOS.map((f) => (
+                      <button
+                        key={f.valor}
+                        type="button"
+                        className={`tm-ficha${migracao.formato === f.valor ? " is-on" : ""}`}
+                        aria-pressed={migracao.formato === f.valor}
+                        onClick={() => setMigracao((m) => ({ ...m, formato: m.formato === f.valor ? "" : f.valor }))}
+                      >
+                        <span className="tm-ficha__radio" aria-hidden="true" />
+                        {f.rotulo}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 <label className="pm-campo">
                   <span className="pm-rotulo">
-                    Telefone <em className="tm-opcional">opcional</em>
+                    Mais alguma coisa? <em className="tm-opcional">opcional</em>
                   </span>
-                  <input
-                    inputMode="tel"
-                    className="pm-entrada"
-                    value={form.telefone}
-                    onChange={(e) => definir("telefone", formatPhone(e.target.value))}
-                    placeholder="(11) 99999-9999"
-                    autoComplete="tel"
+                  <textarea
+                    className="pm-entrada tm-area"
+                    rows={3}
+                    maxLength={500}
+                    value={migracao.observacao}
+                    onChange={(e) => setMigracao((m) => ({ ...m, observacao: e.target.value }))}
+                    placeholder="Prazos, quem cuida do sistema atual, o que não pode parar…"
                   />
                 </label>
+
+                {falha ? <p className="pm-falha">{falha}</p> : null}
+
+                <div className="pm-acoes pm-acoes--tres">
+                  <BotaoModal onClick={() => setPasso("dados")} disabled={criando}>
+                    Voltar
+                  </BotaoModal>
+                  <BotaoModal onClick={() => criar(false)} disabled={criando}>
+                    Pular por enquanto
+                  </BotaoModal>
+                  <BotaoModal primario onClick={() => criar(true)} disabled={criando}>
+                    {criando ? "Preparando ambiente…" : "Começar o teste"}
+                  </BotaoModal>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="tm-painel tm-painel--etapa">
+            <aside className="tm-etapa__aside">
+              <div>
+                <span className="dl-mono pm-eyebrow tm-eyebrow">● TESTE GRÁTIS POR 14 DIAS</span>
+                <span className="tm-passo">ETAPA 2 DE {totalPassos}</span>
+                <h2 id="tm-titulo" className="pm-titulo">
+                  Agora, só o necessário para criar seu ambiente.
+                </h2>
+                <p className="pm-sub">
+                  Escolha o plano, dê um nome à imobiliária e informe seu e-mail. O restante você
+                  configura com calma depois.
+                </p>
               </div>
 
-              <input
-                className="pm-isca"
-                tabIndex={-1}
-                autoComplete="off"
-                aria-hidden="true"
-                value={form.website}
-                onChange={(e) => definir("website", e.target.value)}
-              />
-
-              {falha ? <p className="pm-falha">{falha}</p> : null}
-
-              <div className="pm-acoes">
-                <BotaoModal onClick={() => setPasso("perfil")} disabled={criando}>
-                  Voltar
-                </BotaoModal>
-                {/* Desligado enquanto o endereço não fecha: seguir com um slug
-                    ocupado só adiaria a mesma recusa para o fim do cadastro. */}
-                <BotaoModal
-                  primario
-                  type="submit"
-                  disabled={criando || slug.estado === "indisponivel" || slug.estado === "checando"}
-                >
-                  {criando
-                    ? "Preparando ambiente…"
-                    : slug.estado === "checando" ? "Verificando endereço…"
-                    : perfil === "existente" ? "Próximo" : "Começar o teste"}
-                </BotaoModal>
+              <div className="tm-etapas" aria-label="Progresso do cadastro">
+                <span className="is-ok"><b>1</b><small>Momento</small></span>
+                <span className="is-on"><b>2</b><small>Dados</small></span>
+                {perfil === "existente" ? <span><b>3</b><small>Migração</small></span> : null}
               </div>
-            </form>
-          </>
+
+              <div className="tm-aside-card">
+                <span className="dl-mono">SEU CAMINHO</span>
+                <strong>{perfil === "existente" ? "Imobiliária em operação" : "Começando agora"}</strong>
+                <p>
+                  {planoEscolhido
+                    ? `Plano ${planoEscolhido.name} selecionado para o teste.`
+                    : "Você escolhe o plano do teste no formulário ao lado."}
+                </p>
+              </div>
+            </aside>
+
+            <div className="tm-etapa__corpo">
+              <form className="pm-form" onSubmit={seguirDosDados} noValidate>
+                <div className="tm-form-cab">
+                  <strong>Dados do ambiente</strong>
+                  <span>Leva menos de um minuto.</span>
+                </div>
+
+                <div className="pm-campo">
+                  <span className="pm-rotulo">Plano que você quer testar</span>
+                  <SelectCustom
+                    id="tm-plano"
+                    ariaLabel="Plano do teste"
+                    value={form.plano}
+                    placeholder="Escolha um plano…"
+                    invalid={Boolean(erros.plano)}
+                    options={planos.map((p) => ({
+                      value: p.key,
+                      label: p.name,
+                      description: `${p.price}${p.per || ""}`,
+                    }))}
+                    onChange={(v) => definir("plano", v)}
+                  />
+                  {erros.plano ? <span className="pm-erro">{erros.plano}</span> : null}
+                </div>
+
+                {planoEscolhido ? (
+                  <div className="pm-resumo">
+                    <div className="pm-resumo__topo">
+                      <div>
+                        <span className="dl-mono">PLANO {planoEscolhido.name}</span>
+                        <p className="pm-resumo__desc">{planoEscolhido.desc}</p>
+                      </div>
+                      <strong>{planoEscolhido.price}<small>{planoEscolhido.per || ""}</small></strong>
+                    </div>
+
+                    <ul className="pm-resumo__lista">
+                      {recursosDoPlano.slice(0, 4).map((l) => (
+                        <li key={l.label}>{l.label}</li>
+                      ))}
+                      {recursosDoPlano.length > 4 ? (
+                        <li className="is-mais">+ {recursosDoPlano.length - 4} recursos incluídos</li>
+                      ) : null}
+                    </ul>
+
+                    <span className="dl-mono pm-resumo__nota">
+                      // 14 dias com estes recursos, sem cartão
+                    </span>
+                  </div>
+                ) : null}
+
+                <label className="pm-campo">
+                  <span className="pm-rotulo">Nome da imobiliária</span>
+                  <input
+                    ref={primeiroRef}
+                    className={`pm-entrada${erros.imobiliaria || slug.estado === "indisponivel" ? " is-erro" : ""}`}
+                    value={form.imobiliaria}
+                    onChange={(e) => definir("imobiliaria", e.target.value)}
+                    placeholder="Imobiliária Centro"
+                    autoComplete="organization"
+                    aria-describedby={form.imobiliaria.trim() ? "tm-endereco" : undefined}
+                  />
+                  {erros.imobiliaria ? <span className="pm-erro">{erros.imobiliaria}</span> : null}
+
+                  {form.imobiliaria.trim() ? (
+                    <span className={`tm-endereco is-${slug.estado}`} id="tm-endereco" aria-live="polite">
+                      <span className="tm-endereco__linha">
+                        <span className="dl-mono tm-endereco__url">
+                          <b>{enderecoVisivel(slug.valor)}</b>
+                        </span>
+                        <span className="tm-endereco__selo">{SELO_SLUG[slug.estado]}</span>
+                      </span>
+                      <span className="tm-endereco__nota">
+                        {slug.mensagem || "Este será o endereço padrão da sua vitrine pública."}
+                      </span>
+
+                      {planoLiberaDominio(form.plano) ? (
+                        <span className="tm-endereco__bonus">
+                          Se a sua imobiliária já tem domínio próprio, dá para usá-lo no lugar deste —
+                          o plano {planoInfo(form.plano).nome} inclui isso.
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </label>
+
+                <div className="pm-dupla">
+                  <label className="pm-campo">
+                    <span className="pm-rotulo">E-mail</span>
+                    <input
+                      type="email"
+                      className={`pm-entrada${erros.email ? " is-erro" : ""}`}
+                      value={form.email}
+                      onChange={(e) => definir("email", e.target.value)}
+                      placeholder="voce@imobiliaria.com.br"
+                      autoComplete="email"
+                    />
+                    {erros.email ? <span className="pm-erro">{erros.email}</span> : null}
+                  </label>
+
+                  <label className="pm-campo">
+                    <span className="pm-rotulo">
+                      Telefone <em className="tm-opcional">opcional</em>
+                    </span>
+                    <input
+                      inputMode="tel"
+                      className="pm-entrada"
+                      value={form.telefone}
+                      onChange={(e) => definir("telefone", formatPhone(e.target.value))}
+                      placeholder="(11) 99999-9999"
+                      autoComplete="tel"
+                    />
+                  </label>
+                </div>
+
+                <input
+                  className="pm-isca"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  value={form.website}
+                  onChange={(e) => definir("website", e.target.value)}
+                />
+
+                {falha ? <p className="pm-falha">{falha}</p> : null}
+
+                <div className="pm-acoes">
+                  <BotaoModal onClick={() => setPasso("perfil")} disabled={criando}>
+                    Voltar
+                  </BotaoModal>
+                  <BotaoModal
+                    primario
+                    type="submit"
+                    disabled={criando || slug.estado === "indisponivel" || slug.estado === "checando"}
+                  >
+                    {criando
+                      ? "Preparando ambiente…"
+                      : slug.estado === "checando" ? "Verificando endereço…"
+                      : perfil === "existente" ? "Continuar" : "Começar o teste"}
+                  </BotaoModal>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
+
 }
 
 /* A folha comum (.pm-*) vem do módulo compartilhado; aqui só o que é próprio
    da tela de acesso. */
 const CSS = `${MODAL_CSS}
-.tm-eyebrow { color: var(--mint); }
-.tm-pronto { display: grid; justify-items: center; text-align: center; gap: 12px; }
-.tm-pronto .pm-sub { margin-top: 0; }
+/* OMNIMOB_TRIAL_MODAL_V2_START
+   Trial Modal V2 — composição editorial e responsiva.
+   Este bloco vem DEPOIS de MODAL_CSS e, por isso, consegue refinar o modal sem
+   mudar a folha compartilhada pela TrialConfirmarPage. */
 
-.tm-aviso {
-  font-size: 12px; line-height: 1.65; color: var(--subtle);
-  padding: 10px 13px; border-radius: 10px;
-  background: rgba(212,175,55,0.09); border: 1px solid rgba(212,175,55,0.24);
+/* ── Palco ─────────────────────────────────────────────────────────────── */
+.pm-veu {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(99,102,241,0.13), transparent 34%),
+    rgba(3,4,8,0.76);
+  backdrop-filter: blur(18px) saturate(0.85);
+  -webkit-backdrop-filter: blur(18px) saturate(0.85);
 }
-.tm-aviso--migracao {
-  background: rgba(20,184,166,0.09); border-color: rgba(20,184,166,0.26);
+
+.pm-caixa.tm-caixa-v2 {
+  --tm-fundo: #0d0d10;
+  --tm-painel: #111116;
+  --tm-painel-2: #15151b;
+  --tm-linha: rgba(255,255,255,0.085);
+  --tm-linha-forte: rgba(255,255,255,0.14);
+  --tm-texto: #f6f6f8;
+  --tm-suave: #aaaab5;
+  --tm-fraco: #72727e;
+  --tm-indigo: #818cf8;
+  --tm-indigo-soft: #c4b5fd;
+  --tm-mint: #5eead4;
+  --tm-gold: #d4af37;
+
+  position: relative;
+  width: min(980px, calc(100vw - 56px));
+  max-width: none;
+  max-height: min(790px, calc(100dvh - 56px));
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+
+  color: var(--tm-texto);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(99,102,241,0.10), transparent 30%),
+    linear-gradient(145deg, rgba(18,18,24,0.985), rgba(9,9,12,0.99));
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 30px;
+  box-shadow:
+    0 50px 120px -42px rgba(0,0,0,0.92),
+    0 16px 44px -24px rgba(99,102,241,0.34),
+    inset 0 1px 0 rgba(255,255,255,0.055);
+
+  display: flex;
+  flex-direction: column;
+  animation: tmModalEntra 0.42s cubic-bezier(0.22,1,0.36,1) both;
 }
-.tm-acoes { width: 100%; justify-content: center; }
-.tm-envelope {
-  width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center;
-  background: rgba(99,102,241,0.16); border: 1px solid rgba(99,102,241,0.4);
-  color: var(--accent-soft); margin-bottom: 4px;
+
+.pm-caixa.tm-caixa--dados,
+.pm-caixa.tm-caixa--migracao {
+  height: min(760px, calc(100dvh - 56px));
 }
-/* ── Endereço da vitrine ──────────────────────────────────────────────────
-   Fica colado no campo do nome, com um respiro menor que o do próximo campo:
-   é consequência do que foi digitado ali em cima, não um campo novo. A caixa
-   troca de cor conforme o estado, e o texto de apoio troca junto — no lugar do
-   "este será o endereço" entra o motivo da recusa, sem a linha pular.
-   ─────────────────────────────────────────────────────────────────────── */
+
+.pm-caixa.tm-caixa--perfil {
+  min-height: min(610px, calc(100dvh - 56px));
+}
+
+.pm-caixa.tm-caixa--pronto {
+  width: min(650px, calc(100vw - 56px));
+}
+
+.pm-caixa.tm-caixa-v2::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  z-index: 15;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(196,181,253,0.48), rgba(212,175,55,0.35), transparent);
+}
+
+.dl-root .pm-fechar {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 30;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--tm-linha);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.035);
+  color: var(--tm-suave);
+  box-shadow: none;
+  transform: none;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease, border-color .18s ease, scale .18s ease;
+}
+.dl-root .pm-fechar:hover {
+  transform: none;
+  color: #fff;
+  background: rgba(255,255,255,0.085);
+  border-color: rgba(255,255,255,0.18);
+  box-shadow: none;
+}
+.dl-root .pm-fechar:active { scale: .93; }
+.dl-root .pm-fechar:focus-visible {
+  outline: 2px solid var(--tm-indigo-soft);
+  outline-offset: 3px;
+}
+
+/* ── Tipografia comum ─────────────────────────────────────────────────── */
+.pm-eyebrow.tm-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0 0 16px;
+  color: var(--tm-mint);
+  font-size: 9.5px;
+  line-height: 1;
+  letter-spacing: .18em;
+}
+
+.pm-caixa .pm-titulo {
+  margin: 0;
+  color: var(--tm-texto);
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.06;
+  font-weight: 600;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+
+.pm-caixa .pm-sub {
+  margin: 18px 0 0;
+  max-width: 54ch;
+  color: var(--tm-suave);
+  font-size: 13.5px;
+  line-height: 1.72;
+}
+
+.pm-caixa .pm-sub strong {
+  color: var(--tm-texto);
+  font-weight: 600;
+}
+
+.tm-rodape {
+  margin: 18px 0 0;
+  color: var(--tm-fraco);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+/* ── Primeira decisão: editorial à esquerda, escolhas à direita ─────── */
+.tm-painel {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.tm-painel--perfil {
+  display: grid;
+  grid-template-columns: minmax(300px, .82fr) minmax(0, 1.18fr);
+}
+
+.tm-intro {
+  position: relative;
+  min-width: 0;
+  padding: clamp(54px, 6vw, 78px) clamp(34px, 4vw, 52px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  border-right: 1px solid var(--tm-linha);
+  background:
+    radial-gradient(circle at 0% 16%, rgba(99,102,241,.17), transparent 40%),
+    linear-gradient(180deg, rgba(255,255,255,.018), transparent);
+}
+
+.tm-intro::after {
+  content: "";
+  position: absolute;
+  width: 280px;
+  aspect-ratio: 1;
+  left: -150px;
+  bottom: -165px;
+  border-radius: 50%;
+  border: 1px solid rgba(212,175,55,.16);
+  box-shadow:
+    0 0 0 26px rgba(212,175,55,.025),
+    0 0 0 58px rgba(99,102,241,.022);
+  pointer-events: none;
+}
+
+.tm-intro .pm-titulo {
+  max-width: 10.8ch;
+}
+
+.tm-sinais {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin-top: clamp(34px, 5vh, 50px);
+  overflow: hidden;
+  border: 1px solid var(--tm-linha);
+  border-radius: 15px;
+  background: var(--tm-linha);
+}
+
+.tm-sinais > span {
+  min-width: 0;
+  padding: 13px 12px;
+  display: grid;
+  gap: 3px;
+  background: rgba(13,13,16,.92);
+}
+
+.tm-sinais b {
+  color: var(--tm-texto);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tm-sinais small {
+  color: var(--tm-fraco);
+  font-size: 8.5px;
+  line-height: 1.35;
+}
+
+.tm-escolha-wrap {
+  min-width: 0;
+  min-height: 0;
+  padding: 58px 48px 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.tm-escolha {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 0;
+}
+
+.dl-root .tm-opcao {
+  position: relative;
+  width: 100%;
+  min-height: 176px;
+  padding: 22px 22px 20px;
+  display: grid;
+  grid-template-columns: 52px minmax(0,1fr) auto;
+  grid-template-areas:
+    "icone tag acao"
+    "icone titulo acao"
+    "icone texto acao";
+  column-gap: 17px;
+  row-gap: 5px;
+  align-items: center;
+
+  text-align: left;
+  color: inherit;
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--tm-linha);
+  border-radius: 20px;
+  box-shadow: none;
+  transform: none;
+  overflow: visible;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .22s ease, background .22s ease, transform .25s cubic-bezier(.22,1,.36,1);
+}
+
+.dl-root .tm-opcao:hover {
+  background: rgba(255,255,255,.052);
+  border-color: rgba(196,181,253,.35);
+  box-shadow: none;
+  transform: translateY(-2px);
+}
+
+.dl-root .tm-opcao:active { scale: .992; }
+.dl-root .tm-opcao:focus-visible {
+  outline: 2px solid var(--tm-indigo-soft);
+  outline-offset: 3px;
+}
+
+.dl-root .tm-opcao--especular {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 100%), transparent);
+  border-color: color-mix(in srgb, var(--sb-base-color) 42%, transparent);
+}
+
+.dl-root .tm-opcao--especular:hover {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 150%), transparent);
+  border-color: color-mix(in srgb, var(--sb-base-color) 68%, transparent);
+}
+
+.tm-opcao__marca {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.tm-opcao__marca svg {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  right: -54px;
+  bottom: -72px;
+  color: var(--tm-indigo-soft);
+  opacity: .035;
+  transform: rotate(-8deg);
+  transition: opacity .25s ease, color .25s ease, transform .35s cubic-bezier(.22,1,.36,1);
+}
+
+.tm-opcao:hover .tm-opcao__marca svg {
+  color: var(--tm-gold);
+  opacity: .075;
+  transform: rotate(-5deg) translate(-4px,-4px);
+}
+
+.tm-opcao__icone {
+  grid-area: icone;
+  align-self: start;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(129,140,248,.25);
+  border-radius: 14px;
+  background: rgba(99,102,241,.10);
+  color: var(--tm-indigo-soft);
+  transition: color .2s ease, border-color .2s ease, background .2s ease;
+}
+
+.tm-opcao:hover .tm-opcao__icone {
+  color: var(--tm-gold);
+  border-color: rgba(212,175,55,.32);
+  background: rgba(212,175,55,.09);
+}
+
+.tm-opcao__tag {
+  grid-area: tag;
+  position: relative;
+  z-index: 2;
+  display: block;
+  align-self: end;
+  color: var(--tm-fraco);
+  font-size: 8.5px;
+  letter-spacing: .16em;
+}
+
+.tm-opcao__titulo {
+  grid-area: titulo;
+  position: relative;
+  z-index: 2;
+  color: var(--tm-texto);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -.02em;
+}
+
+.tm-opcao__texto {
+  grid-area: texto;
+  position: relative;
+  z-index: 2;
+  align-self: start;
+  max-width: 48ch;
+  color: var(--tm-suave);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.tm-opcao__acao {
+  grid-area: acao;
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-opcao__rotulo {
+  display: none;
+}
+
+.tm-opcao__seta {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--tm-linha);
+  border-radius: 999px;
+  color: var(--tm-suave);
+  background: rgba(255,255,255,.035);
+  font-size: 14px;
+  line-height: 1;
+  transition: color .2s ease, border-color .2s ease, background .2s ease, transform .2s ease;
+}
+
+.tm-opcao:hover .tm-opcao__seta {
+  color: var(--tm-gold);
+  border-color: rgba(212,175,55,.3);
+  background: rgba(212,175,55,.09);
+  transform: translateX(2px);
+}
+
+/* ── Passos 2 e 3: contexto fixo + conteúdo rolável ─────────────────── */
+.tm-painel--etapa {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px,.72fr) minmax(0,1.28fr);
+}
+
+.tm-etapa__aside {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 54px 34px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  overflow: hidden;
+  border-right: 1px solid var(--tm-linha);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(99,102,241,.14), transparent 38%),
+    rgba(255,255,255,.012);
+}
+
+.tm-etapa__aside::after {
+  content: "";
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  right: -190px;
+  bottom: -150px;
+  border: 1px solid rgba(196,181,253,.12);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.tm-etapa__aside .pm-titulo {
+  max-width: 12ch;
+  font-size: clamp(28px, 3vw, 39px);
+}
+
+.tm-etapa__aside .pm-sub {
+  max-width: 34ch;
+  font-size: 12.5px;
+}
+
+.tm-passo {
+  display: block;
+  width: fit-content;
+  margin: -5px 0 15px;
+  color: var(--tm-fraco);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .14em;
+}
+
+.tm-etapas {
+  display: grid;
+  gap: 7px;
+}
+
+.tm-etapas > span {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  color: var(--tm-fraco);
+}
+
+.tm-etapas > span:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 28px;
+  width: 1px;
+  height: 13px;
+  background: var(--tm-linha-forte);
+}
+
+.tm-etapas b {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--tm-linha-forte);
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.tm-etapas small {
+  font-size: 10.5px;
+  font-weight: 550;
+}
+
+.tm-etapas .is-ok { color: var(--tm-suave); }
+.tm-etapas .is-ok b {
+  color: #081311;
+  background: var(--tm-mint);
+  border-color: var(--tm-mint);
+}
+.tm-etapas .is-on { color: var(--tm-texto); }
+.tm-etapas .is-on b {
+  color: #fff;
+  background: rgba(99,102,241,.24);
+  border-color: rgba(196,181,253,.55);
+  box-shadow: 0 0 0 4px rgba(99,102,241,.08);
+}
+
+.tm-aside-card {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  padding: 14px 15px;
+  border: 1px solid var(--tm-linha);
+  border-radius: 15px;
+  background: rgba(255,255,255,.025);
+}
+
+.tm-aside-card > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--tm-fraco);
+  font-size: 8px;
+  letter-spacing: .16em;
+}
+
+.tm-aside-card strong {
+  display: block;
+  color: var(--tm-texto);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tm-aside-card p {
+  margin: 5px 0 0;
+  color: var(--tm-fraco);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.tm-etapa__corpo {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 46px 46px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent;
+}
+
+.tm-etapa__corpo::-webkit-scrollbar { width: 9px; }
+.tm-etapa__corpo::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  background-clip: padding-box;
+}
+
+.tm-form-cab {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tm-form-cab strong {
+  color: var(--tm-texto);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+.tm-form-cab span {
+  color: var(--tm-fraco);
+  font-size: 10px;
+}
+
+.pm-caixa .pm-form {
+  display: grid;
+  gap: 18px;
+  width: 100%;
+  min-width: 0;
+}
+
+.pm-caixa .pm-campo {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pm-caixa .pm-rotulo {
+  color: #d7d7df;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.tm-opcional {
+  margin-left: 4px;
+  color: var(--tm-fraco);
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 500;
+}
+
+.pm-caixa .pm-entrada {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 14px;
+  border: 1px solid var(--tm-linha-forte);
+  border-radius: 13px;
+  outline: 0;
+  background: rgba(255,255,255,.035);
+  color: var(--tm-texto);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.018);
+  font: inherit;
+  font-size: 12.5px;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.pm-caixa .pm-entrada:hover {
+  border-color: rgba(255,255,255,.19);
+  background: rgba(255,255,255,.045);
+}
+
+.pm-caixa .pm-entrada:focus {
+  border-color: rgba(129,140,248,.72);
+  background: rgba(255,255,255,.052);
+  box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+
+.pm-caixa .pm-entrada::placeholder { color: #62626e; }
+.pm-caixa .pm-entrada.is-erro {
+  border-color: rgba(248,113,113,.62);
+  box-shadow: 0 0 0 3px rgba(248,113,113,.08);
+}
+
+.pm-caixa .pm-dupla {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pm-caixa .pm-erro {
+  color: #fca5a5;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.pm-caixa .pm-falha {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(248,113,113,.25);
+  border-radius: 12px;
+  background: rgba(248,113,113,.07);
+  color: #fca5a5;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.pm-caixa .pm-isca {
+  position: absolute !important;
+  left: -10000px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.tm-area {
+  min-height: 92px !important;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+/* Plano escolhido: mostra só o suficiente para confirmar a decisão. */
+.pm-caixa .pm-resumo {
+  display: grid;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid rgba(129,140,248,.22);
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(99,102,241,.10), transparent 42%),
+    rgba(99,102,241,.045);
+}
+
+.pm-resumo__topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.pm-resumo__topo > div > span {
+  color: var(--tm-indigo-soft);
+  font-size: 8px;
+  letter-spacing: .14em;
+}
+
+.pm-resumo__topo > strong {
+  color: var(--tm-texto);
+  font-size: 18px;
+  font-weight: 650;
+  white-space: nowrap;
+  letter-spacing: -.025em;
+}
+
+.pm-resumo__topo > strong small {
+  margin-left: 2px;
+  color: var(--tm-fraco);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.pm-resumo .pm-resumo__desc {
+  margin: 5px 0 0;
+  color: var(--tm-suave);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.pm-resumo__lista {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pm-resumo__lista li {
+  position: relative;
+  padding-left: 15px;
+  color: var(--tm-suave);
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.pm-resumo__lista li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--tm-mint);
+  font-weight: 700;
+}
+
+.pm-resumo__lista li.is-mais {
+  color: var(--tm-indigo-soft);
+  font-weight: 600;
+}
+
+.pm-resumo__lista li.is-mais::before { content: "+"; }
+
+.pm-resumo__nota {
+  color: var(--tm-fraco);
+  font-size: 8.5px;
+  letter-spacing: .05em;
+}
+
+/* Endereço da vitrine: consequência visual do nome digitado. */
 .tm-endereco {
-  display: grid; gap: 5px; margin-top: 1px;
-  padding: 9px 12px; border-radius: 10px;
-  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--line);
-  transition: background 0.22s ease, border-color 0.22s ease;
-}
-.tm-endereco__linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-/* O slug pode ficar longo; ele encolhe e corta, e o selo não sai da linha. */
-/* Sem o caixa-alta do .dl-mono: o slug é minúsculo de verdade, e mostrá-lo em
-   maiúsculas seria prometer um endereço que não é o que vai ser criado. */
-.tm-endereco__url {
-  flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--placeholder);
-  text-transform: none; letter-spacing: 0.02em;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.tm-endereco__url b { color: var(--subtle); font-weight: 600; }
-.tm-endereco__selo {
-  flex: 0 0 auto; font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em;
-  color: var(--placeholder);
-}
-.tm-endereco__nota { font-size: 11px; line-height: 1.5; color: var(--placeholder); }
-/* Separado da nota por uma linha fina: é informação de outra natureza — a nota
-   fala do endereço que está ali, esta fala de uma alternativa a ele. Sem a
-   divisão, as duas frases se lêem como uma só e a segunda parece contradizer
-   a primeira. */
-.tm-endereco__bonus {
-  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--linha-08, rgba(255,255,255,0.08));
-  font-size: 11px; line-height: 1.5; color: var(--subtle);
+  display: grid;
+  gap: 5px;
+  margin-top: 1px;
+  padding: 10px 12px;
+  border: 1px solid var(--tm-linha);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+  transition: background .2s ease, border-color .2s ease;
 }
 
-.tm-endereco.is-checando .tm-endereco__selo { color: var(--subtle); }
+.tm-endereco__linha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tm-endereco__url {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tm-fraco);
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: .01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tm-endereco__url b {
+  color: var(--tm-suave);
+  font-weight: 600;
+}
+
+.tm-endereco__selo {
+  flex: 0 0 auto;
+  color: var(--tm-fraco);
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.tm-endereco__nota,
+.tm-endereco__bonus {
+  color: var(--tm-fraco);
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.tm-endereco__bonus {
+  margin-top: 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--tm-linha);
+  color: var(--tm-suave);
+}
+
+.tm-endereco.is-checando .tm-endereco__selo { color: var(--tm-suave); }
 .tm-endereco.is-livre {
-  background: rgba(20,184,166,0.08); border-color: rgba(20,184,166,0.3);
+  border-color: rgba(94,234,212,.26);
+  background: rgba(20,184,166,.055);
 }
-.tm-endereco.is-livre .tm-endereco__url b { color: var(--mint); }
-.tm-endereco.is-livre .tm-endereco__selo { color: var(--mint); }
+.tm-endereco.is-livre .tm-endereco__url b,
+.tm-endereco.is-livre .tm-endereco__selo { color: var(--tm-mint); }
+
 .tm-endereco.is-indisponivel {
-  background: rgba(248,113,113,0.09); border-color: rgba(248,113,113,0.3);
+  border-color: rgba(248,113,113,.3);
+  background: rgba(248,113,113,.06);
 }
-.tm-endereco.is-indisponivel .tm-endereco__url b { color: #fca5a5; text-decoration: line-through; }
+.tm-endereco.is-indisponivel .tm-endereco__url b {
+  color: #fca5a5;
+  text-decoration: line-through;
+}
 .tm-endereco.is-indisponivel .tm-endereco__selo,
 .tm-endereco.is-indisponivel .tm-endereco__nota { color: #fca5a5; }
 
-.tm-opcional {
-  font-style: normal; font-weight: 500; color: var(--placeholder); font-size: 10.5px;
-  margin-left: 5px;
+/* Migração: chips com estado legível sem depender só da cor. */
+.tm-fichas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
-/* ── Passo do perfil ──────────────────────────────────────────────────────
-   Duas colunas no desktop, empilhadas no celular. Os cartões têm a mesma
-   altura para nenhum dos dois parecer a opção "principal": a escolha é do
-   cliente, e um botão maior que o outro já seria uma resposta nossa.
-   ─────────────────────────────────────────────────────────────────────── */
-.tm-escolha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 22px; }
-.dl-root .tm-opcao {
-  /* Quatro linhas no desktop — ícone, título, texto elástico e ação —, que é o
-     arranjo que este cartão sempre teve. A etiqueta e o rótulo da ação existem
-     no HTML mas ficam escondidos aqui: eles são para o celular, onde o cartão
-     vira meia tela. Num cartão de 239px eles seriam aperto, não acabamento. */
-  display: grid; grid-template-rows: auto auto 1fr auto; gap: 8px; text-align: left;
-  width: 100%; padding: 18px 18px 14px; border-radius: 16px; cursor: pointer;
-  background: var(--surface); border: 1px solid var(--line);
-  color: inherit; font-family: inherit; box-shadow: none; transform: none;
-  position: relative;
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-}
-/* Etiqueta e rótulo da ação: peças de celular, ligadas lá embaixo. Escondidas
-   com display:none, e não com visibilidade — assim elas nem ocupam linha na
-   grade, e as quatro linhas do desktop continuam sendo quatro. */
-.tm-opcao__tag, .tm-opcao__rotulo { display: none; }
-.tm-opcao__tag {
-  font-size: 9px; letter-spacing: 0.14em; color: var(--placeholder);
-  transition: color 0.18s ease;
-}
-.tm-opcao:hover .tm-opcao__tag { color: var(--gold); }
-/* No desktop sobra só a seta aqui dentro, que é como o cartão sempre foi. */
-.tm-opcao__acao { display: flex; align-items: center; gap: 8px; }
-.tm-opcao__rotulo {
-  font-weight: 600; color: var(--subtle);
-  transition: color 0.18s ease;
-}
-/* Fora do celular a marca-d'água não entra: no cartão de 239px ela não seria
-   textura de fundo, seria o fundo. */
-.tm-opcao__marca { display: none; }
-/* O recorte mora AQUI, e não no cartão. O cartão precisa de overflow visível
-   para o canvas do brilho especular passar 20px além da borda (é assim que a
-   luz vaza para fora); recortar lá decepava o efeito. Esta camada é absoluta,
-   cobre o cartão inteiro e recorta só a si mesma. */
-.tm-opcao--especular .tm-opcao__marca {
-  position: absolute; inset: 0; z-index: 0;
-  overflow: hidden; border-radius: inherit; pointer-events: none;
-}
-.dl-root .tm-opcao:hover {
-  background: var(--surface-2); border-color: var(--accent-soft);
-  transform: translateY(-2px); box-shadow: none;
-}
-.dl-root .tm-opcao:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
-
-/* ── Cartão em vidro especular ──
-   Mesma divisão dos outros: .tm-opcao segue mandando na GRADE (as quatro
-   linhas, o respiro, a altura igual entre os dois) e este modificador manda na
-   aparência. Vale nos dois formatos — no celular os cartões viram meia tela
-   cada, e o traço da beirada é o que continua dizendo onde um acaba e o outro
-   começa quando eles ficam sem preenchimento sólido. */
-.dl-root .tm-opcao--especular {
-  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 100%), transparent);
-  border: 1px solid color-mix(in srgb, var(--sb-base-color) 45%, transparent);
-  color: var(--sb-text-color);
-  overflow: visible;
-}
-/* O translateY do hover fica: ele é o gesto de "cartão levantando", e não
-   disputa nada com a luz. O que sai é a troca de preenchimento. */
-.dl-root .tm-opcao--especular:hover {
-  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 190%), transparent);
-  border-color: color-mix(in srgb, var(--sb-base-color) 78%, transparent);
-}
-.tm-opcao__icone {
-  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
-  background: rgba(99,102,241,0.14); border: 1px solid rgba(99,102,241,0.3);
-  color: var(--accent-soft);
-}
-.tm-opcao:hover .tm-opcao__icone { background: rgba(212,175,55,0.14); border-color: rgba(212,175,55,0.34); color: var(--gold); }
-.tm-opcao__titulo { font-size: 15px; font-weight: 700; color: var(--strong); letter-spacing: -0.015em; }
-.tm-opcao__texto { font-size: 12.5px; line-height: 1.6; color: var(--subtle); }
-.tm-opcao__seta { font-size: 15px; color: var(--placeholder); transition: color 0.18s ease, transform 0.18s ease; }
-.tm-opcao:hover .tm-opcao__seta { color: var(--gold); transform: translateX(3px); }
-
-.tm-rodape {
-  margin-top: 18px; text-align: center;
-  font-size: 11.5px; line-height: 1.6; color: var(--placeholder);
-}
-
-/* ── Passo da migração ── */
-.tm-fichas { display: flex; flex-wrap: wrap; gap: 7px; }
 .dl-root .tm-ficha {
-  width: auto; padding: 8px 13px; border-radius: 999px; cursor: pointer;
-  font-family: inherit; font-size: 12.5px; font-weight: 500;
-  background: var(--surface); border: 1px solid var(--line); color: var(--subtle);
-  box-shadow: none; transform: none;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  width: auto;
+  min-height: 36px;
+  padding: 8px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--tm-linha);
+  border-radius: 999px;
+  background: rgba(255,255,255,.025);
+  color: var(--tm-suave);
+  box-shadow: none;
+  transform: none;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
 }
-.dl-root .tm-ficha:hover { background: var(--surface-2); color: var(--default); box-shadow: none; transform: none; }
+
+.dl-root .tm-ficha:hover {
+  transform: none;
+  box-shadow: none;
+  color: var(--tm-texto);
+  background: rgba(255,255,255,.055);
+  border-color: rgba(255,255,255,.16);
+}
+
 .dl-root .tm-ficha.is-on {
-  background: rgba(99,102,241,0.18); border-color: var(--accent-soft); color: var(--strong);
+  color: #eeeeff;
+  background: rgba(99,102,241,.16);
+  border-color: rgba(129,140,248,.42);
 }
-.tm-area { resize: vertical; min-height: 74px; line-height: 1.6; }
 
+.tm-ficha__check,
+.tm-ficha__radio {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.18);
+  color: transparent;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.tm-ficha__check { border-radius: 4px; }
+.tm-ficha__radio { border-radius: 50%; }
+
+.tm-ficha.is-on .tm-ficha__check {
+  color: #fff;
+  background: var(--tm-indigo);
+  border-color: var(--tm-indigo);
+}
+
+.tm-ficha.is-on .tm-ficha__radio {
+  border: 4px solid var(--tm-indigo-soft);
+  background: #111116;
+}
+
+/* Ações: ficam ao alcance mesmo quando o formulário é alto. */
+.pm-caixa .pm-acoes {
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin: 4px -46px 0;
+  padding: 18px 46px 24px;
+  border-top: 1px solid rgba(255,255,255,.055);
+  background: linear-gradient(180deg, rgba(13,13,16,.72), rgba(13,13,16,.98) 30%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.pm-caixa .tm-acoes,
+.tm-pronto .pm-acoes {
+  position: static;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  justify-content: center;
+}
+
+.pm-caixa .pm-acoes--tres {
+  display: grid;
+  grid-template-columns: auto auto auto;
+}
+
+.dl-root .pm-botao {
+  width: auto;
+  min-width: 112px;
+  min-height: 43px;
+  padding: 11px 17px;
+  border-radius: 999px;
+  transform: none;
+  box-shadow: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dl-root .pm-botao:hover { transform: none; }
+.dl-root .pm-botao:active:not(:disabled) { scale: .98; }
+
+.dl-root .pm-botao--especular {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 100%), transparent);
+  border: 1px solid color-mix(in srgb, var(--sb-base-color) 42%, transparent);
+  color: var(--sb-text-color);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.dl-root .pm-botao--especular:hover {
+  background: color-mix(in srgb, var(--sb-tint) calc(var(--sb-tint-opacity) * 155%), transparent);
+  border-color: color-mix(in srgb, var(--sb-base-color) 72%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.065);
+}
+
+.dl-root .pm-botao--primario {
+  min-width: 150px;
+}
+
+/* ── Confirmação por e-mail ───────────────────────────────────────────── */
+.tm-pronto {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: 560px;
+  padding: 64px 60px 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  text-align: center;
+}
+
+.tm-pronto__halo {
+  position: absolute;
+  z-index: -1;
+  width: 420px;
+  height: 240px;
+  top: -80px;
+  left: 50%;
+  translate: -50% 0;
+  background: radial-gradient(ellipse, rgba(99,102,241,.20), transparent 70%);
+  pointer-events: none;
+}
+
+.tm-envelope {
+  width: 66px;
+  height: 66px;
+  margin-bottom: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(129,140,248,.36);
+  border-radius: 20px;
+  background: rgba(99,102,241,.12);
+  color: var(--tm-indigo-soft);
+  box-shadow: 0 16px 42px -24px rgba(99,102,241,.9);
+}
+
+.tm-pronto .pm-eyebrow { margin-bottom: 12px; }
+.tm-pronto .pm-titulo {
+  max-width: 12ch;
+  font-size: clamp(34px, 4vw, 48px);
+}
+
+.tm-pronto .pm-sub {
+  max-width: 51ch;
+  margin-top: 14px;
+}
+
+.tm-pronto__cartoes {
+  width: min(100%, 510px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin: 26px 0 24px;
+}
+
+.tm-pronto__cartoes:has(.tm-aviso:only-child) {
+  grid-template-columns: 1fr;
+}
+
+.tm-aviso {
+  min-width: 0;
+  padding: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  text-align: left;
+  border: 1px solid rgba(212,175,55,.20);
+  border-radius: 14px;
+  background: rgba(212,175,55,.055);
+  color: var(--tm-suave);
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.tm-aviso--migracao {
+  border-color: rgba(94,234,212,.18);
+  background: rgba(20,184,166,.045);
+}
+
+.tm-aviso__num {
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(212,175,55,.25);
+  border-radius: 10px;
+  color: var(--tm-gold);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tm-aviso--migracao .tm-aviso__num {
+  color: var(--tm-mint);
+  border-color: rgba(94,234,212,.24);
+}
+
+.tm-aviso strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--tm-texto);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.tm-pronto__acoes {
+  margin-top: 0 !important;
+}
+
+/* ── Tablet ───────────────────────────────────────────────────────────── */
+@media (max-width: 820px) {
+  .pm-veu { padding: 18px; }
+
+  .pm-caixa.tm-caixa-v2 {
+    width: min(720px, calc(100vw - 36px));
+    max-height: calc(100dvh - 36px);
+    border-radius: 26px;
+  }
+
+  .pm-caixa.tm-caixa--dados,
+  .pm-caixa.tm-caixa--migracao {
+    height: min(820px, calc(100dvh - 36px));
+  }
+
+  .tm-painel--perfil {
+    grid-template-columns: 1fr;
+  }
+
+  .tm-intro {
+    padding: 42px 44px 32px;
+    border-right: 0;
+    border-bottom: 1px solid var(--tm-linha);
+  }
+
+  .tm-intro .pm-titulo { max-width: 16ch; }
+
+  .tm-sinais {
+    width: min(520px,100%);
+    margin-top: 25px;
+  }
+
+  .tm-escolha-wrap {
+    padding: 28px 44px 34px;
+  }
+
+  .tm-painel--etapa {
+    grid-template-columns: 220px minmax(0,1fr);
+  }
+
+  .tm-etapa__aside {
+    padding: 48px 25px 30px;
+  }
+
+  .tm-etapa__corpo {
+    padding-left: 30px;
+    padding-right: 30px;
+  }
+
+  .pm-caixa .pm-acoes {
+    margin-left: -30px;
+    margin-right: -30px;
+    padding-left: 30px;
+    padding-right: 30px;
+  }
+}
+
+/* ── Celular: bottom sheet de verdade, não desktop encolhido ─────────── */
 @media (max-width: 620px) {
-  .tm-escolha { grid-template-columns: 1fr; margin-top: 18px; gap: 10px; }
-}
+  .pm-veu {
+    align-items: flex-end;
+    padding: 0;
+    background: rgba(3,4,8,.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 
-@media (max-width: 560px) {
-  /* ── Escolha do perfil, em tela cheia ──
-     O modal ocupa a tela inteira no celular (ver modalCSS). O passo do perfil é
-     o único que não tem formulário nenhum: são duas portas, e nada mais. Então
-     as duas portas tomam tudo o que sobra abaixo do texto de abertura, em
-     partes iguais — o primeiro cartão vai até a metade da altura, o segundo até
-     o pé do modal, e o alvo de toque passa a ser metade de tela cada.
+  .pm-caixa.tm-caixa-v2,
+  .pm-caixa.tm-caixa--pronto {
+    width: 100%;
+    height: min(94dvh, 880px);
+    min-height: 0;
+    max-height: 94dvh;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 28px 28px 0 0;
+    animation-name: tmModalEntraMobile;
+  }
 
-     Antes os cartões vinham comprimidos (ícone ao lado do título, seta
-     escondida) porque empilhados eles passavam de uma tela. Com a tela toda o
-     problema se inverteu — agora sobra altura —, então some a compressão e vale
-     o arranjo em coluna do desktop, que tem a seta ancorada na última linha
-     (o "1fr" do texto empurra ela para o rodapé do cartão). */
-  .tm-caixa--perfil { display: flex; flex-direction: column; }
-  /* flex-basis 0 nas duas: sem isso a altura do conteúdo entraria na conta e o
-     cartão de texto mais longo ficaria maior que o outro. */
-  .tm-escolha { flex: 1 1 0; margin-top: 16px; grid-template-rows: 1fr 1fr; }
-  /* Dentro do cartão alto, NENHUMA linha vira 1fr: a linha elástica engoliria
-     sozinha toda a sobra e abriria um vão de 60px no meio do texto. As quatro
-     linhas ficam no tamanho do conteúdo e o bloco todo se centra — a sobra vai
-     para as pontas, onde ela lê como respiro em vez de buraco.
+  .pm-caixa.tm-caixa-v2::after {
+    content: "";
+    position: absolute;
+    z-index: 26;
+    top: 9px;
+    left: 50%;
+    width: 38px;
+    height: 4px;
+    translate: -50% 0;
+    border-radius: 999px;
+    background: rgba(255,255,255,.16);
+    pointer-events: none;
+  }
 
-     E o conteúdo cresce junto com o cartão: um botão de meia tela com ícone e
-     título de tamanho de cartãozinho pareceria um cartão pequeno esticado. */
+  .dl-root .pm-fechar {
+    top: 19px;
+    right: 16px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+  }
+
+  .pm-caixa .pm-titulo {
+    font-size: clamp(27px, 8.2vw, 36px);
+    line-height: 1.08;
+  }
+
+  .pm-caixa .pm-sub {
+    margin-top: 12px;
+    font-size: 12.5px;
+    line-height: 1.62;
+  }
+
+  .pm-eyebrow.tm-eyebrow {
+    margin-bottom: 12px;
+    font-size: 8.5px;
+  }
+
+  /* Perfil: cabeçalho compacto + duas portas roláveis. */
+  .tm-painel--perfil {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .tm-intro {
+    flex: 0 0 auto;
+    padding: 52px 20px 22px;
+    border-bottom: 1px solid var(--tm-linha);
+    background:
+      radial-gradient(circle at 10% 0%, rgba(99,102,241,.14), transparent 42%),
+      transparent;
+  }
+
+  .tm-intro::after { display: none; }
+  .tm-intro .pm-titulo { max-width: 15ch; }
+  .tm-intro .pm-sub { max-width: 42ch; }
+
+  .tm-sinais {
+    display: flex;
+    gap: 7px;
+    margin-top: 20px;
+    overflow: visible;
+    border: 0;
+    background: none;
+  }
+
+  .tm-sinais > span {
+    flex: 1 1 0;
+    padding: 9px 8px;
+    border: 1px solid var(--tm-linha);
+    border-radius: 11px;
+    background: rgba(255,255,255,.025);
+  }
+
+  .tm-sinais b { font-size: 9.5px; }
+  .tm-sinais small { display: none; }
+
+  .tm-escolha-wrap {
+    flex: 1 0 auto;
+    min-height: auto;
+    padding: 18px 14px calc(20px + env(safe-area-inset-bottom));
+    overflow: visible;
+  }
+
+  .tm-escolha { gap: 9px; }
+
   .dl-root .tm-opcao {
-    grid-template-rows: repeat(5, auto); align-content: center;
-    gap: 10px; padding: 22px;
-  }
-  .tm-opcao__icone { width: 48px; height: 48px; border-radius: 14px; }
-  .tm-opcao__icone svg { width: 25px; height: 25px; }
-  .tm-opcao__tag { display: block; font-size: 9.5px; letter-spacing: 0.16em; }
-  .tm-opcao__rotulo { display: block; }
-  .tm-opcao__titulo { font-size: 19px; }
-  .tm-opcao__texto { font-size: 13px; line-height: 1.6; }
-
-  /* ── Marca-d'água ──
-     O mesmo desenho do ícone, gigante, ancorado na quina de baixo e sangrando
-     para fora dela. Só aqui: é neste formato que o cartão vira meia tela e
-     sobra o vazio que ela ocupa — no cartão de 239px do desktop ela deixaria de
-     ser textura e viraria o fundo.
-
-     A opacidade é baixa a ponto de o desenho não competir com o texto por cima:
-     o que se lê é uma sombra de relevo, não um segundo ícone. */
-  .tm-opcao__marca { display: block; }
-  .tm-opcao__marca svg {
-    position: absolute; right: -46px; bottom: -52px;
-    color: var(--accent-soft); opacity: 0.10;
-    transition: opacity 0.28s ease, color 0.28s ease, transform 0.35s var(--ease-out, ease);
-  }
-  /* Acompanha a pastilha do ícone, que já vira dourada ao toque — as duas juntas
-     fazem o cartão inteiro responder, em vez de só o cantinho de cima. */
-  .tm-opcao:hover .tm-opcao__marca svg,
-  .tm-opcao:active .tm-opcao__marca svg {
-    color: var(--gold); opacity: 0.16; transform: translate(-6px, -6px);
+    min-height: 150px;
+    padding: 17px 16px;
+    grid-template-columns: 43px minmax(0,1fr);
+    grid-template-areas:
+      "icone tag"
+      "icone titulo"
+      "texto texto"
+      "acao acao";
+    column-gap: 12px;
+    row-gap: 5px;
+    border-radius: 17px;
   }
 
-  /* ── Linha de ação ──
-     Vira uma pastilha de verdade: o rótulo diz para onde o cartão leva e a seta
-     ganha um disco, como nos botões da landing. Num alvo de meia tela, uma seta
-     solta de 17px era o único sinal de que aquilo era clicável. */
-  /* justify-self, e não align-self: o cartão é uma GRADE de uma coluna, então
-     quem encolhe a pastilha até o tamanho do conteúdo é o eixo em linha.
-     Esticada, ela viraria uma barra de ponta a ponta do cartão. */
+  .tm-opcao__icone {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+
+  .tm-opcao__titulo { font-size: 15px; }
+  .tm-opcao__texto {
+    margin-top: 5px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
   .tm-opcao__acao {
-    margin-top: 4px; justify-self: start;
-    padding: 9px 8px 9px 16px; border-radius: 999px;
-    background: var(--sup-05, rgba(255,255,255,0.05)); border: 1px solid var(--linha-10, rgba(255,255,255,0.10));
-    transition: background 0.18s ease, border-color 0.18s ease;
+    justify-self: start;
+    margin-top: 6px;
+    padding: 6px 7px 6px 11px;
+    gap: 7px;
+    border: 1px solid var(--tm-linha);
+    border-radius: 999px;
+    background: rgba(255,255,255,.03);
   }
-  .tm-opcao:hover .tm-opcao__acao,
-  .tm-opcao:active .tm-opcao__acao {
-    background: rgba(212,175,55,0.12); border-color: rgba(212,175,55,0.34);
+
+  .tm-opcao__rotulo {
+    display: block;
+    color: var(--tm-suave);
+    font-size: 9.5px;
+    font-weight: 600;
   }
-  .tm-opcao__rotulo { font-size: 13px; color: var(--strong); }
+
   .tm-opcao__seta {
-    width: 22px; height: 22px; border-radius: 999px;
-    display: grid; place-items: center; font-size: 13px; line-height: 1;
-    background: var(--sup-10, rgba(255,255,255,0.10)); color: var(--strong);
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
   }
-  .tm-opcao:hover .tm-opcao__seta { background: rgba(212,175,55,0.22); color: var(--gold); }
 
-  .tm-rodape { margin-top: 14px; font-size: 11px; }
+  .tm-opcao__marca svg {
+    width: 150px;
+    height: 150px;
+    right: -54px;
+    bottom: -62px;
+    opacity: .055;
+  }
 
-  /* ── Endereço da vitrine ──
-     Sem corte no fim da linha: o endereço quebra e aparece inteiro. Cortado
-     com reticências, o que sumiria seria justamente o slug, que fica no final
-     e é a única parte que a pessoa escolheu. */
+  .tm-rodape {
+    margin-top: 13px;
+    padding: 0 4px;
+    text-align: center;
+    font-size: 9.5px;
+  }
+
+  /* Dados/migração: a lateral vira cabeçalho; só o formulário rola. */
+  .tm-painel--etapa {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .tm-etapa__aside {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 50px 20px 17px;
+    gap: 15px;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--tm-linha);
+    background:
+      radial-gradient(circle at 8% 0%, rgba(99,102,241,.13), transparent 42%),
+      rgba(255,255,255,.012);
+  }
+
+  .tm-etapa__aside::after,
+  .tm-aside-card { display: none; }
+
+  .tm-etapa__aside .pm-eyebrow { margin-bottom: 8px; }
+  .tm-passo {
+    margin: 0 0 8px;
+    font-size: 8px;
+  }
+
+  .tm-etapa__aside .pm-titulo {
+    max-width: 18ch;
+    font-size: clamp(23px, 6.8vw, 30px);
+  }
+
+  .tm-etapa__aside .pm-sub {
+    display: none;
+  }
+
+  .tm-etapas {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tm-etapas > span {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 28px;
+    grid-template-columns: 24px minmax(0,1fr);
+    gap: 6px;
+  }
+
+  .tm-etapas > span:not(:last-child)::after {
+    display: none;
+  }
+
+  .tm-etapas b {
+    width: 24px;
+    height: 24px;
+    font-size: 8.5px;
+  }
+
+  .tm-etapas small {
+    overflow: hidden;
+    font-size: 8.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tm-etapa__corpo {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 20px 16px 0;
+    overflow-y: auto;
+  }
+
+  .tm-form-cab {
+    margin-bottom: 18px;
+  }
+
+  .tm-form-cab strong { font-size: 13px; }
+  .tm-form-cab span { font-size: 9px; }
+
+  .pm-caixa .pm-form { gap: 16px; }
+  .pm-caixa .pm-dupla {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .pm-caixa .pm-entrada {
+    min-height: 46px;
+    font-size: 16px; /* evita zoom automático do Safari ao focar */
+  }
+
+  .pm-resumo__topo > strong { font-size: 16px; }
+  .pm-resumo__lista {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  .pm-resumo__lista li:nth-child(n+4):not(.is-mais) { display: none; }
+
   .tm-endereco__url {
-    white-space: normal; overflow: visible; text-overflow: clip;
-    overflow-wrap: anywhere; line-height: 1.45;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
   }
-  .tm-endereco { padding: 8px 10px; }
 
-  .tm-fichas { gap: 6px; }
-  .dl-root .tm-ficha { padding: 7px 11px; font-size: 12px; }
-  .tm-area { min-height: 62px; }
+  .tm-fichas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+
+  .tm-fichas--formatos { grid-template-columns: 1fr; }
+
+  .dl-root .tm-ficha {
+    width: 100%;
+    min-height: 42px;
+    justify-content: flex-start;
+    padding: 9px 10px;
+    border-radius: 12px;
+    font-size: 10px;
+    text-align: left;
+  }
+
+  .tm-area { min-height: 84px !important; }
+
+  .pm-caixa .pm-acoes {
+    margin: 3px -16px 0;
+    padding: 13px 16px calc(14px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .dl-root .pm-botao {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    padding: 11px 12px;
+    font-size: 10.5px;
+  }
+
+  .pm-caixa .pm-acoes .pm-botao--primario {
+    order: -1;
+    grid-column: 1 / -1;
+  }
+
+  .pm-caixa .pm-acoes:not(.pm-acoes--tres) > .pm-botao:not(.pm-botao--primario) {
+    grid-column: 1 / -1;
+  }
+
+  .pm-caixa .pm-acoes--tres {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pm-caixa .pm-acoes--tres .pm-botao--primario {
+    grid-column: 1 / -1;
+  }
+
+  /* Confirmação. */
+  .tm-pronto {
+    min-height: 100%;
+    justify-content: flex-start;
+    padding: 64px 18px calc(28px + env(safe-area-inset-bottom));
+  }
+
+  .tm-pronto__halo { top: -95px; }
+  .tm-envelope {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 14px;
+    border-radius: 17px;
+  }
+
+  .tm-pronto .pm-titulo {
+    max-width: 12ch;
+    font-size: clamp(30px, 9vw, 39px);
+  }
+
+  .tm-pronto__cartoes {
+    grid-template-columns: 1fr;
+    margin: 22px 0 20px;
+  }
+
+  .tm-pronto .tm-acoes {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .tm-pronto .tm-acoes .pm-botao--primario {
+    order: -1;
+  }
 }
-`;
+
+@media (max-width: 380px) {
+  .tm-sinais { flex-wrap: wrap; }
+  .tm-sinais > span { flex: 1 1 calc(50% - 4px); }
+  .tm-fichas { grid-template-columns: 1fr; }
+  .tm-etapas small { display: none; }
+}
+
+@media (max-height: 700px) and (min-width: 621px) {
+  .pm-caixa.tm-caixa-v2 { max-height: calc(100dvh - 28px); }
+  .pm-caixa.tm-caixa--dados,
+  .pm-caixa.tm-caixa--migracao { height: calc(100dvh - 28px); }
+  .tm-intro { padding-top: 42px; padding-bottom: 42px; }
+  .tm-escolha-wrap { padding-top: 38px; padding-bottom: 26px; }
+  .tm-etapa__aside { padding-top: 40px; padding-bottom: 26px; }
+  .tm-etapa__corpo { padding-top: 34px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pm-caixa.tm-caixa-v2 { animation: none; }
+  .dl-root .tm-opcao,
+  .tm-opcao__marca svg,
+  .tm-opcao__seta { transition-duration: 1ms !important; }
+}
+
+@keyframes tmModalEntra {
+  from { opacity: 0; transform: translateY(14px) scale(.975); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes tmModalEntraMobile {
+  from { opacity: .7; transform: translateY(28px); }
+  to { opacity: 1; transform: none; }
+}
+/* OMNIMOB_TRIAL_MODAL_V2_END */`;
 
 export default TrialModal;

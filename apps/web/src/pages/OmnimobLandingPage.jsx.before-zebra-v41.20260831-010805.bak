@@ -38,6 +38,13 @@ import LineSidebar from "../components/LineSidebar";
 import Counter from "../components/Counter";
 import SpecularButton from "../components/SpecularButton";
 import { TrialModal } from "../components/TrialModal";
+import {
+  MobileStickyCTA,
+  ProductStorySection,
+  TrustStrip,
+  trackLandingEvent,
+} from "../components/LandingGrowthV4"; // OMNIMOB_LANDING_GROWTH_V4_IMPORT
+import { ExitIntentModal } from "../components/ExitIntentModal"; // OMNIMOB_EXIT_INTENT_V1_IMPORT
 import { PLANOS, PACOTES, RECURSOS_PLANOS, RECURSOS_FLOW_PLANOS, planoInfo } from "../utils/planos";
 /* Renomeado no import: `MODULOS` sozinho colidiria com a leitura desta
    página, que fala de "módulos" no sentido de seções. */
@@ -260,7 +267,7 @@ const RECURSOS = [
 ];
 
 // De quantos em quantos milissegundos o carrossel avança sozinho.
-const RECURSO_INTERVALO = 3000;
+const RECURSO_INTERVALO = 3800;
 /* No carrossel do celular cada passo troca a tela E o texto ao lado dela; no
    desktop troca só a moldura, com as seis abas sempre à vista. Três segundos
    ali é ritmo de vitrine, aqui seria menos tempo do que a frase leva para ser
@@ -3170,10 +3177,10 @@ function ParedeDeDestaques() {
           turn={emMobile ? -8 : -12}
           perspective={emMobile ? 900 : 1400}
           depth={emMobile ? 80 : 120}
-          speed={emMobile ? 26 : 32}
+          speed={emMobile ? 22 : 24}
           variance={0.45}
           parallax={0}
-          lift={emMobile ? 0 : 26}
+          lift={emMobile ? 0 : 18}
           fade={emMobile ? 0.42 : 0.28}
           /* A peça no celular fica bem mais apagada. Numa tela estreita cabem
              três colunas do tamanho de meia tela cada, então a parede deixa de
@@ -3366,7 +3373,12 @@ function ConteudoDaLanding() {
      puxar a conversa depois. */
   const [trialAberto, setTrialAberto] = useState(false);
   const [planoDesejado, setPlanoDesejado] = useState("");
-  const abrirTeste = (plano = "") => { setPlanoDesejado(plano); setTrialAberto(true); };
+  const abrirTeste = (plano = "", origem = "") => {
+    const source = origem || (plano ? "pricing" : "landing");
+    trackLandingEvent("trial_open", { source, plan: plano || undefined });
+    setPlanoDesejado(plano);
+    setTrialAberto(true);
+  };
 
   /* Mensal ou anual. Começa no mensal de propósito: é o menor número da tela,
      e abrir no anual faria o cartão anunciar quatro dígitos para quem só quer
@@ -3445,6 +3457,18 @@ function ConteudoDaLanding() {
 
       <OmnimobSplash />
 
+      {/* OMNIMOB_EXIT_INTENT_V1_RENDER_START */}
+      <ExitIntentModal
+        trialAberto={trialAberto}
+        onTeste={() => abrirTeste("", "exit-intent")}
+      />
+      {/* OMNIMOB_EXIT_INTENT_V1_RENDER_END */}
+      {/* OMNIMOB_LANDING_GROWTH_V4_STICKY_START */}
+      <MobileStickyCTA
+        trialAberto={trialAberto}
+        onTeste={() => abrirTeste("", "mobile-sticky")}
+      />
+      {/* OMNIMOB_LANDING_GROWTH_V4_STICKY_END */}
       <TrialModal
         aberto={trialAberto}
         planos={PLANS}
@@ -3486,9 +3510,7 @@ function ConteudoDaLanding() {
 
               <Reveal delay={170}>
                 <p className="dl-lead">
-                  Do cadastro do imóvel ao lead fechado, num só lugar. Suba os imóveis, monte uma vitrine
-                  impecável sem escrever código, capture interessados e divulgue nas redes — com a
-                  inteligência artificial escrevendo o conteúdo por você.
+                  Imóveis, vitrine, leads e divulgação num só lugar — com um editor visual sem código e IA cuidando do conteúdo.
                 </p>
               </Reveal>
 
@@ -3588,8 +3610,7 @@ function ConteudoDaLanding() {
         <div className="dl-wrap dl-desafio__grade">
           <div className="dl-desafio__conteudo">
           <SectionHead eyebrow="O DESAFIO" eyebrowTone={GOLD} strong="Pare de perder cliente" soft="por falta de presença digital.">
-            Anúncio espalhado em grupo de WhatsApp, foto solta no Instagram, planilha desatualizada. O
-            interessado aparece, não encontra nada organizado e vai para a concorrência.
+            Anúncio espalhado, foto solta, planilha desatualizada. O cliente não espera você organizar tudo.
           </SectionHead>
 
           <Reveal className="dl-callout">
@@ -3630,30 +3651,20 @@ function ConteudoDaLanding() {
               <span className="dl-h2__soft">montada arrastando e soltando.</span>
             </h2>
             <p className="dl-lead" style={{ maxWidth: "460px" }}>
-              Posicione cabeçalho, destaques, imóveis e widgets onde quiser. Troque cores, suba um banner,
-              ajuste brilho e sobreposição, escreva o texto direto na página.
+              Monte sua vitrine arrastando blocos, ajuste cores e escreva direto na página.
             </p>
             <p className="dl-body" style={{ maxWidth: "460px" }}>
-              O layout do mobile é independente do desktop — e, se preferir, você copia um para o outro num
-              clique. Tudo salva sozinho enquanto você edita.
+              Desktop e mobile têm layouts independentes. Tudo é salvo automaticamente enquanto você edita.
             </p>
-            {/* Pequena de proposito. A seccao ja tem a tela do editor animada ao
-                lado, e o briefing foi explicito: aqui a ilustracao e apoio do
-                texto, nunca substituta da tela. */}
-            <img
-              className="dl-editor__desenho"
-              src="/ilustracoes/vitrine-montando.png"
-              alt="Pessoa encaixando um bloco numa página que está sendo montada"
-              width={600}
-              height={400}
-              loading="lazy"
-            />
           </Reveal>
 
           <EditorAoVivo />
         </div>
       </section>
 
+      {/* OMNIMOB_LANDING_GROWTH_V4_PRODUCT_START */}
+      <ProductStorySection onTeste={() => abrirTeste("", "product-story")} />
+      {/* OMNIMOB_LANDING_GROWTH_V4_PRODUCT_END */}
       {/* ── Recursos + mock ── */}
       <section id="recursos" className="dl-section">
         <div className="dl-wrap">
@@ -3671,8 +3682,7 @@ function ConteudoDaLanding() {
       <section className="dl-section dl-section--alt dl-section--compacto" id="integracoes">
         <div className="dl-wrap">
           <SectionHead eyebrow="CANAIS E INTEGRAÇÕES" strong="Conectada aos canais" soft="onde seu cliente já está.">
-            A Omnimob liga o cadastro do imóvel aos canais que realmente trazem cliente, com a IA cuidando do
-            conteúdo dentro da própria plataforma.
+            Do cadastro aos portais, redes e assinatura digital — sem espalhar a operação por várias ferramentas.
           </SectionHead>
 
           <GradeDeCanais />
@@ -3701,11 +3711,14 @@ function ConteudoDaLanding() {
 
         <div className="dl-wrap dl-porque__frente">
           <SectionHead eyebrow="POR QUE OMNIMOB" strong="O que muda no dia a dia" soft="de quem usa.">
-            Detalhes pequenos que aparecem toda semana na rotina da imobiliária.
+            Detalhes que economizam tempo toda semana na rotina da imobiliária.
           </SectionHead>
         </div>
       </section>
 
+      {/* OMNIMOB_LANDING_GROWTH_V4_TRUST_START */}
+      <TrustStrip />
+      {/* OMNIMOB_LANDING_GROWTH_V4_TRUST_END */}
       {/* ── Planos ── */}
       <section id="planos" className="dl-section dl-section--alt">
         <div className="dl-wrap">
@@ -7944,4 +7957,322 @@ ${editorCSS()}
 }
 
 /* OMNIMOB_COMPOSICAO_ILUSTRACOES_V2_1_FIM */
+
+/* OMNIMOB_HIERARQUIA_EDITORIAL_V3_INICIO */
+/*
+   V3 — hierarquia editorial da landing.
+
+   A pagina ja tem personalidade. Este bloco nao tenta acrescentar mais uma
+   linguagem visual; ele faz o contrario: cria dois picos de intensidade
+   (Hero e CTA final) e deixa o miolo respirar.
+
+   Objetivos:
+   - produto acima da decoracao;
+   - menos elementos competindo ao mesmo tempo;
+   - interacoes do miolo mais discretas;
+   - ilustracoes humanas usadas como pontuacao, nao como padrao;
+   - secoes de consulta mais compactas que secoes narrativas.
+*/
+
+/* ── CADENCIA DA PAGINA ─────────────────────────────────────────────────── */
+#recursos,
+#integracoes,
+#porque {
+  --pad-sec: clamp(54px, 6.4vw, 88px);
+}
+
+#planos {
+  --pad-sec: clamp(66px, 7.6vw, 106px);
+}
+
+/* Os cabecalhos do miolo ficam um pouco mais contidos. O Hero, o Manifesto e
+   o CTA final continuam fora desta regra e preservam a escala de campanha. */
+#recursos .dl-head,
+#integracoes .dl-head,
+#porque .dl-head,
+#planos .dl-head {
+  margin-bottom: clamp(28px, 3.5vw, 46px);
+}
+
+/* ── HERO: PRIMEIRO PICO ────────────────────────────────────────────────── */
+@media (min-width: 1025px) {
+  .dl-hero {
+    padding-top: clamp(138px, 13vw, 184px);
+    padding-bottom: clamp(82px, 8.5vw, 118px);
+  }
+
+  .dl-hero__grid {
+    gap: clamp(56px, 5.4vw, 78px);
+  }
+
+  /* O mock e a prova da promessa; ganha alguns pontos de escala. */
+  .dl-stage {
+    transform: scale(1.025);
+    transform-origin: 52% 50%;
+  }
+
+  .dl-stage__glow {
+    inset: 4% -11% -16% -11%;
+    filter: blur(16px);
+  }
+
+  /* Shapes continuam presentes, mas deixam de disputar com o mock. */
+  .dl-hero__shapes { opacity: 0.78; }
+  .dl-hud { opacity: 0.76; }
+}
+
+.dl-checks {
+  opacity: 0.86;
+}
+
+/* ── DESAFIO: NARRATIVA, MAS SEM VIRAR OUTRO HERO ───────────────────────── */
+#desafio .dl-callout {
+  box-shadow: none;
+  border-color: rgba(255,255,255,0.075);
+  background: rgba(255,255,255,0.025);
+}
+
+#desafio .dl-ghost {
+  opacity: 0.78;
+}
+
+/* ── EDITOR: INTERFACE PRIMEIRO, ILUSTRACAO DE APOIO ────────────────────── */
+@media (min-width: 1025px) {
+  #editor .dl-editor__desenho {
+    width: clamp(184px, 15.5vw, 228px);
+    right: clamp(-30px, -2vw, -14px);
+    opacity: 0.82;
+    filter: saturate(0.92);
+  }
+
+  #editor .dl-ed {
+    transform: scale(1.018);
+    transform-origin: 50% 50%;
+    box-shadow: 0 30px 62px -38px rgba(0,0,0,0.92);
+  }
+}
+
+/* ── RECURSOS: O MOCK PASSA A SER O ASSUNTO ─────────────────────────────── */
+@media (min-width: 861px) {
+  /* A aba selecionada deixa de virar um cartao branco inteiro. O acento indica
+     selecao, mas quem chama o olho e a tela do produto ao lado. */
+  .dl-root #recursos .dl-feature--aba.is-ativo {
+    background: rgba(129,140,248,0.075);
+    color: inherit;
+    box-shadow: inset 3px 0 0 rgba(129,140,248,0.68);
+  }
+
+  #recursos .dl-feature--aba.is-ativo .dl-feature__title {
+    color: var(--strong);
+  }
+  #recursos .dl-feature--aba.is-ativo .dl-feature__desc {
+    color: var(--subtle);
+  }
+  #recursos .dl-feature--aba.is-ativo .dl-index {
+    color: var(--placeholder);
+  }
+  #recursos .dl-feature--aba.is-ativo .dl-feature__icon {
+    color: #fff;
+    background: rgba(129,140,248,0.20);
+    border-color: rgba(129,140,248,0.34);
+  }
+
+  .dl-root #recursos .dl-feature--aba:hover {
+    background: rgba(255,255,255,0.018);
+  }
+
+  #recursos .dl-browser {
+    box-shadow: 0 24px 48px -28px rgba(0,0,0,0.72);
+  }
+
+  /* As esteiras continuam vivas, apenas deixam de correr como banner. */
+  #recursos .dl-esteira__linha {
+    animation-duration: 39s;
+  }
+  #recursos .dl-esteira__linha--dir {
+    animation-duration: 45s;
+  }
+  #recursos .dl-esteira__linha:last-child {
+    animation-duration: 42s;
+  }
+}
+
+/* ── INTEGRACOES: DE NOVE MINI-HEROS PARA UMA GRADE DE CONSULTA ─────────── */
+@media (min-width: 861px) {
+  #integracoes .cn-grade {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 9px;
+    margin-top: clamp(16px, 2.3vw, 26px);
+  }
+
+  #integracoes .cn-card {
+    aspect-ratio: 1 / 1.12;
+    min-height: 154px;
+    border-radius: 15px;
+  }
+
+  /* Ainda ha a recompensa de cor no hover, mas ela nao acende a secao inteira. */
+  #integracoes .cn-card__cor {
+    opacity: 0.025;
+  }
+  #integracoes .cn-card:hover .cn-card__cor,
+  #integracoes .cn-card:focus-within .cn-card__cor {
+    opacity: 0.82;
+  }
+
+  #integracoes .cn-card__repouso {
+    gap: 8px;
+  }
+}
+
+/* ── FLOW: UM GRANDE CAPITULO, NAO UMA SEQUENCIA DE CINCO CLIMAXES ──────── */
+.dl-manifesto__forma--a,
+.dl-manifesto__forma--b {
+  opacity: 0.62;
+}
+
+/* O fechamento ganha forca justamente porque perde a segunda ilustracao humana.
+   A cena do funil abre o capitulo; as tres telas provam o produto; a frase fecha. */
+.dl-manifesto__remate {
+  grid-template-columns: 1fr !important;
+  max-width: 780px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  text-align: center;
+  gap: 0 !important;
+}
+
+.dl-manifesto__remate-img {
+  display: none !important;
+}
+
+.dl-manifesto__remate .dl-manifesto__fecho {
+  order: 1 !important;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+/* Os tres mocks continuam sendo a prova, mas perdem um pouco da cara de card
+   promocional para parecer mais demonstracao de produto. */
+.dl-flowtela {
+  border-radius: 17px;
+}
+
+.dl-flowtela__quadro {
+  box-shadow: 0 8px 22px -19px rgba(10,10,11,0.42);
+}
+
+/* ── POR QUE OMNIMOB: PAREDE COMO ATMOSFERA, NAO COMO SEGUNDA PAGINA ────── */
+#porque {
+  min-height: clamp(460px, 55vh, 620px);
+}
+
+#porque .dl-porque__fundo.is-na-vista {
+  opacity: 0.68;
+  filter: saturate(0.74) brightness(0.82);
+}
+
+#porque .dl-porque__fundo::after {
+  background: radial-gradient(
+    ellipse 66% 70% at 50% 50%,
+    rgba(10,10,11,0.96) 0%,
+    rgba(10,10,11,0.88) 42%,
+    rgba(10,10,11,0.48) 68%,
+    rgba(10,10,11,0.08) 88%
+  );
+}
+
+/* No desktop o hover ainda revela a parede, mas o titulo nao desaparece quase
+   por completo. A secao continua legivel enquanto se explora. */
+@media (hover: hover) and (pointer: fine) {
+  #porque:hover .dl-porque__frente {
+    opacity: 0.62;
+    filter: blur(1.5px);
+  }
+
+  #porque:hover .dl-porque__fundo::after {
+    opacity: 0.72;
+  }
+}
+
+/* ── PLANOS: DECISAO CLARA, MENOS NEON PERMANENTE ───────────────────────── */
+#planos .dl-plans-onda.is-on {
+  opacity: 0.28;
+}
+
+#planos .dl-plan__tag {
+  animation-duration: 14s;
+  box-shadow: 0 4px 13px -8px color-mix(in srgb, var(--realce) 72%, transparent);
+}
+
+/* ── APP: UMA NOTA DE FUTURO, NAO MAIS UM PICO VISUAL ───────────────────── */
+#aplicativo::before {
+  opacity: 0.52;
+}
+
+@media (min-width: 1025px) {
+  #aplicativo .dl-app-soon__visual img {
+    width: min(88%, 680px);
+    opacity: 0.80;
+    filter: drop-shadow(0 24px 44px rgba(0,0,0,0.22));
+    translate: clamp(18px, 2.8vw, 44px) clamp(18px, 2.4vw, 34px);
+  }
+}
+
+/* ── CTA FINAL: SEGUNDO PICO ────────────────────────────────────────────── */
+.dl-cta {
+  padding: clamp(88px, 11vw, 152px) 0;
+}
+
+.dl-cta__fundo {
+  opacity: 1;
+}
+
+.dl-cta__brand::before {
+  opacity: 0.20;
+}
+
+.dl-cta__brand:hover::before {
+  opacity: 0.52;
+}
+
+/* ── TABLET / MOBILE ────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  /* Em tela estreita nao se tenta criar diferenca de escala pelo deslocamento. */
+  #editor .dl-ed { transform: none; }
+
+  .dl-manifesto__remate {
+    text-align: left;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .dl-manifesto__remate .dl-manifesto__fecho {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  /* No celular a densidade ja e alta por natureza; nao comprimimos ainda mais. */
+  #recursos,
+  #integracoes,
+  #porque,
+  #planos {
+    --pad-sec: clamp(58px, 16vw, 78px);
+  }
+
+  #aplicativo .dl-app-soon__visual img {
+    opacity: 0.92;
+    width: min(100%, 520px);
+  }
+
+  /* Parede continua atmosferica sem depender de hover. */
+  #porque .dl-porque__fundo.is-na-vista {
+    opacity: 0.58;
+    filter: saturate(0.72) brightness(0.80);
+  }
+}
+
+/* OMNIMOB_HIERARQUIA_EDITORIAL_V3_FIM */
 `;
