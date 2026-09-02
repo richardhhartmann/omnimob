@@ -1,5 +1,6 @@
 import { StatCard, StatGrid } from "./adminUi.jsx";
 import { SkeletonStats } from "./Skeleton";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    A casca que todo relatório usa.
@@ -43,14 +44,23 @@ export function CascaDeRelatorio({
   tourConteudo,
   children,
 }) {
+  /* O nome do relatório sobe para a faixa do painel, como o de toda tela. */
+  useTituloDaTela({ titulo, subtitulo });
+
   return (
-    <div className="main-content" style={{ maxWidth: "1100px" }}>
-      <header data-tour={tourCabecalho} style={{ marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "28px", marginBottom: "6px" }}>{titulo}</h1>
-        {subtitulo ? (
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>{subtitulo}</p>
-        ) : null}
-      </header>
+    /* ── SEM `main-content` AQUI ──────────────────────────────────────────
+       Esta div morava DENTRO do `<main class="main-content">` do layout, com a
+       mesma classe: o padding de 32px valia duas vezes (64 de cada lado), e o
+       recuo que o conteúdo ganha quando a barra abre valia duas vezes também —
+       era o vão gigante à esquerda nos quatro relatórios.
+
+       Aninhar a classe funcionava por acidente enquanto o `<main>` tinha
+       `margin: 0 auto` e um teto de 1200px: as duas caixas centralizadas
+       coincidiam e ninguém via a soma. */
+    <div className="casca-relatorio">
+      {/* A âncora do tour fica: dois passos do primeiro acesso a procuram, e o
+          cabeçalho que ela marcava mudou de lugar, não de existência. */}
+      <div data-tour={tourCabecalho} aria-hidden="true" />
 
       {erro ? <div className="error" style={{ marginBottom: "16px" }}>{erro}</div> : null}
 

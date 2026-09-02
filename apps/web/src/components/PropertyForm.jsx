@@ -21,6 +21,10 @@ import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { IconeCheck, IconeX } from "./Icones.jsx";
 import { PublicandoImovel } from "./PublicandoImovel.jsx";
 import { PORTAIS, IDS_PORTAIS, portaisDoImovel } from "../utils/portais.js";
+import { WarningCircle, X } from "@phosphor-icons/react";
+import {
+  PARAMETRO_RASCUNHO, avisoDeFotos, novaChaveDeRascunho, rotuloDoRascunho, valeGuardar,
+} from "../utils/rascunhoImovel";
 
 function formatCep(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -1452,7 +1456,7 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
   const autoIA = canUseIA && (session?.tenant?.autoGerarIA ?? true); // auto-preencher ao lançar foto
   const visibleSteps = canPublish ? STEPS : STEPS.slice(0, 3);
   const navigate = useNavigate();
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Auto-expande a textarea de descrição conforme o conteúdo cresce — ao colar
   // um texto grande ou quando a IA gera a descrição — sem barra de rolagem interna.
@@ -1756,6 +1760,108 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
     setComodidadesMsg("");
     setStep(0);
   }, [initialData]);
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     O CADASTRO INTERROMPIDO
+     ══════════════════════════════════════════════════════════════════════════
+
+     Esta é a tela mais longa do painel — quatro etapas, quarenta campos, as
+     fotos — e sair dela no meio não é acidente: falta a metragem exata, falta o
+     CEP, o cliente ligou. Até aqui, sair apagava tudo, e a pessoa recomeçava do
+     zero ou não voltava.
+
+     ── SÓ NO CADASTRO, NUNCA NA EDIÇÃO ──
+
+     Editar um imóvel que já existe tem outro desfecho para o abandono: o imóvel
+     continua lá, do jeito que estava. Guardar um rascunho de edição criaria uma
+     segunda verdade sobre o mesmo registro — e a pergunta "qual das duas vale?"
+     não tem resposta boa.
+
+     ── A CHAVE NASCE COM O FORMULÁRIO ──
+
+     E não com o primeiro salvamento. É ela que faz o autosave escrever sempre
+     na MESMA linha (o servidor faz upsert por `[usuário, chave]`), sem precisar
+     esperar um id de volta para não duplicar — e o autosave dispara enquanto a
+     pessoa digita, então esperar significaria três linhas antes da resposta da
+     primeira chegar.
+
+     ── AS FOTOS NÃO VÃO JUNTO ──
+
+     Elas só sobem ao Cloudinary no momento de publicar; até lá são `File` no
+     navegador. Guarda-se QUANTAS eram, e a faixa amarela lá em cima diz isso
+     antes de a pessoa preencher o resto — descobrir na validação, depois de
+     clicar em publicar, seria a pior hora possível.
+     ══════════════════════════════════════════════════════════════════════════ */
+  const chaveRascunho = useRef(null);
+  if (chaveRascunho.current === null) chaveRascunho.current = novaChaveDeRascunho();
+  const [avisoRascunho, setAvisoRascunho] = useState("");
+  const rascunhoPedido = searchParams.get(PARAMETRO_RASCUNHO);
+  const aoMudarRascunhos = useOutletContext()?.aoMudarRascunhos;
+
+  useEffect(() => {
+    if (isEditing || !rascunhoPedido || !tenantSlug) return undefined;
+    let vivo = true;
+    api.listarRascunhosImovel(tenantSlug)
+      .then((r) => {
+        if (!vivo) return;
+        const achado = (r?.rascunhos || []).find((x) => x.chave === rascunhoPedido);
+        if (!achado) {
+          showToast?.("Este cadastro não está mais em andamento.", "warning");
+          return;
+        }
+        /* A chave do formulário passa a ser a DELE: continuar digitando escreve
+           no mesmo rascunho, e não abre um segundo ao lado. */
+        chaveRascunho.current = achado.chave;
+
+        const dados = achado.dados || {};
+        setForm({
+          ...EMPTY,
+          ...dados,
+          /* As comodidades são um objeto de chaves fixas, e um rascunho gravado
+             antes de uma comodidade nova existir voltaria sem ela — o
+             formulário leria `undefined` onde espera booleano. O espalhamento
+             sobre o EMPTY resolve, e é a mesma tolerância que a hidratação da
+             edição já pratica logo acima. */
+          comodidades: { ...EMPTY_COMODIDADES, ...(dados.comodidades || {}) },
+          atributosIds: Array.isArray(dados.atributosIds) ? dados.atributosIds : [],
+        });
+        /* Nunca em Divulgar: aquela etapa exige um imóvel já salvo, e um
+           rascunho por definição não tem um. Duas é o último passo que existe
+           antes de publicar. */
+        setStep(Math.min(Number(achado.etapa) || 0, 2));
+        setSemIA(true); // o gate da foto travaria a tela retomada: já há texto aqui
+        setAvisoRascunho(avisoDeFotos(achado.fotos) || "");
+      })
+      .catch(() => {
+        if (vivo) showToast?.("Não consegui recuperar este cadastro.", "error");
+      });
+    return () => { vivo = false; };
+  }, [isEditing, rascunhoPedido, tenantSlug]);
+
+  /* O autosave. Debounce de 1,5 s sobre o formulário inteiro — o mesmo intervalo
+     que o editor de vitrine usa, e pela mesma razão: curto o bastante para não
+     perder trabalho, longo o bastante para não gravar a cada tecla.
+
+     `valeGuardar` é o que impede a lista de encher de nada: quem clica em "Novo
+     Imóvel", olha e sai não começou cadastro nenhum, e um rascunho vazio ensina
+     a ignorar a lista inteira. */
+  useEffect(() => {
+    if (isEditing || !tenantSlug || savedPropertyId) return undefined;
+    if (!valeGuardar(form, images.length)) return undefined;
+    const relogio = setTimeout(() => {
+      api.salvarRascunhoImovel(tenantSlug, chaveRascunho.current, {
+        titulo: rotuloDoRascunho(form) || null,
+        etapa: step,
+        fotos: images.length,
+        dados: form,
+      }).catch(() => {
+        /* Silencioso: é uma rede de segurança, e um toast vermelho a cada 1,5 s
+           por causa de uma conexão instável atrapalharia o cadastro de verdade
+           que a pessoa está fazendo. */
+      });
+    }, 1500);
+    return () => clearTimeout(relogio);
+  }, [form, step, images.length, isEditing, tenantSlug, savedPropertyId]);
 
   const tipoSelecionado = tipos.find((t) => String(t.id) === String(form.tipoImovelId));
   // A IA gera a partir das fotos, então os botões só aparecem com ao menos uma foto.
@@ -2293,6 +2399,18 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
     }
 
     if (!isEditing && saved?.id) {
+      /* O rascunho cumpriu o papel dele: o imóvel existe agora. Apagar aqui, e
+         não ao desmontar a tela, porque o caminho com permissão de publicar NÃO
+         sai daqui — segue para a etapa Divulgar —, e um rascunho sobrevivente
+         reapareceria na lista prometendo retomar um cadastro já publicado.
+
+         Não é aguardado e não derruba nada: o imóvel já está salvo, e falhar em
+         limpar custa uma linha a mais na lista, não o trabalho da pessoa. */
+      api.removerRascunhoImovel(tenantSlug, chaveRascunho.current)
+        .then(() => aoMudarRascunhos?.())
+        .catch(() => {});
+      setAvisoRascunho("");
+
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
       setImages([]);
       if (canPublish) {
@@ -2612,6 +2730,23 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       onDrop={handleFormDrop}
     >
       {confirmModal}
+
+      {/* ── O que o rascunho NÃO devolveu ───────────────────────────────────
+          As fotos ficam para trás por decisão (ver o bloco do autosave, acima),
+          e isso precisa ser dito ANTES de a pessoa preencher o resto — não na
+          validação, depois de ela clicar em publicar. Ela pode fechar o aviso:
+          quem já reenviou não precisa continuar lendo. */}
+      {avisoRascunho ? (
+        <div className="rsc-aviso">
+          <span className="rsc-aviso__icone"><WarningCircle size={17} weight="fill" /></span>
+          <span>
+            <strong>Cadastro retomado.</strong> {avisoRascunho}
+          </span>
+          <button type="button" className="rsc-aviso__x" aria-label="Fechar aviso" onClick={() => setAvisoRascunho("")}>
+            <X size={14} weight="bold" />
+          </button>
+        </div>
+      ) : null}
 
       <RepublishModal
         platform={republishAsk}

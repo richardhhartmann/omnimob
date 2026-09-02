@@ -86,19 +86,39 @@ export function estaEncerrado(estagio) {
    não toca no banco de propósito. É o que permite testá-la sem subir nada e o
    que a mantém utilizável em cima de um negócio que ainda não foi gravado. */
 export function podeFechar(negocio, { exigeContrato = true, contratoAssinado = false } = {}) {
-  const motivos = [];
+  /* ── CADA PENDÊNCIA TEM CHAVE, E NÃO SÓ FRASE ────────────────────────────
+     A frase é para a pessoa ler; a chave é para a tela decidir o que desenhar
+     ao lado dela — hoje um ícone por setor, amanhã um link para a tela que
+     resolve aquela pendência específica.
+
+     A alternativa seria a tela adivinhar pelo texto ("contém a palavra
+     jurídico"), e ela quebraria calada na primeira vez que alguém melhorasse a
+     redação de uma frase. O que a tela precisa saber, o servidor diz. */
+  const pendencias = [];
 
   if (!negocio?.juridicoOk) {
-    motivos.push("O setor jurídico ainda não validou a documentação deste negócio.");
+    pendencias.push({
+      chave: "juridico",
+      texto: "O setor jurídico ainda não validou a documentação deste negócio.",
+    });
   }
   if (!negocio?.financeiroOk) {
-    motivos.push("O setor financeiro ainda não validou este negócio.");
+    pendencias.push({
+      chave: "financeiro",
+      texto: "O setor financeiro ainda não validou este negócio.",
+    });
   }
   if (exigeContrato && !contratoAssinado) {
-    motivos.push("Nenhum contrato deste negócio foi assinado por todas as partes.");
+    pendencias.push({
+      chave: "contrato",
+      texto: "Nenhum contrato deste negócio foi assinado por todas as partes.",
+    });
   }
 
-  return { pode: motivos.length === 0, motivos };
+  /* `motivos` continua saindo como lista de FRASES. Ele é o que já viajava para
+     a tela, e trocar o tipo de um campo que já está no ar quebraria qualquer
+     leitor que não fosse atualizado no mesmo commit — inclusive um log. */
+  return { pode: pendencias.length === 0, pendencias, motivos: pendencias.map((p) => p.texto) };
 }
 
 /* ── A transição ──────────────────────────────────────────────────────────────
@@ -120,11 +140,14 @@ export function podeMover(negocio, destino, opcoes = {}) {
     return { ok: true };
   }
   if (destino === "GANHO") {
-    const { pode, motivos } = podeFechar(negocio, opcoes);
+    const { pode, pendencias, motivos } = podeFechar(negocio, opcoes);
     if (!pode) {
       return {
         ok: false,
         erro: "Este negócio ainda não pode ser fechado.",
+        /* As duas formas na recusa: `pendencias` é o que a tela desenha (tem a
+           chave do ícone), `motivos` é o que já estava aqui. */
+        pendencias,
         motivos,
       };
     }
@@ -136,5 +159,5 @@ export function podeMover(negocio, destino, opcoes = {}) {
  *  tentar arrastar. Mesma função da trava — se fossem duas, a tela prometeria
  *  uma coisa e o servidor recusaria por outra. */
 export function pendenciasParaFechar(negocio, opcoes = {}) {
-  return podeFechar(negocio, opcoes).motivos;
+  return podeFechar(negocio, opcoes).pendencias;
 }

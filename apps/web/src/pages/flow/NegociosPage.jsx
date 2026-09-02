@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { Plus, WarningCircle } from "@phosphor-icons/react";
+import { Plus, WarningCircle, Handshake } from "@phosphor-icons/react";
 import { api } from "../../api";
 import { PageHeader, SearchInput, FilterTabs, EmptyState, Chip } from "../../components/adminUi";
+import { ConviteDeCriacao } from "../../components/ConviteDeCriacao";
 import { ESTAGIOS_FLOW, ESTAGIO_PERDIDO, estagioInfo, reais, desdeQuando, canalRotulo } from "../../utils/flow";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -57,6 +58,17 @@ export function NegociosPage({ session }) {
         .filter(Boolean).some((v) => String(v).toLowerCase().includes(q)));
   }, [negocios, busca]);
 
+  /* ── A COLEÇÃO VAZIA É OUTRA CONVERSA QUE O FILTRO VAZIO ──────────────────
+     Só o primeiro merece um convite a criar; o segundo é uma pergunta que a
+     pessoa fez e que não teve resposta, e oferecer "crie o primeiro" ali seria
+     responder outra coisa. Mesma distinção de Clientes e Usuários.
+
+     `estagio`, `parados` e `escopo` vêm da URL, então o recorte pode chegar
+     pronto de um link — e um negócio existente escondido por ele NÃO é uma
+     carteira vazia. */
+  const temRecorte = Boolean(busca || estagio || parados || escopo);
+  const semNenhum = !carregando && negocios.length === 0 && !temRecorte;
+
   const opcoesEstagio = [
     { key: "", label: "Todos" },
     ...[...ESTAGIOS_FLOW, ESTAGIO_PERDIDO].map((e) => ({ key: e.key, label: e.rotulo })),
@@ -71,12 +83,30 @@ export function NegociosPage({ session }) {
             ? "Sem nenhum registro de contato nos últimos dias. Um deles ainda pode ser salvo com uma ligação."
             : "A carteira inteira, com busca e filtro. Para trabalhar por etapa, use o funil."
         }
+        /* Com a carteira vazia o botão sai: o convite logo abaixo já traz o
+           dele, e dois "Novo negócio" na mesma tela é ruído. */
         action={
-          <button type="button" className="btn-primary" onClick={() => navigate("/flow/negocios/novo")}>
-            <Plus size={15} weight="bold" style={{ marginRight: 6 }} /> Novo negócio
-          </button>
+          semNenhum ? null : (
+            <button type="button" className="btn-primary" onClick={() => navigate("/flow/negocios/novo")}>
+              <Plus size={15} weight="bold" style={{ marginRight: 6 }} /> Novo negócio
+            </button>
+          )
         }
       />
+
+      {semNenhum ? (
+        <ConviteDeCriacao
+          plena
+          accent="#ec0b5b"
+          icone={<Handshake size={34} weight="duotone" />}
+          titulo="Pronto para abrir seu primeiro negócio?"
+          texto="Aqui fica a carteira inteira, com busca e filtro. Os negócios chegam sozinhos pelas fontes de captação — e você abre à mão o que vem por indicação, telefone ou conversa de corredor."
+          acaoLabel="Abrir negócio"
+          onAcao={() => navigate("/flow/negocios/novo")}
+          tourId="flow-negocios-novo"
+        />
+      ) : (
+      <>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
         <SearchInput value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…" />
@@ -108,14 +138,9 @@ export function NegociosPage({ session }) {
       {carregando ? (
         <div className="skeleton-block" style={{ height: 300, borderRadius: 14 }} />
       ) : visiveis.length === 0 ? (
+        /* Só o recorte que não achou: a carteira vazia já saiu por cima. */
         <EmptyState
-          mensagem={
-            busca || estagio || parados
-              ? "Nenhum negócio bate com este recorte."
-              : "Nenhum negócio ainda. Eles chegam sozinhos pelas fontes de captação, ou você cria um aqui."
-          }
-          acaoLabel={busca || estagio || parados ? null : "Criar o primeiro"}
-          onAcao={() => navigate("/flow/negocios/novo")}
+          mensagem="Nenhum negócio bate com este recorte."
         />
       ) : (
         <div className="glass-panel" style={{ overflow: "hidden" }}>
@@ -157,6 +182,8 @@ export function NegociosPage({ session }) {
             </tbody>
           </table>
         </div>
+      )}
+      </>
       )}
     </div>
   );

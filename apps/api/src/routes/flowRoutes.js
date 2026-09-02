@@ -308,7 +308,25 @@ const negocioSchema = z.object({
   comissaoCorretorPerc: z.coerce.number().min(0).max(100).nullish(),
   canal: z.string().trim().optional(),
   origem: z.string().trim().max(120).optional(),
+  /* Só a CRIAÇÃO lê este campo — ver o `POST` logo abaixo. O `PUT` continua
+     ignorando estágio de propósito, e o motivo está escrito lá: se a edição o
+     aceitasse, a trava do fechamento viraria enfeite. Aceitá-lo aqui não abre
+     aquela porta, porque o `PUT` nunca o consulta. */
+  estagio: z.string().trim().optional(),
 });
+
+/* Encurta o nome de um arquivo para caber numa linha, preservando a extensão —
+ * ela é a parte que diz o que o documento É, e cortar pelo fim a jogaria fora.
+ * O corte fica no MEIO, que é onde mora o ruído (hash, timestamp, id). */
+function nomeCurto(nome, limite = 52) {
+  const texto = String(nome || "").trim();
+  if (texto.length <= limite) return texto || "arquivo";
+  const ponto = texto.lastIndexOf(".");
+  const ext = ponto > 0 && texto.length - ponto <= 6 ? texto.slice(ponto) : "";
+  const base = ext ? texto.slice(0, ponto) : texto;
+  const sobra = limite - ext.length - 1;
+  return `${base.slice(0, Math.max(8, sobra))}…${ext}`;
+}
 
 /** Nenhum id de outra imobiliária entra num negócio desta.
  *
@@ -355,10 +373,32 @@ flowRouter.post("/negocios", podeNegocios, async (req, res) => {
       responsavelId = escolhido?.id ?? null;
     }
 
+    /* ── ABRIR JÁ DENTRO DE UMA COLUNA ───────────────────────────────────
+       O funil virou quadro: a pessoa clica no "+" da etapa e o negócio nasce
+       ali, sem atravessar o formulário inteiro. Sem estágio no corpo o padrão
+       continua sendo LEAD, que é como todo negócio nascia antes disto.
+
+       GANHO fica de fora, e é a única exceção: é o único destino que a trava
+       protege, e nascer ganho seria a porta que o `PUT` já recusa. Quem quer
+       fechar move o cartão até lá — e aí `podeMover` responde o que falta. */
+    let estagio = "LEAD";
+    if (dados.estagio) {
+      if (!TODOS_OS_ESTAGIOS.includes(dados.estagio)) {
+        return res.status(400).json({ error: "Estágio desconhecido." });
+      }
+      if (dados.estagio === "GANHO") {
+        return res.status(422).json({
+          error: "Um negócio não nasce ganho. Abra-o numa etapa anterior e mova o cartão até Ganho — é lá que o jurídico, o financeiro e o contrato são conferidos.",
+        });
+      }
+      estagio = dados.estagio;
+    }
+
     const negocio = await prisma.negocio.create({
       data: {
         tenantId: req.tenant.id,
         titulo: dados.titulo || "Negócio sem título",
+        estagio,
         propertyId: dados.propertyId || null,
         compradorId: dados.compradorId || null,
         vendedorId: dados.vendedorId || null,
@@ -372,7 +412,11 @@ flowRouter.post("/negocios", podeNegocios, async (req, res) => {
       },
     });
 
-    await registrar(req, negocio.id, "CRIADO", { texto: "Negócio criado no painel." });
+    await registrar(req, negocio.id, "CRIADO", {
+      texto: estagio === "LEAD"
+        ? "Negócio criado no painel."
+        : `Negócio criado no painel, direto em ${ROTULO_ESTAGIO[estagio] || estagio}.`,
+    });
     return res.status(201).json(negocio);
   } catch (err) {
     console.error("[POST /flow/negocios]", err);
@@ -457,7 +501,13 @@ flowRouter.post("/negocios/:id/estagio", podeNegocios, async (req, res) => {
 
     const veredito = podeMover(negocio, destino, opcoesDaTrava(req.tenant, negocio));
     if (!veredito.ok) {
-      return res.status(422).json({ error: veredito.erro, motivos: veredito.motivos || [] });
+      /* `pendencias` é o que a tela desenha (traz a chave do ícone); `motivos`
+         segue junto porque já estava no ar. Ver `podeFechar`. */
+      return res.status(422).json({
+        error: veredito.erro,
+        pendencias: veredito.pendencias || [],
+        motivos: veredito.motivos || [],
+      });
     }
     if (veredito.semMudanca) return res.json({ negocio, semMudanca: true });
 
@@ -696,7 +746,12 @@ flowRouter.post("/negocios/:id/documentos", podeNegocios, async (req, res) => {
       },
     });
 
-    await registrar(req, negocio.id, "DOCUMENTO", { texto: `Documento anexado: ${d.nome}.` });
+    /* O nome vem do arquivo que a pessoa escolheu, e arquivo de celular chega
+       com nomes de 180 caracteres (o id que o WhatsApp e a câmera geram). Solto
+       na linha do histórico, um deles ocupava quatro linhas e empurrava a data
+       e o autor para fora do olho. O nome INTEIRO continua no documento; o que
+       encolhe é a frase da trilha. */
+    await registrar(req, negocio.id, "DOCUMENTO", { texto: `Documento anexado: ${nomeCurto(d.nome)}.` });
     return res.status(201).json(doc);
   } catch (err) {
     console.error("[POST /flow/negocios/:id/documentos]", err);

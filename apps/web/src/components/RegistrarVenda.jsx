@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { SelectCustom } from "./SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Registrar uma venda ou locação.
@@ -133,34 +134,48 @@ export function RegistrarVenda({ session, aoRegistrar }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "12px" }}>
             <label>
               <span style={rotulo}>Imóvel</span>
-              <select style={campo} value={form.propertyId} onChange={(e) => setForm({ ...form, propertyId: e.target.value })}>
-                <option value="">Selecione…</option>
-                {listas.imoveis.map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}
-              </select>
+              <SelectCustom
+                value={form.propertyId}
+                onChange={(v) => setForm({ ...form, propertyId: v })}
+                placeholder="Selecione…"
+                ariaLabel="Imóvel"
+                options={listas.imoveis.map((i) => ({ value: i.id, label: i.title }))}
+              />
             </label>
 
             <label>
               <span style={rotulo}>Cliente</span>
-              <select style={campo} value={form.clienteId} onChange={(e) => setForm({ ...form, clienteId: e.target.value })}>
-                <option value="">Selecione…</option>
-                {listas.clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+              <SelectCustom
+                value={form.clienteId}
+                onChange={(v) => setForm({ ...form, clienteId: v })}
+                placeholder="Selecione…"
+                ariaLabel="Cliente"
+                options={listas.clientes.map((c) => ({ value: c.id, label: c.nome }))}
+              />
             </label>
 
             <label>
               <span style={rotulo}>Corretor</span>
-              <select style={campo} value={form.usuarioId} onChange={(e) => setForm({ ...form, usuarioId: e.target.value })}>
-                <option value="">Selecione…</option>
-                {listas.usuarios.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-              </select>
+              <SelectCustom
+                value={form.usuarioId}
+                onChange={(v) => setForm({ ...form, usuarioId: v })}
+                placeholder="Selecione…"
+                ariaLabel="Corretor"
+                options={listas.usuarios.map((u) => ({ value: u.id, label: u.nome }))}
+              />
             </label>
 
             <label>
               <span style={rotulo}>Tipo</span>
-              <select style={campo} value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
-                <option value="VENDA">Venda</option>
-                <option value="ALUGUEL">Locação</option>
-              </select>
+              <SelectCustom
+                value={form.tipo}
+                onChange={(v) => setForm({ ...form, tipo: v })}
+                ariaLabel="Tipo"
+                options={[
+                  { value: "VENDA", label: "Venda" },
+                  { value: "ALUGUEL", label: "Locação" },
+                ]}
+              />
             </label>
 
             <label>

@@ -16,6 +16,7 @@ import { ShieldPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
 import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 /* Cada permissão carrega o ÍCONE do lugar que ela abre — o mesmo da barra
    lateral e do painel inicial. Marcar "Ver Relatórios" e reconhecer ali o
@@ -118,6 +119,11 @@ export function CargosPage({ session, onSessionUpdate }) {
   /* Vazio de verdade: nenhum cargo, e não é a busca escondendo. Troca a tela
      inteira pelo convite — ver `ConviteDeCriacao`. */
   const semNenhum = !initialLoading && cargos.length === 0 && !search.trim();
+
+  /* O nome da tela sobe para a faixa do painel. A rota já saberia o título
+     sozinha (`trilhaDoPainel`), mas o SUBTÍTULO só esta tela conhece — e sem
+     declará-lo aqui ele se perderia na mudança. Ver `contextoDeCabecalho`. */
+  useTituloDaTela({ titulo: "Cargos e Permissões", subtitulo: "O que cada cargo alcança dentro do painel." });
 
   function abrirCriar() {
     setEditando(null);
@@ -287,7 +293,7 @@ export function CargosPage({ session, onSessionUpdate }) {
     const risco = concessaoPendente ? PERMISSOES_DE_RISCO[concessaoPendente.key] : null;
 
     return (
-      <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {/* Aqui também, e não só na lista: é o "Cancelar" com alterações
             pendentes que pergunta, e o modal precisa estar montado nesta tela
             para a pergunta aparecer. */}
@@ -386,16 +392,15 @@ export function CargosPage({ session, onSessionUpdate }) {
   }
 
   return (
-    <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+    <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
       {/* A trilha vale na lista também, e não só nas sub-telas: ela começa no
           Dashboard, então até a tela de primeiro nível tem de onde ter descido. */}
-      <div style={{ marginBottom: "14px" }}>
-        <Trilha itens={degrausAte("/cargos", navigate)} />
-      </div>
+      {/* A trilha subiu para a faixa do painel, que a desenha a partir da rota —
+          uma só, no mesmo lugar em toda tela. Ver `CabecalhoDoPainel`. */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <header data-tour="cargos-cabecalho">
-          <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Cargos e Permissões</h1>
+          {/* Título subiu para a faixa do painel. */}
           <p style={{ color: "var(--text-muted)", margin: 0 }}>Defina o que cada cargo pode fazer no painel.</p>
         </header>
         {/* Vazio: o convite já traz o botão, a tecla e a âncora do tour. */}

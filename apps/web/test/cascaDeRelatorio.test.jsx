@@ -36,14 +36,27 @@ for (const arquivo of RELATORIOS) {
   });
 }
 
-test("o cabeçalho sai com título e subtítulo", () => {
+test("o título NÃO sai no conteúdo — ele subiu para a faixa do painel", () => {
+  /* ── O CONTRATO MUDOU DE PROPÓSITO ────────────────────────────────────────
+     A casca imprimia `<h1>{titulo}</h1>`. Hoje ela DECLARA o título
+     (`useTituloDaTela`) e quem desenha é o `CabecalhoDoPainel`, no alto do
+     painel — o mesmo lugar em toda tela, em vez de quatro tamanhos diferentes
+     conforme a página.
+
+     Este teste guarda a metade que dá para verificar sem navegador: que a casca
+     parou de imprimir. Se alguém devolver o `<h1>` aqui "para a tela não ficar
+     sem título", o resultado é título em dobro — e é este assert que avisa.
+
+     A publicação em si acontece num `useEffect`, que `renderToStaticMarkup` não
+     roda; ela é coberta pelo caminho de sempre: a tela abre e o nome aparece. */
   const html = renderToStaticMarkup(
     <CascaDeRelatorio titulo="Funil de vendas" subtitulo="De visita a lead.">
       <p>conteúdo</p>
     </CascaDeRelatorio>,
   );
-  assert.match(html, /Funil de vendas/);
-  assert.match(html, /De visita a lead\./);
+  assert.ok(!/Funil de vendas/.test(html), "o título voltou a ser impresso no conteúdo");
+  assert.ok(!/De visita a lead/.test(html), "o subtítulo voltou a ser impresso no conteúdo");
+  /* O que a casca continua desenhando: o que é dela. */
   assert.match(html, /conteúdo/);
 });
 

@@ -13,7 +13,9 @@ import {
   canalRotulo, TIPOS_DOCUMENTO, STATUS_CONTRATO,
 } from "../../utils/flow";
 import { ModalTravaDeFechamento } from "../../components/flow/ModalTravaDeFechamento.jsx";
+import { ListaDePendencias } from "../../components/flow/ListaDePendencias.jsx";
 import { PainelDeContrato } from "../../components/flow/PainelDeContrato.jsx";
+import { SelectCustom } from "../../components/SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    A FICHA DE UM NEGÓCIO — onde ele de fato é trabalhado.
@@ -240,7 +242,7 @@ export function NegocioPage({ session }) {
           <span className="flow-pendencias__selo"><LockKey size={16} weight="fill" /></span>
           <div>
             <strong>Para fechar este negócio, ainda falta:</strong>
-            <ul>{pendencias.map((m) => <li key={m}>{m}</li>)}</ul>
+            <ListaDePendencias itens={pendencias} />
           </div>
         </div>
       ) : null}
@@ -507,14 +509,28 @@ function EnvioDeDocumento({ enviando, aoEnviar }) {
 
   return (
     <div className="flow-envio">
-      <select value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Tipo do documento">
-        {TIPOS_DOCUMENTO.map((t) => <option key={t.key} value={t.key}>{t.rotulo}</option>)}
-      </select>
-      <select value={refereA} onChange={(e) => setRefereA(e.target.value)} aria-label="De quem é o documento">
-        <option value="comprador">do comprador</option>
-        <option value="vendedor">do vendedor</option>
-        <option value="imovel">do imóvel</option>
-      </select>
+      {/* `SelectCustom` e não `<select>`: o navegador desenha a lista do select
+          nativo por conta própria, sempre clara, e não aceita estilizar
+          `<option>` — no painel escuro ela abre como janela de outro programa.
+          Ver o cabeçalho de `SelectCustom`. */}
+      <SelectCustom
+        size="sm"
+        value={tipo}
+        onChange={setTipo}
+        ariaLabel="Tipo do documento"
+        options={TIPOS_DOCUMENTO.map((t) => ({ value: t.key, label: t.rotulo }))}
+      />
+      <SelectCustom
+        size="sm"
+        value={refereA}
+        onChange={setRefereA}
+        ariaLabel="De quem é o documento"
+        options={[
+          { value: "comprador", label: "do comprador" },
+          { value: "vendedor", label: "do vendedor" },
+          { value: "imovel", label: "do imóvel" },
+        ]}
+      />
       <label className={`flow-envio__botao${enviando ? " is-enviando" : ""}`}>
         {enviando ? "Enviando…" : "Anexar arquivo"}
         <input

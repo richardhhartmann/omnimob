@@ -4,6 +4,7 @@ import { ArrowLeft } from "@phosphor-icons/react";
 import { api } from "../../api";
 import { PageHeader } from "../../components/adminUi";
 import { CANAIS_FLOW } from "../../utils/flow";
+import { SelectCustom } from "../../components/SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    ABRIR UM NEGÓCIO À MÃO.
@@ -120,30 +121,38 @@ export function NegocioNovoPage({ session }) {
         <div className="flow-form__dupla">
           <label className="flow-campo">
             <span>Comprador (interessado)</span>
-            <select value={form.compradorId} onChange={(e) => marcar("compradorId", e.target.value)}>
-              <option value="">— a definir —</option>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
+            <SelectCustom
+              value={form.compradorId}
+              onChange={(v) => marcar("compradorId", v)}
+              ariaLabel="Comprador"
+              options={[{ value: "", label: "— a definir —" }, ...clientes.map((c) => ({ value: c.id, label: c.nome }))]}
+            />
           </label>
           <label className="flow-campo">
             <span>Vendedor (proprietário)</span>
-            <select value={form.vendedorId} onChange={(e) => marcar("vendedorId", e.target.value)}>
-              <option value="">— a definir —</option>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
+            <SelectCustom
+              value={form.vendedorId}
+              onChange={(v) => marcar("vendedorId", v)}
+              ariaLabel="Vendedor"
+              options={[{ value: "", label: "— a definir —" }, ...clientes.map((c) => ({ value: c.id, label: c.nome }))]}
+            />
           </label>
         </div>
 
         <label className="flow-campo">
           <span>Imóvel</span>
-          <select value={form.propertyId} onChange={(e) => marcar("propertyId", e.target.value)}>
-            <option value="">— a definir —</option>
-            {imoveis.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.title}{i.city ? ` · ${i.city}` : ""}
-              </option>
-            ))}
-          </select>
+          {/* A cidade vira `description` em vez de entrar no rótulo: numa lista
+              longa é ela que distingue dois "Apartamento 2 quartos", e numa
+              segunda linha ela se lê sem competir com o título. */}
+          <SelectCustom
+            value={form.propertyId}
+            onChange={(v) => marcar("propertyId", v)}
+            ariaLabel="Imóvel"
+            options={[
+              { value: "", label: "— a definir —" },
+              ...imoveis.map((i) => ({ value: i.id, label: i.title, description: i.city || undefined })),
+            ]}
+          />
         </label>
 
         <div className="flow-form__dupla">
@@ -158,24 +167,31 @@ export function NegocioNovoPage({ session }) {
           </label>
           <label className="flow-campo">
             <span>Responsável</span>
-            <select value={form.responsavelId} onChange={(e) => marcar("responsavelId", e.target.value)}>
-              {/* O rótulo diz o que acontece, e não "nenhum": a fila é o
-                  comportamento padrão e escondê-la faria parecer que o negócio
-                  ficaria órfão. */}
-              <option value="">Distribuir pela fila (por carga)</option>
-              {usuarios.filter((u) => u.ativo).map((u) => (
-                <option key={u.id} value={u.id}>{u.nome}</option>
-              ))}
-            </select>
+            {/* O rótulo diz o que acontece, e não "nenhum": a fila é o
+                comportamento padrão e escondê-la faria parecer que o negócio
+                ficaria órfão. A segunda linha do `SelectCustom` cabe a
+                explicação que antes não cabia entre parênteses. */}
+            <SelectCustom
+              value={form.responsavelId}
+              onChange={(v) => marcar("responsavelId", v)}
+              ariaLabel="Responsável"
+              options={[
+                { value: "", label: "Distribuir pela fila", description: "Escolhe por carga, como nos leads." },
+                ...usuarios.filter((u) => u.ativo).map((u) => ({ value: u.id, label: u.nome })),
+              ]}
+            />
           </label>
         </div>
 
         <div className="flow-form__dupla">
           <label className="flow-campo">
             <span>De onde veio</span>
-            <select value={form.canal} onChange={(e) => marcar("canal", e.target.value)}>
-              {CANAIS_FLOW.map((c) => <option key={c.key} value={c.key}>{c.rotulo}</option>)}
-            </select>
+            <SelectCustom
+              value={form.canal}
+              onChange={(v) => marcar("canal", v)}
+              ariaLabel="De onde veio"
+              options={CANAIS_FLOW.map((c) => ({ value: c.key, label: c.rotulo }))}
+            />
           </label>
           <label className="flow-campo">
             <span>Detalhe da origem</span>

@@ -1,5 +1,6 @@
 import { spawnRipple } from "../utils/rippleDrop";
 import { TeclaDeAtalho } from "./ContextoDeAtalhos.jsx";
+import { MenuDeCanto } from "./MenuDeCanto.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O cartão dos índices do painel.
@@ -27,6 +28,11 @@ import { TeclaDeAtalho } from "./ContextoDeAtalhos.jsx";
 
 export function CartaoDeMenu({
   icon, title, desc, description, accent, onClick, tourId, acao, tecla,
+  /* Os três pontinhos no canto, quando este destino guarda mais do que o
+     próprio destino. Vem pronto de fora — é o MESMO objeto que a barra lateral
+     usa no item de igual nome, e montá-lo duas vezes daria duas listas de
+     opções para a mesma coisa. Ver `MenuDeCanto`. */
+  menu,
 }) {
   /* `desc` e `description` porque as telas chamavam de dois jeitos — as três de
      índice usavam `desc`, o Dashboard usava `description`. Aceitar os dois foi
@@ -34,7 +40,7 @@ export function CartaoDeMenu({
   const texto = desc ?? description;
   const cor = accent || "#94a3b8";
 
-  return (
+  const cartao = (
     <button
       type="button"
       onClick={onClick}
@@ -96,5 +102,23 @@ export function CartaoDeMenu({
         <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>{texto}</div>
       </div>
     </button>
+  );
+
+  /* O "⋮" é IRMÃO do cartão, nunca filho: os dois são `<button>`, e botão
+     dentro de botão é HTML inválido — o navegador desmonta a árvore e o clique
+     de dentro nunca chega. A caixa abraça os dois, e o CSS empurra o selo da
+     tecla para o lado, porque os dois disputavam o mesmo canto. */
+  if (!menu?.itens?.length) return cartao;
+
+  return (
+    <div className="mkb-hospedeiro">
+      {cartao}
+      <MenuDeCanto
+        itens={menu.itens}
+        rotulo={menu.rotulo || `Mais opções de ${title}`}
+        badge={menu.badge || 0}
+        className="mkb-caixa--cartao"
+      />
+    </div>
   );
 }

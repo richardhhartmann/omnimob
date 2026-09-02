@@ -5,7 +5,11 @@ import { notificarRequisicao } from "./utils/pulsoTrial";
    o Express não casa com rota nenhuma — a resposta vira 404 em TODA requisição,
    sem erro de CORS nem nada que aponte a causa. Normalizar aqui deixa a
    variável de ambiente à prova de barra sobrando. */
-const API_URL = (import.meta.env.VITE_API_URL || "https://api.omnimob.app").replace(/\/+$/, "");
+/* `?.` no `env` pelo mesmo motivo de `dominioVitrine.js` e `enderecoVitrine.js`:
+   fora do Vite (a suíte de testes roda no Node puro) `import.meta.env` é
+   `undefined`, e a leitura direta derruba o módulo na IMPORTAÇÃO — junto com
+   tudo que o importa, ainda que o teste não encoste em nenhuma requisição. */
+const API_URL = (import.meta.env?.VITE_API_URL || "https://api.omnimob.app").replace(/\/+$/, "");
 
 let authToken = null;
 let adminToken = null;
@@ -186,6 +190,27 @@ export const api = {
       method: "PUT",
       headers: { "x-tenant-slug": tenantSlug },
       body: JSON.stringify(payload),
+    }),
+
+  /* ── Cadastros de imóvel interrompidos ──────────────────────────────────
+     O rascunho do formulário, guardado por PESSOA no servidor. A `chave` é
+     gerada no navegador (ver `utils/rascunhoImovel.js`) e o `PUT` faz upsert
+     por ela — é o que deixa o autosave idempotente sem esperar um id de volta.
+     `remover` é chamado nos dois desfechos: publicou, ou descartou. */
+  listarRascunhosImovel: (tenantSlug) =>
+    request("/api/properties/rascunhos", { headers: { "x-tenant-slug": tenantSlug } }),
+
+  salvarRascunhoImovel: (tenantSlug, chave, payload) =>
+    request(`/api/properties/rascunhos/${encodeURIComponent(chave)}`, {
+      method: "PUT",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+
+  removerRascunhoImovel: (tenantSlug, chave) =>
+    request(`/api/properties/rascunhos/${encodeURIComponent(chave)}`, {
+      method: "DELETE",
+      headers: { "x-tenant-slug": tenantSlug },
     }),
 
   /* `canais` é a lista de onde o anúncio também deve sair (FACEBOOK,

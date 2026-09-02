@@ -14,6 +14,7 @@ import { EmptyState } from "./adminUi.jsx";
 import { ExcluirImovel } from "./ExcluirImovel.jsx";
 import { ConviteDeCriacao } from "./ConviteDeCriacao.jsx";
 import { HouseLine } from "@phosphor-icons/react";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 // ─── Selo do tipo de contrato ────────────────────────────────────────────────
 
@@ -225,6 +226,20 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
     });
   }, [properties, searchTerm, typeFilter, minPriceFilter, maxPriceFilter, bedroomsFilter, cityFilter]);
 
+  /* Depois de `filteredProperties`, e não antes: o subtítulo lê a contagem
+     filtrada, e ler uma `const` acima da declaração dela é ReferenceError —
+     derruba a tela inteira, não só o título.
+
+     "Mostrando 0 de 0 imóveis" é a frase mais desanimadora possível para quem
+     acabou de assinar. Com o acervo vazio o subtítulo diz o que a tela é, e a
+     contagem volta quando houver o que contar. */
+  useTituloDaTela({
+    titulo: "Portfólio Ativo",
+    subtitulo: acervoVazio
+      ? "Tudo o que você cadastrar aparece aqui."
+      : `Mostrando ${filteredProperties.length} de ${properties.length} imóveis`,
+  });
+
   const getStatusColor = (status) => {
     switch (status) {
       case "ACTIVE":
@@ -254,7 +269,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
   };
 
   return (
-    <section className="main-content" style={{ animation: "fadeIn 0.4s ease-out", display: "flex", flexDirection: "column", gap: "24px" }}>
+    <section style={{ animation: "fadeIn 0.4s ease-out", display: "flex", flexDirection: "column", gap: "24px" }}>
       {confirmModal}
       {excluindo ? (
         <ExcluirImovel
@@ -274,22 +289,9 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
       <div className={acervoVazio ? undefined : "glass-panel"} style={{ padding: acervoVazio ? "0 0 4px" : "24px" }}>
         {/* O portfólio é subitem de Gerenciar Imóveis na barra, e não tinha como
             subir de volta a não ser pelo menu lateral. */}
-        <div style={{ marginBottom: "14px" }}>
-          <Trilha itens={degrausAte("/imoveis/portfolio", navigate)} />
-        </div>
-        <div data-tour="portfolio-cabecalho" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
-          <div>
-            <h2 style={{ fontSize: "24px", fontWeight: "700", margin: 0 }}>Portfólio Ativo</h2>
-            {/* "Mostrando 0 de 0 imóveis" é a frase mais desanimadora possível
-                para quem acabou de assinar. Com o acervo vazio o subtítulo diz o
-                que a tela é, e a contagem volta quando houver o que contar. */}
-            <p style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>
-              {acervoVazio
-                ? "Tudo o que você cadastrar aparece aqui."
-                : `Mostrando ${filteredProperties.length} de ${properties.length} imóveis`}
-            </p>
-          </div>
-
+        {/* Título, subtítulo e trilha subiram para a faixa do painel. A âncora
+            do tour fica, porque um passo do primeiro acesso aponta para ela. */}
+        <div data-tour="portfolio-cabecalho" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
           <div className="ui-segmentado" style={{ display: acervoVazio ? "none" : "flex", borderRadius: "8px", padding: "4px" }}>
             <button
               onClick={() => setViewMode("grid")}

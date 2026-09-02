@@ -3,6 +3,7 @@ import { CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { api } from "../../api";
 import { FLOW_ACENTO } from "../../utils/modulos";
 import { reais } from "../../utils/flow";
+import { SelectCustom } from "../SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    CONFIGURAÇÕES → OMNIMOB FLOW.
@@ -131,12 +132,12 @@ export function SecaoFlow({ session, Secao, showToast }) {
         <div className="flow-form__dupla" style={{ marginTop: 14 }}>
           <label className="flow-campo">
             <span>Provedor</span>
-            <select
+            <SelectCustom
               value={form.assinaturaProvedor}
-              onChange={(e) => setForm((f) => ({ ...f, assinaturaProvedor: e.target.value }))}
-            >
-              {PROVEDORES.map((p) => <option key={p.key} value={p.key}>{p.rotulo}</option>)}
-            </select>
+              onChange={(v) => setForm((f) => ({ ...f, assinaturaProvedor: v }))}
+              ariaLabel="Provedor de assinatura digital"
+              options={PROVEDORES.map((p) => ({ value: p.key, label: p.rotulo }))}
+            />
             <small className="flow-cfg-dica">{provedor.nota}</small>
           </label>
           {provedor.campoConta ? (

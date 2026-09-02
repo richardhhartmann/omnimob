@@ -767,6 +767,7 @@ model Usuario {
   vendas          Venda[]
   tutorial        UsuarioTutorial[]
   chamados        Chamado[]
+  rascunhosImovel RascunhoImovel[]
   /**
    * Identificador que o registro tinha no sistema de origem, quando veio de uma
    * importação. Nulo em tudo que nasceu aqui dentro.
@@ -998,6 +999,64 @@ model UsuarioTutorial {
   @@unique([usuarioId, etapa])
   @@index([tenantId, usuarioId])
   @@map("tb_usuario_tutorial")
+}
+
+/**
+ * ── Cadastro de imóvel interrompido ────────────────────────────────────────
+ *
+ * O formulário de imóvel é a tela mais longa do painel: quatro etapas, quarenta
+ * campos e as fotos. Até aqui, sair dele sem salvar apagava tudo — e sair não é
+ * exceção, é o normal: falta a metragem exata, falta o CEP, o cliente ligou.
+ * A pessoa voltava e recomeçava do zero, ou não voltava.
+ *
+ * ── POR QUE UMA TABELA, E NÃO O `localStorage` ──
+ *
+ * O rascunho é do TRABALHO, não do navegador. Quem começou o cadastro no
+ * computador da loja e terminaria no notebook de casa perderia tudo; e o
+ * `localStorage` do painel já é usado para preferência de pessoa (tema, zoom do
+ * editor), que é outra coisa — some junto com o cache sem consequência nenhuma.
+ * Aqui sumir tem consequência.
+ *
+ * ── A CHAVE VEM DO CLIENTE ──
+ *
+ * `chave` é gerada no navegador quando o formulário abre, e o servidor faz
+ * upsert por `[usuarioId, chave]`. É o que torna o autosave idempotente: o
+ * primeiro salvamento e os cinquenta seguintes escrevem na MESMA linha, sem
+ * o cliente precisar esperar um id de volta para não duplicar.
+ *
+ * ── O QUE NÃO ENTRA ──
+ *
+ * As fotos. Elas só sobem ao Cloudinary no momento de publicar (são objetos
+ * `File` no navegador até lá), e enviá-las por causa de um cadastro que talvez
+ * nunca seja concluído gastaria cota da conta com o que foi abandonado.
+ * `fotos` guarda só QUANTAS havia, para a tela avisar quantas reenviar.
+ *
+ * Não entra na trilha de auditoria (`services/auditoria.js` tem lista de
+ * dentro): um autosave a cada segundo e meio a encheria de ruído, e rascunho
+ * não é ato que alguém precise explicar depois.
+ */
+model RascunhoImovel {
+  id           String   @id @default(cuid()) @map("rsc_id")
+  tenantId     String   @map("tenant_id")
+  usuarioId    String   @map("usu_id")
+  chave        String   @map("rsc_chave")
+  /* Como a pessoa reconhece o rascunho na lista. O título que ela digitou, ou
+     o endereço, ou nada — e "nada" é um estado legítimo: quem parou na primeira
+     etapa não tem como ter escrito um título ainda. */
+  titulo       String?  @map("rsc_titulo")
+  /* Em que etapa do formulário ela estava. É o que faz "Retomar" devolver a
+     tela onde parou, e não o começo. */
+  etapa        Int      @default(0) @map("rsc_etapa")
+  fotos        Int      @default(0) @map("rsc_fotos")
+  dados        Json     @map("rsc_dados")
+  criadoEm     DateTime @default(now()) @map("created_at")
+  atualizadoEm DateTime @updatedAt @map("updated_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, chave])
+  @@index([tenantId, usuarioId, atualizadoEm])
+  @@map("tb_rascunho_imovel")
 }
 
 // ─── Cliente ─────────────────────────────────────────────────────────────────

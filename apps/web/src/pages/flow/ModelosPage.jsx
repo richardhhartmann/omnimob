@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Plus, Trash, Scroll, Copy } from "@phosphor-icons/react";
 import { api } from "../../api";
-import { PageHeader, EmptyState } from "../../components/adminUi";
+import { PageHeader } from "../../components/adminUi";
+import { ConviteDeCriacao } from "../../components/ConviteDeCriacao";
+import { SelectCustom } from "../../components/SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    MODELOS DE MINUTA — o texto do contrato com marcadores no lugar dos dados.
@@ -94,13 +96,20 @@ export function ModelosPage({ session }) {
 
   if (carregando) return <div className="skeleton-block" style={{ height: 320, borderRadius: 14 }} />;
 
+  /* A coleção INTEIRA vazia — e com o editor fechado, senão o convite brigaria
+     com a minuta que ele mesmo acabou de abrir. */
+  const semNenhum = !editando && modelos.length === 0;
+
   return (
     <div data-tour="flow-modelos">
       <PageHeader
         title="Modelos de minuta"
         subtitle="O texto do contrato com marcadores no lugar dos dados. O sistema preenche cruzando comprador, vendedor e imóvel."
+        /* Com a tela vazia o botão sai: o convite abaixo já traz o dele — e o
+           dele começa pelo modelo pronto, que é o caminho certo para quem
+           nunca escreveu uma minuta com marcadores. */
         action={
-          !editando ? (
+          !editando && !semNenhum ? (
             <button
               type="button" className="btn-primary"
               onClick={() => setEditando({ nome: "", tipo: "VENDA", corpo: "", ativo: true })}
@@ -125,12 +134,17 @@ export function ModelosPage({ session }) {
               </label>
               <label className="flow-campo">
                 <span>Tipo</span>
-                <select value={editando.tipo} onChange={(e) => setEditando((m) => ({ ...m, tipo: e.target.value }))}>
-                  <option value="VENDA">Compra e venda</option>
-                  <option value="LOCACAO">Locação</option>
-                  <option value="AUTORIZACAO">Autorização de venda</option>
-                  <option value="OUTRO">Outro</option>
-                </select>
+                <SelectCustom
+                  value={editando.tipo}
+                  onChange={(v) => setEditando((m) => ({ ...m, tipo: v }))}
+                  ariaLabel="Tipo da minuta"
+                  options={[
+                    { value: "VENDA", label: "Compra e venda" },
+                    { value: "LOCACAO", label: "Locação" },
+                    { value: "AUTORIZACAO", label: "Autorização de venda" },
+                    { value: "OUTRO", label: "Outro" },
+                  ]}
+                />
               </label>
             </div>
 
@@ -191,11 +205,16 @@ export function ModelosPage({ session }) {
             ))}
           </aside>
         </div>
-      ) : modelos.length === 0 ? (
-        <EmptyState
-          mensagem="Nenhuma minuta cadastrada. Comece pelo modelo de compra e venda que já vem pronto — ele é editável."
+      ) : semNenhum ? (
+        <ConviteDeCriacao
+          plena
+          accent="#ec0b5b"
+          icone={<Scroll size={34} weight="duotone" />}
+          titulo="Pronto para cadastrar sua primeira minuta?"
+          texto="É o texto do contrato com marcadores no lugar dos dados — o sistema preenche cruzando comprador, vendedor e imóvel. Comece pelo modelo de compra e venda que já vem pronto: ele é editável, e é a forma mais rápida de ver os marcadores funcionando."
           acaoLabel="Começar pelo modelo pronto"
           onAcao={() => setEditando({ nome: sugestao?.nome || "", tipo: sugestao?.tipo || "VENDA", corpo: sugestao?.corpo || "", ativo: true })}
+          tourId="flow-modelos-novo"
         />
       ) : (
         <div className="flow-modelos">

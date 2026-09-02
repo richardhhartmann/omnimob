@@ -88,8 +88,10 @@ test("CartaoDePublicacao monta nos três estados", () => {
 });
 
 test("CascaDeRelatorio monta com e sem métricas", () => {
+  /* O título não entra mais no HTML da casca: ele é declarado e desenhado na
+     faixa do painel. Ver `cascaDeRelatorio.test.jsx` para o porquê. */
   const semNada = renderToStaticMarkup(<CascaDeRelatorio titulo="X"><p>c</p></CascaDeRelatorio>);
-  assert.match(semNada, /X/);
+  assert.match(semNada, /<p>c<\/p>/);
 
   const cheia = renderToStaticMarkup(
     <CascaDeRelatorio
@@ -102,8 +104,8 @@ test("CascaDeRelatorio monta com e sem métricas", () => {
       <p>c</p>
     </CascaDeRelatorio>,
   );
-  assert.match(cheia, /sub/);
-  assert.match(cheia, /f/);
+  assert.match(cheia, /f<\/span>/);   // os filtros
+  assert.match(cheia, /stat-card|A</);  // a faixa de métricas
 });
 
 test("GradeDePermissoes monta com e sem travadas", () => {

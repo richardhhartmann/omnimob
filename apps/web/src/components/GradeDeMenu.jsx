@@ -5,6 +5,7 @@ import { degrausAte } from "../utils/trilhaDoPainel";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { CartaoDeMenu } from "./CartaoDeMenu.jsx";
 import { tourAtivo } from "../utils/tourAtivo";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 /* ── A grade dos índices do painel ───────────────────────────────────────────
 
@@ -154,22 +155,18 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
     return () => window.removeEventListener("keydown", aoTeclar, true);
   }, [paginado, visiveis]);
 
+  /* O título e a trilha subiram para a faixa do `AdminLayout`. A grade continua
+     DECLARANDO como a tela se chama — quem sabe que este índice é "Gerenciar
+     Imóveis" é ela —, e deixou de desenhar isso. Ver `contextoDeCabecalho`. */
+  useTituloDaTela({ titulo, subtitulo });
+
   return (
     <>
-      {titulo ? (
-        <div data-tour={tourCabecalho} style={{ marginBottom: "24px", padding: "32px 0" }}>
-          {/* A trilha dos três índices — Imóveis, Relatórios e Configurações —
-              sai daqui pelo mesmo motivo que a do Flow sai do `PageHeader`: um
-              índice novo nasce com ela, e ninguém precisa lembrar. */}
-          {degraus.length > 1 ? (
-            <div style={{ marginBottom: "12px" }}><Trilha itens={degraus} /></div>
-          ) : null}
-          <h2 style={{ margin: "0 0 6px", fontSize: "26px", fontWeight: 700 }}>{titulo}</h2>
-          {subtitulo ? (
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "15px" }}>{subtitulo}</p>
-          ) : null}
-        </div>
-      ) : null}
+      {/* A âncora do tour SOBREVIVE ao cabeçalho que ela marcava. Dois passos do
+          primeiro acesso procuram `[data-tour="inicio-saudacao"]` para dizer
+          "este é o seu painel", e sem um elemento aqui o tour pularia calado.
+          Ela mede a largura da grade, que é o que o balão do tour precisa. */}
+      <div data-tour={tourCabecalho} aria-hidden="true" />
 
       <div
         /* A `key` é a página: trocá-la remonta a grade e a entrada roda de
@@ -204,7 +201,7 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
             da grade; a altura continua sendo a do cartão lá dentro. */}
         {reserva.map((card, i) => (
           <div key={`reserva-${i}`} className="menu-grade__reserva" aria-hidden="true">
-            <CartaoDeMenu {...card} tecla={undefined} acao={undefined} />
+            <CartaoDeMenu {...card} tecla={undefined} acao={undefined} menu={undefined} />
           </div>
         ))}
       </div>

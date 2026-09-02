@@ -22,6 +22,11 @@ import { abasVisiveis } from "../utils/abasConfiguracoes";
 import { podeImportar } from "./ImportadorDados.jsx";
 import { SeloBeta } from "./SeloBeta.jsx";
 import { MenuDoPerfil } from "./MenuDoPerfil.jsx";
+import { MenuDeCanto } from "./MenuDeCanto.jsx";
+import { CabecalhoDoPainel } from "./CabecalhoDoPainel.jsx";
+import { BuscaDeAtalhos } from "./BuscaDeAtalhos.jsx";
+import { ProvedorDeCabecalho } from "../utils/contextoDeCabecalho.jsx";
+import { ModalRascunhosDeImovel } from "./RascunhosDeImovel.jsx";
 import { ModalPreferencias, ModalMeusDados } from "./ModaisDoPerfil.jsx";
 import { TEMAS, observarSistema, temaEfetivo, temaEscolhido } from "../utils/temaDoPainel";
 import { lerDoTenant, lerDoUsuario, gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
@@ -116,7 +121,7 @@ function SeloPlano({ plano }) {
    achar o item — nomeado de propósito, em vez de seletor estrutural: um
    `.ds-nav > div:nth-child(3) a` quebraria calado no dia em que um grupo novo
    entrar no meio do menu. */
-function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge, tourId, beta, bloqueado }) {
+function NavItem({ Icon, label, active, onClick, href, collapsed, external, badge, tourId, beta, bloqueado, menu }) {
   /* `has-beta` solta o rótulo do `flex: 1` para o selo sentar ENCOSTADO no
      nome, e não na borda direita do item. Na borda ele leria como o contador de
      leads, que é o outro elemento que mora ali. */
@@ -167,7 +172,30 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
     </button>
   );
 
-  return <SideTooltip label={label} collapsed={collapsed}>{el}</SideTooltip>;
+  const comDica = <SideTooltip label={label} collapsed={collapsed}>{el}</SideTooltip>;
+
+  /* ── Os três pontinhos, quando o item guarda mais do que o destino dele ────
+     O "⋮" é IRMÃO do item, e não filho: os dois seriam `<button>`, e botão
+     dentro de botão é HTML inválido — o navegador desmonta a árvore e o clique
+     de dentro nunca chega. A caixa `.mkb-hospedeiro` abraça os dois, e o CSS
+     põe o "⋮" onde o contador de leads já mora. Ver `MenuDeCanto`. */
+  if (!menu?.itens?.length) return comDica;
+
+  return (
+    <span className="mkb-hospedeiro">
+      {comDica}
+      <MenuDeCanto
+        itens={menu.itens}
+        rotulo={menu.rotulo || `Mais opções de ${label}`}
+        badge={menu.badge || 0}
+        className="mkb-caixa--nav"
+        /* Só AQUI, e não no cartão da tela inicial: é a barra que se recolhe
+           quando o ponteiro a deixa, e o balão sai por portal. Ver o efeito
+           correspondente em `MenuDeCanto`. */
+        aoAlternarAberto={menu.aoAlternarAberto}
+      />
+    </span>
+  );
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -491,6 +519,33 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      comentário em `SeletorDeModulo`: o balão sai por portal para o `body`, e o
      `:hover` da barra não o alcança. */
   const [seletorAberto, setSeletorAberto] = useState(false);
+  /* A paleta de busca. Ctrl+K (⌘K no Mac) é a tecla que todo produto usa para
+     isto, e é por isso que ela não passa pelo catálogo de atalhos do painel:
+     aquele catálogo é o que a imobiliária PODE remapear, e remapear o ⌘K seria
+     desfazer a única convenção que a pessoa já traz de fora. */
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  /* ⌘ no Mac, Ctrl no resto. Mostrar a tecla errada é pior que não mostrar
+     nenhuma: quem lê "Ctrl K" num Mac aperta e não acontece nada, e conclui que
+     o atalho está quebrado. */
+  const noMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+  const atalhoDeBusca = noMac ? "⌘ K" : "Ctrl K";
+
+  useEffect(() => {
+    function aoTeclar(e) {
+      if (e.key !== "k" && e.key !== "K") return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      /* `preventDefault` porque o Ctrl+K nativo do Firefox foca a barra de
+         busca do navegador, e o do Chrome faz o mesmo na omnibox. */
+      e.preventDefault();
+      setBuscaAberta((v) => !v);
+    }
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, []);
+  /* O balão dos três pontinhos segura a barra aberta pela MESMA razão que o
+     seletor de módulo: os dois saem por portal, e alcançá-los com o ponteiro é
+     sair do `<aside>` que expande por hover. Ver `MenuDeCanto`. */
+  const [menuDeCantoAberto, setMenuDeCantoAberto] = useState(false);
 
   /* ── A BARRA FICA PRESA DEPOIS DE TROCAR DE MÓDULO ────────────────────────
 
@@ -665,6 +720,78 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     return () => { vivo = false; window.removeEventListener("focus", conferir); };
   }, [tenantSlug, podeNegocios]);
 
+  /* ── Cadastros de imóvel interrompidos ────────────────────────────────────
+     O formulário de imóvel é a tela mais longa do painel, e sair dele no meio é
+     o normal — falta a metragem, falta o CEP, o cliente ligou. Até aqui isso
+     apagava tudo. O rascunho é gravado no servidor pelo próprio formulário
+     (`PropertyForm`); o que mora AQUI é a porta de volta.
+
+     Ela fica no `AdminLayout` e não numa rota porque a pergunta ("onde parei?")
+     se faz de passagem, a caminho de outra coisa — e porque na maioria dos dias
+     a resposta é "não há nada", que não justifica atravessar uma tela para
+     descobrir. Chega-se a ela pelos três pontinhos do item "Gerenciar Imóveis",
+     na barra e no cartão da tela inicial.
+
+     A releitura acontece ao voltar o foco para a janela e ao SAIR do formulário
+     (`isFormularioImovel` deixa de valer): é exatamente aí que um rascunho novo
+     acabou de nascer, ou o que existia acabou de virar imóvel publicado. */
+  const [rascunhos, setRascunhos] = useState([]);
+  const [rascunhosAbertos, setRascunhosAbertos] = useState(false);
+  const podeImoveis = Boolean(cargo?.gerenciarImoveis);
+  const noFormularioDeImovel = p === "/imoveis/novo" || p === "/imoveis/editar";
+
+  const lerRascunhos = useCallback(async () => {
+    if (!tenantSlug || !podeImoveis) return;
+    try {
+      const r = await api.listarRascunhosImovel(tenantSlug);
+      setRascunhos(r?.rascunhos || []);
+    } catch {
+      /* Silencioso de propósito: é uma conveniência de canto de tela, e um
+         toast vermelho por causa dela atrapalharia o trabalho de verdade que
+         a pessoa está fazendo na tela de baixo. */
+    }
+  }, [tenantSlug, podeImoveis]);
+
+  useEffect(() => {
+    if (noFormularioDeImovel) return undefined;
+    lerRascunhos();
+    window.addEventListener("focus", lerRascunhos);
+    return () => window.removeEventListener("focus", lerRascunhos);
+  }, [lerRascunhos, noFormularioDeImovel]);
+
+  /* O menu dos três pontinhos de "Gerenciar Imóveis", montado uma vez e usado
+     nos dois lugares que desenham aquele item — a barra e o cartão da tela
+     inicial. Duas cópias divergiriam na primeira opção nova. */
+  const menuDeImoveis = useMemo(() => {
+    if (!podeImoveis) return null;
+    return {
+      rotulo: "Mais opções de Gerenciar Imóveis",
+      badge: rascunhos.length,
+      /* Viaja junto do menu porque quem monta o JSX do item é o `NavItem`, três
+         níveis abaixo — e ele não tem como conhecer o estado da barra. */
+      aoAlternarAberto: setMenuDeCantoAberto,
+      itens: [
+        {
+          key: "rascunhos",
+          Icone: ClockCounterClockwise,
+          rotulo: "Cadastros em andamento",
+          detalhe: rascunhos.length
+            ? "Retome de onde você parou."
+            : "Nada pela metade no momento.",
+          badge: rascunhos.length,
+          aoClicar: () => setRascunhosAbertos(true),
+        },
+        {
+          key: "novo",
+          Icone: PlusCircle,
+          rotulo: "Novo imóvel",
+          detalhe: "Começa um cadastro do zero.",
+          aoClicar: () => navigate("/imoveis/novo"),
+        },
+      ],
+    };
+  }, [podeImoveis, rascunhos.length, navigate]);
+
   // ── Grupos de navegação ───────────────────────────────────────────────────────
   // Um grupo só aparece se sobrar algum item depois do filtro de permissões.
   const podeVerPainel = Boolean(cargo?.verPainelGestor);
@@ -700,6 +827,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       ver,
       leadsBadge,
       negociosBadge,
+      menuDeImoveis,
       showcaseLink,
       showcaseEditorLink,
       flags: {
@@ -709,7 +837,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     }),
     [
       moduloAtivo, cargo, session?.tenant?.plano, disponiveis, navigate, leadsBadge, negociosBadge,
-      showcaseEditorLink, showcaseLink,
+      menuDeImoveis, showcaseEditorLink, showcaseLink,
       isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads,
       isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
       p, ver,
@@ -838,6 +966,29 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         <ModalMeusDados onClose={() => setMeusDadosAbertos(false)} session={session} onSessionUpdate={onSessionUpdate} />
       ) : null}
 
+      {/* Os cadastros de imóvel que ficaram pela metade. Mora aqui, e não numa
+          rota, porque a pergunta se faz de passagem — ver o comentário do
+          estado, mais acima. */}
+      {podeImoveis ? (
+        <ModalRascunhosDeImovel
+          aberto={rascunhosAbertos}
+          aoFechar={() => setRascunhosAbertos(false)}
+          tenantSlug={tenantSlug}
+          rascunhos={rascunhos}
+          aoMudar={lerRascunhos}
+          showToast={showToast}
+        />
+      ) : null}
+
+      {/* A paleta. Fora do `.ds-shell` como os outros modais do layout: ela sai
+          por portal, e o que importa é ela existir enquanto o painel existir. */}
+      <BuscaDeAtalhos
+        aberta={buscaAberta}
+        aoFechar={() => setBuscaAberta(false)}
+        grupos={grupos}
+        modulo={moduloAtivo}
+      />
+
       <AjudaModal
         open={ajudaAberta}
         passoInicial={ajudaEm}
@@ -883,7 +1034,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             de mouse empurraria a página inteira para o lado. */}
         <aside
           ref={barraRef}
-          className={`ds-side${seletorAberto || presa ? " is-mod-aberto" : ""}`}
+          className={`ds-side${seletorAberto || presa || menuDeCantoAberto ? " is-mod-aberto" : ""}`}
           data-tour="sidebar"
           /* Solta a barra quando o ponteiro sai DE VERDADE. `mouseleave` no
              `<aside>` já ignora a viagem entre os filhos dele — é `mouseout`
@@ -997,6 +1148,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                       badge={item.badge}
                       beta={item.beta}
                       bloqueado={item.bloqueado}
+                      menu={item.menu}
                       collapsed={c}
                       tourId={`nav-${item.key}`}
                     />
@@ -1138,6 +1290,19 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             qualquer tema. O conteúdo é onde a pessoa trabalha, e é ele que pode
             ser claro. Pintar as duas faria o painel claro perder a âncora
             visual que o identifica como Omnimob. */}
+        {/* ── A COLUNA DO CONTEÚDO ──────────────────────────────────────────
+            O cabeçalho e o `<main>` são irmãos dentro dela, e não pai e filho:
+            o `<main>` do editor de vitrine ocupa a tela inteira, e um cabeçalho
+            dentro dele roubaria altura da prancheta. Ver `data-sem-topo`. */}
+        <div className="ds-coluna" data-tema={efetivo}>
+        <ProvedorDeCabecalho>
+        {/* O editor de vitrine é a única tela sem a faixa: ele tem a própria
+            barra de ferramentas, com o nome do documento e o estado do
+            salvamento, e dois cabeçalhos empilhados comeriam um terço da
+            prancheta. */}
+        {isShowcaseEditor ? null : (
+          <CabecalhoDoPainel aoBuscar={() => setBuscaAberta(true)} atalhoDeBusca={atalhoDeBusca} />
+        )}
         <main
           className={isShowcaseEditor ? "main-content--editor-vitrine" : "main-content"}
           data-tema={efetivo}
@@ -1149,10 +1314,18 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 rótulos. Envolver tudo obrigaria a barra a re-renderizar a cada
                 troca de rota só por causa do contexto. */}
             <ProvedorDeAtalhos session={session}>
-              <Outlet context={{ showToast }} />
+              {/* `menuDeImoveis` desce pelo contexto porque o cartão "Gerenciar
+                  Imóveis" da tela inicial precisa do MESMO menu que o item da
+                  barra — montá-lo de novo lá daria duas listas de opções para
+                  o mesmo item, e elas divergiriam na primeira opção nova.
+                  `aoMudarRascunhos` é como o formulário avisa que gravou ou
+                  descartou um, sem esperar o próximo foco na janela. */}
+              <Outlet context={{ showToast, menuDeImoveis, aoMudarRascunhos: lerRascunhos }} />
             </ProvedorDeAtalhos>
           </div>
         </main>
+        </ProvedorDeCabecalho>
+        </div>
 
         {/* ── Toasts ───────────────────────────────────────────────────────────── */}
         <div className="ds-toasts">
@@ -1180,6 +1353,130 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
    ────────────────────────────────────────────────────────────────────────── */
 
 const CSS = `
+/* ══════════════════════════════════════════════════════════════════════════
+   A COLUNA DO CONTEUDO E A FAIXA DE CIMA
+   ══════════════════════════════════════════════════════════════════════════
+
+   A coluna existe porque o cabecalho e o <main> sao IRMAOS, e nao pai e filho:
+   o editor de vitrine ocupa a tela inteira e nao desenha a faixa, e um <main>
+   por dentro do cabecalho o obrigaria a reservar altura para uma faixa que ali
+   nao existe.
+
+   A faixa e sticky, e nao fixed: assim ela acompanha a rolagem sem sair do
+   fluxo, e o conteudo abaixo continua comecando onde deveria. Fixa, mudar a
+   altura dela exigiria lembrar de mudar o padding do <main> no mesmo
+   commit — e esquecer disso e como o conteudo acaba escondido atras da barra.
+   (Sem crases nestes comentarios: template literal.) */
+/* Posicao relativa e z-index 1 porque a regra que fazia isso era
+   .ds-shell > main, e o <main> deixou de ser filho direto do shell. Sem ela o
+   conteudo volta a disputar camada com a iluminacao do fundo (o ::before).
+   (Sem crases nestes comentarios: template literal.) */
+.ds-coluna {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  position: relative; z-index: 1;
+}
+
+/* ── A FAIXA CEDE ESPACO QUANDO A BARRA ABRE ────────────────────────────────
+   A barra reserva 64px no fluxo e cresce para 240 POR CIMA do conteudo — e tem
+   de ser assim, senao cada passada de mouse empurraria a pagina inteira para o
+   lado. So que a faixa e o unico elemento que comeca colado nesses 64px: com a
+   barra aberta, ela cobria a trilha e o comeco do titulo.
+
+   O conserto e um recuo, nao uma largura: a faixa continua ocupando a coluna
+   toda (o fundo desfocado precisa disso, senao aparece uma falha clara entre a
+   barra e ela) e apenas o CONTEUDO dela anda para a direita. E CSS puro, pelo
+   seletor de irmao — o React nao fica sabendo do hover, e um estado so para
+   isso traria de volta o re-render que a expansao por CSS evita.
+
+   Os 176px sao a diferenca entre os dois estados da barra (240 - 64). O padding
+   base de 28px entra somado, no proprio calc. */
+.ds-side:hover ~ .ds-coluna .ds-topo,
+.ds-side:focus-within ~ .ds-coluna .ds-topo,
+.ds-side.is-mod-aberto ~ .ds-coluna .ds-topo { padding-left: calc(176px + 28px); }
+
+/* O conteudo anda junto com a faixa. Antes ele nao precisava: com o teto de
+   1200px e a margem automatica sobrava calha dos dois lados, e a barra aberta
+   passava por cima de espaco vazio. Sem o teto, a primeira coluna da tabela
+   comeca na borda — e a barra a cobria.
+
+   O padding-left aqui SUBSTITUI o das 32/28px do estado normal, entao a conta e
+   a mesma da faixa: 176 de diferenca entre os dois estados da barra, mais o
+   respiro que ja existia. As duas transicoes compartilham curva e duracao, para
+   o cabecalho e a tabela andarem como uma coisa so. */
+.ds-side:hover ~ .ds-coluna .main-content,
+.ds-side:focus-within ~ .ds-coluna .main-content,
+.ds-side.is-mod-aberto ~ .ds-coluna .main-content { padding-left: calc(176px + 28px); }
+.ds-coluna .main-content { transition: padding-left 0.2s cubic-bezier(0.4,0,0.2,1); }
+
+.ds-topo {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+  padding: 18px 28px 14px;
+  border-bottom: 1px solid var(--linha-08, rgba(255,255,255,0.08));
+  /* O desfoque e o que permite a faixa ser translucida sem o texto de baixo
+     atravessar. O prefixo -webkit- junto porque o Safari ainda o exige. */
+  background: color-mix(in srgb, var(--bg-gradient-1, #0a0a0b) 82%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  /* A MESMA curva e a mesma duracao da barra (ver .ds-side__interno): com
+     tempos diferentes, o titulo chegava no lugar antes ou depois da barra e o
+     gesto lia como dois movimentos em vez de um. */
+  transition: padding-left 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+.ds-topo__esq { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ds-topo__trilha { margin-bottom: 4px; }
+.ds-topo__titulo {
+  margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.3px;
+  color: var(--text-main); line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-topo__sub {
+  margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.45;
+  overflow: hidden; text-overflow: ellipsis;
+  /* Duas linhas no maximo: alguns subtitulos do Flow tem tres frases, e a faixa
+     e sticky — cada linha dela e altura que o conteudo perde em toda rolagem. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.ds-topo__dir { display: flex; align-items: center; gap: 12px; flex: none; }
+.ds-topo__acao { flex: none; }
+
+/* O gatilho da busca tem CARA de campo e e um botao: o que ele abre e a paleta,
+   e um <input> aqui prometeria digitar no lugar onde ninguem vai digitar. */
+.ds-shell .ds-busca, .ds-busca {
+  display: flex; align-items: center; gap: 9px; width: auto;
+  padding: 8px 12px; border-radius: 10px; cursor: pointer;
+  background: var(--sup-04, rgba(255,255,255,0.04));
+  border: 1px solid var(--linha-10, rgba(255,255,255,0.1));
+  color: var(--text-muted); font-family: inherit; font-size: 12.5px; font-weight: 500;
+  box-shadow: none; transform: none;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.ds-shell .ds-busca:hover, .ds-busca:hover {
+  color: var(--text-main); background: var(--sup-06, rgba(255,255,255,0.06));
+  border-color: var(--linha-18, rgba(255,255,255,0.18));
+  box-shadow: none; transform: none;
+}
+.ds-busca__texto { min-width: 128px; text-align: left; }
+.ds-busca__tecla {
+  padding: 2px 6px; border-radius: 5px; font-size: 10.5px; font-weight: 600;
+  font-family: var(--s-mono, ui-monospace, monospace);
+  background: var(--sup-08, rgba(255,255,255,0.08));
+  border: 1px solid var(--linha-10, rgba(255,255,255,0.1));
+}
+
+/* Em tela estreita o rotulo e a tecla saem e sobra a lupa: o titulo da tela e o
+   botao primario tem prioridade sobre um atalho que, no celular, nem existe. */
+@media (max-width: 900px) {
+  .ds-topo { padding: 14px 18px 12px; gap: 12px; }
+  .ds-side:hover ~ .ds-coluna .ds-topo,
+  .ds-side:focus-within ~ .ds-coluna .ds-topo,
+  .ds-side.is-mod-aberto ~ .ds-coluna .ds-topo,
+  .ds-side:hover ~ .ds-coluna .main-content,
+  .ds-side:focus-within ~ .ds-coluna .main-content,
+  .ds-side.is-mod-aberto ~ .ds-coluna .main-content { padding-left: 18px; }
+  .ds-busca__texto, .ds-busca__tecla { display: none; }
+  .ds-busca { padding: 8px; }
+}
+
 .ds-shell {
   /* Acompanha o escurecimento do fundo: contra o novo #0a0a0b quase neutro, o
      azul-noite que a sidebar tinha (#0c0f1a) deixava de ser sutil e passava a
@@ -1276,6 +1573,7 @@ const CSS = `
 .ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-group__label,
 .ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-item__badge,
 .ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .selo-beta,
+.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .mkb-caixa,
 .ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-sub { display: none; }
 
 /* E o que some ao ABRIR: as formas recolhidas dos mesmos elementos. */
@@ -1520,6 +1818,20 @@ const CSS = `
   padding: 4px 10px 5px;
 }
 .ds-group__rule { display: none; height: 1px; background: var(--s-sep); margin: 4px 6px 5px; }
+
+/* A caixa que abraca o item e os tres pontinhos. Ocupa a largura inteira porque
+   o "⋮" e absoluto e se ancora nela: numa caixa do tamanho do texto ele
+   sentaria no meio da linha. O padding a direita e do ITEM, e nao daqui — e o
+   que impede o rotulo longo de passar por baixo do botao.
+   (Sem crases nestes comentarios: template literal.) */
+.mkb-hospedeiro { display: block; width: 100%; }
+.ds-nav .mkb-hospedeiro:hover .ds-item,
+.ds-nav .mkb-hospedeiro:focus-within .ds-item,
+/* Com o balao aberto o ponteiro esta FORA do item (ele sai por portal), entao
+   nenhuma das duas condicoes acima vale — e o rotulo voltava ao lugar largo
+   por baixo do "⋮", que continua aceso. O :has cobre o intervalo em que o menu
+   esta no ar. (Sem crases aqui: template literal.) */
+.ds-nav .mkb-hospedeiro:has(.mkb.is-aberto) .ds-item { padding-right: 34px; }
 
 .ds-shell .ds-item {
   display: flex; align-items: center; gap: 10px;

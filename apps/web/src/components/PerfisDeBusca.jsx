@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Target, Plus, Trash, ArrowsClockwise } from "@phosphor-icons/react";
 import { api } from "../api";
+import { SelectCustom } from "./SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Perfis de busca do cliente, e o cruzamento com o acervo.
@@ -76,30 +77,46 @@ function Formulario({ inicial, tiposImovel, salvando, aoSalvar, aoCancelar }) {
 
       <label className="pfb-campo">
         <span>Negócio</span>
-        <select value={f.tipoContrato} onChange={(e) => campo("tipoContrato", e.target.value)}>
-          <option value="">Tanto faz</option>
-          <option value="VENDA">Compra</option>
-          <option value="LOCACAO">Aluguel</option>
-        </select>
+        <SelectCustom
+          size="sm"
+          value={f.tipoContrato}
+          onChange={(v) => campo("tipoContrato", v)}
+          ariaLabel="Interesse"
+          options={[
+            { value: "", label: "Tanto faz" },
+            { value: "VENDA", label: "Compra" },
+            { value: "LOCACAO", label: "Aluguel" },
+          ]}
+        />
       </label>
 
       <label className="pfb-campo">
         <span>Finalidade</span>
-        <select value={f.finalidade} onChange={(e) => campo("finalidade", e.target.value)}>
-          <option value="">Tanto faz</option>
-          <option value="RESIDENCIAL">Residencial</option>
-          <option value="COMERCIAL">Comercial</option>
-        </select>
+        <SelectCustom
+          size="sm"
+          value={f.finalidade}
+          onChange={(v) => campo("finalidade", v)}
+          ariaLabel="Finalidade"
+          options={[
+            { value: "", label: "Tanto faz" },
+            { value: "RESIDENCIAL", label: "Residencial" },
+            { value: "COMERCIAL", label: "Comercial" },
+          ]}
+        />
       </label>
 
       <label className="pfb-campo">
         <span>Tipo</span>
-        <select value={f.tipoImovelId || ""} onChange={(e) => campo("tipoImovelId", e.target.value)}>
-          <option value="">Qualquer tipo</option>
-          {(tiposImovel || []).map((t) => (
-            <option key={t.id} value={t.id}>{t.descricao}</option>
-          ))}
-        </select>
+        <SelectCustom
+          size="sm"
+          value={f.tipoImovelId ? String(f.tipoImovelId) : ""}
+          onChange={(v) => campo("tipoImovelId", v)}
+          ariaLabel="Tipo de imóvel"
+          options={[
+            { value: "", label: "Qualquer tipo" },
+            ...(tiposImovel || []).map((t) => ({ value: String(t.id), label: t.descricao })),
+          ]}
+        />
       </label>
 
       <label className="pfb-campo">

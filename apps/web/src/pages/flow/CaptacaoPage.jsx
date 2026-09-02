@@ -3,7 +3,9 @@ import { useOutletContext } from "react-router-dom";
 import { Plus, Copy, Trash, Broadcast, CheckCircle, XCircle, Eye } from "@phosphor-icons/react";
 import { api } from "../../api";
 import { PageHeader, EmptyState } from "../../components/adminUi";
+import { ConviteDeCriacao } from "../../components/ConviteDeCriacao";
 import { CANAIS_FLOW, canalRotulo, dataCurta, desdeQuando } from "../../utils/flow";
+import { SelectCustom } from "../../components/SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    FONTES DE CAPTAÇÃO — os endereços que os portais chamam.
@@ -74,14 +76,30 @@ export function CaptacaoPage({ session }) {
     }
   }
 
+  /* A coleção INTEIRA vazia — e com o formulário fechado, senão o convite
+     brigaria com o formulário que ele mesmo acabou de abrir.
+
+     O plano que não libera a captação NÃO conta como vazio: ali a resposta não
+     é "crie a primeira", é o aviso de degrau que já existe logo abaixo. Um
+     convite a criar o que o plano não permite é a pior forma de anunciar um
+     upgrade. */
+  const semNenhuma = !carregando && liberado && !criando && fontes.length === 0;
+
   return (
     <div data-tour="flow-captacao">
       <PageHeader
         title="Fontes de captação"
         subtitle="Cada portal e cada campanha ganha um endereço próprio. O lead entra sozinho, vira negócio e cai na fila do corretor."
+        /* Sai em dois casos, e por razões diferentes: com a tela vazia, porque o
+           convite logo abaixo já traz o botão dele; com o formulário ABERTO,
+           porque "Nova fonte" apontando para um formulário que já está na tela
+           não tem para onde levar — ele alternava o mesmo painel, e um botão
+           que fecha o que acabou de abrir lê como defeito. Quem desiste usa o
+           "Cancelar" do próprio formulário, que é onde a pessoa está olhando.
+           Mesma regra que Modelos de minuta já segue com `editando`. */
         action={
-          liberado ? (
-            <button type="button" className="btn-primary" onClick={() => setCriando((c) => !c)}>
+          liberado && !semNenhuma && !criando ? (
+            <button type="button" className="btn-primary" onClick={() => setCriando(true)}>
               <Plus size={15} weight="bold" style={{ marginRight: 6 }} /> Nova fonte
             </button>
           ) : null
@@ -112,9 +130,12 @@ export function CaptacaoPage({ session }) {
             </label>
             <label className="flow-campo">
               <span>Canal</span>
-              <select value={nova.canal} onChange={(e) => setNova((n) => ({ ...n, canal: e.target.value }))}>
-                {CANAIS_FLOW.map((c) => <option key={c.key} value={c.key}>{c.rotulo}</option>)}
-              </select>
+              <SelectCustom
+                value={nova.canal}
+                onChange={(v) => setNova((n) => ({ ...n, canal: v }))}
+                ariaLabel="Canal da fonte"
+                options={CANAIS_FLOW.map((c) => ({ value: c.key, label: c.rotulo }))}
+              />
             </label>
           </div>
           <label className="flow-check">
@@ -139,12 +160,32 @@ export function CaptacaoPage({ session }) {
 
       {carregando ? (
         <div className="skeleton-block" style={{ height: 220, borderRadius: 14 }} />
-      ) : fontes.length === 0 ? (
-        <EmptyState
-          mensagem="Nenhuma fonte cadastrada. Crie uma para cada portal e cole a URL no painel deles."
-          acaoLabel={liberado ? "Criar a primeira" : null}
+      ) : criando ? (
+        /* ── O formulário fica SOZINHO ─────────────────────────────────────
+           Criar uma fonte é escolher um nome e um canal para um portal que
+           ainda não existe aqui — a lista das que já existem não ajuda em nada
+           nessa decisão, e empurra o formulário para o alto da tela com o
+           "Criar fonte" perdido no meio de um monte de cartão.
+
+           O diagnóstico logo abaixo CONTINUA: ele é o oposto, ajuda mesmo —
+           quem está cadastrando a fonte do ZAP quer ver se o ZAP já bateu na
+           porta. */
+        null
+      ) : semNenhuma ? (
+        <ConviteDeCriacao
+          plena
+          accent="#ec0b5b"
+          icone={<Broadcast size={34} weight="duotone" />}
+          titulo="Pronto para cadastrar sua primeira fonte de captação?"
+          texto="Cada portal e cada campanha ganha um endereço próprio. Você cola essa URL no painel do portal, e o lead passa a entrar sozinho: vira negócio no funil e cai na fila do corretor, sem ninguém digitar nada."
+          acaoLabel="Cadastrar fonte"
           onAcao={() => setCriando(true)}
+          tourId="flow-captacao-nova"
         />
+      ) : fontes.length === 0 ? (
+        /* Sobrou o caso do plano sem captação: ali não há o que criar, e o
+           aviso de degrau logo acima já explicou por quê. */
+        <EmptyState mensagem="Nenhuma fonte cadastrada." />
       ) : (
         <div className="flow-fontes">
           {fontes.map((f) => (

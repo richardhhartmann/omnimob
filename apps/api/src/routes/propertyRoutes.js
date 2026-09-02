@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { canaisAutomaticos } from "../services/publicacaoAutomatica.js";
 import { dispararPublicacaoAutomatica } from "../services/disparoAutomatico.js";
 import prismaPkg from "@prisma/client";
@@ -298,6 +299,151 @@ propertyRouter.get("/portais/pendencias", async (req, res) => {
   } catch (err) {
     console.error("[GET /properties/portais/pendencias]", err);
     return res.status(500).json({ error: "Erro ao conferir os anúncios.", detail: err.message });
+  }
+});
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CADASTROS DE IMÓVEL INTERROMPIDOS
+   ════════════════════════════════════════════════════════════════════════════
+
+   O rascunho do formulário, guardado por PESSOA. Ver o comentário do modelo
+   `RascunhoImovel` no schema para por que é tabela e não `localStorage`.
+
+   ── OS TRÊS VERBOS, E O QUE CADA UM PROTEGE ──
+
+   `GET` devolve só os rascunhos de quem pediu — nunca os do colega. Não é
+   pudor: o rascunho carrega o preço que a imobiliária ainda está decidindo,
+   e ele não é assunto de todo mundo que tem `gerenciarImoveis`.
+
+   `PUT` é upsert pela `chave` que o navegador gerou. É chamado a cada segundo e
+   meio enquanto a pessoa digita, então precisa ser idempotente e barato: uma
+   linha, sem leitura antes, sem trilha de auditoria.
+
+   `DELETE` some com o rascunho, e é chamado nos dois desfechos — publicou o
+   imóvel, ou descartou de propósito.
+
+   VÊM ANTES DE `/:id`: "rascunhos" tem um segmento só e seria capturado como
+   se fosse o id de um imóvel. É a mesma armadilha que `/tipos` já tinha.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Teto de rascunhos por pessoa. Não é economia de disco — é a lista: vinte
+   cadastros pela metade não é um lugar onde alguém encontra o de ontem. Ao
+   passar do teto, o mais ANTIGO sai, porque o que interessa é sempre o
+   recente. */
+const MAX_RASCUNHOS = 12;
+
+/* O que cabe num rascunho. Frouxo de propósito no `dados`: é o formulário
+   inteiro, que muda de campo a cada versão da tela, e um espelho do `EMPTY` do
+   PropertyForm aqui envelheceria em silêncio — a tela ganharia um campo novo e
+   o rascunho o descartaria sem erro nenhum. O que é cobrado é o TAMANHO. */
+const rascunhoSchema = z.object({
+  titulo: z.string().trim().max(200).nullish(),
+  etapa: z.coerce.number().int().min(0).max(10).optional(),
+  fotos: z.coerce.number().int().min(0).max(100).optional(),
+  dados: z.record(z.any()),
+});
+
+/* Um rascunho é texto de formulário; 128 kB é folgado para isso e fecha a porta
+   de alguém usar a tabela como armazenamento de arquivo em base64. */
+const RASCUNHO_MAX_BYTES = 128 * 1024;
+
+function rascunhoParaTela(r) {
+  return {
+    chave: r.chave,
+    titulo: r.titulo,
+    etapa: r.etapa,
+    fotos: r.fotos,
+    dados: r.dados,
+    criadoEm: r.criadoEm,
+    atualizadoEm: r.atualizadoEm,
+  };
+}
+
+propertyRouter.get("/rascunhos", requireImoveis, async (req, res) => {
+  try {
+    const rascunhos = await prisma.rascunhoImovel.findMany({
+      where: { tenantId: req.tenant.id, usuarioId: req.authUserId },
+      orderBy: { atualizadoEm: "desc" },
+      take: MAX_RASCUNHOS,
+    });
+    return res.json({ rascunhos: rascunhos.map(rascunhoParaTela) });
+  } catch (err) {
+    console.error("[GET /properties/rascunhos]", err);
+    return res.status(500).json({ error: "Erro ao ler os cadastros em andamento." });
+  }
+});
+
+propertyRouter.put("/rascunhos/:chave", requireImoveis, async (req, res) => {
+  const chave = String(req.params.chave || "").trim();
+  if (!chave || chave.length > 64) {
+    return res.status(400).json({ error: "Chave de rascunho inválida." });
+  }
+
+  const parsed = rascunhoSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Rascunho inválido.", details: parsed.error.flatten() });
+  }
+
+  const { titulo = null, etapa = 0, fotos = 0, dados } = parsed.data;
+  if (Buffer.byteLength(JSON.stringify(dados), "utf8") > RASCUNHO_MAX_BYTES) {
+    return res.status(413).json({ error: "Este rascunho é grande demais para ser guardado." });
+  }
+
+  try {
+    /* O `where` do upsert é `[usuarioId, chave]`, e não a chave sozinha: duas
+       pessoas podem gerar a mesma chave (improvável, não impossível), e sem o
+       dono na chave uma escreveria por cima do rascunho da outra. */
+    const rascunho = await prisma.rascunhoImovel.upsert({
+      where: { usuarioId_chave: { usuarioId: req.authUserId, chave } },
+      create: {
+        tenantId: req.tenant.id,
+        usuarioId: req.authUserId,
+        chave,
+        titulo: titulo || null,
+        etapa,
+        fotos,
+        dados,
+      },
+      update: { titulo: titulo || null, etapa, fotos, dados },
+    });
+
+    /* A poda roda DEPOIS de gravar e nunca derruba a resposta: o rascunho da
+       pessoa já está a salvo, e falhar aqui só deixaria uma linha velha a mais.
+       Trocar a ordem faria um erro de limpeza custar o trabalho dela. */
+    try {
+      const excedentes = await prisma.rascunhoImovel.findMany({
+        where: { tenantId: req.tenant.id, usuarioId: req.authUserId },
+        orderBy: { atualizadoEm: "desc" },
+        skip: MAX_RASCUNHOS,
+        select: { id: true },
+      });
+      if (excedentes.length) {
+        await prisma.rascunhoImovel.deleteMany({ where: { id: { in: excedentes.map((e) => e.id) } } });
+      }
+    } catch (podaErr) {
+      console.error("[PUT /properties/rascunhos] poda", podaErr);
+    }
+
+    return res.json(rascunhoParaTela(rascunho));
+  } catch (err) {
+    console.error("[PUT /properties/rascunhos]", err);
+    return res.status(500).json({ error: "Erro ao guardar o cadastro em andamento." });
+  }
+});
+
+propertyRouter.delete("/rascunhos/:chave", requireImoveis, async (req, res) => {
+  try {
+    /* `deleteMany` e não `delete`: apagar duas vezes é o normal aqui (a tela
+       apaga ao publicar, e o desmonte do formulário pode repetir a chamada), e
+       um 404 no segundo pedido viraria um toast de erro sobre uma operação que
+       deu certo. */
+    const { count } = await prisma.rascunhoImovel.deleteMany({
+      where: { tenantId: req.tenant.id, usuarioId: req.authUserId, chave: String(req.params.chave || "") },
+    });
+    return res.json({ removidos: count });
+  } catch (err) {
+    console.error("[DELETE /properties/rascunhos]", err);
+    return res.status(500).json({ error: "Erro ao descartar o cadastro em andamento." });
   }
 });
 

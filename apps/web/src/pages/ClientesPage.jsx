@@ -12,6 +12,7 @@ import { UserCirclePlus, PlusCircle, PencilSimple } from "@phosphor-icons/react"
 import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 const FORM_EMPTY = {
   nome: "", cpf: "", rg: "", nascimento: "", email: "", telefone: "", whatsapp: "",
@@ -253,6 +254,11 @@ export function ClientesPage({ session }) {
      que troca a tela inteira pelo convite — ver `ConviteDeCriacao`. */
   const semNenhum = !initialLoading && clientes.length === 0 && !filtrando;
 
+  /* O nome da tela sobe para a faixa do painel. A rota já saberia o título
+     sozinha (`trilhaDoPainel`), mas o SUBTÍTULO só esta tela conhece — e sem
+     declará-lo aqui ele se perderia na mudança. Ver `contextoDeCabecalho`. */
+  useTituloDaTela({ titulo: "Clientes", subtitulo: "Sua base de clientes e contatos." });
+
   /* Esc fecha o cadastro e volta à lista — o mesmo que o "Cancelar". Sem isto a
      tecla não fazia nada aqui: para o atalho global esta tela continua sendo
      `/clientes`, porque a vista trocou por estado e não por rota. */
@@ -260,7 +266,7 @@ export function ClientesPage({ session }) {
 
   if (view === "form") {
     return (
-      <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {/* A trilha no lugar do título: ela diz o mesmo e ainda diz de onde
             veio — e o primeiro degrau é para onde o Esc leva. */}
         <div style={{ marginBottom: "24px" }}>
@@ -367,17 +373,15 @@ export function ClientesPage({ session }) {
   }
 
   return (
-    <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+    <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
       {/* A trilha vale na lista também, e não só nas sub-telas: ela começa no
           Dashboard, então até a tela de primeiro nível tem de onde ter descido. */}
-      <div style={{ marginBottom: "14px" }}>
-        <Trilha itens={degrausAte("/clientes", navigate)} />
-      </div>
+      {/* A trilha subiu para a faixa do painel, que a desenha a partir da rota —
+          uma só, no mesmo lugar em toda tela. Ver `CabecalhoDoPainel`. */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <header data-tour="clientes-cabecalho">
-          <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Clientes</h1>
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>Sua base de clientes e contatos.</p>
+          {/* Título e subtítulo subiram para a faixa do painel. */}
         </header>
         {/* Com a tela vazia o convite já traz o botão, a tecla e a âncora do
             tour — dois "Novo Cliente" na mesma tela seria ruído. */}

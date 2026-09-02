@@ -4,6 +4,7 @@ import { planoLiberaRelatorioMensal } from "../utils/planos";
 import { SkeletonRelatorioMensal } from "./Skeleton";
 import { CascaDeRelatorio } from "./CascaDeRelatorio.jsx";
 import { Eye, ChatCircleText, Handshake, Buildings } from "@phosphor-icons/react";
+import { SelectCustom } from "./SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Relatório mensal — Profissional e Premium.
@@ -117,18 +118,18 @@ export function RelatorioMensal({ session }) {
       erro={erro}
       filtros={
         <>
-          <select
-            value={indice}
-            onChange={(e) => setIndice(Number(e.target.value))}
-            style={{
-              width: "auto", padding: "5px 10px", borderRadius: "8px", fontSize: "13px",
-              background: "var(--sup-05, rgba(255,255,255,0.05))", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: "inherit",
-            }}
-          >
-            {opcoes.map((o, i) => (
-              <option key={`${o.ano}-${o.mes}`} value={i}>{MESES[o.mes - 1]} de {o.ano}</option>
-            ))}
-          </select>
+          {/* O valor é o ÍNDICE na lista, e `SelectCustom` trabalha com texto —
+              daí o `String()` na ida e o `Number()` na volta. Poderia ser
+              `ano-mes`, mas isso obrigaria a procurar a opção de novo a cada
+              troca para descobrir qual índice era. */}
+          <SelectCustom
+            size="sm"
+            style={{ minWidth: "170px" }}
+            value={String(indice)}
+            onChange={(v) => setIndice(Number(v))}
+            ariaLabel="Mês do relatório"
+            options={opcoes.map((o, i) => ({ value: String(i), label: `${MESES[o.mes - 1]} de ${o.ano}` }))}
+          />
 
           {/* Mandar por e-mail é do Profissional em diante. Escondido e não
               desabilitado: um botão cinzento no meio do relatório é anúncio no

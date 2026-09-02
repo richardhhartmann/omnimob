@@ -44,6 +44,53 @@ import { decifrar } from "../cofre.js";
    de e-mail (`notificationService`). */
 const TEMPO_LIMITE_MS = 10_000;
 
+/* ── A RECUSA PRECISA CHEGAR EM PORTUGUÊS, E COM O CAMPO ────────────────────
+ *
+ * A extração era `corpo?.message || corpo?.errors?.[0]?.detail`, e a segunda
+ * metade nunca casava com a Clicksign: ela devolve `errors` como um OBJETO
+ * indexado por CAMPO — `{ "document.path": ["não pode ficar em branco"] }` —,
+ * não como um array de `{ detail }`. O `?.[0]` num objeto é `undefined`, então
+ * toda recusa dela chegava ao painel como "HTTP 422": o número do problema, sem
+ * o problema.
+ *
+ * É a informação mais cara da integração inteira. Sem ela, "não consigo enviar
+ * para assinatura" vira tentativa e erro contra uma API de terceiro; com ela, a
+ * tela diz qual campo o provedor recusou e a pessoa resolve sozinha.
+ *
+ * As quatro formas cobertas são as que os dois provedores usam de fato:
+ *   { message }                        DocuSign, e a Clicksign em erro geral
+ *   { errors: { campo: [msg, …] } }    Clicksign (validação)
+ *   { errors: [{ detail | message }] } formato JSON:API, que a Clicksign usa
+ *                                      em algumas rotas
+ *   { bruto: "…" }                     corpo que nem JSON era (gateway, proxy)
+ */
+function mensagemDoProvedor(corpo) {
+  if (!corpo || typeof corpo !== "object") return null;
+  if (typeof corpo.message === "string" && corpo.message.trim()) return corpo.message.trim();
+
+  const e = corpo.errors;
+  if (Array.isArray(e) && e.length) {
+    const partes = e.map((x) => (typeof x === "string" ? x : x?.detail || x?.message)).filter(Boolean);
+    if (partes.length) return partes.join(" · ");
+  }
+  if (e && typeof e === "object") {
+    /* Campo e mensagem juntos: "document.path não pode ficar em branco" diz
+       onde mexer; "não pode ficar em branco" sozinho não diz nada. */
+    const partes = Object.entries(e)
+      .map(([campo, msgs]) => `${campo} ${[].concat(msgs).filter(Boolean).join(", ")}`.trim())
+      .filter(Boolean);
+    if (partes.length) return partes.join(" · ");
+  }
+
+  if (typeof corpo.error === "string" && corpo.error.trim()) return corpo.error.trim();
+  /* Corpo que não era JSON. Cortado, porque costuma ser uma página HTML inteira
+     de gateway e ela não cabe num toast. */
+  if (typeof corpo.bruto === "string" && corpo.bruto.trim()) {
+    return corpo.bruto.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180) || null;
+  }
+  return null;
+}
+
 async function pedir(url, opcoes = {}) {
   const controle = new AbortController();
   const t = setTimeout(() => controle.abort(), TEMPO_LIMITE_MS);
@@ -57,7 +104,7 @@ async function pedir(url, opcoes = {}) {
     let corpo = null;
     try { corpo = texto ? JSON.parse(texto) : null; } catch { corpo = { bruto: texto }; }
     if (!r.ok) {
-      const erro = new Error(corpo?.message || corpo?.errors?.[0]?.detail || `HTTP ${r.status}`);
+      const erro = new Error(mensagemDoProvedor(corpo) || `HTTP ${r.status}`);
       erro.status = r.status;
       erro.corpo = corpo;
       throw erro;

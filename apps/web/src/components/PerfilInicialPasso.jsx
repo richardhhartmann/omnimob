@@ -3,6 +3,7 @@ import { api } from "../api";
 import { formatCep, formatCnpj, formatCreci, formatPhone, onlyDigits } from "../utils/masks";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
 import { TEMAS } from "../utils/temaDoPainel";
+import { SelectCustom } from "./SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Segundo passo das boas-vindas: a ficha da imobiliária.
@@ -254,10 +255,14 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
         <Campo rotulo="UF">
           {/* Lista fechada: UF é o campo que mais recebe "São Paulo" por
               extenso, e a vitrine imprime o que vier. */}
-          <select className="pi-entrada" value={form.estado} onChange={(e) => set("estado", e.target.value)} disabled={ocupado}>
-            <option value="">—</option>
-            {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-          </select>
+          <SelectCustom
+            value={form.estado}
+            onChange={(v) => set("estado", v)}
+            disabled={ocupado}
+            placeholder="—"
+            ariaLabel="Estado"
+            options={[{ value: "", label: "—" }, ...UFS.map((uf) => ({ value: uf, label: uf }))]}
+          />
         </Campo>
 
         <Campo rotulo="Logotipo" dica="Cole um endereço https ou envie um arquivo." largo>

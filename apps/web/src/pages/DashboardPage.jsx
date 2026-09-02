@@ -42,6 +42,10 @@ function KpiCard({ label, value, accent, icon, loading }) {
 
 function HomePage({ session }) {
   const navigate = useNavigate();
+  /* O menu dos três pontinhos do cartão "Gerenciar Imóveis" vem do
+     `AdminLayout` pelo contexto do `<Outlet>` — é o mesmo que a barra lateral
+     desenha no item de igual nome. */
+  const menuDeImoveis = useOutletContext()?.menuDeImoveis;
   const cargo = session?.usuario?.cargo;
   const tenantSlug = session?.tenant?.slug;
   const primeiroNome = session?.usuario?.nome?.split(" ")[0] || "Usuário";
@@ -77,6 +81,12 @@ function HomePage({ session }) {
       description: "Adicione um novo ativo ao portfólio da imobiliária.",
       onClick: () => navigate("/imoveis"),
       accent: "#6366f1",
+      /* Os três pontinhos no canto do cartão — os cadastros que ficaram pela
+         metade. É o MESMO objeto que a barra lateral usa no item de igual nome:
+         ele é montado no `AdminLayout` e desce pelo contexto do `<Outlet>`.
+         Remontá-lo aqui daria duas listas de opções para o mesmo item, e elas
+         divergiriam na primeira opção nova. */
+      menu: menuDeImoveis,
     },
     cargo?.gerenciarImoveis && {
       icon: <SquaresFour size={32} weight="duotone" />,

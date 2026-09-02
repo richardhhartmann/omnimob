@@ -13,6 +13,7 @@ import { planoLiberaPortais } from "../utils/planos";
 import {
   GraficoDeMovimento, GraficoDeFaturamento, GraficoDeFunil, GraficoDeOrigens,
 } from "../components/Graficos.jsx";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Início — o painel de quem DIRIGE a imobiliária.
@@ -161,6 +162,14 @@ export function InicioPage({ session }) {
   const hora = new Date().getHours();
   const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
 
+  /* A saudação é o título desta tela, e é o exemplo do porquê a página pode
+     sobrescrever o nome que a rota daria: "Painel do Gestor" não cumprimenta
+     ninguém. Ver `utils/contextoDeCabecalho.jsx`. */
+  useTituloDaTela({
+    titulo: `${saudacao}${primeiroNome ? `, ${primeiroNome}` : ""}`,
+    subtitulo: `O que aconteceu na ${session?.tenant?.name || "sua imobiliária"} — e o que precisa de você agora.`,
+  });
+
   /* As pendências viram uma lista só, e cada uma leva para onde se resolve —
      um número que não tem para onde clicar é uma cobrança sem saída. */
   const pendencias = !dados ? [] : [
@@ -205,18 +214,12 @@ export function InicioPage({ session }) {
        gráficos lado a lado. A 1100px o de faturamento ficava com seis barras em
        340px de largura útil, que é estreito demais para o rótulo do mês caber
        sem girar. */
-    <div className="main-content ig-pagina" style={{ maxWidth: "1240px" }}>
-      <div style={{ marginBottom: "14px" }}>
-        <Trilha itens={degrausAte("/inicio", navigate)} />
-      </div>
-      <header data-tour="gestor-saudacao" style={{ marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "28px", marginBottom: "6px" }}>
-          {saudacao}{primeiroNome ? `, ${primeiroNome}` : ""}
-        </h1>
-        <p style={{ color: "var(--text-muted)", margin: 0 }}>
-          O que aconteceu na {session?.tenant?.name || "sua imobiliária"} — e o que precisa de você agora.
-        </p>
-      </header>
+    <div className="ig-pagina">
+      {/* A saudação subiu para a faixa: ela É o título desta tela, e é o
+          exemplo do porquê a página pode sobrescrever o nome que a rota daria
+          ("Painel do Gestor" não cumprimenta ninguém). A trilha também subiu —
+          a faixa a desenha a partir da rota. */}
+      <div data-tour="gestor-saudacao" aria-hidden="true" />
 
       {erro ? <div className="error" style={{ marginBottom: "16px" }}>{erro}</div> : null}
 

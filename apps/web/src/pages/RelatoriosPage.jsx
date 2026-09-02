@@ -86,17 +86,16 @@ export function RelatoriosPage({ session }) {
         />
       ) : (
         <>
-          {/* Os ícones saem da MESMA fonte que desenha os cartões do índice e o
-              submenu da barra lateral (`iconesRelatorios`). Uma escolha à mão
-              aqui daria um funil de um jeito na barra e de outro na trilha. */}
-          <Trilha
-            itens={[
-              /* A cadeia até Relatórios vem do catálogo, e é ela que traz o
-                 Dashboard na frente — o degrau que faltava aqui. */
-              ...degrausAte("/relatorios", navigate, () => setView("MENU")),
-              { chave: view, rotulo: TITULO_RELATORIO[view], Icone: ICONES_RELATORIOS[view], aoIr: () => setView(view) },
-            ]}
-          />
+          {/* ── A TRILHA SAIU DAQUI ──────────────────────────────────────
+              Ela subiu para a faixa do painel, que a monta a partir da ROTA:
+              "Dashboard › Relatórios". O último degrau que esta tela
+              acrescentava — o nome do relatório aberto — não se perdeu: ele é o
+              TÍTULO, logo abaixo, publicado pela `CascaDeRelatorio`.
+
+              Nada quebra ao clicar em "Relatórios" na faixa: `view` é derivada
+              do `?ver=` da URL (logo acima), então navegar para `/relatorios`
+              sem parâmetro já devolve o índice. Fosse `view` um `useState`, o
+              clique não faria nada e a trilha teria de continuar aqui. */}
           {conteudo}
         </>
       )}

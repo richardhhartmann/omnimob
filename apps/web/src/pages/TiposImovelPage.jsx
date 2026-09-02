@@ -539,9 +539,8 @@ export function TiposImovelPage({ session }) {
       style={{ animation: "fadeIn 0.3s ease-in-out" }}
     >
       {confirmModal}
-      <div style={{ marginBottom: "14px" }}>
-        <Trilha itens={degrausAte("/tipos-imovel", navigate)} />
-      </div>
+      {/* A trilha subiu para a faixa do painel, que a desenha a partir da rota —
+          uma só, no mesmo lugar em toda tela. Ver `CabecalhoDoPainel`. */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
         <h2 style={{ margin: 0 }}>Tipos de Imóvel e Atributos</h2>
         {/* Vazio: o convite já traz o botão e a tecla. */}

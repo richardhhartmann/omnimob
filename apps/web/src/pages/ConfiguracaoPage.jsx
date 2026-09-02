@@ -1463,7 +1463,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
        estreitos que os de Relatórios e de Gerenciar Imóveis, que não passam por
        essa moldura, e a mesma grade aparecia apertada só aqui. */
     <div
-      className={`main-content${tab === "MENU" ? " main-content--indice" : ""}`}
+      className={tab === "MENU" ? "cfg-indice" : undefined}
       style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "24px" }}
     >
       {confirmModal}

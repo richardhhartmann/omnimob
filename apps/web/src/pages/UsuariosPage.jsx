@@ -14,6 +14,7 @@ import { UserPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
 import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 const FORM_EMPTY = {
   nome: "", login: "", email: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false,
@@ -185,6 +186,11 @@ export function UsuariosPage({ session }) {
      inteira pelo convite — ver `ConviteDeCriacao`. */
   const semNenhum = !initialLoading && usuarios.length === 0 && !filtrando;
 
+  /* O nome da tela sobe para a faixa do painel. A rota já saberia o título
+     sozinha (`trilhaDoPainel`), mas o SUBTÍTULO só esta tela conhece — e sem
+     declará-lo aqui ele se perderia na mudança. Ver `contextoDeCabecalho`. */
+  useTituloDaTela({ titulo: "Usuários", subtitulo: "Quem tem acesso ao painel e com qual cargo." });
+
   function abrirCriar() {
     setEditando(null);
     // Usuário novo sempre nasce com o sufixo do tenant.
@@ -318,7 +324,7 @@ export function UsuariosPage({ session }) {
 
   if (view === "form") {
     return (
-      <section className="main-content glass-panel" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+      <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         <div style={{ marginBottom: "24px" }}>
           <Trilha
             itens={[
@@ -559,18 +565,16 @@ export function UsuariosPage({ session }) {
   }
 
   return (
-    <div className="main-content" style={{ maxWidth: "1100px", animation: "fadeIn 0.3s ease-in-out" }}>
+    <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       {confirmModal}
       {/* A trilha vale na lista também, e não só nas sub-telas: ela começa no
           Dashboard, então até a tela de primeiro nível tem de onde ter descido. */}
-      <div style={{ marginBottom: "14px" }}>
-        <Trilha itens={degrausAte("/usuarios", navigate)} />
-      </div>
+      {/* A trilha subiu para a faixa do painel, que a desenha a partir da rota —
+          uma só, no mesmo lugar em toda tela. Ver `CabecalhoDoPainel`. */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-        <header data-tour="usuarios-cabecalho">
-          <h1 style={{ fontSize: "28px", margin: "0 0 6px" }}>Usuários</h1>
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>Quem tem acesso ao painel e com qual cargo.</p>
-        </header>
+        {/* O título subiu para a faixa do painel; a âncora do tour fica, porque
+            um passo do primeiro acesso aponta para ela. */}
+        <header data-tour="usuarios-cabecalho" />
         {/* Vazio: o convite já traz o botão, a tecla e a âncora do tour. */}
         {semNenhum ? null : (
           <span data-tour="usuarios-novo">

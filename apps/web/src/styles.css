@@ -101,11 +101,55 @@ body {
   color: var(--text-main);
 }
 
+/* ── LARGURA CHEIA ──────────────────────────────────────────────────────────
+   Era `max-width: 1200px; margin: 0 auto`. Num monitor largo isso deixava duas
+   calhas vazias dos lados e o conteúdo numa coluna estreita no meio — e desde
+   que o título subiu para a faixa (que ocupa a largura toda), a diferença ficou
+   visível: o cabeçalho ia até a borda e a tabela embaixo parava antes.
+
+   O respiro lateral virou padding do próprio `<main>`, então ele acompanha a
+   janela em vez de brigar com um teto fixo. */
+/* ── O TETO É GENEROSO, E O ALINHAMENTO É À ESQUERDA ────────────────────────
+   Eram 1200px CENTRALIZADOS. Num monitor largo isso deixava duas calhas vazias
+   e o conteúdo numa coluna estreita no meio — e ficou gritante quando o título
+   subiu para a faixa, que sangra de ponta a ponta: o cabeçalho ia até a borda e
+   a tabela embaixo parava bem antes.
+
+   Largura cheia também não serve. As telas de lista são feitas de linhas, e uma
+   linha de 3000px afasta tanto a primeira coluna da última que a leitura se
+   perde no meio do caminho — foi o que quebrou Clientes, Usuários, Cargos, o
+   portfólio e os quatro relatórios.
+
+   1720px é o meio-termo: cabe a grade de quatro colunas dos relatórios sem
+   esticar a linha da tabela além do que o olho acompanha.
+
+   ── E NÃO CENTRALIZADO ──
+
+   `margin: 0 auto` era metade do defeito que aparecia com a barra aberta: o
+   recuo que o conteúdo ganha para escapar da barra SOMAVA com a calha da
+   centralização, e o portfólio abria com um vão enorme à esquerda. Encostado na
+   esquerda, o conteúdo fica ancorado na barra — que é a moldura que ele
+   acompanha — e a sobra vai toda para a direita, onde não separa nada. */
+/* ── LARGURA CHEIA, DE VERDADE DESTA VEZ ────────────────────────────────────
+   Eram 1200px centralizados. A primeira tentativa de tirar o teto pareceu
+   quebrar oito telas — e não era a largura: aquelas telas renderizavam o
+   PRÓPRIO `.main-content` dentro deste, com `maxWidth: 1100px` inline por cima.
+   O padding valia duas vezes, o recuo da barra valia duas vezes, e a caixa de
+   dentro mandava. Isso funcionava por acidente enquanto as duas eram
+   centralizadas com o mesmo teto: elas coincidiam e a soma era invisível.
+
+   Com o aninhamento desfeito, o teto deixou de ter função: num monitor de
+   3440px ele deixava metade da tela vazia enquanto a faixa do cabeçalho ia de
+   ponta a ponta.
+
+   O respiro lateral é padding, não margem: assim ele acompanha a janela em vez
+   de brigar com um limite fixo, e é o mesmo valor que a faixa usa — as duas
+   caixas alinham sozinhas. */
 .main-content {
-  padding: 40px;
-  max-width: 1200px;
+  padding: 32px 28px 48px;
   width: 100%;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
 }
 
 /* O índice de Configurações. Ele desenha a MESMA grade de cartões que
@@ -113,6 +157,29 @@ body {
    resultado era a mesma tela parecendo apertada num lugar só. As SEÇÕES
    continuam com o respiro, que é onde ele serve. */
 .main-content--indice { padding: 0; max-width: none; }
+
+/* A casca dos quatro relatórios. Ela usava `className="main-content"` com um
+   `maxWidth` inline — dentro do `<main class="main-content">` do layout. Duas
+   caixas com a mesma classe, uma dentro da outra: o padding de 32px valia duas
+   vezes, e o recuo que o conteúdo ganha com a barra aberta também. Era o vão
+   gigante à esquerda nos relatórios.
+
+   O respiro agora é só do `<main>`, e não há teto: o de 1100px que ficou aqui
+   por um tempo era herança do `maxWidth` inline que a casca tinha, e ele
+   segurava os quatro relatórios estreitos enquanto o resto do painel já ia de
+   ponta a ponta — a tela toda parecia não ter mudado. */
+.casca-relatorio { width: 100%; }
+
+/* ── O ÍNDICE DE CONFIGURAÇÕES ──────────────────────────────────────────────
+   Era `main-content main-content--indice`, dentro do `<main class=
+   "main-content">` do layout — a mesma classe duas vezes, uma dentro da outra.
+   O `--indice` zerava o padding da caixa DE DENTRO, então o de fora continuava
+   valendo e ninguém percebeu enquanto o `<main>` era centralizado com teto de
+   1200px: as duas caixas coincidiam.
+
+   Hoje o respiro é só do `<main>`, e aqui sobra o que era o propósito do
+   `--indice`: a grade de cartões ocupa a largura toda, sem calha extra. */
+.cfg-indice { width: 100%; }
 
 /* Editor da vitrine: usa toda a largura da coluna ao lado da sidebar (sem cap a 1200px).
 
@@ -5975,7 +6042,11 @@ main[data-tema="claro"] {
 /* O fundo do shell é pintado pelo `.ds-shell`, que é comum aos dois temas. O
    `main` precisa cobri-lo, senão o gradiente escuro aparece por baixo do
    conteúdo claro. */
-.ds-shell > main[data-tema="claro"] { position: relative; z-index: 1; }
+/* O `>` deixou de casar quando a faixa do painel entrou e o `<main>` passou a
+   morar dentro de `.ds-coluna`. A camada agora é garantida pela própria coluna
+   (ver `.ds-coluna` no AdminLayout); aqui sobra só o fundo, que continua sendo
+   do `<main>` — ele é quem precisa cobrir o gradiente escuro do shell. */
+.ds-coluna > main[data-tema="claro"] { position: relative; z-index: 1; }
 
 /* Superfícies. O painel usa `.glass-panel` em quase toda tela; sem esta linha
    os cartões continuariam translúcidos sobre claro e ficariam ilegíveis. */
@@ -7011,6 +7082,304 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
 @keyframes mpSobe { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mp-balao { animation: none; } }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   OS TRÊS PONTINHOS (.mkb) — o que um item guarda além do próprio destino
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Ver `components/MenuDeCanto.jsx`. Duas coisas explicam o desenho:
+
+   · O botão é IRMÃO do item, nunca filho. Os dois donos (o item da barra e o
+     cartão da tela inicial) são `<button>`, e botão dentro de botão é HTML
+     inválido — o navegador desmonta a árvore e o clique de dentro não chega.
+     `.mkb-hospedeiro` é a caixa que abraça os dois irmãos.
+
+   · Ele aparece no HOVER. Visível o tempo todo, viraria um enfeite em cada
+     linha da barra; e o que ele guarda não é o caminho principal. A exceção é
+     quando há algo esperando (`tem-badge`): aí ele fica aceso, porque ninguém
+     descobre por hover uma coisa que não sabe que existe.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   A BUSCA DE ATALHOS (.bat) — a paleta de comandos do painel
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Ver `components/BuscaDeAtalhos.jsx`. Ela sai por portal para o <body>, pelo
+   motivo de sempre nesta base: o `<Outlet>` do AdminLayout tem um `transform`
+   residual da animação de entrada, e `position: fixed` lá dentro passa a medir
+   por ele em vez de pela janela.
+
+   ── ESCURA NOS DOIS TEMAS ──
+
+   Como o menu do perfil e os três pontinhos. Ela é uma camada FLUTUANTE sobre a
+   página, não parte dela — e no tema claro uma caixa branca sobre um fundo
+   branco desbotado perderia a borda que a separa do que está atrás. */
+
+.bat-raiz {
+  position: fixed; inset: 0; z-index: 9600;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 12vh 20px 20px;
+}
+.bat-veu {
+  position: absolute; inset: 0;
+  background: rgba(5, 7, 12, 0.62);
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+}
+.bat-caixa {
+  position: relative; width: min(560px, 100%);
+  display: flex; flex-direction: column; max-height: 70vh;
+  border-radius: 16px; overflow: hidden;
+  background: #14161d; border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.9);
+  animation: batEntra 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes batEntra { from { opacity: 0; transform: translateY(-8px) scale(0.99); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .bat-caixa { animation: none; } }
+
+.bat-campo {
+  display: flex; align-items: center; gap: 11px;
+  padding: 15px 17px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #64748b; flex: none;
+}
+.bat-campo input {
+  flex: 1; min-width: 0; padding: 0; border: 0; outline: none;
+  background: transparent; color: #f1f5f9;
+  font-family: inherit; font-size: 15px;
+}
+.bat-campo input::placeholder { color: #556070; }
+.bat-campo kbd, .bat-rodape kbd {
+  padding: 2px 6px; border-radius: 5px; font-size: 10.5px; font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #94a3b8; background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bat-lista { flex: 1; min-height: 0; overflow-y: auto; padding: 7px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
+.bat-titulo {
+  display: block; padding: 6px 10px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #556070;
+}
+.bat-vazio { margin: 0; padding: 22px 14px; text-align: center; font-size: 12.5px; line-height: 1.6; color: #7c8798; }
+
+.ds-shell .bat-item, .bat-item {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 9px 10px; border-radius: 9px; border: 0;
+  background: transparent; box-shadow: none; transform: none;
+  font-family: inherit; font-size: 13.5px; font-weight: 500; text-align: left;
+  color: #cbd5e1; cursor: pointer;
+}
+/* O destaque é UM SÓ e é o do teclado — o hover apenas move o destaque (ver o
+   `onMouseMove` no componente), em vez de acender um segundo item. Dois itens
+   acesos ao mesmo tempo fariam o Enter parecer imprevisível. */
+.ds-shell .bat-item.is-marcado, .bat-item.is-marcado {
+  background: rgba(255, 255, 255, 0.08); color: #f8fafc;
+  box-shadow: none; transform: none;
+}
+.bat-item__icone { display: flex; flex: none; color: #7c8798; }
+.bat-item.is-marcado .bat-item__icone { color: var(--modulo-acento, #818cf8); }
+.bat-item__texto { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.bat-item__texto small { font-size: 11px; font-weight: 400; color: #6b7688; }
+.bat-item__selo {
+  flex: none; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 2px 6px; border-radius: 5px;
+  color: #d4af37; background: rgba(212, 175, 55, 0.12); border: 1px solid rgba(212, 175, 55, 0.28);
+}
+.bat-item__enter { flex: none; color: #6b7688; display: flex; }
+
+.bat-rodape {
+  display: flex; gap: 16px; flex: none;
+  padding: 9px 15px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px; color: #6b7688;
+}
+.bat-rodape span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── A faixa do painel no tema claro ────────────────────────────────────────
+   Só os tons: a estrutura é a mesma. O `color-mix` da faixa usa
+   `--bg-gradient-1`, que o tema claro já redefine — então o fundo acompanha
+   sozinho e o que sobra aqui é a linha de baixo, que sobre claro precisa ser
+   escura em vez de branca. */
+/* ── OS TOKENS PRECISAM SER REDECLARADOS AQUI ─────────────────────────────
+   O tema claro redefine `--text-main`, `--text-muted` e `--bg-gradient-1` em
+   `main[data-tema="claro"]`, e a faixa é IRMÃ do `<main>`, não filha — a
+   cascata não a alcança. Sem estas linhas ela ficava com o título branco e o
+   fundo escuro por cima de uma página clara.
+
+   Redeclarar os tokens (e não escrever cores nas regras) para o resto do bloco
+   continuar valendo tal como está: `.ds-topo__titulo` segue lendo
+   `var(--text-main)`, e é só o VALOR que muda de tema para tema. */
+.ds-coluna[data-tema="claro"] .ds-topo {
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --bg-gradient-1: #f6f7f9;
+  color: var(--text-main);
+  border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+.ds-coluna[data-tema="claro"] .ds-busca {
+  background: #ffffff; border-color: rgba(15, 23, 42, 0.12);
+}
+.ds-coluna[data-tema="claro"] .ds-busca:hover { background: #ffffff; border-color: rgba(15, 23, 42, 0.24); }
+.ds-coluna[data-tema="claro"] .ds-busca__tecla {
+  background: rgba(15, 23, 42, 0.05); border-color: rgba(15, 23, 42, 0.1);
+}
+
+.mkb-hospedeiro { position: relative; }
+.mkb-caixa { display: inline-flex; }
+
+.ds-shell .mkb, .mkb {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border-radius: 7px;
+  border: 1px solid transparent; background: transparent; box-shadow: none; transform: none;
+  color: var(--text-muted); cursor: pointer; position: relative;
+  opacity: 0; transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.mkb-hospedeiro:hover .mkb,
+.mkb-hospedeiro:focus-within .mkb,
+.mkb.is-aberto,
+.mkb.tem-badge { opacity: 1; }
+.ds-shell .mkb:hover, .mkb:hover {
+  background: var(--sup-10, rgba(255, 255, 255, 0.1));
+  color: var(--text-main); box-shadow: none; transform: none;
+}
+.mkb.is-aberto { background: var(--sup-12, rgba(255, 255, 255, 0.12)); color: var(--text-main); }
+.mkb:focus-visible { outline: 2px solid var(--modulo-acento, #6366f1); outline-offset: 1px; }
+
+/* O ponto que diz "há algo aqui" sem gastar um número. O contador exato mora
+   na linha do balão — no botão de 24px ele não caberia sem virar mancha. */
+.mkb__pip {
+  position: absolute; top: 1px; right: 1px; width: 7px; height: 7px;
+  border-radius: 50%; background: #f59e0b;
+}
+
+/* Em tela de toque não existe hover: escondê-lo tornaria o menu inalcançável. */
+@media (hover: none) and (pointer: coarse) {
+  .mkb { opacity: 1; }
+}
+
+/* ── O balão ────────────────────────────────────────────────────────────────
+   `fixed` porque sai por portal, ancorado em coordenadas de tela; o JSX injeta
+   `right` mais `top` OU `bottom`. Escuro nos dois temas, como o menu do perfil:
+   os dois nascem colados na moldura, e alternar a cor de um só faria dois menus
+   da mesma barra parecerem de programas diferentes. */
+.mkb-balao {
+  /* Largura FIXA, e o mesmo 260 que `MenuDeCanto` usa para decidir onde o balão
+     cabe. Com `min`/`max` o JS não teria como saber a largura antes da primeira
+     pintura, e era isso que deixava o balão sair pela esquerda na barra. */
+  position: fixed; width: 260px; z-index: 60;
+  padding: 6px; border-radius: 13px;
+  background: #141821; border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.9);
+  display: flex; flex-direction: column; gap: 1px;
+  animation: mkbEntra 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes mkbEntra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mkb-balao { animation: none; } }
+
+.ds-shell .mkb-linha, .mkb-linha {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 9px 10px; border-radius: 9px; border: 0;
+  background: transparent; box-shadow: none; transform: none;
+  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left;
+  color: #cbd5e1; cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.ds-shell .mkb-linha:hover, .mkb-linha:hover {
+  background: rgba(255, 255, 255, 0.07); color: #f1f5f9;
+  box-shadow: none; transform: none;
+}
+.mkb-linha:disabled { opacity: 0.45; cursor: default; }
+.ds-shell .mkb-linha:disabled:hover, .mkb-linha:disabled:hover { background: transparent; color: #cbd5e1; }
+.mkb-linha__icone { display: flex; flex: none; color: #94a3b8; }
+.mkb-linha__texto { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.mkb-linha__texto small { font-size: 11px; font-weight: 400; color: #7c8798; line-height: 1.4; }
+.mkb-linha__badge {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: #f59e0b; color: #111827; font-size: 10px; font-weight: 700;
+}
+
+/* ── Onde o "⋮" senta em cada dono ─────────────────────────────────────────
+   Na barra, no lugar onde o contador de leads já mora — à direita, centrado.
+   No cartão, no canto de cima; e é por isso que o selo da tecla anda para o
+   lado: os dois disputavam o mesmo canto, e o selo é o que pode ceder. */
+.mkb-caixa--nav {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%); z-index: 2;
+}
+.mkb-caixa--cartao { position: absolute; top: 12px; right: 12px; z-index: 2; }
+.mkb-hospedeiro .pg-follow > .tecla-atalho--canto { right: 42px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CADASTROS DE IMÓVEL EM ANDAMENTO (.rsc) — a lista dentro do modal
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Ver `components/RascunhosDeImovel.jsx`. O modal segue o tema do painel (ele
+   abre centralizado sobre o conteúdo), então tudo aqui sai de token — nada de
+   cor cravada, senão a lista fica ilegível no tema claro. */
+
+.rsc-vazio { margin: 0; font-size: 13px; line-height: 1.65; color: var(--text-muted); }
+
+.rsc-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.rsc-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 13px; border-radius: 11px;
+  background: var(--sup-03, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+}
+.rsc-item__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rsc-item__texto strong {
+  font-size: 13.5px; font-weight: 600; color: var(--text-main);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Sem título não é falha: quem parou na primeira etapa não teve como escrever
+   um. O itálico apagado diz isso sem precisar de um aviso ao lado. */
+.rsc-item__texto strong.is-sem-nome { font-style: italic; font-weight: 500; color: var(--text-muted); }
+.rsc-item__meta { font-size: 11.5px; color: var(--text-muted); }
+.rsc-item__fotos { display: inline-flex; align-items: center; gap: 3px; color: #f59e0b; }
+
+.rsc-item__acoes { display: flex; align-items: center; gap: 6px; flex: none; }
+
+.ds-shell .rsc-retomar, .rsc-retomar {
+  display: inline-flex; align-items: center; gap: 5px; width: auto;
+  padding: 7px 11px; border-radius: 9px; border: 0;
+  background: var(--tenant-primary, #4f46e5); color: var(--tenant-primary-ink, #fff);
+  font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  box-shadow: none; transform: none;
+}
+.ds-shell .rsc-retomar:hover, .rsc-retomar:hover { filter: brightness(1.08); box-shadow: none; transform: none; }
+
+.ds-shell .rsc-descartar, .rsc-descartar {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  padding: 0; border-radius: 9px; cursor: pointer;
+  background: transparent; border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: var(--text-muted); box-shadow: none; transform: none;
+}
+.ds-shell .rsc-descartar:hover, .rsc-descartar:hover {
+  color: #f87171; border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.09);
+  box-shadow: none; transform: none;
+}
+.rsc-descartar:disabled { opacity: 0.45; cursor: default; }
+
+/* ── O aviso das fotos, no topo do formulário retomado ───────────────────────
+   Ele é a metade que o rascunho não devolve, e precisa ser dito ANTES de a
+   pessoa preencher o resto — não na validação, depois de ela clicar em
+   publicar. Ver `utils/rascunhoImovel.js`. */
+.rsc-aviso {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: 12px; margin-bottom: 18px;
+  background: rgba(245, 158, 11, 0.09);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  font-size: 12.5px; line-height: 1.6; color: var(--text-main);
+}
+.rsc-aviso__icone { flex: none; color: #f59e0b; display: flex; padding-top: 1px; }
+.rsc-aviso strong { font-weight: 700; }
+.ds-shell .rsc-aviso__x, .rsc-aviso__x {
+  flex: none; width: auto; padding: 0; margin-left: auto; border: 0;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  box-shadow: none; transform: none; display: flex;
+}
+.ds-shell .rsc-aviso__x:hover, .rsc-aviso__x:hover { color: var(--text-main); background: transparent; box-shadow: none; transform: none; }
+
 .mp-linha-caixa { position: relative; }
 
 .ds-shell .mp-linha, .mp-linha {
@@ -7768,24 +8137,29 @@ html[data-tema-painel="claro"] .ed-esq .skeleton-block {
    (1280 × zoom), então nenhuma peça é remedida e nenhum reflow de altura é
    disparado — o que se move é só o enquadramento. */
 
-.ds-side ~ main .editor-rail,
-.ds-side ~ main .ed-esq__rail {
+.ds-side ~ .ds-coluna main .editor-rail,
+.ds-side ~ .ds-coluna main .ed-esq__rail {
   /* Mesma curva e mesma duração da barra: os dois têm que parecer um movimento
      só, e não uma coisa perseguindo a outra. */
   transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1), width 0.18s ease;
 }
-.ds-side:hover ~ main .editor-rail,
-.ds-side:hover ~ main .ed-esq__rail,
+.ds-side:hover ~ .ds-coluna main .editor-rail,
+.ds-side:hover ~ .ds-coluna main .ed-esq__rail,
 /* `focus-within` porque quem navega por teclado nunca passa o mouse — sem isto
    o rail continuaria enterrado justamente para quem mais precisa vê-lo. */
-.ds-side:focus-within ~ main .editor-rail,
-.ds-side:focus-within ~ main .ed-esq__rail {
+.ds-side:focus-within ~ .ds-coluna main .editor-rail,
+.ds-side:focus-within ~ .ds-coluna main .ed-esq__rail,
+/* O terceiro estado: a barra PRESA aberta, que é o que acontece enquanto o
+   seletor de módulo está no ar. Sem ele o rail voltava para baixo da barra
+   assim que o ponteiro entrava no balão do seletor. */
+.ds-side.is-mod-aberto ~ .ds-coluna main .editor-rail,
+.ds-side.is-mod-aberto ~ .ds-coluna main .ed-esq__rail {
   margin-left: 176px; /* 240 (aberta) − 64 (recolhida) */
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ds-side ~ main .editor-rail,
-  .ds-side ~ main .ed-esq__rail { transition: none; }
+  .ds-side ~ .ds-coluna main .editor-rail,
+  .ds-side ~ .ds-coluna main .ed-esq__rail { transition: none; }
 }
 
 /* ── Modal global (`components/Modal.jsx`) ───────────────────────────────────
@@ -7847,7 +8221,27 @@ html[data-tema-painel="claro"] .ed-esq .skeleton-block {
 
 /* Só o CORPO rola: as ações ficam ancoradas embaixo, visíveis num modal alto. */
 .mdl-corpo { flex: 1; min-height: 0; overflow-y: auto; }
-.mdl-acoes { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+/* ── O rodapé de ações ──────────────────────────────────────────────────────
+   Mesma armadilha do "Anotar": sem reiniciar, cada botão herda o `width: 100%`
+   global e os dois brigam pela linha inteira — o rodapé virava dois blocos
+   gordos e o "Cancelar" ficava do mesmo tamanho da ação principal, que é
+   justamente a hierarquia que não se quer num modal de decisão.
+
+   `width: auto` para cada um caber no próprio texto, e a fila alinhada à
+   direita: a ação principal fica onde o polegar e o olho terminam a leitura. */
+.mdl-acoes { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
+.ds-shell .mdl-acoes button, .mdl-acoes button {
+  width: auto; flex: none;
+  padding: 10px 18px; border-radius: 10px;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+/* Em tela estreita a fila empilha, e aí largura automática deixaria dois botões
+   de tamanhos diferentes centralizados no vazio. Empilhados, eles ocupam a
+   linha — e a ação principal vai para CIMA, que é onde o polegar chega. */
+@media (max-width: 460px) {
+  .mdl-acoes { flex-direction: column-reverse; }
+  .ds-shell .mdl-acoes button, .mdl-acoes button { width: 100%; }
+}
 
 /* ── Publicando um imóvel: a tela cheia ──────────────────────────────────────
    Vai ao `<body>` por portal (ver `components/PublicandoImovel.jsx`). */
@@ -8522,11 +8916,28 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
   border: 1px solid rgba(212, 175, 55, 0.24);
 }
 .flow-aviso.is-compacto { padding: 10px 13px; font-size: 12.5px; }
-.flow-aviso.is-config { background: rgba(20, 184, 166, 0.08); border-color: rgba(20, 184, 166, 0.24); }
+
+/* ── `is-config` NÃO é o mesmo aviso que `.flow-aviso` ─────────────────────
+   O dourado do bloco acima é o do PLANO: "isto existe, mas o seu pacote não
+   inclui". `is-config` diz outra coisa — "falta ligar isto aqui" —, que é uma
+   pendência de configuração da própria casa, não um degrau comercial.
+
+   Ele estava num teal `#14b8a6` cravado, herdado de quando o Flow ainda não
+   tinha cor definida. Hoje o acento do módulo é o rosa `#ec0b5b`, e o resultado
+   era um aviso verde-água no meio de uma tela rosa, com cara de outro produto.
+
+   `--modulo-acento` em vez de cor fixa: o aviso acompanha o módulo em que está
+   sendo desenhado, e no Hub sai índigo sem ninguém escrever uma segunda regra.
+   O `color-mix` deriva as duas opacidades do mesmo tom, então não há como o
+   fundo e a borda divergirem. */
+.flow-aviso.is-config {
+  background: color-mix(in srgb, var(--modulo-acento, #6366f1) 9%, transparent);
+  border-color: color-mix(in srgb, var(--modulo-acento, #6366f1) 28%, transparent);
+}
 .flow-aviso__icone { flex: none; color: #d4af37; margin-top: 2px; }
-.flow-aviso.is-config .flow-aviso__icone { color: #14b8a6; }
+.flow-aviso.is-config .flow-aviso__icone { color: var(--modulo-acento, #6366f1); }
 .flow-aviso strong { color: var(--text-main); }
-.flow-aviso a { color: var(--modulo-acento, #14b8a6); font-weight: 600; }
+.flow-aviso a { color: var(--modulo-acento, #6366f1); font-weight: 600; }
 
 /* ── O alerta de negócios parados ──────────────────────────────────────────── */
 
@@ -8608,7 +9019,33 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
   display: flex; gap: 12px; align-items: flex-start;
   overflow-x: auto; overflow-y: visible;
   padding-bottom: 14px; margin: 0 -4px; padding-left: 4px; padding-right: 4px;
+
+  /* ── A BARRA SEGUE O TEMA, E O `scrollbar-color` NÃO É OPCIONAL ──────────
+     Havia só `scrollbar-width: thin` aqui, e o efeito era o oposto do
+     pretendido: declarar a propriedade padrão faz o Chrome IGNORAR os
+     `::-webkit-scrollbar` globais desta folha, e a barra caía no desenho do
+     sistema operacional — cinza claro, atravessando o quadro escuro.
+
+     Com a cor declarada, os dois temas ficam explícitos: a variável guarda o
+     tom, e o tema claro só a redefine. */
   scrollbar-width: thin;
+  scrollbar-color: var(--funil-barra, rgba(255, 255, 255, 0.22)) transparent;
+}
+/* O Safari ainda não lê `scrollbar-color`. Estas quatro linhas repetem o mesmo
+   desenho pela via antiga; no Chrome elas são ignoradas de propósito (ver
+   acima), e no Firefox nunca valeram. Mesma variável nos dois caminhos, então
+   não há como um tema divergir do outro. */
+.funil::-webkit-scrollbar { height: 8px; }
+.funil::-webkit-scrollbar-track { background: transparent; }
+.funil::-webkit-scrollbar-thumb {
+  background: var(--funil-barra, rgba(255, 255, 255, 0.22));
+  border-radius: 999px;
+}
+.funil::-webkit-scrollbar-thumb:hover { background: var(--funil-barra-forte, rgba(255, 255, 255, 0.34)); }
+
+main[data-tema="claro"] .funil {
+  --funil-barra: rgba(15, 23, 42, 0.22);
+  --funil-barra-forte: rgba(15, 23, 42, 0.34);
 }
 .funil-col {
   flex: 0 0 246px; min-width: 246px;
@@ -8637,6 +9074,128 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
 .funil-col__lista { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
 .funil-col__vazia { font-size: 11.5px; color: var(--text-muted); margin: 4px 2px; line-height: 1.5; opacity: 0.75; }
 
+/* ── O ÍMÃ: o vão que diz onde o cartão vai cair ─────────────────────────────
+   Enquanto o cartão está na mão e o ponteiro entra numa coluna, abre-se ali um
+   vão com o nome dele. Antes, o gesto só pintava a coluna de outra cor e a
+   pessoa deduzia o resto — perto da borda entre duas colunas, soltar era
+   adivinhação.
+
+   Tracejado e na cor da COLUNA, não na do cartão: ele não é o cartão, é o lugar
+   que a coluna está abrindo. A altura cresce sozinha com o texto, então o vão
+   tem mais ou menos o tamanho do que vai chegar, sem ninguém medir nada. */
+.funil-ima {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 11px; border-radius: 11px; margin-bottom: 8px;
+  background: color-mix(in srgb, var(--cor) 10%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--cor) 60%, transparent);
+  animation: funilImaEntra 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+  /* O vão não pode receber o `drop`: ele nasce sob o ponteiro, e um alvo novo
+     aparecendo debaixo do cursor no meio do arrasto faz o navegador disparar
+     `dragleave` na coluna — o vão se fecharia no quadro seguinte, e reabriria,
+     e piscaria enquanto durasse o gesto. Quem recebe é sempre a coluna. */
+  pointer-events: none;
+}
+@keyframes funilImaEntra {
+  from { opacity: 0; transform: scaleY(0.7); transform-origin: top; }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .funil-ima { animation: none; } }
+
+.funil-ima__codigo {
+  font-family: var(--s-mono, ui-monospace, monospace);
+  font-size: 9.5px; letter-spacing: 0.06em; color: var(--text-muted);
+}
+.funil-ima__titulo {
+  font-size: 12.5px; font-weight: 600; line-height: 1.35; color: var(--text-main);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.funil-ima__destino {
+  margin-top: 2px; font-size: 10.5px; font-weight: 600; color: var(--cor);
+}
+
+/* ── Abrir um negócio na própria coluna ──────────────────────────────────────
+   Fantasma até o hover: o quadro tem sete destes, e sete botões acesos
+   competiriam com os cartões, que são o conteúdo. Aceso é o "+" da coluna sob o
+   ponteiro — que é a que a pessoa está considerando. */
+.ds-shell .funil-col__novo, .funil-col__novo {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 10px;
+  font-family: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--text-muted); cursor: pointer;
+  background: transparent; border: 1px dashed var(--linha-10, rgba(255, 255, 255, 0.1));
+  box-shadow: none; transform: none;
+  opacity: 0.6; transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.ds-shell .funil-col:hover .funil-col__novo, .funil-col:hover .funil-col__novo { opacity: 1; }
+.ds-shell .funil-col__novo:hover, .funil-col__novo:hover {
+  color: var(--cor); border-color: color-mix(in srgb, var(--cor) 55%, transparent);
+  background: color-mix(in srgb, var(--cor) 8%, transparent);
+  box-shadow: none; transform: none;
+}
+.funil-col__novo:focus-visible { opacity: 1; outline: 2px solid var(--cor); outline-offset: 2px; }
+/* Em tela de toque não existe hover: o botão sempre visível é a única forma de
+   alcançá-lo. */
+@media (hover: none) and (pointer: coarse) {
+  .funil-col__novo { opacity: 1; }
+}
+
+.funil-compor {
+  margin-top: 8px; padding: 9px; border-radius: 11px;
+  display: flex; flex-direction: column; gap: 7px;
+  background: var(--sup-06, rgba(255, 255, 255, 0.06));
+  border: 1px solid color-mix(in srgb, var(--cor) 45%, transparent);
+  animation: funilComporEntra 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes funilComporEntra { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .funil-compor { animation: none; } }
+
+.funil-compor__nome {
+  width: 100%; padding: 7px 9px; border-radius: 8px;
+  font-family: inherit; font-size: 12px; color: var(--text-main);
+  background: var(--sup-05, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+}
+.funil-compor__nome::placeholder { color: var(--text-muted); }
+.funil-compor__nome:focus {
+  outline: none; border-color: color-mix(in srgb, var(--cor) 65%, transparent);
+}
+/* O responsável virou `SelectCustom`; ele já traz a própria caixa, e o que
+   sobra é o invólucro do Escape ocupar a linha inteira. */
+.funil-compor > div { width: 100%; }
+
+.funil-compor__acoes { display: flex; gap: 6px; }
+.ds-shell .funil-compor__ok, .funil-compor__ok {
+  flex: 1; padding: 7px 10px; border-radius: 8px; border: 0;
+  font-family: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  background: var(--cor); color: #fff; box-shadow: none; transform: none;
+}
+.ds-shell .funil-compor__ok:hover, .funil-compor__ok:hover { filter: brightness(1.1); box-shadow: none; transform: none; }
+.ds-shell .funil-compor__cancelar, .funil-compor__cancelar {
+  width: auto; padding: 7px 10px; border-radius: 8px;
+  font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+  background: transparent; border: 1px solid var(--linha-10, rgba(255, 255, 255, 0.1));
+  color: var(--text-muted); box-shadow: none; transform: none;
+}
+.ds-shell .funil-compor__cancelar:hover, .funil-compor__cancelar:hover {
+  color: var(--text-main); background: var(--sup-06, rgba(255, 255, 255, 0.06));
+  box-shadow: none; transform: none;
+}
+.funil-compor__ok:disabled, .funil-compor__cancelar:disabled { opacity: 0.5; cursor: default; }
+
+/* A porta completa, embaixo do quadro. Uma linha de texto e não um botão: ela é
+   a saída de uma minoria dos negócios, e um segundo botão primário competiria
+   com o "+" de cada coluna, que é o caminho principal. */
+.funil-rodape { margin: 14px 2px 0; font-size: 12px; color: var(--text-muted); }
+.ds-shell .funil-rodape button, .funil-rodape button {
+  display: inline-flex; align-items: center; gap: 4px; width: auto; padding: 0;
+  border: 0; background: transparent; box-shadow: none; transform: none;
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--modulo-acento, #ec0b5b); text-decoration: underline; text-underline-offset: 2px;
+}
+.ds-shell .funil-rodape button:hover, .funil-rodape button:hover {
+  filter: brightness(1.15); background: transparent; box-shadow: none; transform: none;
+}
+
 .funil-cartao {
   border-radius: 11px; overflow: hidden; cursor: grab;
   background: var(--sup-05, rgba(255, 255, 255, 0.05));
@@ -8646,7 +9205,10 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
 .funil-cartao:hover { border-color: var(--linha-18, rgba(255, 255, 255, 0.18)); }
 /* Meia opacidade no original enquanto ele é arrastado: é o que diz que aquele
    cartão está "na mão" e não duplicado. */
-.funil-cartao.is-arrastando { opacity: 0.4; cursor: grabbing; }
+/* Meia opacidade no original enquanto ele é arrastado — e mais apagado desde
+   que existe o vão do ímã: com um duplo do cartão aberto na coluna alvo, o de
+   casa precisa recuar para não parecer que o negócio está em dois lugares. */
+.funil-cartao.is-arrastando { opacity: 0.28; cursor: grabbing; }
 .funil-cartao.is-parado { border-left: 2px solid #f59e0b; }
 
 .ds-shell .funil-cartao__corpo {
@@ -8675,13 +9237,28 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
 .funil-cartao__dono { display: inline-flex; align-items: center; gap: 3px; }
 .funil-cartao__alerta { display: inline-flex; align-items: center; gap: 3px; color: #f59e0b; font-weight: 600; }
 
+/* ── A barra de trocar etapa, no pé do cartão ────────────────────────────────
+   Era um `<select>` nativo e virou `SelectCustom` — o navegador desenhava a
+   lista de opções por conta própria, sempre clara, e ela abria como uma janela
+   de outro programa sobre o quadro escuro.
+
+   O que sobrou aqui é a MOLDURA: a faixa colada no rodapé do cartão. O gatilho
+   do combo é um `<button>`, então ele precisa ser reiniciado — sem isso herda o
+   `button { width: 100%; padding: 14px 20px }` global e a faixa de 26px vira
+   uma barra de 44 no pé de um cartão de 86. */
 .funil-cartao__mover {
-  width: 100%; border: 0; border-top: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--linha-08, rgba(255, 255, 255, 0.08));
   background: var(--sup-03, rgba(255, 255, 255, 0.03));
-  color: var(--text-muted); font-family: inherit; font-size: 11px;
-  padding: 6px 10px; cursor: pointer; outline: none;
 }
-.funil-cartao__mover:focus-visible { outline: 2px solid var(--modulo-acento, #14b8a6); outline-offset: -2px; }
+.ds-shell .funil-cartao__mover button, .funil-cartao__mover button {
+  width: 100%; border: 0; border-radius: 0; box-shadow: none; transform: none;
+  background: transparent; color: var(--text-muted);
+  font-family: inherit; font-size: 11px; padding: 6px 10px;
+}
+.ds-shell .funil-cartao__mover button:hover, .funil-cartao__mover button:hover {
+  background: var(--sup-06, rgba(255, 255, 255, 0.06)); color: var(--text-main);
+  box-shadow: none; transform: none;
+}
 
 .funil-perdidos { margin-top: 16px; }
 .ds-shell .funil-perdidos__topo {
@@ -8764,8 +9341,30 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
 }
 .flow-pendencias__selo { flex: none; color: #f59e0b; margin-top: 2px; }
 .flow-pendencias strong { font-size: 13px; }
-.flow-pendencias ul { margin: 7px 0 0; padding-left: 18px; }
-.flow-pendencias li { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; }
+/* ── A lista do que falta para fechar ───────────────────────────────────────
+   Um estilo só para os dois lugares onde ela aparece — a ficha do negócio e o
+   modal que recusa o arrasto até Ganho. Ver `components/flow/ListaDePendencias`.
+
+   Sem `list-style`: o marcador agora é o ÍCONE DO SETOR (balança, moedas,
+   assinatura), e ele separa as três pendências antes de a pessoa ler qualquer
+   frase. Com bolinha, descobrir qual é qual exigia ler as três inteiras. */
+.flow-pendencias__lista, .flow-modal__lista {
+  list-style: none; margin: 8px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.flow-pendencias__lista li, .flow-modal__lista li {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-size: 12.5px; line-height: 1.55; color: var(--text-muted);
+}
+/* O ícone num disco âmbar: ele precisa ler como "falta isto", e não como um
+   enfeite do texto. Âmbar e não vermelho pela mesma razão do modal inteiro —
+   isto é o controle funcionando, não um erro. */
+.flow-pend__icone {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 8px; margin-top: -1px;
+  color: #f59e0b; background: rgba(245, 158, 11, 0.13);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
 
 /* ── Blocos e grade ────────────────────────────────────────────────────────── */
 
@@ -8897,14 +9496,39 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
 }
 .flow-nota textarea:focus { border-color: color-mix(in srgb, var(--modulo-acento, #14b8a6) 45%, transparent); }
 
+/* ── O "Anotar" ─────────────────────────────────────────────────────────────
+   Ele estava herdando o `button { width: 100%; padding: 14px 20px; font-size:
+   14px }` global desta folha — num flex, isso o fazia disputar metade da linha
+   com a textarea e ficar mais alto que ela. É a mesma armadilha que o editor de
+   vitrine descreve no cabeçalho dele; aqui a saída é a mesma: reiniciar o botão
+   neste contexto em vez de salpicar `!important`.
+
+   `align-self: flex-start` com a altura da textarea (o `min-height` dela), e não
+   `stretch`: a textarea é redimensionável, e esticado o botão viraria uma barra
+   de 300px de altura no dia em que alguém puxasse a alça. */
+.ds-shell .flow-nota button, .flow-nota button {
+  flex: none; width: auto; align-self: flex-start; height: 44px;
+  padding: 0 18px; border-radius: 10px;
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+}
+
 .flow-historico { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+/* `minmax(0, 1fr)` e não `1fr`: numa grade, a coluna automática tem largura
+   mínima igual à do conteúdo, e o nome de arquivo que um celular gera é uma
+   "palavra" só, de 180 caracteres — ela esticava a linha e empurrava a data
+   para fora do olho. Com o mínimo zerado, a coluna cede e o texto quebra. */
 .flow-historico li {
-  display: grid; grid-template-columns: 58px 1fr; gap: 11px;
+  display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 11px;
   padding: 8px 0; border-bottom: 1px solid var(--linha-06, rgba(255, 255, 255, 0.06));
 }
 .flow-historico li:last-child { border-bottom: 0; }
 .flow-historico__quando { font-size: 10.5px; color: var(--text-muted); font-family: var(--s-mono, ui-monospace, monospace); padding-top: 2px; }
-.flow-historico__texto { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+/* `anywhere` e não `break-word`: o segundo só quebra ENTRE palavras quando
+   pode, e um nome de arquivo sem espaço nenhum não tem entre. */
+.flow-historico__texto {
+  display: flex; flex-direction: column; gap: 2px; font-size: 12.5px;
+  min-width: 0; overflow-wrap: anywhere;
+}
 .flow-historico__texto strong { color: var(--modulo-acento, #14b8a6); font-size: 12px; }
 .flow-historico__texto em { font-size: 10.5px; color: var(--text-muted); font-style: normal; }
 
@@ -9205,38 +9829,30 @@ html[data-tema-painel="claro"] .ea-tela__rota { background: rgba(15, 23, 42, 0.0
 }
 @media (max-width: 860px) { .flow-eventos li { grid-template-columns: 20px 1fr; } }
 
-/* ── O modal da trava ──────────────────────────────────────────────────────── */
+/* ── O modal da trava ────────────────────────────────────────────────────────
+   Ele montava o próprio véu `fixed`, e caía na armadilha que o cabeçalho do
+   `components/Modal.jsx` descreve: o `<Outlet/>` do AdminLayout tem um
+   `transform` residual da animação de entrada, e isso o torna BLOCO DE
+   CONTENÇÃO — o `fixed` passa a medir por ele, e não pela janela. O véu cobria
+   metade da tela, sem desfoque e por baixo do que devia cobrir.
 
-.flow-modal-veu {
-  position: fixed; inset: 0; z-index: 9994;
-  display: grid; place-items: center; padding: 24px;
-  background: rgba(5, 7, 12, 0.72);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-}
-.flow-modal {
-  width: min(480px, 100%); padding: 28px 30px 24px; border-radius: 18px; text-align: center;
-  background: #14121c; border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.9);
-  color: #f1edf9;
-}
-.flow-modal__selo {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 46px; height: 46px; border-radius: 14px; margin-bottom: 14px;
-  background: rgba(245, 158, 11, 0.14); color: #f59e0b;
-}
-.flow-modal__titulo { margin: 0 0 10px; font-size: 19px; font-weight: 700; }
-.flow-modal__texto { margin: 0 0 16px; font-size: 13.5px; line-height: 1.65; color: #a9a3ba; }
-.flow-modal__texto strong { color: #f1edf9; }
-.flow-modal__lista {
-  list-style: none; margin: 0 0 20px; padding: 0; text-align: left;
-  display: flex; flex-direction: column; gap: 8px;
-}
+   Hoje ele usa o `Modal`, que sai por portal para o `<body>`: véu, desfoque,
+   `z-index`, tokens de tema e Esc vêm de lá. Sobrou só o que é DELE — o texto e
+   a lista de pendências, ambos em token, para o tema claro não ficar com um
+   cinza cravado sobre branco. */
+
+.flow-modal__texto { margin: 0 0 16px; font-size: 13.5px; line-height: 1.65; color: var(--text-muted); }
+.flow-modal__texto strong { color: var(--text-main); font-weight: 700; }
+/* O modal usa o MESMO desenho da ficha (declarado junto de
+   `.flow-pendencias__lista`, acima) e só acrescenta o que é dele: a caixa em
+   volta de cada linha, que ali dentro é o que dá corpo a um conteúdo curto. */
+.flow-modal__lista { text-align: left; }
 .flow-modal__lista li {
-  padding: 11px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.55;
-  background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2);
-  color: #d8d2e6;
+  align-items: center;
+  padding: 10px 12px; border-radius: 10px;
+  background: rgba(245, 158, 11, 0.07); border: 1px solid rgba(245, 158, 11, 0.2);
+  color: var(--text-main);
 }
-.flow-modal__acoes { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
 @media (prefers-reduced-motion: reduce) {
   .flow-barra__preenchida, .funil-col, .funil-cartao { transition: none; }

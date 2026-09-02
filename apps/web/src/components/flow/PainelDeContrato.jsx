@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FileText, PaperPlaneTilt, ArrowsClockwise, XCircle, Plus, Trash } from "@phosphor-icons/react";
 import { api } from "../../api";
 import { STATUS_CONTRATO, PAPEIS_SIGNATARIO, dataCurta } from "../../utils/flow";
+import { SelectCustom } from "../SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O CONTRATO, DENTRO DO NEGÓCIO.
@@ -92,9 +93,13 @@ export function PainelDeContrato({ session, negocio, aoMudar, showToast }) {
         ) : (
           <>
             <div className="flow-gerar">
-              <select value={modeloId} onChange={(e) => { setModeloId(e.target.value); setPrevia(null); }}>
-                {modelos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
-              </select>
+              <SelectCustom
+                size="sm"
+                value={modeloId}
+                onChange={(v) => { setModeloId(v); setPrevia(null); }}
+                ariaLabel="Modelo de minuta"
+                options={modelos.map((m) => ({ value: m.id, label: m.nome }))}
+              />
               <button type="button" className="flow-btn-fantasma" onClick={verPrevia} disabled={ocupado}>
                 Ver prévia
               </button>
@@ -262,15 +267,30 @@ function ContratoVivo({ contrato, negocio, tenantSlug, aoMudar, showToast }) {
                   value={s.email} placeholder="e-mail" type="email"
                   onChange={(e) => setSignatarios((a) => a.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))}
                 />
-                <select
+                <SelectCustom
+                  size="sm"
                   value={s.papel}
-                  onChange={(e) => setSignatarios((a) => a.map((x, j) => (j === i ? { ...x, papel: e.target.value } : x)))}
-                >
-                  {PAPEIS_SIGNATARIO.map((p) => <option key={p.key} value={p.key}>{p.rotulo}</option>)}
-                </select>
-                <button type="button" onClick={() => setSignatarios((a) => a.filter((_, j) => j !== i))}>
-                  <Trash size={13} />
-                </button>
+                  onChange={(v) => setSignatarios((a) => a.map((x, j) => (j === i ? { ...x, papel: v } : x)))}
+                  ariaLabel="Papel do signatário"
+                  options={PAPEIS_SIGNATARIO.map((p) => ({ value: p.key, label: p.rotulo }))}
+                />
+                {/* ── COM UM SÓ, NÃO HÁ O QUE EXCLUIR ────────────────────
+                    O envio exige pelo menos um signatário (a rota recusa lista
+                    vazia), então este botão, na última linha, só levava a um
+                    erro — e a um formulário sem nenhum campo, do qual a pessoa
+                    tinha que sair e voltar. Some em vez de desabilitar: um
+                    ícone de lixeira apagado ao lado de um campo obrigatório
+                    parece defeito, e a única explicação possível ("você precisa
+                    de um") é óbvia demais para merecer uma dica. */}
+                {signatarios.length > 1 ? (
+                  <button
+                    type="button"
+                    title="Remover este signatário"
+                    onClick={() => setSignatarios((a) => a.filter((_, j) => j !== i))}
+                  >
+                    <Trash size={13} />
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -85,7 +85,7 @@ function itemDeConfiguracoes(ctx) {
 }
 
 export function gruposDoHub(ctx) {
-  const { cargo, plano, navigate, rota: p, ver, leadsBadge, showcaseLink, showcaseEditorLink, flags } = ctx;
+  const { cargo, plano, navigate, rota: p, ver, leadsBadge, menuDeImoveis, showcaseLink, showcaseEditorLink, flags } = ctx;
 
   return limpar([
     {
@@ -102,6 +102,15 @@ export function gruposDoHub(ctx) {
         {
           key: "imoveis-novo", Icon: Buildings, label: "Gerenciar Imóveis",
           active: flags.isGerenciarImoveis, onClick: () => navigate("/imoveis"),
+          /* Os três pontinhos, que aparecem no hover. Guardam o que PERTENCE a
+             este item sem ser o destino dele — hoje, os cadastros que ficaram
+             pela metade. Como subitem eles competiriam com "Novo Imóvel" e
+             "Categoria"; como tela nova, exigiriam navegação para uma pergunta
+             que na maioria dos dias se responde com "não há nada".
+             O menu vem PRONTO do layout: o cartão da tela inicial desenha o
+             mesmo item, e duas listas montadas em dois arquivos divergiriam na
+             primeira opção nova. Ver `MenuDeCanto`. */
+          menu: menuDeImoveis,
           subitens: [
             { key: "imovel-form", Icon: PlusCircle, label: "Novo Imóvel", active: p === "/imoveis/novo", onClick: () => navigate("/imoveis/novo") },
             { key: "imovel-tipos", Icon: Tag, label: "Categoria de Imóvel", active: p === "/tipos-imovel", onClick: () => navigate("/tipos-imovel") },

@@ -4,6 +4,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { Trilha } from "./Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 
 export function initial(name) {
   const c = (name || "").trim().charAt(0);
@@ -136,28 +137,22 @@ export function StatusPill({ active }) {
 
    `trilha={false}` desliga, e `trilha={[...]}` substitui, para a tela que
    precisa de um degrau próprio (o código de um negócio, por exemplo). */
-export function PageHeader({ title, subtitle, action, trilha }) {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
+/* ── O cabeçalho da tela MUDOU DE LUGAR, não de dono ────────────────────────
+   Ele desenhava título, subtítulo, trilha e botão dentro do conteúdo. Hoje
+   quem desenha é a faixa do `AdminLayout` (`CabecalhoDoPainel`), e este
+   componente virou a DECLARAÇÃO: a tela continua dizendo como se chama, no
+   mesmo lugar do JSX, e não renderiza nada onde estava.
 
-  const degraus = trilha === false
-    ? []
-    : Array.isArray(trilha) ? trilha : degrausAte(pathname, navigate);
+   Manter o componente em vez de apagá-lo das nove telas que o usam não é
+   preguiça — é o que faz o título continuar sendo uma decisão da PÁGINA. Sem
+   ele, o nome de cada tela viraria uma tabela distante do código que a desenha,
+   e "Negócio #412" (que só a tela sabe montar) não teria como existir.
 
-  return (
-    <>
-      {degraus.length > 1 ? (
-        <div style={{ marginBottom: "14px" }}><Trilha itens={degraus} /></div>
-      ) : null}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "28px", gap: "16px" }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "700", letterSpacing: "-0.3px" }}>{title}</h2>
-          {subtitle && <p style={{ margin: "5px 0 0", color: "var(--text-muted)", fontSize: "14px" }}>{subtitle}</p>}
-        </div>
-        {action && <div style={{ flexShrink: 0 }}>{action}</div>}
-      </div>
-    </>
-  );
+   `trilha` continua aceito e ignorado: a trilha agora sai da rota, na faixa, e
+   nenhuma das telas passava um valor diferente do padrão. */
+export function PageHeader({ title, subtitle, action }) {
+  useTituloDaTela({ titulo: title, subtitulo: subtitle, acao: action });
+  return null;
 }
 
 /* Lista vazia, com a saída à mão.

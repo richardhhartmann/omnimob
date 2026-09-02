@@ -4,6 +4,7 @@ import { ClockCounterClockwise, PlusCircle, PencilSimple, Trash, MagnifyingGlass
 import { api } from "../api";
 import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
+import { SelectCustom } from "../components/SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Trilha de auditoria.
@@ -207,8 +208,9 @@ export function AuditoriaPage({ session }) {
   }, [dados.registros]);
 
   return (
-    <div className="main-content" style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "20px" }}>
-      <Trilha itens={degrausAte("/auditoria", navigate)} />
+    <div style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* A trilha subiu para a faixa do painel, que a desenha a partir da rota —
+          uma só, no mesmo lugar em toda tela. Ver `CabecalhoDoPainel`. */}
       <header data-tour="auditoria-cabecalho">
         <h2 style={{ margin: "0 0 4px 0", fontSize: "24px", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
           <ClockCounterClockwise size={24} weight="duotone" />
@@ -230,26 +232,55 @@ export function AuditoriaPage({ session }) {
           />
         </label>
 
-        <select value={filtros.acao} onChange={(e) => setFiltros((f) => ({ ...f, acao: e.target.value }))}>
-          <option value="">Toda ação</option>
-          <option value="CRIOU">Criou</option>
-          <option value="ALTEROU">Alterou</option>
-          <option value="EXCLUIU">Excluiu</option>
-        </select>
+        {/* Os três filtros usam o `SelectCustom` pelo mesmo motivo do resto do
+            painel: a lista do `<select>` nativo é desenhada pelo navegador,
+            sempre clara, e abre como janela de outro programa sobre o tema
+            escuro. Ver o cabeçalho de `SelectCustom`. */}
+        <SelectCustom
+          size="sm"
+          value={filtros.acao}
+          onChange={(v) => setFiltros((f) => ({ ...f, acao: v }))}
+          ariaLabel="Filtrar por ação"
+          options={[
+            { value: "", label: "Toda ação" },
+            { value: "CRIOU", label: "Criou", color: "#10b981" },
+            { value: "ALTEROU", label: "Alterou", color: "#f59e0b" },
+            { value: "EXCLUIU", label: "Excluiu", color: "#ef4444" },
+          ]}
+        />
 
-        <select value={filtros.entidade} onChange={(e) => setFiltros((f) => ({ ...f, entidade: e.target.value }))}>
-          <option value="">Todo registro</option>
-          {opcoes.entidades.map((e) => (
-            <option key={e.valor} value={e.valor}>{nomeDaEntidade(e.valor)} ({e.total})</option>
-          ))}
-        </select>
+        {/* A contagem vira segunda linha em vez de parêntese no rótulo: ela
+            responde outra pergunta ("quanto há disto?") e, colada ao nome,
+            fazia o olho ler "Imóvel 412" como se fosse o nome do registro. */}
+        <SelectCustom
+          size="sm"
+          value={filtros.entidade}
+          onChange={(v) => setFiltros((f) => ({ ...f, entidade: v }))}
+          ariaLabel="Filtrar por tipo de registro"
+          options={[
+            { value: "", label: "Todo registro" },
+            ...opcoes.entidades.map((e) => ({
+              value: e.valor,
+              label: nomeDaEntidade(e.valor),
+              description: `${e.total} ${e.total === 1 ? "registro" : "registros"}`,
+            })),
+          ]}
+        />
 
-        <select value={filtros.usuarioId} onChange={(e) => setFiltros((f) => ({ ...f, usuarioId: e.target.value }))}>
-          <option value="">Toda a equipe</option>
-          {opcoes.usuarios.map((u) => (
-            <option key={u.id} value={u.id}>{u.nome} ({u.total})</option>
-          ))}
-        </select>
+        <SelectCustom
+          size="sm"
+          value={filtros.usuarioId}
+          onChange={(v) => setFiltros((f) => ({ ...f, usuarioId: v }))}
+          ariaLabel="Filtrar por pessoa"
+          options={[
+            { value: "", label: "Toda a equipe" },
+            ...opcoes.usuarios.map((u) => ({
+              value: u.id,
+              label: u.nome,
+              description: `${u.total} ${u.total === 1 ? "ação" : "ações"}`,
+            })),
+          ]}
+        />
 
         <label className="aud-data">
           De <input type="date" value={filtros.desde} onChange={(e) => setFiltros((f) => ({ ...f, desde: e.target.value }))} />
