@@ -90,7 +90,7 @@ export const ACOES = [
   { id: "configuracoes.atalhos",   tela: "configuracoes", rotulo: "Atalhos de teclado",  padrao: "3", exige: "verConfiguracoes", destino: "/configuracoes?ver=atalhos" },
   { id: "configuracoes.redes",     tela: "configuracoes", rotulo: "Redes sociais",       padrao: "4", exige: "verConfiguracoes", destino: "/configuracoes?ver=redes" },
   { id: "configuracoes.dados",     tela: "configuracoes", rotulo: "Dados",               padrao: "5", exige: "verConfiguracoes", destino: "/configuracoes?ver=dados" },
-  { id: "configuracoes.flow",      tela: "configuracoes", rotulo: "Omnimob Flow",        padrao: "6", exige: "verConfiguracoes", destino: "/configuracoes?ver=flow" },
+  { id: "configuracoes.flow",      tela: "configuracoes", rotulo: "Omniflow",        padrao: "6", exige: "verConfiguracoes", destino: "/configuracoes?ver=flow" },
   { id: "configuracoes.cobranca",  tela: "configuracoes", rotulo: "Cobrança e pagamentos", padrao: "7", exige: "verCobranca",     destino: "/configuracoes?ver=cobranca" },
   { id: "configuracoes.plano",     tela: "configuracoes", rotulo: "Plano e recursos",    padrao: "8", exige: "verConfiguracoes", destino: "/configuracoes?ver=plano" },
 

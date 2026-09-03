@@ -750,19 +750,19 @@ const FAIXA_EXTRA = [
     value: "7",
     label: "Estágios até o negócio fechar",
     tone: "rose",
-    detalhe: "O funil do Flow vai de Lead a Ganho passando por Contato, Visita, Proposta, Negociação e Aprovação. Perdido fica fora dessa sequência de propósito: um negócio perdido não é uma etapa a caminho da seguinte, e tratá-lo como tal distorceria qualquer leitura do funil.",
+    detalhe: "O funil do Omniflow vai de Lead a Ganho passando por Contato, Visita, Proposta, Negociação e Aprovação. Perdido fica fora dessa sequência de propósito: um negócio perdido não é uma etapa a caminho da seguinte, e tratá-lo como tal distorceria qualquer leitura do funil.",
   },
   {
     kind: "text",
     title: "Do portal direto ao funil",
     desc: "O interessado que chega pelo ZAP, VivaReal ou OLX entra como negócio, sem ninguém copiar e colar.",
-    detalhe: "Cada canal de captação recebe um endereço próprio, e é ele que a imobiliária cola no integrador do portal. O Flow entende os formatos conhecidos e ainda assim guarda o corpo original de cada chamada por noventa dias — é o que permite descobrir por que uma integração parou, em vez de apenas constatar que parou.",
+    detalhe: "Cada canal de captação recebe um endereço próprio, e é ele que a imobiliária cola no integrador do portal. O Omniflow entende os formatos conhecidos e ainda assim guarda o corpo original de cada chamada por noventa dias — é o que permite descobrir por que uma integração parou, em vez de apenas constatar que parou.",
   },
   {
     kind: "text",
     title: "O contrato não sai pela metade",
     desc: "Campo sem dado vira pendência, e não um espaço em branco no documento assinado.",
-    detalhe: "As minutas são modelos com marcadores que o Flow preenche a partir do negócio. Quando falta a informação de um marcador, o contrato não é gerado: o sistema lista o que falta. Um documento com lacuna é pior que documento nenhum, porque parece pronto.",
+    detalhe: "As minutas são modelos com marcadores que o Omniflow preenche a partir do negócio. Quando falta a informação de um marcador, o contrato não é gerado: o sistema lista o que falta. Um documento com lacuna é pior que documento nenhum, porque parece pronto.",
   },
   {
     kind: "text",
@@ -780,7 +780,7 @@ const FAIXA_EXTRA = [
     kind: "text",
     title: "Assinatura sem sair do fluxo",
     desc: "O contrato gerado segue para assinatura digital e o negócio acompanha o retorno.",
-    detalhe: "O Flow conversa com Clicksign e DocuSign por um adaptador único, com quatro verbos: enviar, consultar, cancelar e ler o retorno. O resto do sistema nunca fala com o fornecedor diretamente, então trocar de provedor é trabalho de um arquivo — e não de todas as telas que mencionam contrato.",
+    detalhe: "O Omniflow conversa com Clicksign e DocuSign por um adaptador único, com quatro verbos: enviar, consultar, cancelar e ler o retorno. O resto do sistema nunca fala com o fornecedor diretamente, então trocar de provedor é trabalho de um arquivo — e não de todas as telas que mencionam contrato.",
   },
 ];
 
@@ -853,7 +853,7 @@ const NOTA_DO_PERIODO = { mensal: "cobrado mensalmente" };
 /* A nota do anual precisa do PLANO, não só do período — ela nomeia o que está
    sendo comprado ("plano Profissional com Flow anual") e diz o total. */
 function notaDoAnual(plano, total) {
-  const descricao = plano.comFlow ? `${plano.name} com Flow` : plano.name;
+  const descricao = plano.comFlow ? `${plano.name} com Omniflow` : plano.name;
   return `Valor equivalente à média mensal do plano ${descricao} anual, totalizando ${formatarBRL(total)}, com facilidade de parcelamento em até 6x no cartão ou boleto.`;
 }
 
@@ -955,7 +955,7 @@ function planosBase(pacotes) {
          quem ligou o interruptor ligou por causa dele, e é a primeira coisa que
          o cartão precisa confirmar. */
       resumo: comFlow
-        ? [{ label: "Tudo do Hub, mais o Omnimob Flow", heranca: true }, ...resumoDoPlano(p.key).slice(0, 3)]
+        ? [{ label: "Tudo do Omnimob, mais o Omniflow", heranca: true }, ...resumoDoPlano(p.key).slice(0, 3)]
         : resumoDoPlano(p.key),
       highlight: p.key === "PROFISSIONAL",
     };
@@ -1236,7 +1236,7 @@ function ManifestoDoFlow() {
       <div className="dl-manifesto__wrap">
         <span className="dl-manifesto__olho">
           <i aria-hidden="true" />
-          O Omnimob Flow
+          O Omniflow
         </span>
 
         <div className="dl-manifesto__cabeca">
@@ -1267,7 +1267,7 @@ function ManifestoDoFlow() {
           </p>
           <div>
             <p>
-              O Flow é essa metade. Ele não é uma aba a mais no painel: é o caminho que o negócio
+              O Omniflow é essa metade. Ele não é uma aba a mais no painel: é o caminho que o negócio
               percorre depois que o lead chega.
             </p>
             <p>
@@ -1282,9 +1282,9 @@ function ManifestoDoFlow() {
 
         <div className="dl-manifesto__remate">
           <p className="dl-manifesto__fecho">
-            O Hub cuida do que a sua imobiliária tem.
+            O Omnimob cuida do que a sua imobiliária tem.
             <br />
-            <em>O Flow cuida do que ela está fechando.</em>
+            <em>O Omniflow cuida do que ela está fechando.</em>
           </p>
           {/* A frase que fecha a secao, ao lado da imagem do negocio fechando.
               E o unico ponto da pagina inteira que mostra alguem CONSEGUINDO —
@@ -1334,7 +1334,7 @@ function TelasDoFlow() {
   return (
     <div className="dl-flowtelas">
       <article className="dl-flowtela dl-flowtela--funil">
-        <span className="dl-flowtela__tag"><i aria-hidden="true" />Flow · Funil</span>
+        <span className="dl-flowtela__tag"><i aria-hidden="true" />Omniflow · Funil</span>
 
         <div className="dl-flowtela__quadro" aria-hidden="true">
           <div className="dl-fkanban">
@@ -1371,7 +1371,7 @@ function TelasDoFlow() {
       </article>
 
       <article className="dl-flowtela dl-flowtela--minuta">
-        <span className="dl-flowtela__tag"><i aria-hidden="true" />Flow · Contrato</span>
+        <span className="dl-flowtela__tag"><i aria-hidden="true" />Omniflow · Contrato</span>
 
         <div className="dl-flowtela__quadro" aria-hidden="true">
           <div className="dl-fminuta">
@@ -1398,7 +1398,7 @@ function TelasDoFlow() {
       </article>
 
       <article className="dl-flowtela dl-flowtela--comissao">
-        <span className="dl-flowtela__tag"><i aria-hidden="true" />Flow · Comissão</span>
+        <span className="dl-flowtela__tag"><i aria-hidden="true" />Omniflow · Comissão</span>
 
         <div className="dl-flowtela__quadro" aria-hidden="true">
           <div className="dl-fsplit">

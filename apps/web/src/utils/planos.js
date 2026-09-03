@@ -118,18 +118,18 @@ export const PLANOS = [
 export const PACOTES = [
   {
     key: "HUB",
-    nome: "Hub",
+    nome: "Omnimob",
     modulos: ["HUB"],
-    titulo: "Só o Omnimob Hub",
+    titulo: "Só o Omnimob",
     descricao: "Acervo, vitrine pública, leads, clientes, equipe e relatórios.",
   },
   {
     key: "HUB_FLOW",
-    nome: "Hub + Flow",
+    nome: "Omnimob + Omniflow",
     modulos: ["HUB", "FLOW"],
-    titulo: "Omnimob Hub + Flow",
+    titulo: "Omnimob + Omniflow",
     descricao:
-      "Tudo do Hub, mais a operação comercial: captação automática dos portais, " +
+      "Tudo do Omnimob, mais a operação comercial: captação automática dos portais, " +
       "funil de negócios, minuta contratual, assinatura digital e comissão.",
     /* Selo da coluna na landing. É o pacote que queremos vender e a tabela pode
        dizer isso — o que ela não pode é esconder que o outro existe. */

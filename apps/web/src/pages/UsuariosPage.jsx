@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useOutletContext, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useOutletContext, useNavigate, useParams, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
@@ -11,7 +11,6 @@ import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
 import { UserPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
-import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
@@ -120,7 +119,12 @@ export function UsuariosPage({ session }) {
   const showToast = useOutletContext()?.showToast;
   const [usuarios, setUsuarios] = useState([]);
   const [cargos, setCargos] = useState([]);
-  const [view, setView] = useState("list"); // "list" | "form"
+  /* ── A VISTA SAI DA ROTA ─────────────────────────────────────────────────
+     Era `useState("list" | "form")`. Ver o bloco de rotas em `App.jsx` e a
+     mesma migração em `ClientesPage`. */
+  const { usuarioId } = useParams();
+  const criando = useLocation().pathname.endsWith("/novo");
+  const view = criando || usuarioId ? "form" : "list";
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(FORM_EMPTY);
   const [loading, setLoading] = useState(false);
@@ -189,17 +193,32 @@ export function UsuariosPage({ session }) {
   /* O nome da tela sobe para a faixa do painel. A rota já saberia o título
      sozinha (`trilhaDoPainel`), mas o SUBTÍTULO só esta tela conhece — e sem
      declará-lo aqui ele se perderia na mudança. Ver `contextoDeCabecalho`. */
-  useTituloDaTela({ titulo: "Usuários", subtitulo: "Quem tem acesso ao painel e com qual cargo." });
+  /* O título e a trilha acompanham a sub-tela — antes a faixa dizia "Usuários"
+     com um cadastro aberto, e a página compensava com uma segunda trilha. */
+  useTituloDaTela({
+    titulo: view === "form" ? (editando ? "Editar Usuário" : "Novo Usuário") : "Usuários",
+    subtitulo: view === "form"
+      ? (editando?.nome || "Preencha os dados do novo usuário.")
+      : "Quem tem acesso ao painel e com qual cargo.",
+    trilha: view === "form" ? [
+      ...degrausAte("/usuarios", navigate),
+      {
+        chave: "form",
+        rotulo: editando ? "Editar Usuário" : "Novo Usuário",
+        Icone: editando ? PencilSimple : PlusCircle,
+        aoIr: () => {},
+      },
+    ] : undefined,
+  });
 
   function abrirCriar() {
-    setEditando(null);
-    // Usuário novo sempre nasce com o sufixo do tenant.
-    setForm({ ...FORM_EMPTY, comSufixo: true });
-    setError("");
-    setView("form");
+    navigate("/usuarios/novo");
   }
 
-  function abrirEditar(u) {
+  /* Preenche o formulário a partir de um usuário já em mãos. Separado de
+     `abrirEditar` porque o efeito abaixo precisa da mesma coisa quando ninguém
+     clicou em nada — F5 ou link colado. */
+  function preencherCom(u) {
     const { base, temSufixo } = separarLogin(u.login, tenantSlug);
     setEditando(u);
     setForm({
@@ -221,8 +240,45 @@ export function UsuariosPage({ session }) {
       cargoVitrine: u.cargoVitrine ?? "",
     });
     setError("");
-    setView("form");
   }
+
+  function abrirEditar(u) {
+    preencherCom(u);
+    preenchidoPara.current = u.id;
+    navigate(`/usuarios/${u.id}`);
+  }
+
+  /* ── O FORMULÁRIO SE PREENCHE A PARTIR DA URL ────────────────────────────
+     `/usuarios/:id` pode ser aberta sem passar pela lista: F5, favorito, link
+     colado. Aqui não há `GET /api/usuarios/:id` no servidor — e não precisa:
+     `listUsuarios` traz todos, sem filtro nem paginação, então basta esperar a
+     lista chegar. Só depois de ela ter chegado (`initialLoading` falso) é que
+     um id não encontrado significa id inválido.
+
+     `preenchidoPara` impede o efeito de reescrever o que a pessoa está
+     digitando quando a lista recarregar. */
+  const preenchidoPara = useRef(null);
+  useEffect(() => {
+    if (criando) {
+      if (preenchidoPara.current === "novo") return;
+      preenchidoPara.current = "novo";
+      setEditando(null);
+      // Usuário novo sempre nasce com o sufixo do tenant.
+      setForm({ ...FORM_EMPTY, comSufixo: true });
+      setError("");
+      return;
+    }
+    if (!usuarioId) { preenchidoPara.current = null; return; }
+    if (preenchidoPara.current === usuarioId) return;
+
+    const achado = usuarios.find((u) => u.id === usuarioId);
+    if (achado) { preenchidoPara.current = usuarioId; preencherCom(achado); return; }
+    if (initialLoading) return;   // a lista ainda não chegou
+
+    showToast?.("Não encontrei este usuário.", "error");
+    navigate("/usuarios", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuarioId, criando, usuarios, initialLoading]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -270,7 +326,7 @@ export function UsuariosPage({ session }) {
         setUsuarios((prev) => [...prev, created]);
         showToast?.(`${created.nome} cadastrado.`);
       }
-      setView("list");
+      navigate("/usuarios");
     } catch (err) {
       setError(err.message);
       showToast?.(err.message, "error");
@@ -320,24 +376,14 @@ export function UsuariosPage({ session }) {
   /* Esc fecha o cadastro e volta à lista — o mesmo que o "Cancelar". A vista
      trocou por estado e não por rota, então o atalho global não tinha o que
      fazer aqui. */
-  useSaidaDaTela(() => setView("list"), view === "form");
+  /* Esc fecha o cadastro e volta à lista. Continua necessário mesmo com rota
+     própria: o Esc global recusa agir com o foco num campo de texto, e num
+     formulário ele quase sempre está. Ver `useSaidaDaTela`. */
+  useSaidaDaTela(() => navigate("/usuarios"), view === "form");
 
   if (view === "form") {
     return (
       <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-        <div style={{ marginBottom: "24px" }}>
-          <Trilha
-            itens={[
-              ...degrausAte("/usuarios", navigate, () => setView("list")),
-              {
-                chave: "form",
-                rotulo: editando ? "Editar Usuário" : "Novo Usuário",
-                Icone: editando ? PencilSimple : PlusCircle,
-                aoIr: () => setView("form"),
-              },
-            ]}
-          />
-        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
           <input
@@ -555,7 +601,7 @@ export function UsuariosPage({ session }) {
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               {editando ? "Salvar Alterações" : "Criar Usuário"}
             </button>
-            <button type="button" className="button-secondary" onClick={() => setView("list")} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
+            <button type="button" className="button-secondary" onClick={() => navigate("/usuarios")} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               Cancelar
             </button>
           </div>

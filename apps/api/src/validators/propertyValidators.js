@@ -98,7 +98,7 @@ export const updateTenantConfiguracaoSchema = z.object({
      chama `cofre.cifrar`). Ele é opcional em toda gravação e nunca é limpo por
      ausência: quem só veio ajustar a comissão não pode apagar a credencial de
      assinatura por não ter mandado o campo. */
-  assinaturaProvedor: z.enum(["clicksign", "docusign"]).nullish(),
+  assinaturaProvedor: z.enum(["autentique", "clicksign", "docusign"]).nullish(),
   assinaturaToken: z.string().trim().min(8).max(4000).optional(),
   assinaturaConta: z.string().trim().max(200).nullish(),
   assinaturaSandbox: z.boolean().optional(),

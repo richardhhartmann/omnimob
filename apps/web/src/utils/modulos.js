@@ -45,18 +45,25 @@ export const FLOW = "FLOW";
    e precisa ser a mesma em toda conta — é o que faz a pessoa reconhecer, de
    relance, em qual módulo ela está.
 
-   ── A MARCA É IMAGEM, E ELA É COMPOSTA ──
+   ── A MARCA É UM WORDMARK FECHADO POR MÓDULO ──
 
-   A logo de cada módulo é montada de duas peças:
+   Cada módulo tem UMA imagem, inteira:
 
-     TIPO_OMNIMOB   o prédio + "OMNIMOB"  — a mesma nos dois
-     palavra        "Hub" ou "flow"       — a parte que muda
+     Omnimob    /tipo_header_alt.png   o prédio + "OMNIMOB"
+     Omniflow   /omnimob_flow.png      o prédio + "OMNI" + "flow"
 
-   Duas imagens e não um wordmark fechado por módulo, e a razão é de
-   manutenção: a metade "OMNIMOB" já existe no produto (é a arte do cabeçalho
-   da landing), e com wordmarks fechados um retoque nela exigiria reexportar
-   uma imagem por módulo — a terceira nasceria fora de registro com as outras
-   duas.
+   Era composta — a arte `/tipo_header_alt.png` mais uma segunda imagem com a palavra do
+   módulo ("Hub" ou "flow") sentada à direita —, e a composição existia para
+   não reexportar a metade "OMNIMOB" a cada retoque. Ela deixou de fazer
+   sentido quando os nomes mudaram: o antigo Hub virou só "Omnimob" e não tem
+   mais palavra para acrescentar, e o antigo Flow virou "Omniflow", uma palavra
+   ÚNICA em que "Omni" e "flow" se emendam. Não há onde cortar sem partir uma
+   letra.
+
+   As duas artes têm o mesmo quadro (2852×603) e o símbolo no mesmo lugar
+   (x 0..499), então elas são intercambiáveis no mesmo `height` — foi medido,
+   não estimado. É o que mantém o alinhamento do seletor sem uma regra por
+   módulo.
 
    Só a barra ABERTA usa a logo. Recolhida, ela tem 64px e a composição não
    cabe; ali entra `SIMBOLO_OMNIMOB`, o prédio sozinho, e quem distingue o
@@ -84,11 +91,9 @@ export const FLOW = "FLOW";
 export const MODULOS = [
   {
     key: HUB,
-    nome: "Hub",
-    nomeCompleto: "Omnimob Hub",
-    /* A PALAVRA do módulo, que senta à direita de `TIPO_OMNIMOB`. Ver a nota
-       sobre a logo composta, acima. */
-    palavra: "/hub.png",
+    nome: "Omnimob",
+    /* O wordmark inteiro. Ver a nota sobre a marca, acima. */
+    logo: "/tipo_header_alt.png",
     /* Uma linha dizendo o que o módulo É. Curta de propósito: ela cabe embaixo
        da logo no balão do seletor (228px) e vira a chamada do cartão na
        landing. Duas frases diferentes para as duas telas seriam duas versões da
@@ -113,9 +118,8 @@ export const MODULOS = [
   },
   {
     key: FLOW,
-    nome: "Flow",
-    nomeCompleto: "Omnimob Flow",
-    palavra: "/flow.png",
+    nome: "Omniflow",
+    logo: "/omnimob_flow.png",
     descricao:
       "Onde o lead vira negócio: captação automática dos portais, funil por " +
       "estágio, minuta, assinatura digital e comissão.",
@@ -131,10 +135,6 @@ export const MODULOS = [
 /* O símbolo sozinho, sem palavra nenhuma — o que a barra RECOLHIDA mostra.
    O mesmo para os dois módulos, porque ele É o mesmo nas duas artes. */
 export const SIMBOLO_OMNIMOB = "/logo_nova.png";
-
-/* A metade fixa da logo: o prédio e a palavra OMNIMOB, sem o nome do módulo.
-   A mesma arte que a landing usa no cabeçalho — uma marca, um arquivo. */
-export const TIPO_OMNIMOB = "/tipo_header_alt.png";
 
 /* O acento do Flow, solto. O `ToggleDoFlow` aparece na LANDING, onde não há
    `.ds-shell` publicando `--modulo-acento` — ele precisa da cor como valor, e

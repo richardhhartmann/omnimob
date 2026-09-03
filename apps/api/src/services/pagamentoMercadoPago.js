@@ -155,7 +155,7 @@ export function corpoDaCobrancaPix({ tenant, plano, periodo, pacote, valor, agor
     /* O que a pessoa vê no app do banco na hora de confirmar. Diz o produto, o
        plano e o prazo — "OMNIMOB" sozinho, meses depois, no extrato, não
        responde por que aquele valor saiu. */
-    description: `Omnimob ${nome} — ${pacoteEscolhido === "HUB_FLOW" ? "Hub + Flow, " : ""}${
+    description: `Omnimob ${nome} — ${pacoteEscolhido === "HUB_FLOW" ? "Omnimob + Omniflow, " : ""}${
       periodoEscolhido === "anual" ? "12 meses" : "1 mês"
     }`,
     payment_method_id: "pix",

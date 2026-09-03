@@ -125,7 +125,7 @@ captacaoPublicaRouter.post("/:chave", async (req, res) => {
     return res.json({ recebido: false, motivo: "conta-inativa" });
   }
   if (!tenantTemModulo(tenant, FLOW)) {
-    await registrarEvento(fonte, req.body, "RECUSADO", "Módulo Flow não contratado.");
+    await registrarEvento(fonte, req.body, "RECUSADO", "Módulo Omniflow não contratado.");
     return res.json({ recebido: false, motivo: "modulo-nao-contratado" });
   }
   if (!flowLibera(tenant.plano, "captacaoWebhook")) {

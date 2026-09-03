@@ -611,7 +611,19 @@ export default function App() {
             : <Navigate to={defaultPublicPath} replace />
         } />
         <Route path="/leads" element={<Navigate to="/relatorios" replace />} />
+        {/* As três são a MESMA página; a rota diz se é a lista ou o cadastro.
+            Ver a nota no bloco de Clientes. */}
         <Route path="/usuarios" element={
+          cargo?.gerenciarUsuarios
+            ? <UsuariosPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/usuarios/novo" element={
+          cargo?.gerenciarUsuarios
+            ? <UsuariosPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/usuarios/:usuarioId" element={
           cargo?.gerenciarUsuarios
             ? <UsuariosPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
@@ -624,17 +636,86 @@ export default function App() {
             ? <AuditoriaPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        {/* As três são a MESMA página; a rota diz se é a lista ou o cadastro.
+            Ver a nota no bloco de Clientes. */}
         <Route path="/cargos" element={
           cargo?.gerenciarCargos
             ? <CargosPage session={session} onSessionUpdate={handleSessionUpdate} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        <Route path="/cargos/novo" element={
+          cargo?.gerenciarCargos
+            ? <CargosPage session={session} onSessionUpdate={handleSessionUpdate} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/cargos/:cargoId" element={
+          cargo?.gerenciarCargos
+            ? <CargosPage session={session} onSessionUpdate={handleSessionUpdate} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        {/* ── Clientes ──────────────────────────────────────────────────────
+            As três são a MESMA página; o que muda é a rota, e é ela que decide
+            se a tela mostra a lista ou o cadastro.
+
+            O cadastro morava num `useState("list" | "form")`, e o preço disso
+            aparecia em três lugares: F5 no meio do formulário voltava para a
+            lista, o botão Voltar do navegador saía de `/clientes` inteiro (não
+            havia entrada de histórico para a sub-tela) e não dava para mandar a
+            alguém o link de um cliente. É a mesma migração que `/imoveis` já
+            fez ao trocar `?ver=novo` por endereço próprio.
+
+            `/clientes/novo` vem antes de `/clientes/:clienteId` por clareza; o
+            roteador já prefere o trecho literal ao parâmetro, mas ler as duas
+            linhas na ordem em que se resolvem poupa a dúvida. */}
         <Route path="/clientes" element={
           cargo?.gerenciarClientes
             ? <ClientesPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        <Route path="/clientes/novo" element={
+          cargo?.gerenciarClientes
+            ? <ClientesPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/clientes/:clienteId" element={
+          cargo?.gerenciarClientes
+            ? <ClientesPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        {/* ── Tipos de imóvel ───────────────────────────────────────────────
+            Cinco endereços para a MESMA página, e o aninhamento é real: um
+            atributo mora dentro de um tipo. Era tudo `useState`, e editar um
+            atributo com F5 devolvia a pessoa dois níveis acima. Ver a nota no
+            bloco de Clientes.
+
+            O literal vem antes do parâmetro nos dois níveis — o roteador já
+            prefere assim, mas ler na ordem em que se resolve poupa a dúvida. */}
         <Route path="/tipos-imovel" element={
+          cargo?.gerenciarImoveis
+            ? <TiposImovelPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/tipos-imovel/novo" element={
+          cargo?.gerenciarImoveis
+            ? <TiposImovelPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/tipos-imovel/:tipoId" element={
+          cargo?.gerenciarImoveis
+            ? <TiposImovelPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/tipos-imovel/:tipoId/atributos" element={
+          cargo?.gerenciarImoveis
+            ? <TiposImovelPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/tipos-imovel/:tipoId/atributos/novo" element={
+          cargo?.gerenciarImoveis
+            ? <TiposImovelPage session={session} />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/tipos-imovel/:tipoId/atributos/:atributoId" element={
           cargo?.gerenciarImoveis
             ? <TiposImovelPage session={session} />
             : <Navigate to={defaultPublicPath} replace />

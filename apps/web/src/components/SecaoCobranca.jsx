@@ -201,7 +201,7 @@ export function SecaoCobranca({ session, Secao }) {
         </Numero>
         <Numero rotulo="Plano">
           {info?.nome || situacao?.plano || "—"}
-          {comFlow ? <span style={{ color: "#ec0b5b" }}> + Flow</span> : null}
+          {comFlow ? <span style={{ color: "#ec0b5b" }}> + Omniflow</span> : null}
           {situacao?.valorMensal ? (
             <span style={{ fontSize: "12px", color: "var(--text-muted)", marginLeft: "8px", fontWeight: 400 }}>
               {dinheiro(situacao.valorMensal)}/mês

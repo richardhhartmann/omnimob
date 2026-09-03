@@ -113,7 +113,7 @@ export function gruposDoHub(ctx) {
           menu: menuDeImoveis,
           subitens: [
             { key: "imovel-form", Icon: PlusCircle, label: "Novo Imóvel", active: p === "/imoveis/novo", onClick: () => navigate("/imoveis/novo") },
-            { key: "imovel-tipos", Icon: Tag, label: "Categoria de Imóvel", active: p === "/tipos-imovel", onClick: () => navigate("/tipos-imovel") },
+            { key: "imovel-tipos", Icon: Tag, label: "Categoria de Imóvel", active: flags.isTiposImovel, onClick: () => navigate("/tipos-imovel") },
           ],
         },
         { key: "imoveis-lista", Icon: SquaresFour, label: "Portfólio Ativo", active: flags.isImovelList || flags.isInsights, onClick: () => navigate("/imoveis/portfolio") },

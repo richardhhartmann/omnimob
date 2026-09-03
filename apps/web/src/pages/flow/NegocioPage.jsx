@@ -4,8 +4,8 @@ import {
   SealCheck, XCircle, FileText, Paperclip, Trash, CheckCircle,
   Clock, Coins, LockKey, Handshake,
 } from "@phosphor-icons/react";
-import { Trilha } from "../../components/Trilha.jsx";
 import { degrausAte } from "../../utils/trilhaDoPainel";
+import { useTituloDaTela } from "../../utils/contextoDeCabecalho.jsx";
 import { api } from "../../api";
 import { uploadToCloudinary } from "../../utils/uploadToCloudinary";
 import {
@@ -142,6 +142,52 @@ export function NegocioPage({ session }) {
     }
   }
 
+  /* ── O TOPO DESTA TELA MORA NA FAIXA, COMO O DE TODAS AS OUTRAS ───────────
+     Aqui havia uma trilha e um bloco de título (`flow-neg-topo`) desenhados
+     dentro do conteúdo, logo abaixo do cabeçalho que já desenha as duas coisas.
+     O resultado era a faixa e a página dizendo o mesmo, uma embaixo da outra —
+     e a página dizendo em outra tipografia.
+
+     Não dava para simplesmente apagar: `/flow/negocios/<id>` não está em
+     `TELAS_DO_PAINEL` (o último degrau é "Negócio #412", e o número só existe
+     depois da resposta), então a faixa ficava vazia. Por isso a trilha vai
+     junto — ver `useTituloDaTela`.
+
+     O hook fica ANTES dos returns de carregamento porque hook não pode ser
+     condicional; com `n` ainda nulo ele declara o que dá e completa quando a
+     resposta chega. */
+  useTituloDaTela({
+    titulo: n ? `Negócio #${n.codigo}` : "",
+    subtitulo: n
+      ? [
+          n.titulo,
+          canalRotulo(n.canal) + (n.origem ? ` · ${n.origem}` : ""),
+          `criado ${desdeQuando(n.createdAt)}`,
+          n.responsavel?.nome || "sem responsável",
+        ].filter(Boolean).join(" · ")
+      : null,
+    /* O valor ocupa o slot da AÇÃO, à direita. Ele não é um botão, mas é o que
+       aquele canto da faixa é: o dado que a pessoa procura sem ler o resto. */
+    acao: n ? (
+      <div className="flow-neg-valor">
+        <span>{n.estagio === "GANHO" ? "Fechado por" : "Proposta"}</span>
+        <strong>{reais(n.valorFechado ?? n.valorProposta)}</strong>
+      </div>
+    ) : null,
+    /* A trilha diz onde o negócio MORA, que é a lista — ele é alcançável pelo
+       funil E por ela, então um botão "voltar" só podia estar certo metade das
+       vezes. Ver o cabeçalho de `Trilha.jsx`. */
+    trilha: n ? [
+      ...degrausAte("/flow/negocios", navigate),
+      {
+        chave: "negocio",
+        rotulo: `Negócio #${n.codigo}`,
+        Icone: Handshake,
+        aoIr: () => navigate(`/flow/negocios/${n.id}`),
+      },
+    ] : undefined,
+  });
+
   if (carregando) {
     return <div className="skeleton-block" style={{ height: 420, borderRadius: 14 }} />;
   }
@@ -154,41 +200,6 @@ export function NegocioPage({ session }) {
 
   return (
     <div data-tour="flow-negocio">
-      {/* A trilha no lugar do "Voltar ao funil". O negócio é alcançável pelo
-          funil E pela lista, então um botão só podia estar certo metade das
-          vezes; a trilha diz onde ele MORA, que é a lista, e o funil continua a
-          um clique na barra. Mesma troca que Configurações e Relatórios já
-          fizeram — ver o cabeçalho de `Trilha.jsx`. */}
-      <div style={{ marginBottom: "14px" }}>
-        <Trilha
-          itens={[
-            ...degrausAte("/flow/negocios", navigate),
-            {
-              chave: "negocio",
-              rotulo: `Negócio #${n.codigo}`,
-              Icone: Handshake,
-              aoIr: () => navigate(`/flow/negocios/${n.id}`),
-            },
-          ]}
-        />
-      </div>
-
-      <div className="flow-neg-topo">
-        <div>
-          <span className="flow-neg-codigo">Negócio #{n.codigo}</span>
-          <h2 className="flow-neg-titulo">{n.titulo}</h2>
-          <p className="flow-neg-sub">
-            {canalRotulo(n.canal)}{n.origem ? ` · ${n.origem}` : ""} ·
-            criado {desdeQuando(n.createdAt)} ·
-            {n.responsavel?.nome ? ` ${n.responsavel.nome}` : " sem responsável"}
-          </p>
-        </div>
-        <div className="flow-neg-valor">
-          <span>{n.estagio === "GANHO" ? "Fechado por" : "Proposta"}</span>
-          <strong>{reais(n.valorFechado ?? n.valorProposta)}</strong>
-        </div>
-      </div>
-
       {/* ── A régua ────────────────────────────────────────────────────────
           Todos os estágios visíveis e clicáveis, inclusive os que já passaram:
           voltar é normal (o cliente sumiu, voltou, mudou de imóvel) e um funil

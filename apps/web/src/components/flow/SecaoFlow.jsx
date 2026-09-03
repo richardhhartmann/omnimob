@@ -31,11 +31,23 @@ import { SelectCustom } from "../SelectCustom.jsx";
 
 const PROVEDORES = [
   {
+    key: "autentique",
+    rotulo: "Autentique",
+    nota: "Brasileira, com plano gratuito de ~10 documentos por mês. É a opção para não depender de mais uma mensalidade.",
+    campoConta: null,
+    ondePegar: "Painel da Autentique → Configurações → Integrações (API) → gerar token.",
+  },
+  {
     key: "clicksign",
     rotulo: "Clicksign",
-    nota: "Brasileira, cobra em real e aceita assinatura por e-mail, SMS e WhatsApp.",
+    nota: "Brasileira, cobra em real e aceita assinatura por e-mail, SMS e WhatsApp. Não tem plano gratuito.",
     campoConta: null,
-    ondePegar: "Painel da Clicksign → Configurações → API → Access Token.",
+    /* ── A ARMADILHA DA CLICKSIGN, DITA ANTES ─────────────────────────────
+       O token só passa a valer DEPOIS de o "e-mail do usuário da API" estar
+       salvo, e um token gerado antes disso continua órfão para sempre. O erro
+       que ela devolve nesse estado não diz nada disso — e descobrir isso pelo
+       suporte custa um dia. */
+    ondePegar: "Painel da Clicksign → Configurações → API: salve o \"e-mail do usuário da API\" PRIMEIRO e só depois gere o Access Token — um token gerado antes disso não funciona.",
   },
   {
     key: "docusign",
@@ -106,7 +118,7 @@ export function SecaoFlow({ session, Secao, showToast }) {
       await api.updateTenantConfiguracao(tenantSlug, payload);
       setForm((f) => ({ ...f, assinaturaToken: "" }));
       setDados((d) => ({ ...d, assinaturaConfigurada: jaConfigurado || Boolean(payload.assinaturaToken) }));
-      showToast?.("Configurações do Flow salvas.");
+      showToast?.("Configurações do Omniflow salvas.");
     } catch (e) {
       showToast?.(e.message || "Não consegui salvar.", "error");
     } finally { setSalvando(false); }
@@ -118,7 +130,7 @@ export function SecaoFlow({ session, Secao, showToast }) {
       <Secao cor={FLOW_ACENTO} titulo="Assinatura digital" icone={<CheckCircle size={16} weight="fill" />}>
         <p className="config-nota">
           A conta é sua, no provedor que você contratar — os contratos saem em nome da sua
-          imobiliária, não da Omnimob. Sem isto configurado, o Flow gera a minuta preenchida mas não
+          imobiliária, não da Omnimob. Sem isto configurado, o Omniflow gera a minuta preenchida mas não
           consegue mandá-la para assinatura.
         </p>
 
@@ -172,10 +184,21 @@ export function SecaoFlow({ session, Secao, showToast }) {
           />
           <span>
             Ambiente de teste (sandbox)
-            {/* Ligado por padrão, e é deliberado: o primeiro contrato que
-                alguém manda é para ver se funciona, e ele não pode chegar ao
-                cliente de verdade nem consumir documento pago. */}
-            <small>Recomendado até você conferir o primeiro contrato. Nada enviado aqui tem validade jurídica.</small>
+            {/* ── O SANDBOX NÃO SIGNIFICA A MESMA COISA NOS DOIS ───────────────
+                Na Autentique é uma flag da chamada: mesmo token, mesma conta,
+                e o documento só não consome cota nem dispara e-mail.
+
+                Na Clicksign é uma CONTA SEPARADA, com token próprio. Um token
+                de produção apontado para o sandbox dela volta como "Access
+                Token inválido" — que lê como token errado quando o errado é o
+                ambiente. Foi exatamente esse engano que travou a primeira
+                configuração, e é por isso que a frase abaixo é diferente por
+                provedor em vez de ser um aviso genérico. */}
+            <small>
+              {form.assinaturaProvedor === "clicksign"
+                ? "⚠ Na Clicksign o sandbox é uma conta SEPARADA, com token próprio — o token de produção não funciona aqui. Se você só tem a conta normal, deixe desligado."
+                : "Documento de teste não consome sua cota, não vale juridicamente e não dispara e-mail para o signatário."}
+            </small>
           </span>
         </label>
       </Secao>
@@ -222,7 +245,7 @@ export function SecaoFlow({ session, Secao, showToast }) {
 
       <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
         <button type="button" className="btn-primary" onClick={salvar} disabled={salvando}>
-          {salvando ? "Salvando…" : "Salvar configurações do Flow"}
+          {salvando ? "Salvando…" : "Salvar configurações do Omniflow"}
         </button>
       </div>
     </>

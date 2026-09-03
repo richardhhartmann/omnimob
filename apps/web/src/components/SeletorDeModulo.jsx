@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretUpDown, Check } from "@phosphor-icons/react";
 import { MenuFluido } from "./MenuFluido.jsx";
-import { MODULOS, SIMBOLO_OMNIMOB, TIPO_OMNIMOB, moduloInfo } from "../utils/modulos";
+import { MODULOS, SIMBOLO_OMNIMOB, moduloInfo } from "../utils/modulos";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O SELETOR DE MÓDULO — a peça mais alta da barra lateral.
@@ -11,25 +11,26 @@ import { MODULOS, SIMBOLO_OMNIMOB, TIPO_OMNIMOB, moduloInfo } from "../utils/mod
    responde: primeiro "em que produto eu estou", depois "de quem é esta conta".
    Invertida, a marca da imobiliária pareceria o título do módulo.
 
-   ── A LOGO É COMPOSTA, E NÃO UMA IMAGEM POR MÓDULO ──
+   ── UM WORDMARK FECHADO POR MÓDULO ──
 
-   `tipo_header_alt.png` (o prédio + "OMNIMOB") mais a palavra do módulo à
-   direita: `hub.png` ou `flow.png`. Duas imagens, e não um wordmark fechado por
-   módulo.
+   Uma imagem inteira por módulo, vinda de `modulo.logo`: `tipo_header_alt.png`
+   no Omnimob, `omnimob_flow.png` no Omniflow.
 
-   A razão é de manutenção: a parte "OMNIMOB" é a MESMA nos dois, e ela já
-   existe no produto — é a mesma arte do cabeçalho da landing. Com wordmarks
-   fechados, um retoque na marca principal exigiria reexportar uma imagem por
-   módulo, e a terceira nasceria fora de registro com as outras duas. Composta,
-   a marca tem um arquivo só e cada módulo acrescenta a palavra dele.
+   Era composta — a metade "OMNIMOB" mais a palavra do módulo à direita —, para
+   não reexportar a metade comum a cada retoque da marca. A composição morreu
+   com os nomes novos: "Omnimob" não tem palavra para acrescentar, e "Omniflow"
+   é uma palavra só, em que "Omni" e "flow" se emendam. Cortá-la em duas
+   imagens partiria uma letra no meio.
 
-   O preço é o alinhamento entre as duas peças, que é resolvido no CSS pela
-   altura relativa (a palavra do módulo é menor que o tipo).
+   O que a composição custava era o alinhamento entre as duas peças, resolvido
+   no CSS por altura relativa e um deslocamento medido na arte. Isso saiu
+   junto: as duas artes têm o mesmo quadro (2852×603) e o símbolo na mesma
+   posição, então uma altura só serve para as duas.
 
    ── DUAS FORMAS, CONFORME A BARRA ──
 
-   ABERTA: só a logo composta. O ladrilho do símbolo some — ele repetiria o
-   prédio que já está dentro do `tipo_header_alt`, e dois prédios lado a lado
+   ABERTA: só o wordmark. O ladrilho do símbolo some — ele repetiria o
+   prédio que já está dentro da arte, e dois prédios lado a lado
    na mesma linha leem como erro de montagem.
 
    RECOLHIDA (64px): só o ladrilho do símbolo. A logo é larga demais e sairia
@@ -89,16 +90,14 @@ function SimboloModulo({ modulo }) {
   );
 }
 
-/** A logo composta: OMNIMOB + a palavra do módulo.
+/** O wordmark do módulo.
  *
- *  O `alt` vai no invólucro por texto oculto e as duas imagens são decorativas:
- *  um leitor de tela anunciando "Omnimob" e depois "Flow" como duas imagens
- *  separadas lê a marca partida ao meio. */
+ *  O `alt` continua no invólucro, e não na imagem: o nome do módulo é o rótulo
+ *  do CONJUNTO, e é ele que o leitor de tela anuncia. */
 function LogoModulo({ modulo, className = "" }) {
   return (
-    <span className={`ds-mod__logo ${className}`.trim()} role="img" aria-label={modulo.nomeCompleto}>
-      <img className="ds-mod__tipo" src={TIPO_OMNIMOB} alt="" aria-hidden="true" />
-      <img className="ds-mod__palavra" src={modulo.palavra} alt="" aria-hidden="true" />
+    <span className={`ds-mod__logo ${className}`.trim()} role="img" aria-label={modulo.nome}>
+      <img className="ds-mod__tipo" src={modulo.logo} alt="" aria-hidden="true" />
     </span>
   );
 }
@@ -187,7 +186,7 @@ export function SeletorDeModulo({ atual, disponiveis, aoTrocar, aoAlternarAberto
             onFocus={() => setAberto(true)}
             aria-haspopup="listbox"
             aria-expanded={aberto}
-            aria-label={`Módulo atual: ${info.nomeCompleto}. Trocar de módulo`}
+            aria-label={`Módulo atual: ${info.nome}. Trocar de módulo`}
           >
             <CaretUpDown size={14} weight="bold" />
           </button>

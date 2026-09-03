@@ -14,12 +14,23 @@ O produto tem duas faces:
 
 O produto deixou de ser um sistema só. São dois, dentro do mesmo painel:
 
-| | **Omnimob Hub** | **Omnimob Flow** |
+| | **Omnimob** | **Omniflow** |
 |---|---|---|
 | responde | o que a imobiliária TEM | o que ela está FECHANDO |
 | conteúdo | acervo, vitrine, leads, clientes, equipe, relatórios | captação por webhook, funil de negócios, minuta, assinatura digital, comissão |
 | é | tudo que existia antes desta divisão | o módulo novo |
 | acento | índigo `#6366f1` | rosa `#ec0b5b` (a cor da palavra "flow" na arte) |
+| wordmark | `/tipo_header_alt.png` | `/omnimob_flow.png` |
+
+> **Os nomes de tela e os nomes de código divergem de propósito.** O que o
+> cliente lê é **Omnimob** e **Omniflow**; o que o código diz continua sendo
+> `HUB` e `FLOW` — enum de `Tenant.modulos`, permissão `acessarFlow`, prefixo
+> `/api/flow/*`. Não é dívida: o enum é coluna de banco e o prefixo já está
+> colado nos integradores do ZAP e do VivaReal de clientes reais
+> (`POST /api/flow/captacao/:chave`). Renomear os dois seria uma migração de
+> dados mais um aviso a cada portal, e não uma troca de marca. Por isso os
+> comentários deste repositório seguem falando de Hub e Flow: eles descrevem o
+> código, e é o código que eles precisam acompanhar.
 
 **Três perguntas, e as três precisam ser sim:**
 
@@ -101,7 +112,7 @@ omnimob/
   importação por planilha; ver `formatosImportacao.js`
 - `/api/webhooks-saida/*` — webhooks de saída (Profissional+). O inverso do
   feed: o evento é nosso, e nós avisamos
-- `/api/flow/*` — **o Omnimob Flow**. Negócios e funil, documentos, as duas
+- `/api/flow/*` — **o Omniflow**. Negócios e funil, documentos, as duas
   validações setoriais, minutas, contratos e assinatura digital, comissões e as
   fontes de captação. Atrás de `requireFlow` (a conta contratou?) e, por rota,
   de `requirePermissao` + `requireRecursoFlow` (o plano libera?)
@@ -819,7 +830,7 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 - Coordenadas (lat/lng) e busca por raio — hoje endereço é texto
 - Exclusão lógica (`deletedAt`) e retenção/anonimização (LGPD)
 - Módulos ERP: Agenda, Financeiro, Vistorias, Proprietários (Contratos saiu
-  desta lista — é o Omnimob Flow)
+  desta lista — é o Omniflow)
 - **Os 6 preços NOVOS do Flow no Stripe** (a matriz completa é 3 planos ×
   2 pacotes × 2 períodos = 12; os 6 do Hub já existem). O código já lê
   `STRIPE_PRICE_{BASICO,PROFISSIONAL,PREMIUM}_FLOW[_ANUAL]`; enquanto elas não

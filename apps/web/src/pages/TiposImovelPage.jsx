@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useOutletContext, useParams, useLocation } from "react-router-dom";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnGerenciar, BtnNovo } from "../components/ActionIcons";
 import { useConfirm } from "../components/ConfirmModal";
@@ -8,7 +9,6 @@ import { TIPOS_CONTRATO, TIPOS_CONTRATO_KEYS } from "../utils/tiposContrato.js";
 import { IconeEstrela } from "../components/Icones.jsx";
 import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
 import { Tag, PlusCircle, PencilSimple, ListChecks } from "@phosphor-icons/react";
-import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 
@@ -182,12 +182,38 @@ export function TiposImovelPage({ session }) {
   const showToast = useOutletContext()?.showToast;
   const tenantSlug = session?.tenant?.slug;
   const [tipos, setTipos] = useState([]);
-  const [view, setView] = useState("list"); // "list" | "tipoForm" | "atributos" | "atributoForm"
+  /* ── A VISTA SAI DA ROTA ─────────────────────────────────────────────────
+     Eram quatro estados num `useState`, e esta tela tinha o pior caso do
+     painel: dois níveis de aninhamento (um atributo mora DENTRO de um tipo)
+     vivendo inteiramente em memória. Editar um atributo e apertar F5 devolvia a
+     pessoa à lista de tipos, dois níveis acima.
+
+     Cinco endereços, um por sub-tela — ver o bloco de rotas em `App.jsx`. */
+  const { tipoId, atributoId } = useParams();
+  const caminho = useLocation().pathname;
+  const criandoTipo = caminho === "/tipos-imovel/novo";
+  const criandoAtributo = caminho.endsWith("/atributos/novo");
+  const view = criandoTipo ? "tipoForm"
+    : criandoAtributo || atributoId ? "atributoForm"
+    : caminho.includes("/atributos") ? "atributos"
+    : tipoId ? "tipoForm"
+    : "list";
   const [editandoTipo, setEditandoTipo] = useState(null);
   const [tipoAtivo, setTipoAtivo] = useState(null);
   const [editandoAtributo, setEditandoAtributo] = useState(null);
   const [tipoForm, setTipoForm] = useState(emptyTipoForm());
   const [atributoForm, setAtributoForm] = useState(emptyAtributoForm());
+  /* ── ATRIBUTOS ANTES DE O TIPO EXISTIR ───────────────────────────────────
+     Atributo é filho de um tipo no banco: `POST /tipos/:id/atributos` precisa
+     do id, e o id só nasce quando o tipo é gravado. Isso empurrava a pessoa
+     para um fluxo de dois tempos — cadastre o tipo, volte à lista, clique em
+     gerenciar, só então descreva o que ele tem —, e "Casa" sem nenhum atributo
+     é um tipo que ainda não serve para cadastrar imóvel nenhum.
+
+     Aqui eles ficam em memória enquanto o formulário está aberto e são gravados
+     logo depois do tipo, em `handleTipoSubmit`. */
+  const [atributosNovos, setAtributosNovos] = useState([]);
+  const [rascunhoAtributo, setRascunhoAtributo] = useState({ descricao: "", grupo: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { confirm, modal: confirmModal } = useConfirm();
@@ -208,20 +234,49 @@ export function TiposImovelPage({ session }) {
   // ─── Tipo CRUD ────────────────────────────────────────────────────────────
 
   function abrirCriarTipo() {
-    setEditandoTipo(null);
-    setTipoForm(emptyTipoForm());
-    setError("");
-    setView("tipoForm");
+    navigate("/tipos-imovel/novo");
   }
 
-  function abrirEditarTipo(t) {
+  function preencherTipo(t) {
     setEditandoTipo(t);
     setTipoForm({
       descricao: t.descricao,
       areaFields: Array.isArray(t.areaFields) ? t.areaFields : [],
     });
     setError("");
-    setView("tipoForm");
+  }
+
+  function abrirEditarTipo(t) {
+    preencherTipo(t);
+    preenchidoPara.current = `tipo:${t.id}`;
+    navigate(`/tipos-imovel/${t.id}`);
+  }
+
+  /* Acrescenta o rascunho a lista. Recusa nome vazio e nome repetido — o
+     servidor recusaria o duplicado depois, e descobrir isso so ao salvar o tipo
+     deixaria a pessoa sem saber qual dos dez atributos era o problema. */
+  function adicionarAtributoRascunho() {
+    const descricao = rascunhoAtributo.descricao.trim();
+    if (!descricao) return;
+    const grupo = rascunhoAtributo.grupo.trim();
+    if (atributosNovos.some((a) => a.descricao.toLowerCase() === descricao.toLowerCase())) {
+      showToast?.(`"${descricao}" ja esta na lista.`, "error");
+      return;
+    }
+    setAtributosNovos((prev) => [...prev, { descricao, grupo }]);
+    /* O GRUPO fica: quem cadastra "Piscina / Lazer" quase sempre cadastra
+       "Churrasqueira / Lazer" logo em seguida, e reescreve-lo a cada item e o
+       tipo de atrito que faz a pessoa parar no terceiro. */
+    setRascunhoAtributo((r) => ({ descricao: "", grupo: r.grupo }));
+  }
+
+  /* Enter acrescenta o atributo em vez de ENVIAR o formulario. Sem isto,
+     digitar "Piscina" e apertar Enter criaria o tipo sem o atributo que a
+     pessoa acabou de escrever — e ela so descobriria na tela seguinte. */
+  function aoTeclarNoRascunho(e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    adicionarAtributoRascunho();
   }
 
   async function handleTipoSubmit(e) {
@@ -233,12 +288,36 @@ export function TiposImovelPage({ session }) {
         const updated = await api.updateTipoImovel(tenantSlug, editandoTipo.id, tipoForm);
         setTipos((prev) => prev.map((t) => t.id === updated.id ? { ...t, descricao: updated.descricao, areaFields: updated.areaFields } : t));
         showToast?.(`Tipo "${updated.descricao}" atualizado.`);
+        navigate("/tipos-imovel");
       } else {
         const created = await api.createTipoImovel(tenantSlug, tipoForm);
-        setTipos((prev) => [...prev, { ...created, atributos: [] }]);
-        showToast?.(`Tipo "${created.descricao}" criado.`);
+
+        /* Os atributos rascunhados viram registros agora que existe um id.
+           Em série e não em paralelo: são poucos, e a ordem em que a pessoa os
+           digitou é a ordem em que ela espera vê-los. */
+        const criados = [];
+        for (const a of atributosNovos) {
+          try {
+            criados.push(await api.createAtributo(tenantSlug, created.id, {
+              descricao: a.descricao, grupo: a.grupo || null,
+            }));
+          } catch (err) {
+            /* O TIPO já existe — falhar aqui não pode desfazer isso nem parecer
+               que nada foi salvo. Avisa qual atributo ficou de fora e segue. */
+            showToast?.(`Tipo criado, mas o atributo "${a.descricao}" falhou: ${err.message}`, "error");
+          }
+        }
+
+        setTipos((prev) => [...prev, { ...created, atributos: criados }]);
+        showToast?.(
+          criados.length
+            ? `Tipo "${created.descricao}" criado com ${criados.length} atributo(s).`
+            : `Tipo "${created.descricao}" criado.`,
+        );
+        /* Vai para os atributos do tipo recém-criado, e não para a lista: quem
+           acabou de descrever um tipo quase sempre quer continuar descrevendo. */
+        navigate(`/tipos-imovel/${created.id}/atributos`);
       }
-      setView("list");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -261,22 +340,82 @@ export function TiposImovelPage({ session }) {
 
   function abrirGerenciarAtributos(t) {
     setTipoAtivo(t);
-    setView("atributos");
+    navigate(`/tipos-imovel/${t.id}/atributos`);
   }
 
   function abrirCriarAtributo() {
-    setEditandoAtributo(null);
-    setAtributoForm(emptyAtributoForm());
-    setError("");
-    setView("atributoForm");
+    navigate(`/tipos-imovel/${tipoId}/atributos/novo`);
   }
 
-  function abrirEditarAtributo(a) {
+  function preencherAtributo(a) {
     setEditandoAtributo(a);
     setAtributoForm({ descricao: a.descricao, grupo: a.grupo || "" });
     setError("");
-    setView("atributoForm");
   }
+
+  function abrirEditarAtributo(a) {
+    preencherAtributo(a);
+    preenchidoPara.current = `atributo:${a.id}`;
+    navigate(`/tipos-imovel/${tipoId}/atributos/${a.id}`);
+  }
+
+  /* ── AS SUB-TELAS SE PREENCHEM A PARTIR DA URL ───────────────────────────
+     Um efeito só para os quatro casos, porque eles compartilham a mesma fonte:
+     `tipos`, que já vem do servidor com os atributos aninhados. Não há chamada
+     nova — o que faltava era ler a lista em vez de depender de um clique.
+
+     `tipoAtivo` é sincronizado SEMPRE que há `tipoId`, e não só na vista de
+     atributos: o formulário de atributo mostra o nome do tipo na trilha e usa
+     `tipoAtivo.id` para gravar. Sem isso, abrir o link de um atributo direto
+     gravaria contra `null`.
+
+     `preenchidoPara` impede o efeito de reescrever o que a pessoa está
+     digitando quando a lista recarregar. */
+  const preenchidoPara = useRef(null);
+  useEffect(() => {
+    const tipo = tipoId ? tipos.find((t) => t.id === tipoId) : null;
+    if (tipo && tipo !== tipoAtivo) setTipoAtivo(tipo);
+
+    if (criandoTipo) {
+      if (preenchidoPara.current === "tipo:novo") return;
+      preenchidoPara.current = "tipo:novo";
+      setEditandoTipo(null); setTipoForm(emptyTipoForm()); setError("");
+      setAtributosNovos([]); setRascunhoAtributo({ descricao: "", grupo: "" });
+      return;
+    }
+    if (criandoAtributo) {
+      if (preenchidoPara.current === "atributo:novo") return;
+      preenchidoPara.current = "atributo:novo";
+      setEditandoAtributo(null); setAtributoForm(emptyAtributoForm()); setError("");
+      return;
+    }
+    if (view === "list") { preenchidoPara.current = null; return; }
+    if (!tipos.length) return;   // a lista ainda não chegou
+
+    if (!tipo) {
+      showToast?.("Não encontrei este tipo de imóvel.", "error");
+      navigate("/tipos-imovel", { replace: true });
+      return;
+    }
+    if (view === "tipoForm") {
+      if (preenchidoPara.current === `tipo:${tipoId}`) return;
+      preenchidoPara.current = `tipo:${tipoId}`;
+      preencherTipo(tipo);
+      return;
+    }
+    if (view === "atributoForm") {
+      if (preenchidoPara.current === `atributo:${atributoId}`) return;
+      const a = (tipo.atributos || []).find((x) => x.id === atributoId);
+      if (!a) {
+        showToast?.("Não encontrei este atributo.", "error");
+        navigate(`/tipos-imovel/${tipoId}/atributos`, { replace: true });
+        return;
+      }
+      preenchidoPara.current = `atributo:${atributoId}`;
+      preencherAtributo(a);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoId, atributoId, criandoTipo, criandoAtributo, view, tipos]);
 
   async function handleAtributoSubmit(e) {
     e.preventDefault();
@@ -299,7 +438,7 @@ export function TiposImovelPage({ session }) {
         setTipoAtivo((prev) => ({ ...prev, atributos: [...prev.atributos, created] }));
         showToast?.(`Atributo "${created.descricao}" criado.`);
       }
-      setView("atributos");
+      navigate(`/tipos-imovel/${tipoId}/atributos`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -327,28 +466,58 @@ export function TiposImovelPage({ session }) {
      ele volta aos atributos do tipo, que é de onde se veio. As vistas trocam por
      estado dentro de `/tipos-imovel`, então o atalho global não alcança nenhuma
      delas. */
+  /* ── O TÍTULO E A TRILHA ACOMPANHAM A SUB-TELA ──────────────────────────
+     Eram três trilhas desenhadas dentro do conteúdo, uma por sub-tela, logo
+     abaixo da faixa que já desenha a sua — e a de cima falando sempre de
+     "Categoria de Imóvel", inclusive com um atributo aberto dois níveis abaixo.
+
+     O degrau do meio ("Casa", "Apartamento") é o que a rota não teria como
+     saber: ele é o NOME do tipo, e sai do registro. Ver `useTituloDaTela`. */
+  const degrauDoTipo = tipoAtivo ? {
+    chave: "atributos",
+    rotulo: tipoAtivo.descricao,
+    Icone: ListChecks,
+    aoIr: () => navigate(`/tipos-imovel/${tipoAtivo.id}/atributos`),
+  } : null;
+
+  useTituloDaTela({
+    titulo: view === "tipoForm" ? (editandoTipo ? "Editar Tipo de Imóvel" : "Novo Tipo de Imóvel")
+      : view === "atributoForm" ? (editandoAtributo ? "Editar Atributo" : "Novo Atributo")
+      : view === "atributos" ? (tipoAtivo?.descricao || "Atributos")
+      : "Categoria de Imóvel",
+    subtitulo: view === "atributos" ? "Os atributos que este tipo de imóvel aceita."
+      : view === "atributoForm" ? (tipoAtivo?.descricao || null)
+      : view === "tipoForm" ? (editandoTipo?.descricao || "Um novo tipo de imóvel para o acervo.")
+      : "Os tipos de imóvel do acervo e os atributos de cada um.",
+    trilha: view === "list" ? undefined : [
+      ...degrausAte("/tipos-imovel", navigate),
+      ...(view === "tipoForm" ? [{
+        chave: "tipoForm",
+        rotulo: editandoTipo ? "Editar Tipo de Imóvel" : "Novo Tipo de Imóvel",
+        Icone: editandoTipo ? PencilSimple : PlusCircle,
+        aoIr: () => {},
+      }] : []),
+      ...(view !== "tipoForm" && degrauDoTipo ? [degrauDoTipo] : []),
+      ...(view === "atributoForm" ? [{
+        chave: "atributoForm",
+        rotulo: editandoAtributo ? "Editar Atributo" : "Novo Atributo",
+        Icone: editandoAtributo ? PencilSimple : PlusCircle,
+        aoIr: () => {},
+      }] : []),
+    ],
+  });
+
+  /* Esc sobe UM nível, e não volta direto à lista: de um atributo aberto,
+     "sair" é voltar aos atributos daquele tipo, e não abandonar o tipo. */
   useSaidaDaTela(
-    () => setView(view === "atributoForm" ? "atributos" : "list"),
-    view === "tipoForm" || view === "atributos" || view === "atributoForm",
+    () => navigate(view === "atributoForm" ? `/tipos-imovel/${tipoId}/atributos` : "/tipos-imovel"),
+    view !== "list",
   );
 
   if (view === "tipoForm") {
     return (
       <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {confirmModal}
-        <div style={{ marginBottom: "24px" }}>
-          <Trilha
-            itens={[
-              ...degrausAte("/tipos-imovel", navigate, () => setView("list")),
-              {
-                chave: "tipoForm",
-                rotulo: editandoTipo ? "Editar Tipo de Imóvel" : "Novo Tipo de Imóvel",
-                Icone: editandoTipo ? PencilSimple : PlusCircle,
-                aoIr: () => setView("tipoForm"),
-              },
-            ]}
-          />
-        </div>
         {error ? <div className="error">{error}</div> : null}
         <form onSubmit={handleTipoSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           <div>
@@ -370,11 +539,101 @@ export function TiposImovelPage({ session }) {
             />
           </div>
 
+          {/* -- ATRIBUTOS ----------------------------------------------------
+              No cadastro eles ficam AQUI, e nao atras de um segundo passo. Um
+              tipo sem atributo nao descreve imovel nenhum, e mandar a pessoa
+              gravar, voltar a lista e clicar em "gerenciar" para so entao dizer
+              que Casa tem piscina e pedir que ela termine um cadastro que ainda
+              nao esta pronto.
+
+              Na EDICAO o bloco vira um botao: ali os atributos ja existem, tem
+              id, podem ser renomeados e excluidos — e essa e a tela de gerencia,
+              que ja sabe fazer tudo isso. Duplica-la aqui seriam dois lugares
+              para a mesma coisa. */}
+          {editandoTipo ? (
+            <div style={{ background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))", borderRadius: "12px", padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: "13px", fontWeight: 600 }}>Atributos</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  {(editandoTipo.atributos || []).length} cadastrado(s) para este tipo.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => navigate(`/tipos-imovel/${editandoTipo.id}/atributos`)}
+                style={{ width: "auto", padding: "10px 16px" }}
+              >
+                Gerenciar atributos
+              </button>
+            </div>
+          ) : (
+            <div style={{ background: "var(--sup-02, rgba(255,255,255,0.02))", border: "1px solid var(--linha-07, rgba(255,255,255,0.07))", borderRadius: "12px", padding: "16px" }}>
+              <div style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Atributos
+              </div>
+              <p style={{ margin: "0 0 12px", fontSize: "12.5px", color: "var(--text-muted)" }}>
+                O que este tipo pode ter — piscina, churrasqueira, vaga coberta. Da para
+                acrescentar mais depois; eles sao gravados junto com o tipo.
+              </p>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <input
+                  placeholder="Nome do atributo (ex: Piscina)"
+                  value={rascunhoAtributo.descricao}
+                  onChange={(e) => setRascunhoAtributo((r) => ({ ...r, descricao: e.target.value }))}
+                  disabled={loading}
+                  style={{ flex: "2 1 200px" }}
+                  onKeyDown={aoTeclarNoRascunho}
+                />
+                <input
+                  placeholder="Grupo (opcional)"
+                  value={rascunhoAtributo.grupo}
+                  onChange={(e) => setRascunhoAtributo((r) => ({ ...r, grupo: e.target.value }))}
+                  disabled={loading}
+                  style={{ flex: "1 1 140px" }}
+                  onKeyDown={aoTeclarNoRascunho}
+                />
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={adicionarAtributoRascunho}
+                  disabled={loading || !rascunhoAtributo.descricao.trim()}
+                  style={{ width: "auto", padding: "10px 16px" }}
+                >
+                  Adicionar
+                </button>
+              </div>
+
+              {atributosNovos.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+                  {atributosNovos.map((a, i) => (
+                    <span
+                      key={`${a.descricao}-${i}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "12.5px", padding: "5px 10px", borderRadius: "999px", background: "var(--sup-03, rgba(255,255,255,0.05))", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))" }}
+                    >
+                      {a.descricao}
+                      {a.grupo ? <em style={{ color: "var(--text-muted)", fontStyle: "normal" }}>· {a.grupo}</em> : null}
+                      <button
+                        type="button"
+                        onClick={() => setAtributosNovos((prev) => prev.filter((_, x) => x !== i))}
+                        aria-label={`Remover ${a.descricao}`}
+                        style={{ width: "auto", padding: 0, background: "none", border: 0, color: "var(--text-muted)", cursor: "pointer", fontSize: "14px", lineHeight: 1 }}
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="actions" style={{ marginTop: "8px" }}>
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               {editandoTipo ? "Salvar Alterações" : "Criar Tipo"}
             </button>
-            <button type="button" className="button-secondary" onClick={() => setView("list")} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
+            <button type="button" className="button-secondary" onClick={() => navigate("/tipos-imovel")} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               Cancelar
             </button>
           </div>
@@ -393,27 +652,6 @@ export function TiposImovelPage({ session }) {
     return (
       <section key={view} className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
         {confirmModal}
-        {/* Três degraus: o atributo mora DENTRO de um tipo, e a linha "Tipo:
-            Casa" que ficava embaixo do título dizia isso sem deixar voltar. */}
-        <div style={{ marginBottom: "24px" }}>
-          <Trilha
-            itens={[
-              ...degrausAte("/tipos-imovel", navigate, () => setView("list")),
-              {
-                chave: "atributos",
-                rotulo: tipoAtivo?.descricao || "Atributos",
-                Icone: ListChecks,
-                aoIr: () => setView("atributos"),
-              },
-              {
-                chave: "atributoForm",
-                rotulo: editandoAtributo ? "Editar Atributo" : "Novo Atributo",
-                Icone: editandoAtributo ? PencilSimple : PlusCircle,
-                aoIr: () => setView("atributoForm"),
-              },
-            ]}
-          />
-        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleAtributoSubmit}>
           <input
@@ -440,7 +678,7 @@ export function TiposImovelPage({ session }) {
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               {editandoAtributo ? "Salvar Alterações" : "Criar Atributo"}
             </button>
-            <button type="button" className="button-secondary" onClick={() => setView("atributos")} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
+            <button type="button" className="button-secondary" onClick={() => navigate(`/tipos-imovel/${tipoId}/atributos`)} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               Cancelar
             </button>
           </div>
@@ -462,21 +700,9 @@ export function TiposImovelPage({ session }) {
         style={{ animation: "fadeIn 0.3s ease-in-out" }}
       >
         {confirmModal}
-        {/* A trilha no lugar do botão "voltar" — é a troca que Configurações e
-            Relatórios já fizeram, e o motivo está no cabeçalho de `Trilha.jsx`:
-            ela diz onde a página MORA, e não por onde a pessoa passou. */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
-          <Trilha
-            itens={[
-              ...degrausAte("/tipos-imovel", navigate, () => setView("list")),
-              {
-                chave: "atributos",
-                rotulo: tipoAtivo.descricao,
-                Icone: ListChecks,
-                aoIr: () => setView("atributos"),
-              },
-            ]}
-          />
+        {/* A trilha subiu para a faixa do painel — uma só, no mesmo lugar em
+            toda tela. O que sobra desta linha é o botão. */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: "24px" }}>
           <div style={{ marginLeft: "auto" }}>
             {semAtributos ? null : <BtnNovo onClick={abrirCriarAtributo} label="Novo Atributo" />}
           </div>

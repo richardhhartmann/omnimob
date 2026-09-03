@@ -9,6 +9,7 @@ import {
 import { flowRouter } from "../src/routes/flowRoutes.js";
 import { calcularSplit } from "../src/services/flow/comissoes.js";
 import { podeFechar, podeMover } from "../src/services/flow/funil.js";
+import { cifrar } from "../src/services/cofre.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    OMNIMOB FLOW — a trava do fechamento e o split da comissão.
@@ -170,7 +171,21 @@ test.before(async () => {
   for (const t of [A, B]) {
     await prisma.tenant.update({
       where: { id: t.tenant.id },
-      data: { modulos: ["HUB", "FLOW"] },
+      data: {
+        modulos: ["HUB", "FLOW"],
+        /* ── O PROVEDOR DE ASSINATURA PRECISA ESTAR CONECTADO ──────────────
+           A trava do fechamento só cobra contrato quando a conta CONSEGUE
+           emitir um: plano que libera E provedor conectado. Sem estas duas
+           linhas os tenants de teste seriam PREMIUM sem provedor, a exigência
+           de contrato cairia, e os testes que verificam justamente essa
+           exigência passariam a verde por não exigirem nada.
+
+           O token é falso de propósito — nenhum teste chega a falar com a
+           Clicksign. O que está sob teste é a TRAVA, e para ela só importa que
+           haja provedor configurado. */
+        assinaturaProvedor: "clicksign",
+        assinaturaToken: cifrar("token-de-teste-nunca-usado"),
+      },
     });
     await prisma.cargo.update({
       where: { id: t.cargoAdmin.id },
@@ -268,6 +283,57 @@ test("o PUT não é uma porta dos fundos para o estágio", async () => {
   assert.equal(r.status, 200);
   assert.equal(r.json.titulo, "Renomeado");
   assert.equal(r.json.estagio, "LEAD", "o PUT não pode mexer no estágio");
+});
+
+test("plano com assinatura mas SEM provedor conectado não trava o negócio", async () => {
+  /* ── A ARMADILHA QUE ESTE TESTE EXISTE PARA IMPEDIR ────────────────────────
+     A trava perguntava só ao PLANO se o contrato era exigido. Uma imobiliária
+     no Profissional ou no Premium que ainda não tivesse conectado Clicksign nem
+     DocuSign caía num beco: a trava pedia um contrato assinado, e não havia
+     como emitir um sem contratar um fornecedor de fora. Nenhum negócio daquela
+     conta chegava a GANHO, nunca, e a tela não dizia por quê — dizia só "falta
+     contrato assinado", que parece uma pendência resolvível.
+
+     A pergunta certa não é "o plano libera?", é "esta conta CONSEGUE emitir?",
+     e são duas condições. Este teste desconecta o provedor e exige que as duas
+     validações humanas passem a bastar — que é exatamente o que já vale no
+     Básico. */
+  await prisma.tenant.update({
+    where: { id: B.tenant.id },
+    data: { assinaturaProvedor: null, assinaturaToken: null },
+  });
+
+  const negocio = await negocioNovo(B);
+  for (const setor of ["juridico", "financeiro"]) {
+    const v = await api.comoTenant(B).post(`/api/flow/negocios/${negocio.id}/validar/${setor}`, {
+      aprovado: true, nota: "conferido",
+    });
+    assert.equal(v.status, 200, JSON.stringify(v.json));
+  }
+
+  const r = await api.comoTenant(B).post(`/api/flow/negocios/${negocio.id}/estagio`, {
+    estagio: "GANHO",
+  });
+  assert.equal(r.status, 200, `sem provedor o contrato não pode ser cobrado: ${JSON.stringify(r.json)}`);
+  assert.equal(r.json.negocio.estagio, "GANHO");
+
+  /* E a exigência VOLTA assim que o provedor é reconectado — senão o conserto
+     teria virado um buraco permanente na trava. */
+  await prisma.tenant.update({
+    where: { id: B.tenant.id },
+    data: { assinaturaProvedor: "clicksign", assinaturaToken: cifrar("token-de-teste-nunca-usado") },
+  });
+  const outro = await negocioNovo(B);
+  for (const setor of ["juridico", "financeiro"]) {
+    await api.comoTenant(B).post(`/api/flow/negocios/${outro.id}/validar/${setor}`, {
+      aprovado: true, nota: "conferido",
+    });
+  }
+  const r2 = await api.comoTenant(B).post(`/api/flow/negocios/${outro.id}/estagio`, {
+    estagio: "GANHO",
+  });
+  assert.equal(r2.status, 422, "com provedor conectado, o contrato volta a ser exigido");
+  assert.equal(r2.json.motivos.length, 1);
 });
 
 test("com as duas validações e sem contrato, ainda não fecha", async () => {

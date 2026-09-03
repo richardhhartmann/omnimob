@@ -48,7 +48,7 @@ test("desenha os dois estados, e o texto muda entre eles", () => {
   /* A frase muda com o estado, e não é enfeite: desligado ela VENDE, ligado ela
      CONFIRMA. O mesmo texto nos dois deixaria a pessoa sem saber se o clique
      surtiu efeito. */
-  assert.match(desligado, /só o Hub/i);
+  assert.match(desligado, /só o Omnimob/i);
   assert.match(ligado, /funil de negócios/i);
   assert.notEqual(desligado, ligado);
 

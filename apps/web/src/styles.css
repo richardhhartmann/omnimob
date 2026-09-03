@@ -9281,13 +9281,16 @@ main[data-tema="claro"] .funil {
    A FICHA DO NEGÓCIO
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.flow-neg-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 18px; }
-.flow-neg-codigo { font-family: var(--s-mono, ui-monospace, monospace); font-size: 10.5px; letter-spacing: 0.08em; color: var(--text-muted); }
-.flow-neg-titulo { margin: 3px 0 4px; font-size: 21px; font-weight: 700; letter-spacing: -0.3px; }
-.flow-neg-sub { margin: 0; font-size: 12.5px; color: var(--text-muted); }
-.flow-neg-valor { text-align: right; }
+/* O valor do negocio, hoje no slot de acao do cabecalho (.ds-topo__acao).
+   O bloco de topo que morava aqui — codigo, titulo e subtitulo desenhados
+   dentro do conteudo — saiu: a faixa ja desenhava as mesmas coisas logo acima,
+   com outra tipografia, e as duas apareciam juntas na tela.
+
+   A entrelinha e apertada de proposito: a faixa e sticky, entao cada pixel de
+   altura dela e altura que o conteudo perde em toda rolagem. */
+.flow-neg-valor { text-align: right; line-height: 1.15; }
 .flow-neg-valor span { display: block; font-size: 11px; color: var(--text-muted); }
-.flow-neg-valor strong { font-size: 22px; font-weight: 700; }
+.flow-neg-valor strong { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
 
 /* ── A régua de estágios ───────────────────────────────────────────────────── */
 

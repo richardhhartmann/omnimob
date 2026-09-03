@@ -831,10 +831,10 @@ export function SuperAdminPage({ session, onLogout }) {
                     onChange={(e) => setField("temFlow", e.target.checked)}
                   />
                   <span>
-                    <strong>Incluir o Omnimob Flow</strong>
+                    <strong>Incluir o Omniflow</strong>
                     <small>
                       Captação por webhook, funil de negócios, minutas contratuais, assinatura
-                      digital e comissão. Sem isto a conta fica só com o Hub.
+                      digital e comissão. Sem isto a conta fica só com o Omnimob.
                       {editingId && !form.temFlow
                         ? " Ao remover, os negócios e contratos continuam guardados — só o acesso é fechado."
                         : ""}
@@ -912,7 +912,7 @@ export function SuperAdminPage({ session, onLogout }) {
                         {ativacao.valorMensal
                           ? ` — R$ ${Number(ativacao.valorMensal).toFixed(2).replace(".", ",")}/mês registrados`
                           : ""}
-                        {ativacao.modulos?.includes("FLOW") ? ", com o Flow." : "."}
+                        {ativacao.modulos?.includes("FLOW") ? ", com o Omniflow." : "."}
                       </p>
                     ) : null}
                   </div>

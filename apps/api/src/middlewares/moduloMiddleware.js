@@ -20,7 +20,7 @@ import {
 
 /** A imobiliária contratou o módulo, E este cargo alcança? */
 export function requireModulo(modulo) {
-  const nome = modulo === FLOW ? "Flow" : "Hub";
+  const nome = modulo === FLOW ? "Omniflow" : "Omnimob";
 
   return (req, res, next) => {
     if (!tenantTemModulo(req.tenant, modulo)) {
@@ -71,7 +71,7 @@ export function requireRecursoFlow(recurso) {
   return (req, res, next) => {
     if (flowLibera(req.tenant?.plano, recurso)) return next();
     return res.status(403).json({
-      error: `Recurso disponível no Omnimob Flow a partir do plano ${planoQueLibera(recurso)}.`,
+      error: `Recurso disponível no Omniflow a partir do plano ${planoQueLibera(recurso)}.`,
       planoInsuficiente: planoQueLibera(recurso),
     });
   };

@@ -874,8 +874,8 @@ tenantRouter.post(
    sozinha, do jeito errado, no dia em que um caso novo aparecesse aqui. */
 function montarAvisoDoAjuste(querFlow, ajuste) {
   const oQueMudou = querFlow
-    ? "O Omnimob Flow já está disponível."
-    : "O Omnimob Flow foi desativado. Seus negócios e contratos continuam guardados, e voltam se você contratar de novo.";
+    ? "O Omniflow já está disponível."
+    : "O Omniflow foi desativado. Seus negócios e contratos continuam guardados, e voltam se você contratar de novo.";
 
   if (ajuste.ajustada) {
     /* O proporcional entra na PRÓXIMA fatura, e dizer isso é metade do
@@ -949,7 +949,7 @@ tenantRouter.post(
       const jaTem = atuais.includes("FLOW");
       if (jaTem === querFlow) {
         return res.status(400).json({
-          error: querFlow ? "O Flow já está ativo nesta conta." : "O Flow já não está ativo.",
+          error: querFlow ? "O Omniflow já está ativo nesta conta." : "O Omniflow já não está ativo.",
         });
       }
 

@@ -171,20 +171,20 @@ ${CSS_FLOW}`}</style>
         <span className="pa-icone is-flow" aria-hidden="true"><IconeChapeuFormatura size={26} /></span>
         <span className="pa-eyebrow is-flow">● OMNIMOB FLOW</span>
         <h2 id="paf-titulo" className="pa-titulo">
-          {primeiroNome ? `Bem-vindo ao Flow, ${primeiroNome}` : "Bem-vindo ao Omnimob Flow"}
+          {primeiroNome ? `Bem-vindo ao Omniflow, ${primeiroNome}` : "Bem-vindo ao Omniflow"}
         </h2>
         <p className="pa-texto">
-          Este é o outro lado do sistema. Enquanto o <strong>Hub</strong> cuida do acervo e da
-          vitrine, o <strong>Flow</strong> cuida do que está sendo fechado: o lead que chega do
+          Este é o outro lado do sistema. Enquanto o <strong>Omnimob</strong> cuida do acervo e da
+          vitrine, o <strong>Omniflow</strong> cuida do que está sendo fechado: o lead que chega do
           portal, o funil, a documentação, o contrato e a comissão.
         </p>
         <ul className="pa-lista is-flow">
           <li>{paradas}, e você pode sair a qualquer momento</li>
-          <li>O seu trabalho no Hub continua exatamente onde está</li>
+          <li>O seu trabalho no Omnimob continua exatamente onde está</li>
           <li>Dá para rever depois, em Configurações</li>
         </ul>
         <button type="button" className="pa-botao pa-botao--primario is-flow" onClick={aoComecar}>
-          Conhecer o Flow
+          Conhecer o Omniflow
         </button>
         <button type="button" className="pa-botao pa-botao--fraco" onClick={aoPular}>
           Explorar por conta própria

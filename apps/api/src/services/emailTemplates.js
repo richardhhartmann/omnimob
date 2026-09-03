@@ -328,7 +328,7 @@ export function emailAssinaturaConfirmada({
     `Obrigado! A assinatura da ${imobiliaria} está ativa.`,
     "",
     `Plano:            ${plano}`,
-    temFlow ? "Módulos:          Omnimob Hub + Omnimob Flow" : "",
+    temFlow ? "Módulos:          Omnimob + Omniflow" : "",
     `Valor:            ${valorRotulo}`,
     proximaCobranca ? `Próxima cobrança: ${proximaCobranca}` : "",
     "",
@@ -338,7 +338,7 @@ export function emailAssinaturaConfirmada({
     "",
     recursos.length ? `O plano libera:\n- ${recursos.join("\n- ")}` : "",
     temFlow
-      ? "\nE o Omnimob Flow acrescenta:\n" +
+      ? "\nE o Omniflow acrescenta:\n" +
         "- Captação automática de leads pelos portais e redes\n" +
         "- Funil de vendas de sete etapas, do lead ao fechamento\n" +
         "- Minutas contratuais preenchidas e assinatura digital\n" +

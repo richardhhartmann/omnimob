@@ -82,7 +82,7 @@ export function ToggleDoFlow({
         />
         <span className="pkg-texto">
           <span className="pkg-titulo">
-            Incluir o <strong>Omnimob Flow</strong>
+            Incluir o <strong>Omniflow</strong>
             {extra ? <span className="pkg-extra">{extra}</span> : null}
           </span>
           {/* A frase muda com o estado, e não é enfeite: desligado ela precisa
@@ -93,7 +93,7 @@ export function ToggleDoFlow({
             <span className="pkg-desc">
               {ligado
                 ? "Captação automática pelos portais, funil de negócios, minutas contratuais, assinatura digital e comissão."
-                : "Você leva só o Hub: acervo, vitrine, leads, clientes e equipe."}
+                : "Você leva só o Omnimob: acervo, vitrine, leads, clientes e equipe."}
             </span>
           )}
         </span>

@@ -25,8 +25,8 @@ ninguém percebe como defeito. A assinatura da Omnimob são as formas da marca
 
 Cor de acento na hora do download:
 
-- `#6366f1` — Omnimob Hub
-- `#ec0b5b` — Omnimob Flow
+- `#6366f1` — Omnimob
+- `#ec0b5b` — Omniflow
 
 Restrições do unDraw: não revender em pacote, não construir biblioteca
 concorrente, não usar para treinar modelo. Usar no site é o caso previsto.

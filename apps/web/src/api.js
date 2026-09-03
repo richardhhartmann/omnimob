@@ -537,6 +537,14 @@ export const api = {
     return request(`/api/clientes${query}`, { headers: { "x-tenant-slug": tenantSlug } });
   },
 
+  /* Um cliente só, pelo id. Existe para o LINK DIRETO: com `/clientes/:id`
+     sendo rota de verdade, alguém pode chegar nela por F5, por favorito ou por
+     um link colado no WhatsApp — e aí a lista ainda não está em memória para o
+     formulário se preencher a partir dela. Quando a pessoa chega pela lista,
+     este caminho não é usado. */
+  obterCliente: (tenantSlug, id) =>
+    request(`/api/clientes/${id}`, { headers: { "x-tenant-slug": tenantSlug } }),
+
   createCliente: (tenantSlug, payload) =>
     request("/api/clientes", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
 

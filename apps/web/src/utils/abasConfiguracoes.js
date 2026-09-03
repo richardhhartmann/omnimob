@@ -90,7 +90,7 @@ export const ABAS_CONFIG = [
        Por isso o item "Configurações" da barra do Flow aponta para
        `/configuracoes?ver=flow`: mesmo destino, âncora diferente. */
     key: "flow",
-    label: "Omnimob Flow",
+    label: "Omniflow",
     /* O ACENTO DO MÓDULO. A única cor desta lista que não é escolha estética. */
     cor: "#ec0b5b",
     Icon: Kanban,

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChartLineUp } from "@phosphor-icons/react";
-import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 import { api } from "../api";
 import { InteressadosNoImovel } from "../components/InteressadosNoImovel.jsx";
 import { comodidadesAtivas } from "../utils/comodidades";
@@ -307,37 +307,27 @@ export function PropertyInsightsPage({ session }) {
     ["Cidade / UF", `${property.city || "—"} / ${property.state || "—"}`],
   ].filter(Boolean) : [];
 
+  /* ── O TOPO MORA NA FAIXA ────────────────────────────────────────────────
+     Havia aqui uma trilha e um `<h1>` de 26px desenhados dentro do conteúdo,
+     logo abaixo do cabeçalho que já desenha os dois — o mesmo desencontro que
+     a tela de negócio do Flow tinha, e pela mesma causa: `/imoveis/:id` não
+     está em `TELAS_DO_PAINEL`, então a rota não monta a trilha sozinha.
+
+     O "Atualizando…" entra pelo SUBTÍTULO, e não pela ação: `acao` fica fora
+     das dependências do efeito, então um indicador ali congelaria no primeiro
+     valor. Subtítulo é texto e está nas dependências — muda quando `loading`
+     muda, que é exatamente o que um indicador precisa fazer. */
+  useTituloDaTela({
+    titulo: "Painel de Performance",
+    subtitulo: loading ? "Atualizando…" : (property?.title || null),
+    trilha: [
+      ...degrausAte("/imoveis/portfolio", navigate),
+      { chave: "desempenho", rotulo: "Painel de Performance", Icone: ChartLineUp, aoIr: () => {} },
+    ],
+  });
+
   return (
     <div style={{ maxWidth: "1000px", display: "flex", flexDirection: "column", gap: "20px" }}>
-
-      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-        <div>
-          {/* A trilha no lugar do "Voltar" — o mesmo primeiro destino, e ainda
-              diz onde esta tela mora. Ver o cabeçalho de `Trilha.jsx`. */}
-          <div style={{ marginBottom: "12px" }}>
-            <Trilha
-              itens={[
-                ...degrausAte("/imoveis/portfolio", navigate),
-                {
-                  chave: "desempenho",
-                  rotulo: "Painel de Performance",
-                  Icone: ChartLineUp,
-                  aoIr: () => {},
-                },
-              ]}
-            />
-          </div>
-          <h1 style={{ margin: 0, fontSize: "26px", fontWeight: "700", lineHeight: 1.2 }}>
-            Painel de Performance
-          </h1>
-        </div>
-        {loading && (
-          <span style={{ fontSize: "13px", color: "var(--text-muted)", alignSelf: "flex-end", paddingBottom: "4px" }}>
-            Atualizando...
-          </span>
-        )}
-      </div>
 
       {error ? <div className="error">{error}</div> : null}
 

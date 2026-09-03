@@ -93,12 +93,27 @@ function negocioCompleto(tenantId, where) {
 
 /** As opções da trava, montadas num lugar só.
  *
- *  `exigeContrato` depende do PLANO: no Básico não há assinatura digital, e
- *  cobrar um documento que aquele plano não consegue produzir travaria o
- *  negócio para sempre — a trava viraria defeito em vez de controle. As duas
- *  validações humanas continuam valendo em todos os planos. */
+ *  `exigeContrato` pergunta se esta conta CONSEGUE produzir um contrato
+ *  assinado, e são duas condições, não uma:
+ *
+ *    1. o PLANO libera assinatura digital (no Básico não existe), e
+ *    2. há um PROVEDOR conectado (Clicksign ou DocuSign, com token).
+ *
+ *  A segunda faltava, e a falta era grave: uma imobiliária no Profissional que
+ *  ainda não tinha conectado provedor nenhum não conseguia mover negócio
+ *  ALGUM para GANHO — a trava pedia um documento que aquela conta não tinha
+ *  como emitir, e não havia caminho para destravar sem contratar um fornecedor
+ *  de fora. É exatamente o defeito que a isenção do Básico existia para evitar,
+ *  passando pela metade: o raciocínio estava certo e aplicado só a uma das
+ *  duas maneiras de a conta não conseguir emitir contrato.
+ *
+ *  ⚠ Consequência assumida: desconectar o provedor derruba a exigência de
+ *  contrato. É uma porta, mas é estreita — exige `verConfiguracoes`, aparece na
+ *  trilha de auditoria, e cega a imobiliária inteira para fugir de um controle
+ *  num negócio só. A alternativa, travar o negócio para sempre, é pior e já
+ *  está provada pior. */
 function opcoesDaTrava(tenant, negocio) {
-  const exigeContrato = flowLibera(tenant.plano, "assinaturaDigital");
+  const exigeContrato = flowLibera(tenant.plano, "assinaturaDigital") && assinaturaConfigurada(tenant);
   const contratoAssinado = (negocio.contratos || []).some((c) => c.status === "ASSINADO");
   return { exigeContrato, contratoAssinado };
 }
@@ -205,7 +220,7 @@ flowRouter.get("/painel", async (req, res) => {
     });
   } catch (err) {
     console.error("[GET /flow/painel]", err);
-    return res.status(500).json({ error: "Erro ao carregar o painel do Flow." });
+    return res.status(500).json({ error: "Erro ao carregar o painel do Omniflow." });
   }
 });
 
@@ -1115,7 +1130,7 @@ flowRouter.post(
       const provedor = cfg && provedorDe(cfg.provedor);
       if (!provedor) {
         return res.status(422).json({
-          error: "Configure a assinatura digital em Configurações → Flow antes de enviar.",
+          error: "Configure a assinatura digital em Configurações → Omniflow antes de enviar.",
           faltaConfigurar: true,
         });
       }
@@ -1169,11 +1184,27 @@ flowRouter.post(
         include: { signatarios: { orderBy: { ordem: "asc" } } },
       });
 
+      /* ── QUEM NÃO FOI AVISADO PRECISA APARECER ────────────────────────────
+         O provedor pode aceitar o documento e falhar em notificar — e esse é
+         justamente o desfecho que ninguém percebe, porque a tela diz
+         "aguardando assinatura" e nada contradiz isso. Vai no evento (fica no
+         histórico do negócio) e na resposta (a tela avisa na hora), com a saída
+         pela URL de assinatura, que agora existe por signatário. */
+      const semAviso = resultado.semAviso || [];
       await registrar(req, contrato.negocioId, "CONTRATO", {
         para: "ENVIADO",
-        texto: `Contrato enviado para assinatura (${provedor.rotulo}) — ${criados.length} signatário(s).`,
+        texto: semAviso.length
+          ? `Contrato enviado para assinatura (${provedor.rotulo}) — ${criados.length} signatário(s), ` +
+            `mas ${semAviso.length} não recebeu o aviso por e-mail: ${semAviso.join("; ")}.`
+          : `Contrato enviado para assinatura (${provedor.rotulo}) — ${criados.length} signatário(s).`,
       });
-      return res.json(atualizado);
+      return res.json({
+        ...atualizado,
+        ...(semAviso.length ? {
+          aviso: `O contrato foi criado, mas ${semAviso.length === 1 ? "um signatário não recebeu" : `${semAviso.length} signatários não receberam`} ` +
+            "o e-mail: " + semAviso.join("; ") + ". Use o link de assinatura de cada um para mandar por WhatsApp.",
+        } : {}),
+      });
     } catch (err) {
       console.error("[POST /flow/contratos/:id/enviar]", err);
       return res.status(500).json({ error: "Erro ao enviar o contrato." });

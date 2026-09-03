@@ -21,7 +21,7 @@ export const PERMISSOES = [
 
 export const PORTA_DO_FLOW = {
   key: "acessarFlow",
-  label: "Acessar o Omnimob Flow",
+  label: "Acessar o Omniflow",
   descricao: "Sem isto, o módulo não aparece no seletor da barra lateral.",
   Icon: SignIn,
 };
@@ -51,7 +51,7 @@ export function gruposDePermissao(plano, { temFlow = false } = {}) {
   const grupos = [{ titulo: null, itens: permissoesDoPlano(plano) }];
   if (temFlow) {
     grupos.push({
-      titulo: "No Omnimob Flow",
+      titulo: "No Omniflow",
       porta: PORTA_DO_FLOW,
       itens: PERMISSOES_FLOW.filter((p) => p.key !== PORTA_DO_FLOW.key),
     });

@@ -1,5 +1,5 @@
-import { useOutletContext, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useOutletContext, useNavigate, useParams, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { Avatar, EmptyState, SearchInput, StatCard, StatGrid } from "../components/adminUi";
@@ -13,7 +13,6 @@ import { GradeDePermissoes } from "../components/GradeDePermissoes.jsx";
 import { FLOW, modulosDoTenant } from "../utils/modulos";
 import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
 import { ShieldPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
-import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
@@ -72,7 +71,11 @@ export function CargosPage({ session, onSessionUpdate }) {
   );
   const { confirm, modal: confirmModal } = useConfirm();
   const [cargos, setCargos] = useState([]);
-  const [view, setView] = useState("list");
+  /* ── A VISTA SAI DA ROTA ─────────────────────────────────────────────────
+     Ver o bloco de rotas em `App.jsx` e a mesma migração em `ClientesPage`. */
+  const { cargoId } = useParams();
+  const criando = useLocation().pathname.endsWith("/novo");
+  const view = criando || cargoId ? "form" : "list";
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(cargoVazio());
   const [loading, setLoading] = useState(false);
@@ -123,18 +126,33 @@ export function CargosPage({ session, onSessionUpdate }) {
   /* O nome da tela sobe para a faixa do painel. A rota já saberia o título
      sozinha (`trilhaDoPainel`), mas o SUBTÍTULO só esta tela conhece — e sem
      declará-lo aqui ele se perderia na mudança. Ver `contextoDeCabecalho`. */
-  useTituloDaTela({ titulo: "Cargos e Permissões", subtitulo: "O que cada cargo alcança dentro do painel." });
+  /* O título e a trilha acompanham a sub-tela — antes a faixa dizia "Cargos e
+     Permissões" com um cadastro aberto, e a página compensava com uma segunda
+     trilha logo abaixo. */
+  useTituloDaTela({
+    titulo: view === "form" ? (editando ? "Editar Cargo" : "Novo Cargo") : "Cargos e Permissões",
+    subtitulo: view === "form"
+      ? (editando?.descricao || "Defina o que este cargo alcança.")
+      : "O que cada cargo alcança dentro do painel.",
+    trilha: view === "form" ? [
+      ...degrausAte("/cargos", navigate),
+      {
+        chave: "form",
+        rotulo: editando ? "Editar Cargo" : "Novo Cargo",
+        Icone: editando ? PencilSimple : PlusCircle,
+        aoIr: () => {},
+      },
+    ] : undefined,
+  });
 
   function abrirCriar() {
-    setEditando(null);
-    const f = cargoVazio();
-    setForm(f);
-    setFormOriginal(f);
-    setError("");
-    setView("form");
+    navigate("/cargos/novo");
   }
 
-  function abrirEditar(c) {
+  /* Preenche o formulário a partir de um cargo já em mãos. Separado de
+     `abrirEditar` porque o efeito abaixo precisa da mesma coisa quando ninguém
+     clicou em nada — F5 ou link colado. */
+  function preencherCom(c) {
     setEditando(c);
     const f = { descricao: c.descricao };
     /* `TODAS_AS_PERMISSOES`, e não `permissoesVisiveis` nem `PERMISSOES`.
@@ -156,8 +174,46 @@ export function CargosPage({ session, onSessionUpdate }) {
     setForm(f);
     setFormOriginal(f);
     setError("");
-    setView("form");
   }
+
+  function abrirEditar(c) {
+    preencherCom(c);
+    preenchidoPara.current = c.id;
+    navigate(`/cargos/${c.id}`);
+  }
+
+  /* ── O FORMULÁRIO SE PREENCHE A PARTIR DA URL ────────────────────────────
+     `/cargos/:id` pode ser aberta sem passar pela lista. `listCargos` traz
+     todos, sem filtro, então basta esperar a lista — não há `GET /cargos/:id`
+     no servidor e não é preciso.
+
+     `preenchidoPara` é mais crítico aqui que nas outras telas: sem ele, uma
+     recarga da lista reescreveria `form` E `formOriginal` no meio da edição, o
+     que zeraria a verificação de "não salvo" e faria o aviso de descarte parar
+     de aparecer justamente depois de a pessoa ter mexido em tudo. */
+  const preenchidoPara = useRef(null);
+  useEffect(() => {
+    if (criando) {
+      if (preenchidoPara.current === "novo") return;
+      preenchidoPara.current = "novo";
+      setEditando(null);
+      const f = cargoVazio();
+      setForm(f);
+      setFormOriginal(f);
+      setError("");
+      return;
+    }
+    if (!cargoId) { preenchidoPara.current = null; return; }
+    if (preenchidoPara.current === cargoId) return;
+
+    const achado = cargos.find((c) => c.id === cargoId);
+    if (achado) { preenchidoPara.current = cargoId; preencherCom(achado); return; }
+    if (initialLoading) return;   // a lista ainda não chegou
+
+    showToast?.("Não encontrei este cargo.", "error");
+    navigate("/cargos", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargoId, criando, cargos, initialLoading]);
 
   /* Comparação por conteúdo: as chaves saem sempre da mesma lista, na mesma
      ordem, então o JSON basta e não precisa de um laço à mão. */
@@ -174,7 +230,7 @@ export function CargosPage({ session, onSessionUpdate }) {
       "Você mexeu nas permissões e ainda não salvou. Deseja sair mesmo assim?",
       "Sair sem salvar",
     )) return;
-    setView("list");
+    navigate("/cargos");
   }
 
   function atualizarSessaoSeProprioCargoFoi(updatedCargo) {
@@ -250,12 +306,12 @@ export function CargosPage({ session, onSessionUpdate }) {
         atualizarSessaoSeProprioCargoFoi(updated);
         showToast?.(`Cargo "${updated.descricao}" atualizado.`);
         setFormOriginal(form);
-        setView("list");
+        navigate("/cargos");
       } else {
         const created = await api.createCargo(tenantSlug, form);
         setCargos((prev) => [...prev, created]);
         showToast?.(`Cargo "${created.descricao}" criado.`);
-        setView("list");
+        navigate("/cargos");
       }
     } catch (err) {
       setError(err.message);
@@ -308,21 +364,6 @@ export function CargosPage({ session, onSessionUpdate }) {
           aoConfirmar={confirmarConcessao}
           aoCancelar={() => setConcessaoPendente(null)}
         />
-        <div style={{ marginBottom: "24px" }}>
-          <Trilha
-            itens={[
-              /* O primeiro degrau é o mesmo destino do "Cancelar" — e passa
-                 pela mesma pergunta quando há alteração pendente. */
-              ...degrausAte("/cargos", navigate, sair),
-              {
-                chave: "form",
-                rotulo: editando ? "Editar Cargo" : "Novo Cargo",
-                Icone: editando ? PencilSimple : PlusCircle,
-                aoIr: () => setView("form"),
-              },
-            ]}
-          />
-        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>

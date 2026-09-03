@@ -137,7 +137,14 @@ test("porta fechada desabilita as seis de dentro, sem apagar os valores", () => 
     <GradeDePermissoes plano="PREMIUM" valores={valores} aoAlternar={() => {}} temFlow />,
   );
 
-  const grade = html.slice(html.indexOf("Omnimob Flow"));
+  /* O corte é no título do GRUPO ("No Omniflow"), que é o que separa as seis
+     caixas do módulo das do Hub. Ele é texto de tela e já mudou uma vez, com o
+     rebrand de "Omnimob Flow" para "Omniflow" — se mudar de novo, este teste
+     falha aqui, achando zero caixas, e não em silêncio. */
+  const marcador = "No Omniflow";
+  const inicio = html.indexOf(marcador);
+  assert.ok(inicio >= 0, `não achei o grupo "${marcador}" na grade`);
+  const grade = html.slice(inicio);
   const caixas = [...grade.matchAll(/<input type="checkbox"[^>]*>/g)].map((m) => m[0]);
   const daGrade = caixas.filter((c) => !c.includes('class="sw"'));
   assert.ok(daGrade.length >= 6, `esperava as seis caixas, achei ${daGrade.length}`);
@@ -153,7 +160,14 @@ test("porta aberta libera as seis", () => {
   const html = renderToStaticMarkup(
     <GradeDePermissoes plano="PREMIUM" valores={valores} aoAlternar={() => {}} temFlow />,
   );
-  const grade = html.slice(html.indexOf("Omnimob Flow"));
+  /* O corte é no título do GRUPO ("No Omniflow"), que é o que separa as seis
+     caixas do módulo das do Hub. Ele é texto de tela e já mudou uma vez, com o
+     rebrand de "Omnimob Flow" para "Omniflow" — se mudar de novo, este teste
+     falha aqui, achando zero caixas, e não em silêncio. */
+  const marcador = "No Omniflow";
+  const inicio = html.indexOf(marcador);
+  assert.ok(inicio >= 0, `não achei o grupo "${marcador}" na grade`);
+  const grade = html.slice(inicio);
   const daGrade = [...grade.matchAll(/<input type="checkbox"[^>]*>/g)]
     .map((m) => m[0]).filter((c) => !c.includes('class="sw"'));
   assert.ok(daGrade.every((c) => !c.includes("disabled")), "com a porta aberta, todas respondem");

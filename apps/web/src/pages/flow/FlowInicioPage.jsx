@@ -75,7 +75,7 @@ export function FlowInicioPage({ session }) {
   }
 
   if (!dados) {
-    return <p style={{ color: "var(--text-muted)" }}>Não consegui carregar o painel do Flow.</p>;
+    return <p style={{ color: "var(--text-muted)" }}>Não consegui carregar o painel do Omniflow.</p>;
   }
 
   const maior = Math.max(1, ...ESTAGIOS_FLOW.map((e) => dados.contagem?.[e.key] || 0));
@@ -83,7 +83,7 @@ export function FlowInicioPage({ session }) {
   return (
     <div data-tour="flow-inicio">
       <PageHeader
-        title={primeiroNome ? `Seu Flow, ${primeiroNome}` : "Visão do Flow"}
+        title={primeiroNome ? `Seu Omniflow, ${primeiroNome}` : "Visão do Omniflow"}
         subtitle={
           dados.escopo === "meus"
             ? "Os negócios sob sua responsabilidade, do primeiro contato ao fechamento."

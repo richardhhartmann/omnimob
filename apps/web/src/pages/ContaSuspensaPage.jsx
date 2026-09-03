@@ -317,7 +317,7 @@ export function ContaSuspensaPage({ session, onLogout }) {
                 aoAlternar={(on) => setPacote(on ? "HUB_FLOW" : "HUB")}
                 nota={
                   session?.tenant?.modulos?.includes("FLOW")
-                    ? "Sua conta tinha o Flow. Desmarcando, ele não volta — mas os negócios e contratos continuam guardados."
+                    ? "Sua conta tinha o Omniflow. Desmarcando, ele não volta — mas os negócios e contratos continuam guardados."
                     : undefined
                 }
               />

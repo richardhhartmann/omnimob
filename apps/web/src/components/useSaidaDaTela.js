@@ -10,12 +10,15 @@ import { tourAtivo } from "../utils/tourAtivo";
    campo quando a pessoa está escrevendo — "Esc no meio de um formulário não
    pode arrastar ninguém para fora da tela" é a regra certa para ele.
 
-   Só que metade dos cadastros do painel não é uma rota: Clientes, Usuários,
-   Cargos e Tipos de Imóvel trocam de VISTA dentro do mesmo endereço. Para o
-   atalho global, quem está preenchendo "Novo Cliente" continua em `/clientes` —
-   então ele não tinha o que fazer, e o Esc ali não fazia nada. O sintoma é
-   exatamente esse: a tecla não responde justamente onde a pessoa mais espera
-   que responda, que é dentro de um formulário aberto.
+   Isso deixa um buraco nos cadastros. Clientes, Usuários, Cargos e Tipos de
+   Imóvel HOJE têm rota própria (`/clientes/novo`, `/cargos/:id`, …) — antes não
+   tinham, e o Esc ali não fazia nada porque, para o atalho global, quem
+   preenchia "Novo Cliente" continuava em `/clientes`.
+
+   As rotas consertaram o Voltar do navegador, o F5 e o link, mas NÃO consertam
+   o Esc: o atalho global se recusa a agir com o foco num campo de texto, e num
+   formulário ele quase sempre está. O sintoma é o mesmo de antes — a tecla não
+   responde justamente onde a pessoa mais espera que responda.
 
    ── POR QUE ELE AGE MESMO COM O FOCO NUM CAMPO ──
 

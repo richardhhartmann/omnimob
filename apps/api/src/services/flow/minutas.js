@@ -83,11 +83,11 @@ export const CAMPOS = [
   { chave: "imovel.valor", rotulo: "Valor de anúncio do imóvel", onde: "Imóveis" },
 
   // ── Negócio ──
-  { chave: "negocio.codigo", rotulo: "Número do negócio", onde: "Flow" },
-  { chave: "negocio.valor", rotulo: "Valor fechado do negócio", onde: "Flow" },
-  { chave: "negocio.valorPorExtenso", rotulo: "Valor por extenso", onde: "Flow" },
-  { chave: "negocio.comissao", rotulo: "Comissão total", onde: "Flow" },
-  { chave: "negocio.corretor", rotulo: "Corretor responsável", onde: "Flow" },
+  { chave: "negocio.codigo", rotulo: "Número do negócio", onde: "Omniflow" },
+  { chave: "negocio.valor", rotulo: "Valor fechado do negócio", onde: "Omniflow" },
+  { chave: "negocio.valorPorExtenso", rotulo: "Valor por extenso", onde: "Omniflow" },
+  { chave: "negocio.comissao", rotulo: "Comissão total", onde: "Omniflow" },
+  { chave: "negocio.corretor", rotulo: "Corretor responsável", onde: "Omniflow" },
   { chave: "negocio.creciCorretor", rotulo: "CRECI do corretor", onde: "Usuários" },
 
   // ── Imobiliária ──

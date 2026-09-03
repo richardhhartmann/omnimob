@@ -44,7 +44,7 @@ export function AvisoDePlanoFlow({ recursos, plano, compacto = false }) {
         <span className="flow-aviso__icone"><LockSimple size={16} weight="fill" /></span>
         <span>
           A assinatura digital ainda não está conectada. Escolha o provedor e cole a chave em{" "}
-          <Link to="/configuracoes?ver=flow">Configurações → Flow</Link> — sem isso, o contrato é
+          <Link to="/configuracoes?ver=flow">Configurações → Omniflow</Link> — sem isso, o contrato é
           gerado mas não sai para assinatura.
         </span>
       </div>
@@ -55,7 +55,7 @@ export function AvisoDePlanoFlow({ recursos, plano, compacto = false }) {
     <div className={`flow-aviso${compacto ? " is-compacto" : ""}`}>
       <span className="flow-aviso__icone"><LockSimple size={16} weight="fill" /></span>
       <span>
-        No plano <strong>{info?.nome}</strong>, o Flow entrega o funil, os negócios, os documentos e
+        No plano <strong>{info?.nome}</strong>, o Omniflow entrega o funil, os negócios, os documentos e
         as minutas. Ficam de fora {listar(faltando)} — os dois entram a partir do{" "}
         <strong>Profissional</strong>.{" "}
         <Link to="/configuracoes?ver=plano">Ver planos</Link>

@@ -189,7 +189,7 @@ export const CARGOS_PADRAO = [
     permite: ["acessarFlow", "gerenciarNegocios", "validarFinanceiro", "verComissoes"],
   },
   {
-    descricao: "Corretor Flow",
+    descricao: "Corretor Omniflow",
     /* Tem permissões do HUB e mesmo assim é do Flow: ele existe POR CAUSA do
        módulo. É o caso que provou que a marca precisa ser explícita — nenhuma
        dedução a partir das caixas marcadas o classificaria certo. */

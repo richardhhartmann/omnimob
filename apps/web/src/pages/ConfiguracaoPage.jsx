@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams, useNavigate } from "react-router-dom";
 import { GradeDeMenu } from "../components/GradeDeMenu.jsx";
-import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { abasVisiveis, ICONES_CONFIG, ehAbaDeConfig, rotuloDaAba } from "../utils/abasConfiguracoes";
+import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 import { GearSix } from "@phosphor-icons/react";
 import { api } from "../api";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
@@ -949,6 +949,24 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
   const pedida = searchParams.get("ver");
   const tab = abas.some((a) => a.key === pedida) ? pedida : "MENU";
   const setTab = (proxima) => setSearchParams(proxima === "MENU" ? {} : { ver: proxima });
+  /* ── O TÍTULO E A TRILHA ACOMPANHAM A ABA ────────────────────────────────
+     A aba já vive na URL (`?ver=`), então esta tela nunca teve o problema de
+     F5 que as outras tinham. O que ela tinha era a trilha em duplicata: a faixa
+     desenhava "Dashboard › Configurações" e a página desenhava
+     "Dashboard › Configurações › Aparência" logo abaixo, com a de cima parada
+     um degrau atrás.
+
+     `degrausAte` não alcança a aba porque ela não é um segmento de caminho — é
+     um parâmetro de busca, e o catálogo de telas indexa por rota. Daí o
+     override. */
+  useTituloDaTela({
+    titulo: tab === "MENU" ? "Configurações" : rotuloDaAba(tab),
+    trilha: tab === "MENU" ? undefined : [
+      ...degrausAte("/configuracoes", navigate),
+      { chave: tab, rotulo: rotuloDaAba(tab), Icone: ICONES_CONFIG[tab], aoIr: () => {} },
+    ],
+  });
+
   const [form, setForm] = useState(EMPTY);
   const [plano, setPlano] = useState(session?.tenant?.plano || "BASICO");
   const [loading, setLoading] = useState(true);
@@ -1076,16 +1094,16 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
        de faixa, ligar o módulo na faixa atual, ou as duas coisas. */
     const oQueMuda = mesmoPlano
       ? comFlow
-        ? `Contratar o Omnimob Flow no plano ${para.nome}? O módulo é liberado na hora. `
-        : `Dispensar o Omnimob Flow? O acesso ao módulo fecha imediatamente — os negócios e contratos continuam guardados. `
-      : `Trocar do plano ${de.nome} para o ${para.nome}${comFlow && !temFlowHoje ? ", com o Omnimob Flow" : ""}? ` +
+        ? `Contratar o Omniflow no plano ${para.nome}? O módulo é liberado na hora. `
+        : `Dispensar o Omniflow? O acesso ao módulo fecha imediatamente — os negócios e contratos continuam guardados. `
+      : `Trocar do plano ${de.nome} para o ${para.nome}${comFlow && !temFlowHoje ? ", com o Omniflow" : ""}? ` +
         (subindo
           ? `Os recursos do ${para.nome} passam a valer imediatamente. `
           : `Os recursos exclusivos do ${de.nome} deixam de aparecer imediatamente. `);
 
     const ok = await confirm(
       oQueMuda + sobreCobranca,
-      mesmoPlano ? (comFlow ? "Contratar o Flow" : "Dispensar o Flow") : subindo ? "Fazer upgrade" : "Fazer downgrade",
+      mesmoPlano ? (comFlow ? "Contratar o Omniflow" : "Dispensar o Omniflow") : subindo ? "Fazer upgrade" : "Fazer downgrade",
       // Tirar recurso de quem está usando pede vermelho; acrescentar, não.
       subindo || (mesmoPlano && comFlow) ? "primary" : "danger",
     );
@@ -1165,8 +1183,8 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
         texto: `${
           mesmoPlano
             ? comFlow
-              ? "Omnimob Flow contratado."
-              : "Omnimob Flow dispensado."
+              ? "Omniflow contratado."
+              : "Omniflow dispensado."
             : `Plano alterado para ${para.nome}.`
         } ${
           r?.cobrancaAjustada
@@ -1515,19 +1533,10 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
       ) : (
         <>
         {/* ── Cabeçalho da seção ─── */}
-        <div data-tour="config-secao" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-          {/* `GearSix` é o mesmo ícone que Configurações tem na barra lateral, e
-              o da seção sai de `ICONES_CONFIG` — a mesma lista que desenha os
-              cartões do índice e o submenu. */}
-          <Trilha
-            itens={[
-              /* A cadeia até Configurações vem do catálogo, e traz o Dashboard
-                 na frente — o degrau que faltava aqui. */
-              ...degrausAte("/configuracoes", navigate, () => setTab("MENU")),
-              { chave: tab, rotulo: rotuloDaAba(tab), Icone: ICONES_CONFIG[tab], aoIr: () => setTab(tab) },
-            ]}
-          />
-          {/* A mesma margem da trilha, para os dois ficarem na mesma linha. */}
+        {/* A trilha subiu para a faixa do painel. O indicador de salvamento
+            fica: ele muda a cada gravação, e a faixa não o redesenharia — o
+            slot de ação dela é fixado junto com o título. */}
+        <div data-tour="config-secao" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "16px", flexWrap: "wrap" }}>
           <div style={{ minHeight: "24px", marginBottom: "20px" }}>{saveIndicator}</div>
         </div>
 
@@ -2344,7 +2353,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
                                   {trocandoPlano === p.key
                                     ? "Trocando…"
                                     : !mudaPlano
-                                      ? comFlow ? "Contratar o Flow" : "Dispensar o Flow"
+                                      ? comFlow ? "Contratar o Omniflow" : "Dispensar o Omniflow"
                                       : subindo ? "Fazer upgrade" : "Fazer downgrade"}
                                 </button>
                               )}

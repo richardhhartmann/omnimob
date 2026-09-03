@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { PerfisDeBusca } from "../components/PerfisDeBusca.jsx";
-import { useOutletContext, useNavigate } from "react-router-dom";
+import { useOutletContext, useNavigate, useParams, useLocation } from "react-router-dom";
 import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
 import { useConfirm } from "../components/ConfirmModal";
 import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
@@ -9,7 +9,6 @@ import { SkeletonStats, SkeletonListRows } from "../components/Skeleton";
 import { formatCep, formatCpf, formatPhone, formatRg, onlyDigits } from "../utils/masks";
 import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
 import { UserCirclePlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
-import { Trilha } from "../components/Trilha.jsx";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
@@ -53,7 +52,15 @@ export function ClientesPage({ session }) {
   const { confirm, modal: confirmModal } = useConfirm();
   const showToast = useOutletContext()?.showToast;
   const [clientes, setClientes] = useState([]);
-  const [view, setView] = useState("list");
+
+  /* ── A VISTA SAI DA ROTA ─────────────────────────────────────────────────
+     Era `useState("list" | "form")`, e o preço aparecia em três lugares: F5 no
+     meio do formulário voltava para a lista, o Voltar do navegador saía de
+     `/clientes` inteiro, e não havia link para mandar a alguém. Ver o bloco de
+     rotas em `App.jsx`. */
+  const { clienteId } = useParams();
+  const criando = useLocation().pathname.endsWith("/novo");
+  const view = criando || clienteId ? "form" : "list";
   const [editando, setEditando] = useState(null);
   /* Um cliente por vez com os perfis abertos. Vários abertos ao mesmo tempo
      transformariam a lista numa parede de formulários — e a pergunta "o que
@@ -116,13 +123,13 @@ export function ClientesPage({ session }) {
   }
 
   function abrirCriar() {
-    setEditando(null);
-    setForm(FORM_EMPTY);
-    setError("");
-    setView("form");
+    navigate("/clientes/novo");
   }
 
-  function abrirEditar(c) {
+  /* Preenche o formulário a partir de um cliente já em mãos. Separado de
+     `abrirEditar` porque o efeito abaixo precisa da mesma coisa quando ninguém
+     clicou em nada — F5 ou link colado. */
+  function preencherCom(c) {
     setEditando(c);
     setForm({
       nome: c.nome || "", cpf: formatCpf(c.cpf || ""), rg: formatRg(c.rg || ""),
@@ -134,8 +141,58 @@ export function ClientesPage({ session }) {
       aceitaDivulgacao: Boolean(c.aceitaDivulgacao),
     });
     setError("");
-    setView("form");
   }
+
+  function abrirEditar(c) {
+    /* Preenche ANTES de navegar: quem veio da lista já tem o objeto, e assim o
+       formulário nasce pronto sem uma segunda ida ao servidor. A marca diz ao
+       efeito que este id já está preenchido — sem ela ele refaria o trabalho no
+       render seguinte. */
+    preencherCom(c);
+    preenchidoPara.current = c.id;
+    navigate(`/clientes/${c.id}`);
+  }
+
+  /* ── O FORMULÁRIO PRECISA SE PREENCHER A PARTIR DA URL ───────────────────
+     Quando a rota vira endereço de verdade, ela pode ser aberta sem passar pela
+     lista: F5, favorito, link no WhatsApp. Aí não há objeto em memória e o
+     formulário apareceria vazio, com aparência de cliente sem dados.
+
+     `preenchidoPara` existe para o efeito NÃO reescrever o que a pessoa está
+     digitando. Sem ele, qualquer recarga da lista (a busca tem debounce de
+     350ms e roda enquanto se digita no filtro) devolveria o formulário ao
+     estado do servidor no meio da edição — e o campo mexido perderia o valor
+     sem nada na tela explicando por quê. */
+  const preenchidoPara = useRef(null);
+  useEffect(() => {
+    if (criando) {
+      if (preenchidoPara.current === "novo") return;
+      preenchidoPara.current = "novo";
+      setEditando(null);
+      setForm(FORM_EMPTY);
+      setError("");
+      return;
+    }
+    if (!clienteId) { preenchidoPara.current = null; return; }
+    if (preenchidoPara.current === clienteId) return;
+
+    const daLista = clientes.find((c) => c.id === clienteId);
+    if (daLista) { preenchidoPara.current = clienteId; preencherCom(daLista); return; }
+    if (!tenantSlug) return;
+
+    /* A lista ainda não chegou (ou o cliente está fora do filtro atual): busca
+       o registro sozinho. Falhar aqui é um id que não existe — a mensagem vale
+       mais que um formulário em branco. */
+    preenchidoPara.current = clienteId;
+    api.obterCliente(tenantSlug, clienteId)
+      .then(preencherCom)
+      .catch((err) => {
+        preenchidoPara.current = null;
+        showToast?.(err.message || "Não encontrei este cliente.", "error");
+        navigate("/clientes", { replace: true });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteId, criando, clientes, tenantSlug]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -153,7 +210,7 @@ export function ClientesPage({ session }) {
         setClientes((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
         showToast?.(`${created.nome} cadastrado.`);
       }
-      setView("list");
+      navigate("/clientes");
     } catch (err) {
       setError(err.message);
       showToast?.(err.message, "error");
@@ -257,31 +314,41 @@ export function ClientesPage({ session }) {
   /* O nome da tela sobe para a faixa do painel. A rota já saberia o título
      sozinha (`trilhaDoPainel`), mas o SUBTÍTULO só esta tela conhece — e sem
      declará-lo aqui ele se perderia na mudança. Ver `contextoDeCabecalho`. */
-  useTituloDaTela({ titulo: "Clientes", subtitulo: "Sua base de clientes e contatos." });
+  /* ── O TÍTULO ACOMPANHA A SUB-TELA ───────────────────────────────────────
+     A faixa dizia "Clientes — sua base de clientes e contatos" mesmo com um
+     formulário de cadastro na tela, e a página compensava desenhando uma
+     segunda trilha logo abaixo. Duas trilhas empilhadas, e a de cima falando
+     da tela que a pessoa já tinha deixado.
 
-  /* Esc fecha o cadastro e volta à lista — o mesmo que o "Cancelar". Sem isto a
-     tecla não fazia nada aqui: para o atalho global esta tela continua sendo
-     `/clientes`, porque a vista trocou por estado e não por rota. */
-  useSaidaDaTela(() => setView("list"), view === "form");
+     A trilha vai junto porque a rota não consegue montá-la: `/clientes/:id` tem
+     id dinâmico, e o rótulo do último degrau depende de estar criando ou
+     editando. Ver `useTituloDaTela`. */
+  useTituloDaTela({
+    titulo: view === "form" ? (editando ? "Editar Cliente" : "Novo Cliente") : "Clientes",
+    subtitulo: view === "form"
+      ? (editando?.nome || "Preencha os dados do novo cliente.")
+      : "Sua base de clientes e contatos.",
+    trilha: view === "form" ? [
+      ...degrausAte("/clientes", navigate),
+      {
+        chave: "form",
+        rotulo: editando ? "Editar Cliente" : "Novo Cliente",
+        Icone: editando ? PencilSimple : PlusCircle,
+        aoIr: () => {},
+      },
+    ] : undefined,
+  });
+
+  /* Esc fecha o cadastro e volta à lista — o mesmo que o "Cancelar".
+     Continua necessário mesmo agora que o cadastro tem rota própria: o Esc
+     global recusa agir quando o foco está num campo de texto (e num formulário
+     ele quase sempre está), então sem isto a tecla não responderia justamente
+     onde mais se espera que responda. Ver `useSaidaDaTela`. */
+  useSaidaDaTela(() => navigate("/clientes"), view === "form");
 
   if (view === "form") {
     return (
       <section className="glass-panel" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-        {/* A trilha no lugar do título: ela diz o mesmo e ainda diz de onde
-            veio — e o primeiro degrau é para onde o Esc leva. */}
-        <div style={{ marginBottom: "24px" }}>
-          <Trilha
-            itens={[
-              ...degrausAte("/clientes", navigate, () => setView("list")),
-              {
-                chave: "form",
-                rotulo: editando ? "Editar Cliente" : "Novo Cliente",
-                Icone: editando ? PencilSimple : PlusCircle,
-                aoIr: () => setView("form"),
-              },
-            ]}
-          />
-        </div>
         {error ? <div className="error">{error}</div> : null}
         <form className="grid" onSubmit={handleSubmit}>
 
@@ -363,7 +430,7 @@ export function ClientesPage({ session }) {
             <button type="submit" disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               {loading ? "Salvando…" : editando ? "Salvar Alterações" : "Criar Cliente"}
             </button>
-            <button type="button" className="button-secondary" onClick={() => setView("list")} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
+            <button type="button" className="button-secondary" onClick={() => navigate("/clientes")} disabled={loading} style={{ width: "auto", padding: "10px 20px" }}>
               Cancelar
             </button>
           </div>

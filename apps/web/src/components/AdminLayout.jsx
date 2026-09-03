@@ -444,16 +444,28 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const isDashboard     = p === "/";
   /* "Gerenciar Imóveis" é o índice (`/imoveis`) e acende também quando a pessoa
      está numa das telas que ele leva a — o formulário e as categorias. */
-  const isGerenciarImoveis = p === "/imoveis" || p === "/imoveis/novo" || p === "/tipos-imovel";
+  /* ── SUB-ROTA TAMBÉM ACENDE O ITEM ──────────────────────────────────────
+     Metade dos cadastros do painel virou rota de verdade: `/clientes/novo`,
+     `/cargos/:id`, `/tipos-imovel/:id/atributos`. Com `===` puro, abrir um
+     desses APAGAVA o item da barra — a pessoa está dentro de Clientes e a
+     navegação não mostra nada aceso, como se ela tivesse saído do painel.
+
+     A conferência é por prefixo com a barra: `p.startsWith("/clientes")` sozinho
+     acenderia "Clientes" numa hipotética `/clientes-inativos`, que é o tipo de
+     rota que aparece meses depois e ninguém liga uma coisa à outra. */
+  const sob = (base) => p === base || p.startsWith(`${base}/`);
+
+  const isTiposImovel   = sob("/tipos-imovel");
+  const isGerenciarImoveis = p === "/imoveis" || p === "/imoveis/novo" || isTiposImovel;
   const isImovelList    = p === "/imoveis/portfolio";
   /* Insights de um imóvel é `/imoveis/<id>` — qualquer coisa sob o prefixo que
      não seja um dos caminhos nomeados. A lista com um imóvel aberto continua
      sendo "onde a pessoa está" para o item Portfólio. */
   const isInsights      = p.startsWith("/imoveis/") && !isGerenciarImoveis && !isImovelList && p !== "/imoveis/editar";
   const isLeads         = p === "/relatorios" || p === "/leads";
-  const isClientes      = p === "/clientes";
-  const isUsuarios      = p === "/usuarios";
-  const isCargos        = p === "/cargos";
+  const isClientes      = sob("/clientes");
+  const isUsuarios      = sob("/usuarios");
+  const isCargos        = sob("/cargos");
   const isAuditoria     = p === "/auditoria";
   const isConfiguracoes = p === "/configuracoes";
   // Apenas o editor da vitrine (/vitrine/:slug/editar) — não confundir com
@@ -831,14 +843,14 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       showcaseLink,
       showcaseEditorLink,
       flags: {
-        isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads,
+        isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads, isTiposImovel,
         isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
       },
     }),
     [
       moduloAtivo, cargo, session?.tenant?.plano, disponiveis, navigate, leadsBadge, negociosBadge,
       menuDeImoveis, showcaseEditorLink, showcaseLink,
-      isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads,
+      isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads, isTiposImovel,
       isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
       p, ver,
     ],
@@ -1627,39 +1639,36 @@ const CSS = `
 .ds-mod__marca img { width: 68%; height: 68%; object-fit: contain; }
 .ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__marca { display: flex; }
 
-/* ── A LOGO COMPOSTA: tipo + palavra do modulo ──────────────────────────────
+/* ── O WORDMARK DO MODULO ───────────────────────────────────────────────────
 
-   O problema: as duas artes tem SOBRAS diferentes dentro do quadro.
-   tipo_header_alt e 2852x603 com o texto OMNIMOB ocupando so a faixa y=197..403
-   — 34% da altura. hub.png e flow.png sao recortados rente a palavra, ou seja,
-   100% do quadro e tinta. Dar a mesma height as duas fazia o OMNIMOB sair com
-   um terco do tamanho da palavra do modulo.
+   Uma imagem so por modulo (modulo.logo), e nao mais tipo + palavra coladas
+   lado a lado. A composicao caiu junto com os nomes: "Omnimob" nao tem palavra
+   para acrescentar, e "Omniflow" e uma palavra unica.
 
-   A solucao: uma variavel com a altura da TINTA, e os dois tamanhos derivados
-   dela. Os fatores foram MEDIDOS nas proprias artes, nao estimados:
+   O que sobrou e o dimensionamento, e ele continua sendo por TINTA e nao por
+   quadro. As artes tem sobra dentro do arquivo: tipo_header_alt e 2852x603 com
+   as letras ocupando so a faixa y=197..403 — 34% da altura, porque o simbolo do
+   predio, esse sim, vai de borda a borda. Dar height ao quadro faria a
+   PALAVRA sair com um terco do tamanho pretendido.
 
-     603 / 207 = 2,913   quanto o quadro do tipo e maior que o texto dentro dele
-     197 / 603 = 0,327   onde esse texto comeca, em fracao do quadro
+   O fator foi MEDIDO nas artes, nao estimado:
 
-   Assim OMNIMOB e "Hub" saem com a mesma altura de letra, e o deslocamento do
-   topo poe as duas na mesma linha. Mexer no tamanho da logo e mexer em --tinta,
-   num lugar so.
+     603 / 207 = 2,913   quanto o quadro e maior que as letras dentro dele
 
-   align-items baseline nao resolve: o navegador nao sabe onde esta a linha de
-   base DENTRO de um PNG e alinha pela borda de baixo do quadro — que no tipo
-   fica 200px abaixo do texto. Era o que empurrava a palavra para baixo. */
+   E ele vale para as DUAS: omnimob_flow.png tem o mesmo quadro 2852x603, o
+   simbolo na mesma faixa (x 0..499) e a mesma altura de letra (207px). Foi essa
+   coincidencia — deliberada na arte — que permitiu apagar a regra por modulo.
+   Trocar uma arte por outra de proporcao diferente traz a matematica de volta.
+
+   Mexer no tamanho da logo e mexer em --tinta, num lugar so. */
 .ds-mod__logo {
   --tinta: 10px;
   flex: 1; min-width: 0;
-  display: flex; align-items: flex-start; gap: 7px;
+  display: flex; align-items: flex-start;
   overflow: hidden;
 }
 .ds-mod__tipo {
   height: calc(var(--tinta) * 2.913); width: auto; flex: none; display: block;
-}
-.ds-mod__palavra {
-  height: var(--tinta); width: auto; flex: none; display: block;
-  margin-top: calc(var(--tinta) * 2.913 * 0.327); padding-left: 5px;
 }
 .ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__logo { display: none; }
 .ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__atual,

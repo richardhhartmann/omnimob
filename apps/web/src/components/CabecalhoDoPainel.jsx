@@ -48,9 +48,14 @@ export function CabecalhoDoPainel({ aoBuscar, atalhoDeBusca = "Ctrl K" }) {
   const { pathname } = useLocation();
   const daTela = useCabecalho();
 
-  /* A trilha da rota, sempre. Ela é a mesma tabela de onde sai o título de
-     reserva, então as duas nunca discordam sobre o nome de uma tela. */
-  const degraus = degrausAte(pathname, navigate);
+  /* A trilha da rota por padrão — ela é a mesma tabela de onde sai o título de
+     reserva, então as duas nunca discordam sobre o nome de uma tela.
+
+     A tela sobrescreve só quando a rota não dá conta: `/flow/negocios/<id>` não
+     está em `TELAS_DO_PAINEL`, e `degrausAte` devolve lista vazia ali. O último
+     degrau daquela tela é "Negócio #412", e o número só existe depois da
+     resposta do servidor — não há tabela estática que o saiba. */
+  const degraus = daTela?.trilha ?? degrausAte(pathname, navigate);
   const ultimo = degraus[degraus.length - 1];
 
   const titulo = daTela?.titulo ?? ultimo?.rotulo ?? "";

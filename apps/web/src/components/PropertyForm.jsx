@@ -2,8 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CanaisDoImovel } from "./CanaisDoImovel.jsx";
 import { linkDoImovel } from "../utils/enderecoVitrine";
 import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { Trilha } from "./Trilha.jsx";
-import { degrausAte } from "../utils/trilhaDoPainel";
 import { api } from "../api.js";
 import { useConfirm } from "./ConfirmModal";
 import { loadSession } from "../session.js";
@@ -1125,18 +1123,12 @@ export function PropertyManagement({ onSubmitProperty, disabled, initialData, lo
 
       {view === "PROPERTY" && (
         <>
-        {/* A trilha que faltava nesta tela. O cadastro de imóvel é a página
-            mais longa do painel, e ela abria sem nenhuma indicação de onde
-            estava nem de como sair sem rolar até o fim. O primeiro degrau é o
-            mesmo destino do "Voltar ao menu" / "Cancelar edição". */}
-        <div style={{ marginBottom: "20px" }}>
-          <Trilha
-            itens={degrausAte(
-              initialData?.id ? "/imoveis/editar" : "/imoveis/novo",
-              navigate,
-            )}
-          />
-        </div>
+        {/* A trilha subiu para a faixa do painel. Aqui ela era duplicata pura:
+            saía de `degrausAte` da própria rota, que é exatamente o que o
+            cabeçalho já desenha — `/imoveis/novo` e `/imoveis/editar` estão os
+            dois em `TELAS_DO_PAINEL`. Ao contrário dos cadastros de Clientes e
+            Cargos, esta tela nunca precisou de override: ela sempre teve
+            endereço próprio. */}
         <PropertyForm
           onSubmit={onSubmitProperty}
           disabled={disabled}

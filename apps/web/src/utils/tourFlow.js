@@ -60,16 +60,16 @@ export function montarFluxoFlow({ cargo, plano }) {
   const etapas = [
     {
       chave: chave("inicio"),
-      titulo: "Visão do Flow",
+      titulo: "Visão do Omniflow",
       rota: "/flow",
       passos: [
         {
           alvo: '[data-tour="seletor-modulo"]',
           titulo: "Você trocou de módulo",
           texto:
-            "O <strong>Hub</strong> cuida do que a imobiliária TEM: acervo, vitrine, equipe. O " +
-            "<strong>Flow</strong> cuida do que ela está FECHANDO. Este seletor troca entre os dois " +
-            "— e o seu trabalho no Hub continua exatamente onde estava.",
+            "O <strong>Omnimob</strong> cuida do que a imobiliária TEM: acervo, vitrine, equipe. O " +
+            "<strong>Omniflow</strong> cuida do que ela está FECHANDO. Este seletor troca entre os dois " +
+            "— e o seu trabalho no Omnimob continua exatamente onde estava.",
           lado: ["right", "bottom"],
           respiro: 6,
         },
@@ -244,9 +244,9 @@ export function montarFluxoFlow({ cargo, plano }) {
       ...ultima.passos,
       {
         alvo: '[data-tour="seletor-modulo"]',
-        titulo: "É isso — e o Hub continua ali",
+        titulo: "É isso — e o Omnimob continua ali",
         texto:
-          "O seletor no topo leva de volta ao <strong>Hub</strong> a qualquer momento, com tudo " +
+          "O seletor no topo leva de volta ao <strong>Omnimob</strong> a qualquer momento, com tudo " +
           "como você deixou. Pode rever este tour em <strong>Configurações</strong>.",
         lado: ["right", "bottom"],
         respiro: 6,

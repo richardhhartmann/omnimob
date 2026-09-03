@@ -53,22 +53,34 @@ export function useCabecalho() {
 /**
  * A tela declara o próprio título.
  *
- * `titulo` e `subtitulo` são texto; `acao` é JSX e muda de identidade a cada
- * render da página — por isso ele NÃO entra na lista de dependências do efeito.
- * Entrasse, toda página com um botão no cabeçalho gravaria estado a cada quadro
- * e o painel inteiro re-renderizaria em laço.
+ * `titulo` e `subtitulo` são texto; `acao` e `trilha` carregam JSX e funções, e
+ * mudam de identidade a cada render da página — por isso NÃO entram na lista de
+ * dependências do efeito. Entrassem, toda página com um botão no cabeçalho
+ * gravaria estado a cada quadro e o painel inteiro re-renderizaria em laço.
  *
  * O preço é conhecido e aceitável: um botão que troca de rótulo sem que título
- * ou subtítulo mudem só aparece no próximo. Nenhuma tela faz isso hoje, e
- * quando fizer basta mexer no título junto.
+ * ou subtítulo mudem só aparece no próximo. Na prática os dois andam juntos —
+ * quando o negócio termina de carregar, título e trilha mudam no mesmo render.
+ *
+ * ── QUANDO PASSAR `trilha` ──
+ *
+ * Só quando a ROTA não consegue montá-la, que é o caso das telas de registro
+ * aberto: `/flow/negocios/<id>` não está em `TELAS_DO_PAINEL` e nem poderia
+ * estar — o último degrau é "Negócio #412", e o número só existe depois de a
+ * requisição voltar. Sem esta porta, essas telas ficavam sem trilha nenhuma no
+ * cabeçalho e acabavam desenhando uma segunda por conta própria, dentro do
+ * conteúdo. Era o que acontecia, e é o que isto resolve.
+ *
+ * Nas outras telas, não passe nada: a rota responde melhor e nunca discorda do
+ * título, porque as duas saem da mesma tabela.
  */
-export function useTituloDaTela({ titulo, subtitulo, acao } = {}) {
+export function useTituloDaTela({ titulo, subtitulo, acao, trilha } = {}) {
   const ctx = useContext(Contexto);
   const definir = ctx?.definir;
 
   useEffect(() => {
     if (!definir) return undefined;
-    definir({ titulo, subtitulo, acao });
+    definir({ titulo, subtitulo, acao, trilha });
     /* Limpa ao sair. Sem isto, navegar de "Negócio #412" para uma tela que não
        declara nada deixaria o título antigo no ar — e ele estaria mentindo. */
     return () => definir(null);

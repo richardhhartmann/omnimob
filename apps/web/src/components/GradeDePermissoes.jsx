@@ -136,7 +136,7 @@ export function GradeDePermissoes({
               desabilitado={desabilitado || !portaAberta}
               travadas={travadas}
               motivoTravada={
-                portaAberta ? motivoTravada : "Ligue o acesso ao Flow para escolher isto"
+                portaAberta ? motivoTravada : "Ligue o acesso ao Omniflow para escolher isto"
               }
               somenteLeitura={somenteLeitura}
               dataTour={grupo.titulo ? undefined : dataTour}
