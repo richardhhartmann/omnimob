@@ -6544,6 +6544,43 @@ main[data-tema="claro"] .inicio-atalho:hover {
 
    `both` para segurar o estado inicial antes do primeiro quadro — sem ele a
    grade aparece na posição final e só depois pula para o começo da animação. */
+/* ── A GRADE DE ATALHOS ──────────────────────────────────────────────────────
+
+   FLEX, e nao grid, e a razao e uma so: a ultima linha.
+
+   Era `grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))`. Com o
+   `.main-content` limitado a 1200px isso da quatro colunas, e nove atalhos
+   viram 4 + 4 + UM — com o cartao solitario encostado a esquerda e o resto da
+   linha vazio. Grade nao conserta isso: `justify-content` ali move as FAIXAS,
+   e as faixas continuam existindo mesmo sem item dentro.
+
+   No flex as sobras da ultima linha sao espaco livre de verdade, e ai
+   `justify-content: center` faz o que se espera.
+
+   ── POR QUE AS LINHAS CHEIAS NAO MUDAM ──
+
+   `flex: 1 1 var(--col)` deixa os cartoes crescerem, entao uma linha completa
+   consome o espaco todo e fica igual ao que a grade desenhava. O `max-width` e
+   o que impede o cartao sozinho de esticar por mil pixels — e e justamente por
+   ele parar de crescer que sobra espaco para centralizar.
+
+   1,25x a coluna minima: largo o bastante para o cartao orfao nao parecer
+   menor que os vizinhos (numa linha de quatro em 1200px cada um fica com
+   285px), e estreito o bastante para nao virar um painel deitado. */
+.menu-grade {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.menu-grade > * {
+  flex: 1 1 var(--col, 280px);
+  /* `min-width: 0` porque item de flex nao encolhe abaixo do proprio conteudo
+     por padrao — um titulo longo empurraria o cartao para fora da linha. */
+  min-width: 0;
+  max-width: calc(var(--col, 280px) * 1.25);
+}
+.menu-grade.is-centrada { justify-content: center; }
+
 .menu-grade--vem-da-direita { animation: menuPaginaDireita 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .menu-grade--vem-da-esquerda { animation: menuPaginaEsquerda 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes menuPaginaDireita {

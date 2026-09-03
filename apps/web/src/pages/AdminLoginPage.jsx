@@ -1,27 +1,56 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { adminApi, setAdminToken } from "../api";
-import { Alert, Button, OmnimobStyles, Eyebrow, Field, GOLD, LogoLockup, Reveal, Scallop, useSaidaDeAuth } from "../styles/omnimobKit";
+import { CascaDeAcesso } from "../components/CascaDeAcesso.jsx";
+import { Button, Field, useSaidaDeAuth } from "../styles/omnimobKit";
 
-/* Login do painel super-admin — mesma identidade da landing (fundo quase-preto,
-   vidro sobre os blobs, micro-labels em mono, botão pill). */
+/* Login do painel super-admin.
+
+   Mesma casca do login do cliente (`CascaDeAcesso`), com `tom="admin"`: o que
+   muda é a paleta, a cor do fluido e o recado. A tela tinha uma casca própria,
+   escrita à mão, e as duas já haviam divergido em padding, tamanho de título e
+   fundo — ver o cabeçalho do componente.
+
+   ── DUAS ETAPAS QUANDO HÁ SEGUNDO FATOR ──
+
+   A senha é a primeira. Se a conta tiver aplicativo autenticador ligado, o
+   servidor não devolve sessão: devolve um DESAFIO de cinco minutos, e a tela
+   troca os campos pelo de seis dígitos. A senha digitada NÃO fica guardada
+   esperando o segundo passo — é o desafio que carrega "a senha já passou".
+
+   Contas sem segundo fator entram num passo só, como sempre. */
 
 export function AdminLoginPage({ onLogin }) {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [aviso, setAviso] = useState("");
+  // Quando existe, a tela está no segundo passo.
+  const [desafio, setDesafio] = useState(null);
+  const [codigo, setCodigo] = useState("");
   const { saindo, sair } = useSaidaDeAuth();
 
-  async function handleSubmit(e) {
+  function entrar(res) {
+    setAdminToken(res.token);
+    // A troca de sessão só acontece quando a tela terminar de sair.
+    sair(() => onLogin({ token: res.token, email: res.email, nome: res.nome }));
+  }
+
+  async function handleSenha(e) {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
       const res = await adminApi.login({ email, senha });
-      setAdminToken(res.token);
-      // A troca de sessão só acontece quando a tela terminar de sair.
-      sair(() => onLogin({ token: res.token, email: res.email, nome: res.nome }));
+      if (res?.precisaTotp) {
+        setDesafio(res.desafio);
+        /* A senha sai da memória da tela junto: daqui em diante quem prova a
+           primeira etapa é o desafio, e guardá-la só aumentaria a superfície. */
+        setSenha("");
+        return;
+      }
+      entrar(res);
     } catch (err) {
       setError(err.message || "Falha no login.");
     } finally {
@@ -29,122 +58,130 @@ export function AdminLoginPage({ onLogin }) {
     }
   }
 
-  return (
-    <div className={`dl-root dl-page dl-login${saindo ? " authx-out" : ""}`}>
-      <OmnimobStyles extra={CSS} />
+  async function handleCodigo(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const res = await adminApi.loginTotp(desafio, codigo);
+      /* Quantos códigos de recuperação sobraram vive na aba Segurança do
+         painel, que os lê do servidor. Guardar o número aqui daria duas fontes
+         para o mesmo dado — e a desta tela envelheceria na primeira ativação
+         nova. A resposta traz `recuperacaoRestantes` para quem precisar. */
+      entrar(res);
+    } catch (err) {
+      /* Desafio vencido tem saída diferente de código errado: um pede a senha
+         de novo, o outro pede o próximo código. Insistir no campo errado é o
+         que essa distinção evita. */
+      if (err?.body?.code === "DESAFIO_EXPIRADO") {
+        setDesafio(null);
+        setCodigo("");
+        setAviso("A etapa da senha expirou. Entre novamente.");
+        setError("");
+      } else {
+        setError(err.message || "Codigo invalido.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      <div className="dl-login__shapes authx-shapes" aria-hidden="true">
-        <Scallop size={168} color={GOLD} style={{ position: "absolute", top: "12%", right: "8%", opacity: 0.5 }} />
-        <span className="dl-shape dl-shape--halfs" />
-        <span className="dl-shape dl-shape--circle" />
-        <span className="dl-shape dl-shape--violet" />
-      </div>
-
-      <Reveal className="dl-login__card dl-glass authx-card" as="form" onSubmit={handleSubmit}>
-        <Link to="/" className="dl-logo dl-login__logo" aria-label="Omnimob — início">
-          <LogoLockup height={44} />
-        </Link>
-
-        <Eyebrow>ACESSO RESTRITO</Eyebrow>
-        <h1 className="dl-login__title">
-          <span>Painel</span>
-          <span className="dl-h1__accent">Super-Admin.</span>
-        </h1>
-
-        {error ? <Alert tone="danger">{error}</Alert> : null}
-
-        <div className="dl-login__fields">
-          <Field label="E-mail">
-            <input
-              className="dl-input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="username"
-              placeholder="super@omnimob.app"
-            />
-          </Field>
-
-          <Field label="Senha">
-            <input
-              className="dl-input"
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              required
-              autoComplete="current-password"
-              placeholder="••••••••"
-            />
-          </Field>
-        </div>
+  if (desafio) {
+    return (
+      <CascaDeAcesso
+        tom="admin"
+        eyebrow="VERIFICAÇÃO EM DUAS ETAPAS"
+        strong="Digite o código"
+        soft="do seu aplicativo."
+        descricao="São seis dígitos, e eles trocam a cada 30 segundos. Sem o celular, use um dos códigos de recuperação."
+        error={error}
+        saindo={saindo}
+        onSubmit={handleCodigo}
+        nota="// o código vale uma vez só"
+        rodape={
+          <button
+            type="button"
+            className="ax-alt ax-voltar"
+            onClick={() => { setDesafio(null); setCodigo(""); setError(""); }}
+          >
+            Voltar e digitar a senha
+          </button>
+        }
+      >
+        <Field label="Código" hint="Ou um código de recuperação, no formato XXXXX-XXXXX.">
+          <input
+            className="dl-input ax-codigo"
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value)}
+            required
+            /* `one-time-code` é o que faz o iOS e o Android oferecerem o código
+               copiado; `off` no autocorretor porque ele "conserta" o hífen do
+               código de recuperação. */
+            autoComplete="one-time-code"
+            autoCorrect="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            inputMode="text"
+            maxLength={11}
+            placeholder="000000"
+            autoFocus
+            disabled={loading}
+          />
+        </Field>
 
         <Button as="button" type="submit" variant="primary" className="dl-btn--block" disabled={loading}>
-          {loading ? "Entrando…" : "Entrar"}
+          {loading ? "Conferindo…" : "Confirmar"}
         </Button>
+      </CascaDeAcesso>
+    );
+  }
 
-        <p className="dl-mono dl-login__note">
-          // acesso monitorado · use as credenciais da plataforma
-        </p>
+  return (
+    <CascaDeAcesso
+      tom="admin"
+      eyebrow="ACESSO RESTRITO"
+      strong="Painel"
+      soft="Super-Admin."
+      error={error}
+      aviso={aviso}
+      saindo={saindo}
+      onSubmit={handleSenha}
+      nota="// acesso monitorado · use as credenciais da plataforma"
+      rodape={<Link to="/login" className="ax-alt">É de uma imobiliária? Entrar no painel do cliente</Link>}
+    >
+      <Field label="E-mail">
+        <input
+          className="dl-input"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="username"
+          placeholder="super@omnimob.app"
+          disabled={loading}
+        />
+      </Field>
 
-        <Link to="/login" className="dl-login__alt">É de uma imobiliária? Entrar no painel do cliente</Link>
-      </Reveal>
-    </div>
+      <Field label="Senha">
+        <input
+          className="dl-input"
+          type="password"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+          required
+          autoComplete="current-password"
+          placeholder="••••••••"
+          disabled={loading}
+        />
+      </Field>
+
+      {/* Botão branco, e não o acento: é o mesmo par de cores que o painel
+          super-admin usa por dentro, e ele não deve parecer o botão do cliente
+          — as duas telas são parecidas de propósito, mas a ação principal é a
+          de sistemas diferentes. */}
+      <Button as="button" type="submit" variant="primary" className="dl-btn--block" disabled={loading}>
+        {loading ? "Entrando…" : "Entrar"}
+      </Button>
+    </CascaDeAcesso>
   );
 }
-
-const CSS = `
-.dl-login {
-  position: relative; overflow: hidden;
-  display: flex; align-items: center; justify-content: center; padding: 40px 24px;
-}
-.dl-login::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background:
-    radial-gradient(760px 460px at 70% 6%, rgba(99,102,241,0.22), transparent 70%),
-    radial-gradient(560px 360px at 8% 88%, rgba(212,175,55,0.10), transparent 70%);
-}
-.dl-login__shapes { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
-.dl-shape { position: absolute; display: block; border-radius: 999px; }
-.dl-shape--halfs {
-  left: -18px; top: 30%; width: 72px; height: 92px;
-  background: #a78bfa; border-radius: 0 999px 999px 0;
-  box-shadow: 46px 0 0 -6px #c4b5fd;
-}
-.dl-shape--circle { right: 14%; bottom: 16%; width: 46px; height: 46px; background: #e879b9; }
-.dl-shape--violet {
-  left: 32%; bottom: -60px; width: 260px; height: 260px;
-  background: radial-gradient(closest-side, rgba(139,92,246,0.45), transparent);
-  filter: blur(8px);
-}
-
-.dl-login__card {
-  position: relative; z-index: 1;
-  width: 100%; max-width: 430px; padding: 34px 34px 30px;
-  border-radius: 22px; display: flex; flex-direction: column;
-}
-.dl-login__logo { margin-bottom: 24px; }
-.dl-login__title {
-  display: flex; flex-direction: column; margin: 14px 0 0;
-  font-size: clamp(30px, 5vw, 40px); line-height: 1.03;
-  letter-spacing: -0.045em; font-weight: 800; color: var(--strong);
-}
-.dl-login__sub { font-size: 13.5px; line-height: 1.75; color: var(--subtle); margin-top: 14px; }
-.dl-login__fields { display: grid; gap: 16px; margin: 22px 0 24px; }
-.dl-login .dl-alert { margin-top: 20px; }
-.dl-login__note {
-  color: var(--placeholder); margin-top: 18px; text-align: center;
-  text-transform: none; letter-spacing: 0.04em; font-size: 9.5px;
-}
-.dl-login__alt {
-  margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line-soft);
-  font-size: 12.5px; color: var(--subtle); text-align: center;
-  transition: color 0.18s ease;
-}
-.dl-login__alt:hover { color: var(--strong); }
-
-@media (max-width: 640px) {
-  .dl-login__shapes { display: none; }
-  .dl-login__card { padding: 26px 22px 24px; }
-}
-`;

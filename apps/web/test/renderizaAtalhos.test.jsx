@@ -5,6 +5,8 @@ import { EditorDeAtalhos } from "../src/components/EditorDeAtalhos.jsx";
 import { CartaoDePublicacao } from "../src/components/PublicandoImovel.jsx";
 import { CascaDeRelatorio } from "../src/components/CascaDeRelatorio.jsx";
 import { GradeDePermissoes } from "../src/components/GradeDePermissoes.jsx";
+import { MemoryRouter } from "react-router-dom";
+import { GradeDeMenu } from "../src/components/GradeDeMenu.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Os componentes RENDERIZAM.
@@ -124,4 +126,63 @@ test("GradeDePermissoes monta com e sem travadas", () => {
     />,
   );
   assert.match(travada, /is-travada/);
+});
+
+/* ── A GRADE DE ATALHOS ──────────────────────────────────────────────────────
+
+   O que este teste guarda é o LIMIAR, e não a aparência.
+
+   A grade centraliza quando os atalhos passam de uma linha — senão a última
+   linha fica com um cartão solitário encostado à esquerda e o resto vazio. Mas
+   centralizar SEMPRE é pior: com três atalhos, a linha única sairia do lugar e
+   descolaria do título, que é alinhado à esquerda logo acima.
+
+   O número de colunas é derivado do `max-width: 1200px` do `.main-content` e da
+   `colunaMinima`, e não medido — medir aqui daria um número diferente entre o
+   primeiro quadro e o segundo, que é o erro que o cabeçalho de `GradeDeMenu`
+   descreve. Sendo derivado, ele pode ser conferido sem DOM. */
+
+function atalhos(n) {
+  return Array.from({ length: n }, (_, i) => ({
+    title: `Atalho ${i + 1}`,
+    description: "descrição",
+    onClick: () => {},
+  }));
+}
+
+function grade(n, props = {}) {
+  return renderToStaticMarkup(
+    <MemoryRouter>
+      <GradeDeMenu cards={atalhos(n)} titulo="X" {...props} />
+    </MemoryRouter>,
+  );
+}
+
+test("a grade só centraliza quando passa de uma linha", () => {
+  /* Com a coluna padrão (280px) cabem QUATRO em 1200px. Até lá, alinhado à
+     esquerda; a partir do quinto, centralizado — é o quinto que cria a segunda
+     linha e, com ela, a sobra. */
+  for (const n of [1, 2, 3, 4]) {
+    assert.ok(!/is-centrada/.test(grade(n)), `${n} atalho(s) não deveria centralizar`);
+  }
+  for (const n of [5, 9]) {
+    assert.ok(/is-centrada/.test(grade(n)), `${n} atalhos deveriam centralizar`);
+  }
+});
+
+test("o limiar acompanha a largura da coluna, e não um número cravado", () => {
+  /* Coluna maior, menos colunas por linha, limiar menor. Se alguém trocar a
+     conta por um `> 4` literal, este teste cai: com colunas de 560px cabem
+     duas, então o TERCEIRO atalho já cria a segunda linha. */
+  assert.ok(!/is-centrada/.test(grade(2, { colunaMinima: 560 })), "duas colunas cabem em 1200px");
+  assert.ok(/is-centrada/.test(grade(3, { colunaMinima: 560 })), "a terceira já desce de linha");
+});
+
+test("a grade monta e leva a largura da coluna para o CSS", () => {
+  /* O arranjo mora no `styles.css`; o único valor que vem do JS é a coluna,
+     porque é prop. Se ela parar de viajar, os cartões perdem a base do flex e a
+     linha vira uma coluna só. */
+  const html = grade(9);
+  assert.match(html, /menu-grade/);
+  assert.match(html, /--col:\s*280px/);
 });

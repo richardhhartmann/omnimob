@@ -3947,7 +3947,10 @@ function ConteudoDaLanding() {
             <div>
               <span className="dl-mono">ACESSO</span>
               <Link to="/login">Acesso do cliente</Link>
-              <Link to="/admin/login">Área administrativa</Link>
+              {/* A área administrativa saiu daqui junto com o link do rodapé do
+                  login — ver o comentário em `LoginPage`. Anunciá-la no rodapé
+                  da página de VENDAS era o pior dos dois lugares: ela aparecia
+                  para quem nem cliente é. */}
             </div>
             <div>
               {/* Termos e Privacidade no rodapé, como em qualquer serviço que

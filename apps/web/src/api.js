@@ -1183,14 +1183,33 @@ async function adminRequest(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, { ...restOptions, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(normalizeErrorMessage(body));
+    const erro = new Error(normalizeErrorMessage(body));
+    /* Mesma costura do cliente do painel: o `code` da resposta é o que deixa a
+       tela separar "código errado" de "o desafio venceu" — dois desfechos com
+       saídas diferentes. Sem isto sobra a mensagem, e comparar texto de erro
+       quebra na primeira revisão de redação. */
+    erro.body = body;
+    erro.status = response.status;
+    throw erro;
   }
   if (response.status === 204) return null;
   return response.json();
 }
 
 export const adminApi = {
+  /* Pode devolver a sessão OU `{ precisaTotp: true, desafio }` quando a conta
+     tem aplicativo autenticador — nesse caso o segundo passo é `loginTotp`. */
   login: (payload) => adminRequest("/api/admin/login", { method: "POST", body: JSON.stringify(payload) }),
+  loginTotp: (desafio, codigo) =>
+    adminRequest("/api/admin/login/totp", { method: "POST", body: JSON.stringify({ desafio, codigo }) }),
+
+  // ─── Segundo fator do super-admin ─────────────────────────────────────────
+  totpSituacao: () => adminRequest("/api/admin/totp"),
+  totpIniciar: () => adminRequest("/api/admin/totp/iniciar", { method: "POST" }),
+  totpConfirmar: (codigo) =>
+    adminRequest("/api/admin/totp/confirmar", { method: "POST", body: JSON.stringify({ codigo }) }),
+  totpDesativar: (senha, codigo) =>
+    adminRequest("/api/admin/totp", { method: "DELETE", body: JSON.stringify({ senha, codigo }) }),
   listTenants: () => adminRequest("/api/admin/tenants"),
   getTenant: (id) => adminRequest(`/api/admin/tenants/${id}`),
   createTenant: (payload) => adminRequest("/api/admin/tenants", { method: "POST", body: JSON.stringify(payload) }),

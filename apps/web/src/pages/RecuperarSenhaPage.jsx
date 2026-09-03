@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, Field } from "../styles/omnimobKit";
-import { AuthShell } from "./LoginPage";
+import { CascaDeAcesso } from "../components/CascaDeAcesso.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Recuperação de senha — uma página, dois momentos.
@@ -13,7 +13,7 @@ import { AuthShell } from "./LoginPage";
    link expira — o que num par de páginas separadas viraria uma ida e volta em
    que a pessoa se perde.
 
-   A casca visual vem do `AuthShell` do login, de propósito: nesta tela em
+   A casca visual vem do `CascaDeAcesso`, a mesma do login, de propósito: nesta tela em
    particular, qualquer diferença de aparência em relação ao login parece golpe.
    ──────────────────────────────────────────────────────────────────────────── */
 
@@ -54,32 +54,32 @@ function PedirLink() {
      propósito. O texto diz o que fazer e o que checar, sem confirmar nada. */
   if (enviado) {
     return (
-      <AuthShell
+      <CascaDeAcesso
         eyebrow="RECUPERAR ACESSO"
         strong="Se a conta existir,"
         soft="o link já está a caminho."
         descricao="Verifique a caixa de entrada e o spam. O link vale por 1 hora e só funciona uma vez."
         nota="// não recebeu? confira se o acesso está correto e tente de novo"
-        rodape={<Link to="/login" className="lg-alt">Voltar para o login</Link>}
+        rodape={<Link to="/login" className="ax-alt">Voltar para o login</Link>}
         onSubmit={(e) => e.preventDefault()}
       >
         <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6, color: "var(--tinta-62, rgba(255,255,255,0.62))" }}>
           Se o seu usuário não tiver e-mail cadastrado, o link não chega — nesse caso, quem redefine
           a sua senha é o administrador da sua imobiliária, na tela de Usuários.
         </p>
-      </AuthShell>
+      </CascaDeAcesso>
     );
   }
 
   return (
-    <AuthShell
+    <CascaDeAcesso
       eyebrow="RECUPERAR ACESSO"
       strong="Esqueceu"
       soft="a sua senha?"
       descricao="Informe o seu login ou o e-mail cadastrado. Enviamos um link para você escolher uma nova senha."
       error={error}
       nota="// o link vale por 1 hora"
-      rodape={<Link to="/login" className="lg-alt">Voltar para o login</Link>}
+      rodape={<Link to="/login" className="ax-alt">Voltar para o login</Link>}
       onSubmit={handleSubmit}
     >
       <Field label="Login ou e-mail">
@@ -97,7 +97,7 @@ function PedirLink() {
       <Button as="button" type="submit" variant="accent" className="dl-btn--block" disabled={loading}>
         {loading ? "Enviando…" : "Enviar link de recuperação"}
       </Button>
-    </AuthShell>
+    </CascaDeAcesso>
   );
 }
 
@@ -157,44 +157,44 @@ function DefinirNova({ token, onLogin }) {
 
   if (checando) {
     return (
-      <AuthShell
+      <CascaDeAcesso
         eyebrow="RECUPERAR ACESSO"
         strong="Conferindo"
         soft="o seu link…"
         onSubmit={(e) => e.preventDefault()}
       >
         <p style={{ margin: 0, fontSize: "13px", color: "var(--tinta-55, rgba(255,255,255,0.55))" }}>Um instante.</p>
-      </AuthShell>
+      </CascaDeAcesso>
     );
   }
 
   if (!valido) {
     return (
-      <AuthShell
+      <CascaDeAcesso
         eyebrow="RECUPERAR ACESSO"
         strong="Este link"
         soft="não vale mais."
         descricao={error || "Peça um novo link para escolher a sua senha."}
         nota="// links de recuperação valem 1 hora e só funcionam uma vez"
-        rodape={<Link to="/login" className="lg-alt">Voltar para o login</Link>}
+        rodape={<Link to="/login" className="ax-alt">Voltar para o login</Link>}
         onSubmit={(e) => { e.preventDefault(); navigate("/recuperar-senha", { replace: true }); }}
       >
         <Button as="button" type="submit" variant="accent" className="dl-btn--block">
           Pedir um novo link
         </Button>
-      </AuthShell>
+      </CascaDeAcesso>
     );
   }
 
   return (
-    <AuthShell
+    <CascaDeAcesso
       eyebrow="RECUPERAR ACESSO"
       strong={nome ? `Olá, ${nome.split(" ")[0]}.` : "Quase lá."}
       soft="Escolha a sua nova senha."
       descricao="Depois de salvar, você já entra no painel — não precisa fazer login de novo."
       error={error}
       nota="// mínimo de 6 caracteres"
-      rodape={<Link to="/login" className="lg-alt">Voltar para o login</Link>}
+      rodape={<Link to="/login" className="ax-alt">Voltar para o login</Link>}
       onSubmit={handleSubmit}
     >
       <Field label="Nova senha">
@@ -226,7 +226,7 @@ function DefinirNova({ token, onLogin }) {
       <Button as="button" type="submit" variant="accent" className="dl-btn--block" disabled={loading}>
         {loading ? "Salvando…" : "Salvar e entrar"}
       </Button>
-    </AuthShell>
+    </CascaDeAcesso>
   );
 }
 

@@ -17,6 +17,16 @@ import {
 import { verificarEmail } from "../services/notificationService.js";
 import { registrarPagamento } from "../services/pagamentos.js";
 import { diagnosticarBanco } from "../services/healthService.js";
+import { cifrar, decifrar } from "../services/cofre.js";
+import {
+  conferir as conferirTotp,
+  formatarSegredo,
+  gerarCodigosDeRecuperacao,
+  gerarSegredo,
+  hashDeRecuperacao,
+  pareceCodigoDeRecuperacao,
+  uriDeProvisionamento,
+} from "../services/totp.js";
 import { montarSessao } from "./authRoutes.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 
@@ -35,7 +45,53 @@ const loginLimiter = rateLimit({
   message: { error: "Muitas tentativas. Tente novamente em 15 minutos." },
 });
 
-// ─── Login super-admin (usuario armazenado no banco) ─────────────────────────
+/* ─── Login super-admin ──────────────────────────────────────────────────────
+
+   Duas etapas quando a conta tem segundo fator, e a divisão entre elas é a
+   regra inteira.
+
+   A PRIMEIRA confere a senha e, se houver aplicativo autenticador ligado, NÃO
+   devolve sessão nenhuma: devolve um DESAFIO, que é um token de cinco minutos
+   sem `role` — ele não abre rota alguma, só prova que a senha já passou. Sem
+   isso a tela teria de guardar a senha para reenviá-la na segunda chamada.
+
+   A SEGUNDA troca desafio + código pela sessão de verdade.
+
+   E as duas dividem o MESMO limitador: são a mesma tentativa de entrar, e um
+   contador por rota daria ao atacante o dobro de tentativas de graça.
+   ────────────────────────────────────────────────────────────────────────── */
+
+function sessaoDoSuperAdmin(admin) {
+  const token = jwt.sign(
+    { role: "SUPERADMIN", superAdminId: admin.id, email: admin.email },
+    JWT_SECRET,
+    { expiresIn: "7d" },
+  );
+  return { token, email: admin.email, nome: admin.nome };
+}
+
+/* Confere o segundo fator, seja o código do aplicativo ou um de recuperação, e
+   devolve o que precisa ser GRAVADO por causa dele — o passo consumido ou o
+   código de recuperação queimado. Quem chama grava; assim a regra de "usar
+   consome" mora num lugar só e não depende de cada rota lembrar dela. */
+function conferirSegundoFator(admin, codigo) {
+  if (!admin.totpSegredo) return { ok: false };
+
+  if (pareceCodigoDeRecuperacao(codigo)) {
+    let hashes = [];
+    try { hashes = JSON.parse(admin.totpRecuperacao || "[]"); } catch { hashes = []; }
+    const alvo = hashDeRecuperacao(codigo);
+    if (!hashes.includes(alvo)) return { ok: false };
+    // Uso único: o código sai da lista no mesmo passo em que é aceito.
+    const restantes = hashes.filter((h) => h !== alvo);
+    return { ok: true, recuperacao: true, dados: { totpRecuperacao: JSON.stringify(restantes) }, restantes: restantes.length };
+  }
+
+  const { ok, passo } = conferirTotp(decifrar(admin.totpSegredo), codigo, { depoisDe: admin.totpUltimoPasso });
+  if (!ok) return { ok: false };
+  return { ok: true, recuperacao: false, dados: { totpUltimoPasso: passo } };
+}
+
 adminRouter.post("/login", loginLimiter, async (req, res) => {
   try {
     const { email, senha } = req.body || {};
@@ -47,16 +103,185 @@ adminRouter.post("/login", loginLimiter, async (req, res) => {
     const ok = await bcrypt.compare(senha, admin.senha);
     if (!ok) return res.status(401).json({ error: "Credenciais invalidas." });
 
-    const token = jwt.sign({ role: "SUPERADMIN", superAdminId: admin.id, email: admin.email }, JWT_SECRET, { expiresIn: "7d" });
-    return res.json({ token, email: admin.email, nome: admin.nome });
+    if (admin.totpAtivadoEm) {
+      const desafio = jwt.sign({ etapa: "totp", superAdminId: admin.id }, JWT_SECRET, { expiresIn: "5m" });
+      return res.json({ precisaTotp: true, desafio });
+    }
+
+    return res.json(sessaoDoSuperAdmin(admin));
   } catch (err) {
     console.error("[POST /admin/login]", err);
     return res.status(500).json({ error: "Erro interno no servidor." });
   }
 });
 
+adminRouter.post("/login/totp", loginLimiter, async (req, res) => {
+  try {
+    const { desafio, codigo } = req.body || {};
+    if (!desafio || !codigo) return res.status(400).json({ error: "Desafio e codigo sao obrigatorios." });
+
+    let payload;
+    try {
+      payload = jwt.verify(desafio, JWT_SECRET);
+    } catch {
+      /* Código próprio: a tela precisa distinguir "o código está errado" (tente
+         de novo) de "o desafio venceu" (volte e digite a senha). Sem isso a
+         pessoa fica batendo num campo que não vai mais aceitar nada. */
+      return res.status(401).json({ error: "Sua sessao de login expirou. Entre novamente.", code: "DESAFIO_EXPIRADO" });
+    }
+    // O desafio não é sessão: ele não carrega `role`, e esta é a única rota que
+    // o aceita.
+    if (payload.etapa !== "totp" || !payload.superAdminId) {
+      return res.status(401).json({ error: "Desafio invalido.", code: "DESAFIO_EXPIRADO" });
+    }
+
+    const admin = await prisma.superAdmin.findUnique({ where: { id: payload.superAdminId } });
+    if (!admin || !admin.ativo || !admin.totpAtivadoEm) return res.status(401).json({ error: "Credenciais invalidas." });
+
+    const conferido = conferirSegundoFator(admin, codigo);
+    if (!conferido.ok) return res.status(401).json({ error: "Codigo invalido ou ja usado." });
+
+    await prisma.superAdmin.update({ where: { id: admin.id }, data: conferido.dados });
+
+    const sessao = sessaoDoSuperAdmin(admin);
+    /* Quem entrou com código de recuperação precisa saber quantos sobraram — é
+       a única hora em que ele olha para isso, e chegar a zero sem aviso é
+       ficar trancado do lado de fora. */
+    if (conferido.recuperacao) {
+      sessao.recuperacaoUsada = true;
+      sessao.recuperacaoRestantes = conferido.restantes;
+    }
+    return res.json(sessao);
+  } catch (err) {
+    console.error("[POST /admin/login/totp]", err);
+    return res.status(500).json({ error: "Erro interno no servidor." });
+  }
+});
+
 // Tudo abaixo exige super-admin.
 adminRouter.use(requireSuperAdmin);
+
+/* ─── Segundo fator: ligar, conferir e desligar ───────────────────────────────
+
+   As três rotas exigem estar logado, e isso é a regra de segurança: o segundo
+   fator nasce de quem JÁ PROVOU ser aquela conta. É o mesmo desenho do vínculo
+   com o Google em `authRoutes` — vincular exige sessão, entrar só procura.
+   ────────────────────────────────────────────────────────────────────────── */
+
+async function superAdminDaSessao(req) {
+  return prisma.superAdmin.findUnique({ where: { id: req.superAdmin.id } });
+}
+
+function situacaoDoSegundoFator(admin) {
+  let restantes = 0;
+  try { restantes = JSON.parse(admin.totpRecuperacao || "[]").length; } catch { restantes = 0; }
+  return {
+    ativo: Boolean(admin.totpAtivadoEm),
+    // Chave gerada mas ainda não confirmada: a tela precisa oferecer "continuar".
+    pendente: Boolean(admin.totpSegredo && !admin.totpAtivadoEm),
+    ativadoEm: admin.totpAtivadoEm,
+    codigosRestantes: restantes,
+  };
+}
+
+adminRouter.get("/totp", async (req, res) => {
+  try {
+    const admin = await superAdminDaSessao(req);
+    if (!admin) return res.status(404).json({ error: "Conta nao encontrada." });
+    return res.json(situacaoDoSegundoFator(admin));
+  } catch (err) {
+    console.error("[GET /admin/totp]", err);
+    return res.status(500).json({ error: "Erro interno no servidor." });
+  }
+});
+
+/* Gera a chave e a guarda cifrada, SEM ativar. Chamar de novo antes de
+   confirmar descarta a anterior — quem começou o cadastro, errou o aplicativo e
+   recomeçou não fica preso a uma chave que o celular dele não tem. */
+adminRouter.post("/totp/iniciar", async (req, res) => {
+  try {
+    const admin = await superAdminDaSessao(req);
+    if (!admin) return res.status(404).json({ error: "Conta nao encontrada." });
+    if (admin.totpAtivadoEm) {
+      return res.status(409).json({ error: "O segundo fator ja esta ativo. Desative antes de cadastrar outro aplicativo." });
+    }
+
+    const segredo = gerarSegredo();
+    await prisma.superAdmin.update({
+      where: { id: admin.id },
+      data: { totpSegredo: cifrar(segredo), totpUltimoPasso: null },
+    });
+
+    /* O texto do segredo sai daqui UMA vez. Depois disto ele só existe cifrado,
+       e nem esta rota o devolve de novo: quem perdeu o meio do caminho começa
+       outro. */
+    return res.json({
+      segredo,
+      segredoFormatado: formatarSegredo(segredo),
+      uri: uriDeProvisionamento({ segredo, conta: admin.email }),
+    });
+  } catch (err) {
+    console.error("[POST /admin/totp/iniciar]", err);
+    return res.status(500).json({ error: "Erro interno no servidor." });
+  }
+});
+
+/* Só o código do aplicativo prova que a chave chegou lá. Ativar sem essa prova
+   é a forma exata de se trancar para fora: o login passaria a exigir um código
+   que nenhum aplicativo consegue gerar. */
+adminRouter.post("/totp/confirmar", async (req, res) => {
+  try {
+    const { codigo } = req.body || {};
+    const admin = await superAdminDaSessao(req);
+    if (!admin) return res.status(404).json({ error: "Conta nao encontrada." });
+    if (admin.totpAtivadoEm) return res.status(409).json({ error: "O segundo fator ja esta ativo." });
+    if (!admin.totpSegredo) return res.status(400).json({ error: "Nenhum cadastro em andamento. Comece de novo." });
+
+    const { ok, passo } = conferirTotp(decifrar(admin.totpSegredo), codigo);
+    if (!ok) return res.status(400).json({ error: "Codigo invalido. Confira o relogio do celular e tente o proximo." });
+
+    const { textos, hashes } = gerarCodigosDeRecuperacao();
+    await prisma.superAdmin.update({
+      where: { id: admin.id },
+      data: { totpAtivadoEm: new Date(), totpUltimoPasso: passo, totpRecuperacao: JSON.stringify(hashes) },
+    });
+
+    // Os textos aparecem aqui e nunca mais: o banco só guarda o hash.
+    return res.json({ ativo: true, codigos: textos });
+  } catch (err) {
+    console.error("[POST /admin/totp/confirmar]", err);
+    return res.status(500).json({ error: "Erro interno no servidor." });
+  }
+});
+
+/* Desligar exige a senha E um código válido. Só a senha não serviria: senha nas
+   mãos erradas é exatamente o que o segundo fator existe para conter, e uma
+   rota que o desliga com ela o anula por completo. */
+adminRouter.delete("/totp", async (req, res) => {
+  try {
+    const { senha, codigo } = req.body || {};
+    const admin = await superAdminDaSessao(req);
+    if (!admin) return res.status(404).json({ error: "Conta nao encontrada." });
+    if (!admin.totpAtivadoEm) return res.status(400).json({ error: "O segundo fator nao esta ativo." });
+    if (!senha || !codigo) return res.status(400).json({ error: "Senha e codigo sao obrigatorios." });
+
+    if (!(await bcrypt.compare(senha, admin.senha))) {
+      return res.status(401).json({ error: "Senha incorreta." });
+    }
+    if (!conferirSegundoFator(admin, codigo).ok) {
+      return res.status(401).json({ error: "Codigo invalido ou ja usado." });
+    }
+
+    await prisma.superAdmin.update({
+      where: { id: admin.id },
+      data: { totpSegredo: null, totpAtivadoEm: null, totpUltimoPasso: null, totpRecuperacao: null },
+    });
+    return res.json({ ativo: false });
+  } catch (err) {
+    console.error("[DELETE /admin/totp]", err);
+    return res.status(500).json({ error: "Erro interno no servidor." });
+  }
+});
 
 /* Diagnóstico do envio de e-mail: conecta e autentica no provedor, sem enviar
    mensagem nenhuma. Fica atrás do super-admin porque a resposta revela o

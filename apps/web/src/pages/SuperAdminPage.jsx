@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, GraduationCap, Lifebuoy } from "@phosphor-icons/react";
+import { Buildings, GraduationCap, Lifebuoy, ShieldCheck } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -11,6 +11,7 @@ import { enderecoVisivel } from "../utils/enderecoVitrine";
 import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { AdminChamadosPage, CHAMADOS_CSS } from "./admin/AdminChamadosPage";
 import { AdminTutoriaisPage, TUTORIAIS_CSS } from "./admin/AdminTutoriaisPage";
+import { AdminSegurancaPage, SEGURANCA_CSS } from "./admin/AdminSegurancaPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -138,6 +139,14 @@ const ABAS = [
     rotulo: "Tutoriais",
     nota: "quanto do tour cada pessoa percorreu",
     icone: <GraduationCap size={16} />,
+  },
+  /* Por último, e é o lugar certo: não é rotina, é a conta de quem opera. Só
+     se mexe nela ao trocar de celular ou ao ligar o segundo fator. */
+  {
+    chave: "seguranca",
+    rotulo: "Segurança",
+    nota: "verificação em duas etapas desta conta",
+    icone: <ShieldCheck size={16} />,
   },
 ];
 
@@ -514,12 +523,13 @@ export function SuperAdminPage({ session, onLogout }) {
       abas={abas}
       aba={aba}
       aoTrocarAba={setAba}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}`}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}`}
     >
       {confirmModal}
 
       {aba === "chamados" ? <AdminChamadosPage aoContarAbertos={setChamadosAbertos} /> : null}
       {aba === "tutoriais" ? <AdminTutoriaisPage /> : null}
+      {aba === "seguranca" ? <AdminSegurancaPage /> : null}
 
       {aba === "tenants" ? (
         <>

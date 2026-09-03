@@ -538,6 +538,30 @@ model SuperAdmin {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /*
+   * ─── Segundo fator por aplicativo autenticador ─────────────────────────────
+   *
+   * `totpSegredo` é a chave do TOTP, CIFRADA pelo cofre (`services/cofre.js`) —
+   * ela é equivalente à senha em poder: quem a lê gera códigos válidos para
+   * sempre. Um dump da tabela não pode virar isso, e é a mesma regra do token
+   * da página do Facebook.
+   *
+   * `totpAtivadoEm` é o que liga o segundo fator, e é separado do segredo de
+   * propósito: entre gerar a chave e provar que o aplicativo a leu existe um
+   * intervalo, e nele o login NÃO pode passar a exigir um código que a pessoa
+   * ainda não consegue gerar.
+   *
+   * `totpUltimoPasso` é o anti-reuso: o código vale 30 segundos e, sem isto,
+   * funciona quantas vezes for apresentado dentro deles.
+   *
+   * `totpRecuperacao` é um JSON com os HASHES dos códigos de uso único. Nunca o
+   * texto — ele aparece uma vez, na ativação, e some.
+   */
+  totpSegredo     String?
+  totpAtivadoEm   DateTime?
+  totpUltimoPasso Int?
+  totpRecuperacao String?
+
   @@map("tb_super_admin")
 }
 

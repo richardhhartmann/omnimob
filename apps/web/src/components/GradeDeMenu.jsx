@@ -119,6 +119,25 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
   useEffect(() => { setPagina((p) => Math.min(p, paginas - 1)); }, [paginas]);
 
   const paginado = paginas > 1;
+
+  /* ── QUANDO A ULTIMA LINHA FICA ORFA ─────────────────────────────────────
+     Nove atalhos numa tela larga viravam 4 + 4 + UM, e o cartao sozinho ficava
+     encostado a esquerda com quase mil pixels vazios ao lado. Nao e a grade
+     inteira que desalinha — sao as sobras da ultima linha.
+
+     Centralizar so vale a pena quando existe mais de uma linha. Com tres
+     atalhos, uma linha unica centralizada descolaria do titulo, que e alinhado
+     a esquerda logo acima — e ai o conserto seria pior que o defeito.
+
+     O numero de colunas nao e medido: ele sai da conta que o proprio CSS faz.
+     `.main-content` tem `max-width: 1200px` (ver AdminLayout), o vao e 20px, e
+     cada coluna pede `colunaMinima`. Medir a tela aqui repetiria o erro que o
+     cabecalho deste arquivo ja descreve — e daria um numero que muda entre o
+     primeiro quadro e o segundo. */
+  const LARGURA_DO_CONTEUDO = 1200;
+  const VAO = 20;
+  const colunasCheias = Math.max(1, Math.floor((LARGURA_DO_CONTEUDO + VAO) / (colunaMinima + VAO)));
+  const centralizar = itens.length > colunasCheias;
   const visiveis = paginado ? itens.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA) : itens;
 
   /* Os lugares que sobraram nesta página, preenchidos pelos cartões que
@@ -174,12 +193,14 @@ export function GradeDeMenu({ cards, tourId, titulo, subtitulo, tourCabecalho, c
            passagens seguintes seriam saltos secos. */
         key={pagina}
         data-tour={tourId}
-        className={direcao === 0 ? undefined : `menu-grade--vem-da-${direcao > 0 ? "direita" : "esquerda"}`}
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(auto-fill, minmax(${colunaMinima}px, 1fr))`,
-          gap: "20px",
-        }}
+        className={[
+          "menu-grade",
+          centralizar ? "is-centrada" : "",
+          direcao === 0 ? "" : `menu-grade--vem-da-${direcao > 0 ? "direita" : "esquerda"}`,
+        ].filter(Boolean).join(" ")}
+        /* So a largura da coluna e inline: ela e o unico valor que vem de fora
+           (a prop `colunaMinima`). O resto do arranjo mora no `styles.css`. */
+        style={{ "--col": `${colunaMinima}px` }}
       >
         {visiveis.map((card, i) => (
           <CartaoDeMenu

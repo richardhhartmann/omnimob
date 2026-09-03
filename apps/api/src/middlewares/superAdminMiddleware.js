@@ -12,7 +12,9 @@ export function requireSuperAdmin(req, res, next) {
     if (payload.role !== "SUPERADMIN") {
       return res.status(403).json({ error: "Acesso restrito ao super-admin." });
     }
-    req.superAdmin = { email: payload.email };
+    /* O `id` entra porque as rotas do segundo fator precisam ler e escrever a
+       PRÓPRIA linha; até aqui o e-mail bastava porque nada era por conta. */
+    req.superAdmin = { id: payload.superAdminId, email: payload.email };
     return next();
   } catch {
     return res.status(401).json({ error: "Token invalido ou expirado." });
