@@ -63,17 +63,6 @@ Preencha:
 - `VITE_CLOUDINARY_CLOUD_NAME`
 - `VITE_CLOUDINARY_UPLOAD_PRESET`
 
-## Usuarios seed
-
-- `admin` / `admin` (tenant `imobiliaria-centro`)
-- `admin-casa` / `admin` (tenant `casa-nobre`)
-- `editor` / `admin` (edicao da vitrine do tenant `imobiliaria-centro`)
-
-## Regras de acesso
-
-- `ADMIN`: acesso ao painel de controle
-- `SHOWCASE_EDITOR`: acesso ao editor da vitrine em `/vitrine/:tenantSlug/editar`
-
 ## Apos alteracoes de schema Prisma
 
 Sempre execute:
