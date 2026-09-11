@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { tourAtivo } from "../utils/tourAtivo";
+import { temCaixaPorCima } from "../utils/caixaPorCima";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O Esc de uma SUB-TELA.
@@ -39,10 +40,9 @@ import { tourAtivo } from "../utils/tourAtivo";
    caminho (o `SelectCustom` aberto).
    ────────────────────────────────────────────────────────────────────────── */
 
-/** Há uma caixa modal por cima? Todas travam a rolagem do corpo enquanto abertas. */
-function temCaixaPorCima() {
-  return document.body.style.overflow === "hidden";
-}
+/* `temCaixaPorCima` saiu daqui para `utils/caixaPorCima`: o Esc global do painel
+   (`useAtalhos`) passou a fazer a MESMA pergunta, e ela não pode ter duas
+   respostas. */
 
 export function useSaidaDaTela(aoSair, ativo = true) {
   /* `useRef` para o ouvinte não ser recolocado a cada render: a tela passa uma

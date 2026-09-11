@@ -28,13 +28,26 @@ export const DADOS_PASSOS_PADRAO = {
   ],
 };
 
+/* ── A EQUIPE NASCE VAZIA, E ISSO É O CONSERTO DE UM DEFEITO ANTIGO ──────────
+
+   Havia três pessoas aqui: "Ana Souza", "João Lima" e "Marina Alves", com CRECI
+   inventado. Toda imobiliária que arrastasse a peça da biblioteca publicava
+   aqueles três nomes na própria vitrine — e várias publicaram. O widget nunca
+   teve como saber que aquilo era exemplo, porque era o conteúdo dele.
+
+   Agora a lista começa vazia e a peça pede que se escolha quem aparece. Um
+   widget vazio é honesto; um widget com gente que não existe é uma mentira que
+   se publica sozinha.
+
+   `pessoas` continua existindo para a sobrescrita MANUAL (quem desliga a fonte
+   real e digita a equipe à mão), e para as vitrines que já têm isso gravado. O
+   que mudou é o padrão: ele não inventa ninguém. */
 export const DADOS_EQUIPE_PADRAO = {
   subtitulo: "Especialistas prontos para ajudar você a encontrar o imóvel certo.",
-  pessoas: [
-    { nome: "Ana Souza", cargo: "Corretora", creci: "CRECI 12345", whatsapp: "", foto: "" },
-    { nome: "João Lima", cargo: "Corretor", creci: "CRECI 54321", whatsapp: "", foto: "" },
-    { nome: "Marina Alves", cargo: "Especialista em locação", creci: "CRECI 67890", whatsapp: "", foto: "" },
-  ],
+  pessoas: [],
+  /* Os ids escolhidos no seletor, na ordem em que aparecem. Ver
+     `SeletorDeEquipe`. */
+  ids: [],
 };
 
 export const DADOS_FINANCIAMENTO_PADRAO = {
@@ -62,6 +75,44 @@ export function conteudoEhJson(conteudo) {
   } catch {
     return false;
   }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Trocar UM campo do JSON de um widget, pelo caminho.
+
+   É o que permite editar o conteúdo do widget NA PRANCHETA em vez do inspetor.
+   O componente declara `widget|<id>|dados|subtitulo` ou
+   `widget|<id>|dados|itens|2|resposta` no `data-rich-sync`, e o editor entrega
+   o caminho aqui sem precisar saber o que aquele widget guarda.
+
+   Índice numérico entra em array, nome entra em objeto — e o caminho é criado
+   quando falta, para o primeiro texto digitado num widget recém-nascido não se
+   perder por causa de um nível que ainda não existia.
+
+   A imutabilidade não é preciosismo: o `atualizarConfig` compara referências
+   para saber o que mudou, e escrever no objeto lido faria a mudança acontecer
+   sem ninguém perceber que aconteceu.
+   ──────────────────────────────────────────────────────────────────────────── */
+export function comDadoTrocado(conteudo, caminho, valor, fallback = {}) {
+  const dados = lerDadosWidget(conteudo, fallback);
+  if (!Array.isArray(caminho) || !caminho.length) return serializarDadosWidget(dados);
+
+  const clonar = (no, i) => {
+    const chave = caminho[i];
+    const indice = /^\d+$/.test(String(chave)) ? Number(chave) : null;
+    const ultimo = i === caminho.length - 1;
+
+    if (indice !== null) {
+      const lista = Array.isArray(no) ? [...no] : [];
+      lista[indice] = ultimo ? valor : clonar(lista[indice], i + 1);
+      return lista;
+    }
+    const objeto = no && typeof no === "object" && !Array.isArray(no) ? { ...no } : {};
+    objeto[chave] = ultimo ? valor : clonar(objeto[chave], i + 1);
+    return objeto;
+  };
+
+  return serializarDadosWidget(clonar(dados, 0));
 }
 
 export function serializarDadosWidget(dados) {

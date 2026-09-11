@@ -673,6 +673,27 @@ export function distribuirPecas(cfg, mode, pieceIds, eixo) {
  */
 export const LARGURA_MINIMA_MOBILE = 25;
 
+/* ── O PISO DE LARGURA NO DESKTOP ────────────────────────────────────────────
+
+   Era 10% — e 10% de 1280px são 128px. Nessa largura o widget não fica
+   apertado, fica QUEBRADO: o texto passa a uma palavra por linha ("melhor / es
+   / opções"), o título vira uma coluna de sílabas e o botão de WhatsApp, que
+   tem largura mínima própria, transborda a caixa da peça. A pessoa não estava
+   pedindo isso; ela estava arrastando a alça e o construtor deixou.
+
+   18% dão 230px, que é onde uma linha de texto ainda é uma linha e um botão
+   ainda cabe dentro da peça. É o mesmo raciocínio do limite do mobile logo
+   acima: a resposta não é a página se defender de um layout impossível, é o
+   construtor não deixar chegar lá — e o limite age no GESTO, então a alça
+   simplesmente para e a pessoa vê onde é o fundo.
+
+   Vale para TODOS os widgets, e por isso mora aqui e não em cada peça: um piso
+   por widget seria treze respostas para a mesma pergunta, e a décima quarta
+   nasceria sem nenhuma.
+
+   Não vale para os blocos fixos, que já tinham 20% e continuam com ele. */
+export const LARGURA_MINIMA_WIDGET = 18;
+
 /**
  * Redimensiona uma peça. Não empurra ninguém — para na primeira peça
  * encontrada, para que ajustar um canto não sacuda a página inteira.
@@ -686,8 +707,11 @@ export function redimensionarPeca(cfg, mode, pieceId, tamanho) {
   const kind = parsePieceId(pieceId)?.kind;
   const minW = mode === "mobile"
     ? LARGURA_MINIMA_MOBILE
-    : (kind === "block" ? 20 : 10);
-  const minH = kind === "block" ? 120 : 80;
+    : (kind === "block" ? 20 : LARGURA_MINIMA_WIDGET);
+  /* A altura mínima sobe junto: 80px não cabem um título e uma linha, e o
+     resultado era o conteúdo vazando por baixo da peça — o mesmo tipo de
+     estado quebrado que o piso de largura evita. */
+  const minH = kind === "block" ? 120 : 110;
 
   const { w, h } = limitarResize(alvo, outras, tamanho, minW, minH);
   alvo.w = w;

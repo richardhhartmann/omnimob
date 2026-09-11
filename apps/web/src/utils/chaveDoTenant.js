@@ -84,6 +84,14 @@ export const CHAVES = {
      imobiliária faria a corretora que trabalha no Flow abrir o painel no módulo
      em que o colega do administrativo parou. */
   moduloAtivo: "domus_modulo_ativo",
+  /* A barra lateral está aberta ou recolhida. Ela abre por clique no
+     hambúrguer, e o estado precisa sobreviver à troca de tela — sem isto, cada
+     navegação devolveria a barra ao padrão e o clique teria de ser refeito.
+
+     Chaveada por USUÁRIO pelo mesmo motivo do `moduloAtivo`: numa recepção com
+     computador compartilhado, quem gosta da barra aberta não impõe isso a quem
+     trabalha o dia inteiro numa tabela de imóveis. */
+  barraAberta: "domus_barra_aberta",
   /* Mesmo atalho do `tourResolvido`, para o tour do OUTRO módulo. Uma chave
      própria e não um sufixo na mesma: o tour do Hub e o do Flow são resolvidos
      em momentos diferentes (um no primeiro acesso ao painel, outro na primeira
@@ -97,6 +105,15 @@ export const CHAVES = {
      Por usuário, como `moduloAtivo` e pelo mesmo motivo: num computador de
      recepção, a última tela de um não é a do outro. */
   ultimaTelaDoModulo: "domus_ultima_tela_modulo",
+  /* As últimas telas visitadas, para as sugestões da paleta de busca. Guarda
+     CHAVES de item de menu (`imoveis-lista`, `config-cobranca`), nunca rótulo
+     nem caminho: a chave é resolvida contra a lista da barra na hora de
+     desenhar, então um destino que o cargo perdeu, ou que mudou de nome, some
+     sozinho em vez de virar um atalho para "acesso negado".
+
+     Por usuário, como as duas de cima: num computador de recepção, por onde um
+     andou não é sugestão para o outro. */
+  historicoDeTelas: "domus_historico_telas",
 };
 
 /* ── Chave da PESSOA, e não da imobiliária ───────────────────────────────────

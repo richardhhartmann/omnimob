@@ -52,6 +52,13 @@ export const FLOW = "FLOW";
      Omnimob    /tipo_header_alt.png   o prédio + "OMNIMOB"
      Omniflow   /omnimob_flow.png      o prédio + "OMNI" + "flow"
 
+   As artes têm as letras BRANCAS, e sobre a faixa clara do painel elas
+   desapareciam. `logoClaro` é a segunda arte, com as letras pretas, e existe
+   só no Omnimob — o Omniflow ainda não tem, e por isso `logoClaro` é OPCIONAL:
+   sem ela o módulo cai no nome em texto, tingido pelo acento, que é o que os
+   dois faziam antes. Um módulo novo não fica quebrado por não trazer a arte
+   clara; fica com a forma antiga.
+
    Era composta — a arte `/tipo_header_alt.png` mais uma segunda imagem com a palavra do
    módulo ("Hub" ou "flow") sentada à direita —, e a composição existia para
    não reexportar a metade "OMNIMOB" a cada retoque. Ela deixou de fazer
@@ -94,6 +101,12 @@ export const MODULOS = [
     nome: "Omnimob",
     /* O wordmark inteiro. Ver a nota sobre a marca, acima. */
     logo: "/tipo_header_alt.png",
+    /* A MESMA arte com as letras pretas, para superficie clara. Opcional: o
+       modulo que nao tiver cai no nome em texto (ver `NomeDoModulo`, no
+       `SeletorDeModulo`), que e o que os dois faziam antes de ela existir.
+       Mesmo quadro 2852x603 e mesmo simbolo em x 0..499 da clara, senao a
+       troca por tema mexeria na altura. */
+    logoClaro: "/tipo_header_alt_dark.png",
     /* Uma linha dizendo o que o módulo É. Curta de propósito: ela cabe embaixo
        da logo no balão do seletor (228px) e vira a chamada do cartão na
        landing. Duas frases diferentes para as duas telas seriam duas versões da
@@ -120,6 +133,7 @@ export const MODULOS = [
     key: FLOW,
     nome: "Omniflow",
     logo: "/omnimob_flow.png",
+    logoClaro: "/omnimob_flow_dark.png",
     descricao:
       "Onde o lead vira negócio: captação automática dos portais, funil por " +
       "estágio, minuta, assinatura digital e comissão.",

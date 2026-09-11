@@ -1,6 +1,6 @@
 import { mergeBlockWrapperStyle } from "../../utils/showcaseConfig";
+import { useFaixaDoWidget } from "./useFaixaDoWidget";
 import { CtaWidget } from "./widgets/CtaWidget.jsx";
-import { DividerWidget } from "./widgets/DividerWidget.jsx";
 import { FaqWidget } from "./widgets/FaqWidget.jsx";
 import { FinanceWidget } from "./widgets/FinanceWidget.jsx";
 import { HoursWidget } from "./widgets/HoursWidget.jsx";
@@ -21,7 +21,6 @@ const RENDERIZADORES = {
   stats: StatsWidget,
   cta: CtaWidget,
   social: SocialWidget,
-  divider: DividerWidget,
   map: MapWidget,
   text: TextWidget,
   note: TextWidget,
@@ -42,9 +41,24 @@ export const TIPOS_DE_WIDGET = Object.keys(RENDERIZADORES);
 
 export function ShowcaseWidget({ widget }) {
   const Renderizador = RENDERIZADORES[widget.type] || TextWidget;
+  /* A medição mora AQUI, no despachante, e não em cada renderizador: é um
+     observador por peça em vez de treze implementações da mesma pergunta, e
+     garante que todo widget — inclusive os que ainda não adaptam nada — já
+     nasça com a faixa no atributo, à disposição do CSS. */
+  const [ref, faixa] = useFaixaDoWidget();
+
   return (
-    <article className="widget-card" style={{ ...mergeBlockWrapperStyle(widget), height: "100%", boxSizing: "border-box" }}>
-      <Renderizador widget={widget} />
+    <article
+      ref={ref}
+      className="widget-card"
+      /* `data-faixa` para o CSS (grades, gaps, tamanhos) e a prop `faixa` para
+         quem precisa mudar o CONTEÚDO — quantos corretores mostrar, quantas
+         perguntas abrir. A maior parte da adaptação é CSS; a prop é para o que
+         o CSS não alcança. */
+      data-faixa={faixa}
+      style={{ ...mergeBlockWrapperStyle(widget), height: "100%", boxSizing: "border-box" }}
+    >
+      <Renderizador widget={widget} faixa={faixa} />
     </article>
   );
 }

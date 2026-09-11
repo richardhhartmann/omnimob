@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import {
   GearSix, Question, SignOut, CaretRight, GoogleLogo, IdentificationBadge,
-  LifebuoyIcon, Notebook, FileText, ShieldCheck, Bug, Check,
+  LifebuoyIcon, Notebook, FileText, ShieldCheck, Bug, Check, Buildings,
 } from "@phosphor-icons/react";
+import { planoInfo } from "../utils/planos";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O menu do perfil — um balão que sobe do rodapé da barra lateral.
@@ -53,6 +54,62 @@ const ATRASO_PARA_FECHAR_MS = 180;
 function Submenu({ aberto, children }) {
   if (!aberto) return null;
   return <div className="mp-flutuante">{children}</div>;
+}
+
+/* ── O PLANO DA IMOBILIÁRIA, E POR QUE ELE MORA AQUI ────────────────────────
+
+   O selo vivia na face da imobiliária dentro do seletor de módulo, no topo da
+   barra lateral. Funcionou enquanto aquela face tinha a largura de uma barra
+   aberta; quando o seletor mudou para a faixa do topo, ela passou a viver em
+   ~146px — e a pílula é a única peça de largura fixa lá (não pode virar
+   "Premi…"), então o nome e o slug encolheram até `P…` e `pap…`. O selo comeu
+   justamente a informação que aquela face existe para dar.
+
+   Aqui a linha tem 232px, o plano fica ao lado do nome da imobiliária, e um
+   clique leva a Configurações › Plano — que é o único lugar onde ele muda. A
+   pergunta que o selo responde é a mesma de antes: "que Omnimob é esta?", e por
+   que metade das telas esconde recurso. Sem ela, a ausência de um botão parece
+   defeito em vez de limite do plano.
+
+   Reaproveita `.ds-plano`, da folha do `AdminLayout`: é uma ideia só no produto
+   e merece uma aparência só — a mesma que a landing e o painel super-admin
+   usam. O balão sai por portal, mas aquela regra não é escopada em `.ds-shell`,
+   então ela alcança daqui.
+   ────────────────────────────────────────────────────────────────────────────── */
+function LinhaDaImobiliaria({ tenant, podeVerPlano, aoIr }) {
+  const nome = tenant?.name || "Minha imobiliária";
+  const info = planoInfo(tenant?.plano);
+
+  const conteudo = (
+    <span className="mp-casa">
+      <span className="mp-casa__nome">{nome}</span>
+      {info ? (
+        <span className="ds-plano" style={{ "--plano": info.cor }}>{info.nome}</span>
+      ) : null}
+    </span>
+  );
+
+  /* Sem `verConfiguracoes` não há para onde ir, e a linha vira informação: o
+     plano continua dito, sem cursor de mão e sem destino. Mesma regra do rolo
+     do seletor de módulo — um botão desabilitado prometeria uma tela que aquela
+     pessoa nunca verá. */
+  if (!podeVerPlano) {
+    return (
+      <div className="mp-linha is-informativa">
+        <span className="mp-linha__icone"><Buildings size={17} /></span>
+        <span className="mp-linha__texto">{conteudo}</span>
+      </div>
+    );
+  }
+
+  return (
+    <Linha
+      Icone={Buildings}
+      rotulo={conteudo}
+      detalhe="Plano e recursos"
+      aoClicar={aoIr}
+    />
+  );
 }
 
 function Linha({ Icone, rotulo, detalhe, aoClicar, temSubmenu, submenu, aoAbrirSub, aoFecharSub, subAberto }) {
@@ -251,7 +308,18 @@ export function MenuDoPerfil({
 
       <span className="mp-risco" role="separator" />
 
-      {/* ── 2. Preferências desta pessoa ───────────────────────────────────── */}
+      {/* ── 2. De quem é esta conta, e em que plano ─────────────────────────
+          Logo abaixo de quem VOCÊ é, porque as duas são identidade — e antes
+          das preferências, que são ajuste. Ver `LinhaDaImobiliaria`. */}
+      <LinhaDaImobiliaria
+        tenant={tenant}
+        podeVerPlano={Boolean(usuario?.cargo?.verConfiguracoes)}
+        aoIr={() => { aoFechar(); navegar("/configuracoes?ver=plano"); }}
+      />
+
+      <span className="mp-risco" role="separator" />
+
+      {/* ── 3. Preferências desta pessoa ───────────────────────────────────── */}
       <Linha
         Icone={GearSix}
         rotulo="Configurações"
@@ -260,7 +328,7 @@ export function MenuDoPerfil({
 
       <span className="mp-risco" role="separator" />
 
-      {/* ── 3. Ajuda ───────────────────────────────────────────────────────── */}
+      {/* ── 4. Ajuda ───────────────────────────────────────────────────────── */}
       <Linha
         Icone={Question}
         rotulo="Ajuda"

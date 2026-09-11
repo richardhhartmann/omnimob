@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MagnifyingGlass, ArrowElbowDownLeft } from "@phosphor-icons/react";
 
@@ -92,7 +92,7 @@ export function destinosDe(grupos) {
   return saida;
 }
 
-export function BuscaDeAtalhos({ aberta, aoFechar, grupos, modulo }) {
+export function BuscaDeAtalhos({ aberta, aoFechar, grupos, modulo, historico }) {
   const [busca, setBusca] = useState("");
   const [marcado, setMarcado] = useState(0);
   const campoRef = useRef(null);
@@ -102,14 +102,37 @@ export function BuscaDeAtalhos({ aberta, aoFechar, grupos, modulo }) {
 
   const achados = useMemo(() => {
     const termos = chao(busca).split(/\s+/).filter(Boolean);
-    if (!termos.length) return destinos.slice(0, 8);
-    return destinos
-      .filter((d) => {
-        const alvo = chao(`${d.rotulo} ${d.onde || ""}`);
-        return termos.every((t) => alvo.includes(t));
-      })
-      .slice(0, 12);
-  }, [destinos, busca]);
+    if (termos.length) {
+      return destinos
+        .filter((d) => {
+          const alvo = chao(`${d.rotulo} ${d.onde || ""}`);
+          return termos.every((t) => alvo.includes(t));
+        })
+        .slice(0, 12);
+    }
+
+    /* ── CAMPO VAZIO: primeiro por onde a pessoa ANDOU ─────────────────────
+       As chaves guardadas são RESOLVIDAS contra os destinos, e não usadas
+       direto: a lista de destinos já passou pelos filtros de cargo, plano e
+       módulo, então uma tela que a pessoa visitou ontem e perdeu o acesso hoje
+       some daqui sozinha. Ver `utils/historicoDeTelas`.
+
+       O resto da lista continua sendo a ordem da barra — a de APRENDIZADO. Ela
+       é o que apresenta as telas que a pessoa ainda não abriu, e é por isso que
+       o histórico não pode ocupar as oito linhas. */
+    const recentes = (historico || [])
+      .map((chave) => destinos.find((d) => d.chave === chave))
+      .filter(Boolean)
+      .map((d) => ({ ...d, secao: "Recentes" }));
+
+    const vistos = new Set(recentes.map((d) => d.chave));
+    const resto = destinos
+      .filter((d) => !vistos.has(d.chave))
+      .slice(0, Math.max(3, 8 - recentes.length))
+      .map((d) => ({ ...d, secao: "Ir para" }));
+
+    return [...recentes, ...resto];
+  }, [destinos, busca, historico]);
 
   /* A cada busca nova o destaque volta ao primeiro: sem isto, apagar uma letra
      podia deixar o destaque num índice que a lista nova não tem, e o Enter não
@@ -123,8 +146,30 @@ export function BuscaDeAtalhos({ aberta, aoFechar, grupos, modulo }) {
     const t = setTimeout(() => campoRef.current?.focus(), 20);
     const anterior = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { clearTimeout(t); document.body.style.overflow = anterior; };
-  }, [aberta]);
+
+    /* ── O ESC É DA JANELA, E NÃO DO CAMPO ────────────────────────────────
+       Ele morava no `onKeyDown` do input, e por isso só funcionava enquanto o
+       foco estivesse lá dentro. Fora dali a tecla vazava para o Esc global do
+       painel, que SOBE um nível na rota — o sintoma era a paleta fechando e a
+       página de trás trocando no mesmo gesto.
+
+       O `preventDefault` avisa quem estiver ouvindo depois que a tecla já teve
+       dono. O `useAtalhos` também passou a recuar diante de uma caixa aberta;
+       as duas travas são de propósito, porque a ordem entre dois ouvintes de
+       janela depende de quem registrou primeiro, e isso não é um contrato. */
+    const aoTeclar = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      aoFechar();
+    };
+    window.addEventListener("keydown", aoTeclar);
+
+    return () => {
+      clearTimeout(t);
+      document.body.style.overflow = anterior;
+      window.removeEventListener("keydown", aoTeclar);
+    };
+  }, [aberta, aoFechar]);
 
   /* Mantém o item destacado à vista quando o teclado passa do fim da janela. */
   useEffect(() => {
@@ -145,7 +190,6 @@ export function BuscaDeAtalhos({ aberta, aoFechar, grupos, modulo }) {
   }
 
   function naTecla(e) {
-    if (e.key === "Escape") { e.preventDefault(); aoFechar(); return; }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setMarcado((i) => (achados.length ? (i + 1) % achados.length : 0));
@@ -190,10 +234,15 @@ export function BuscaDeAtalhos({ aberta, aoFechar, grupos, modulo }) {
             </p>
           ) : (
             <>
-              {!busca ? <span className="bat-titulo">Ir para</span> : null}
               {achados.map((d, i) => (
+                <Fragment key={`${d.chave}-${i}`}>
+                  {/* O rótulo entra quando a seção MUDA: assim "Recentes" e
+                      "Ir para" aparecem na ordem em que a lista os produz, sem
+                      ninguém precisar saber onde fica a divisa. */}
+                  {d.secao && d.secao !== achados[i - 1]?.secao
+                    ? <span className="bat-titulo">{d.secao}</span>
+                    : null}
                 <button
-                  key={`${d.chave}-${i}`}
                   type="button"
                   role="option"
                   aria-selected={i === marcado}
@@ -215,6 +264,7 @@ export function BuscaDeAtalhos({ aberta, aoFechar, grupos, modulo }) {
                     <span className="bat-item__enter" aria-hidden="true"><ArrowElbowDownLeft size={13} weight="bold" /></span>
                   ) : null}
                 </button>
+                </Fragment>
               ))}
             </>
           )}

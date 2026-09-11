@@ -1,8 +1,4 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import { MagnifyingGlass } from "@phosphor-icons/react";
-import { Trilha } from "./Trilha.jsx";
-import { degrausAte } from "../utils/trilhaDoPainel";
-import { useCabecalho } from "../utils/contextoDeCabecalho.jsx";
+import { useCabecalho, useDegrausDoPainel } from "../utils/contextoDeCabecalho.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O CABEÇALHO DO PAINEL — a faixa que diz onde você está e leva a qualquer
@@ -20,6 +16,10 @@ import { useCabecalho } from "../utils/contextoDeCabecalho.jsx";
    botão primário da tela, que morava colado ao título desde sempre: separá-los
    deixaria um "Novo Cliente" solto no alto de uma lista, sem nada explicando o
    que ele cria.
+
+   O gatilho da BUSCA fez o caminho inverso, e pelo mesmo critério: ele esteve
+   aqui e subiu para a faixa do topo. O botão primário é desta tela; a paleta
+   abre qualquer uma. O que serve a todas pertence à moldura.
 
    ── ELE É UM SÓ, NOS DOIS MÓDULOS ──
 
@@ -43,49 +43,58 @@ import { useCabecalho } from "../utils/contextoDeCabecalho.jsx";
    disso é como o conteúdo acaba escondido atrás da barra.
    ────────────────────────────────────────────────────────────────────────── */
 
-export function CabecalhoDoPainel({ aoBuscar, atalhoDeBusca = "Ctrl K" }) {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
+export function CabecalhoDoPainel({ Icone = null }) {
   const daTela = useCabecalho();
 
-  /* A trilha da rota por padrão — ela é a mesma tabela de onde sai o título de
-     reserva, então as duas nunca discordam sobre o nome de uma tela.
-
-     A tela sobrescreve só quando a rota não dá conta: `/flow/negocios/<id>` não
-     está em `TELAS_DO_PAINEL`, e `degrausAte` devolve lista vazia ali. O último
-     degrau daquela tela é "Negócio #412", e o número só existe depois da
-     resposta do servidor — não há tabela estática que o saiba. */
-  const degraus = daTela?.trilha ?? degrausAte(pathname, navigate);
+  /* Os degraus continuam sendo lidos aqui, mas não são mais DESENHADOS aqui: a
+     trilha desceu para dentro do conteúdo (ver `TrilhaDoConteudo`). O que sobra
+     desta lista no cabeçalho é o título de reserva — o último degrau é o nome
+     da tela quando ela não define um próprio. */
+  const degraus = useDegrausDoPainel();
   const ultimo = degraus[degraus.length - 1];
 
   const titulo = daTela?.titulo ?? ultimo?.rotulo ?? "";
   const subtitulo = daTela?.subtitulo ?? null;
 
+  /* O ícone vem da navegação (o layout o encontra pelo item aceso), e a tela
+     pode sobrescrever — mesma regra do título. Serve para as telas de detalhe,
+     que não têm item próprio no menu: `/flow/negocios/<id>` acende "Todos os
+     Negócios", e o ícone dele é melhor que nenhum, mas a tela sabe mais. */
+  const IconeDaTela = daTela?.icone ?? Icone;
+
   return (
     <header className="ds-topo">
       <div className="ds-topo__esq">
-        {/* Só a partir de dois degraus: um degrau é a própria tela, e repetir o
-            nome dela logo acima do título é ruído. */}
-        {degraus.length > 1 ? (
-          <div className="ds-topo__trilha"><Trilha itens={degraus} /></div>
+        {/* `aria-hidden`: ele repete o que o título já diz. Um leitor de tela
+            anunciando "ícone Cargos, Cargos" é ruído, não acessibilidade. */}
+        {IconeDaTela ? (
+          <span className="ds-topo__icone" aria-hidden="true">
+            <IconeDaTela size={19} weight="regular" />
+          </span>
         ) : null}
-        {titulo ? <h1 className="ds-topo__titulo">{titulo}</h1> : null}
-        {subtitulo ? <p className="ds-topo__sub">{subtitulo}</p> : null}
+        <div className="ds-topo__texto">
+          {titulo ? <h1 className="ds-topo__titulo">{titulo}</h1> : null}
+          {subtitulo ? <p className="ds-topo__sub">{subtitulo}</p> : null}
+        </div>
       </div>
 
-      <div className="ds-topo__dir">
-        {/* O gatilho da busca é um botão com CARA de campo, e não um `<input>`:
-            o que ele abre é a paleta, e um campo aqui prometeria digitar no
-            lugar onde a pessoa não vai digitar. Ele mostra a tecla porque é
-            assim que alguém descobre que existe um atalho. */}
-        <button type="button" className="ds-busca" onClick={aoBuscar} aria-label="Buscar telas do painel">
-          <MagnifyingGlass size={15} weight="bold" />
-          <span className="ds-busca__texto">Buscar no painel…</span>
-          <kbd className="ds-busca__tecla">{atalhoDeBusca}</kbd>
-        </button>
+      {/* A busca saiu daqui e subiu para a faixa do topo (`.ds-topbar`): ela
+          abre qualquer tela do painel, e o que serve a todas as telas pertence à
+          moldura, não ao cabeçalho de uma delas. Ver o comentário no
+          `AdminLayout`.
 
-        {daTela?.acao ? <div className="ds-topo__acao">{daTela.acao}</div> : null}
-      </div>
+          O que sobra é o botão primário DESTA tela — e agora ele tem o canto
+          direito só para si, em vez de dividi-lo com um controle que não tem
+          nada a ver com o que a página faz.
+
+          A caixa só existe quando há ação: uma `<div>` vazia num flex com
+          `space-between` não muda nada hoje, mas deixa uma peça sem conteúdo no
+          DOM de quase toda tela do painel. */}
+      {daTela?.acao ? (
+        <div className="ds-topo__dir">
+          <div className="ds-topo__acao">{daTela.acao}</div>
+        </div>
+      ) : null}
     </header>
   );
 }

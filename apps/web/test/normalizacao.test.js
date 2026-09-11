@@ -98,3 +98,41 @@ test("lixo no config não derruba a vitrine", () => {
     assert.ok(Number.isFinite(widgetRect(w, "mobile").y));
   }
 });
+
+/* ── O interruptor do Puck ─────────────────────────────────────────────────
+   `showcaseConfig.puck` é o que decide, por imobiliária, qual renderizador
+   desenha a vitrine pública. O que se guarda aqui é a REVERSIBILIDADE: o
+   formato antigo tem que sobreviver intacto ao lado do novo, senão a migração
+   vira porta de mão única no meio de um beta. */
+
+test("o documento do Puck atravessa a normalização", () => {
+  const doc = { content: [{ type: "BlocoImoveis", props: { id: "a" } }], root: {} };
+  const cfg = normalizeShowcaseConfig({ puck: doc });
+  assert.equal(cfg.puck.content.length, 1);
+  assert.deepEqual(cfg.puck.root, {});
+});
+
+test("sem documento do Puck, o campo é null — e é isso que mantém a vitrine antiga", () => {
+  assert.equal(normalizeShowcaseConfig(null).puck, null);
+  assert.equal(normalizeShowcaseConfig({}).puck, null);
+  // Lixo no lugar do documento não pode ligar o renderizador novo.
+  assert.equal(normalizeShowcaseConfig({ puck: "sim" }).puck, null);
+  assert.equal(normalizeShowcaseConfig({ puck: { content: "nao é lista" } }).puck, null);
+});
+
+test("ligar o Puck NÃO mexe no formato antigo", () => {
+  const antes = normalizeShowcaseConfig({
+    widgets: [{ id: "w1", type: "text", title: "Oi", x: 0, y: 100, w: 50, h: 200 }],
+    layout: { header: { x: 0, y: 0, w: 100, h: 90 } },
+  });
+  const depois = normalizeShowcaseConfig({
+    widgets: [{ id: "w1", type: "text", title: "Oi", x: 0, y: 100, w: 50, h: 200 }],
+    layout: { header: { x: 0, y: 0, w: 100, h: 90 } },
+    puck: { content: [], root: {} },
+  });
+  /* Byte por byte, tirando a chave nova. É o que faz "Voltar ao editor antigo"
+     ser apagar uma chave, e não reconstruir uma página. */
+  const { puck: _a, ...semPuckAntes } = antes;
+  const { puck: _b, ...semPuckDepois } = depois;
+  assert.deepEqual(semPuckDepois, semPuckAntes);
+});

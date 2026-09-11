@@ -401,6 +401,47 @@ async function consequenciasDaTroca(tenantId, planoAtual, planoNovo) {
 
 /* Leitura sem gate de plano: quem está no Básico precisa VER o recurso para
    saber que ele existe, e a resposta já diz que não está liberado. */
+/* ── QUEM PODE ENTRAR NA EQUIPE DA VITRINE ───────────────────────────────────
+
+   A lista que o seletor do widget de Equipe abre. Existe como rota própria por
+   causa da PERMISSÃO: `/api/usuarios` inteiro exige `gerenciarUsuarios`, e quem
+   monta a vitrine tem `editarPagina` — são trabalhos diferentes, e obrigar um a
+   ter a permissão do outro daria à pessoa que mexe no site o poder de criar e
+   apagar contas.
+
+   Devolve só o que o cartão da vitrine mostra: nome, foto, CRECI, WhatsApp e o
+   rótulo público. NUNCA login, e-mail ou cargo do painel — o seletor é uma tela
+   de escolher quem aparece, não uma listagem de pessoal.
+
+   Inativo fica de fora: quem saiu da imobiliária não deve nem aparecer como
+   opção. */
+tenantRouter.get("/me/equipe-possivel", requireAuth, requireTenant, requirePermissao("editarPagina"), async (req, res) => {
+  try {
+    const pessoas = await prisma.usuario.findMany({
+      where: { tenantId: req.tenant.id, ativo: true },
+      orderBy: { nome: "asc" },
+      select: {
+        id: true, nome: true, foto: true, creci: true, whatsapp: true,
+        cargoVitrine: true, cargo: { select: { descricao: true } },
+      },
+    });
+    return res.json(pessoas.map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      /* Mesmo par de `dadosDaVitrine`: o rótulo público quando existe, o cargo
+         do painel como reserva. Repetir a regra seria deixá-la divergir; o que
+         se repete aqui é só a leitura, e o formato de saída é o mesmo. */
+      cargo: String(p.cargoVitrine || "").trim() || p.cargo?.descricao || "Corretor",
+      creci: String(p.creci || "").trim(),
+      whatsapp: String(p.whatsapp || "").replace(/\D/g, ""),
+      foto: String(p.foto || "").trim(),
+    })));
+  } catch (err) {
+    console.error("[GET /tenants/me/equipe-possivel]", err);
+    return res.status(500).json({ error: "Erro ao listar a equipe." });
+  }
+});
+
 tenantRouter.get("/me/dominio", requireAuth, requireTenant, async (req, res) => {
   const t = await prisma.tenant.findUnique({
     where: { id: req.tenant.id },

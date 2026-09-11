@@ -11,7 +11,7 @@ import { useAssistenteIA } from "../components/builder/ia/useAssistenteIA";
 import { planoLiberaIA } from "../utils/planos";
 import { normalizeShowcaseConfig, widgetRect } from "../utils/showcaseConfig";
 import { estiloDoTema, linkWhatsApp, LARGURA_DESKTOP_REFERENCIA, LARGURA_MOBILE_REFERENCIA } from "../components/showcase/tema.js";
-import { comCelulaTrocada } from "../components/showcase/widgets/StatsWidget.jsx";
+import { aplicarEdicaoNoWidget } from "../utils/edicaoDeWidget.js";
 import { useConfirm } from "../components/ConfirmModal";
 
 import { SENSORES_EDITOR } from "../components/builder/dndEditor";
@@ -555,6 +555,47 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
     atualizarConfig((prev) => ({ ...prev, widgets: prev.widgets.filter((w) => w.id !== alvo.key) }), { comHistorico: true });
   }, [atualizarConfig]);
 
+  /* ── Delete / Backspace apagam a peça selecionada ──────────────────────────
+
+     Mora aqui embaixo, e não junto do Esc, porque depende do `removerWidget`
+     declarado logo acima: uma dependência lida antes da linha que a cria é erro
+     de inicialização, e o editor inteiro não montaria.
+
+     As duas teclas porque as duas são "apagar isto" para quem usa: Del no
+     teclado cheio, Backspace no notebook, onde é ela que fica à mão.
+
+     ── AS TRÊS GUARDAS ──
+
+     1. ESCREVENDO NÃO APAGA PEÇA. O editor tem `contentEditable` no meio do
+        conteúdo — é assim que se edita texto na prancheta —, e um Backspace ali
+        é "apagar uma letra". Sem esta guarda, corrigir uma palavra excluiria o
+        widget inteiro.
+     2. BLOCO FIXO NÃO SE APAGA. `b:properties` e companhia não são removíveis;
+        a tecla recusa ANTES de chamar para não parecer defeito. Ocultar é o
+        gesto equivalente, e a barra da peça já o oferece.
+     3. TRAVADA NÃO SE APAGA. Travar existe justamente para o gesto rápido não
+        alcançar a peça. */
+  useEffect(() => {
+    const aoTeclar = (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (!selecionada) return;
+
+      const alvo = e.target;
+      if (alvo?.isContentEditable) return;
+      const tag = alvo?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const peca = parsePieceId(selecionada);
+      if (peca?.kind !== "widget") return;
+      if (configRef.current?.widgets?.find((w) => w.id === peca.key)?.locked) return;
+
+      e.preventDefault();
+      removerWidget(selecionada);
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [selecionada, removerWidget]);
+
   const atualizarWidget = useCallback((widgetId, campo, valor) => {
     atualizarConfig((prev) => ({
       ...prev,
@@ -868,6 +909,58 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
       return;
     }
 
+    /* ── Estrutura da lista de destaques, pedida DE DENTRO da peça ──────────
+       `highlights|adicionar` e `highlights|remover|<i>`. Não é texto, e por
+       isso não carrega `html` — mas entra pelo mesmo caminho porque é a única
+       ponte que o bloco tem com o editor: a vitrine não conhece o construtor,
+       ela só sabe avisar "isto mudou". Ver `ShowcaseHighlights`. */
+    if (partes[0] === "highlights") {
+      if (partes[1] === "adicionar") {
+        atualizarConfig((prev) => ({
+          ...prev,
+          highlights: [...prev.highlights, { title: "Novo destaque", description: "Descreva o benefício aqui." }],
+          highlightStyles: [...prev.highlightStyles, { backgroundColor: "", color: "" }],
+        }), { comHistorico: true });
+        return;
+      }
+      if (partes[1] === "remover") {
+        const indice = parseInt(partes[2], 10);
+        atualizarConfig((prev) => (
+          /* Nunca abaixo de um: a faixa de destaques sem nenhum cartão vira uma
+             fatia de fundo colorido que ninguém sabe o que é nem como tirar. */
+          prev.highlights.length <= 1 ? prev : {
+            ...prev,
+            highlights: prev.highlights.filter((_, i) => i !== indice),
+            highlightStyles: prev.highlightStyles.filter((_, i) => i !== indice),
+          }
+        ), { comHistorico: true });
+        return;
+      }
+      return;
+    }
+
+    /* `estiloDestaque|<i>|<campo>` — a aparência de UM cartão, pedida de dentro
+       dele. Separado de `highlight|<i>|…`, que escreve o TEXTO: são duas listas
+       diferentes no config (`highlights` e `highlightStyles`), e misturá-las
+       num caminho só faria a cor entrar como se fosse um parágrafo. */
+    if (partes[0] === "estiloDestaque") {
+      const indice = parseInt(partes[1], 10);
+      const campo = partes[2];
+      /* `__tudo` cola o estilo inteiro de outro cartão. Uma gravação só, e não
+         uma por campo: com três chamadas seguidas, desfazer devolveria a cor
+         sem devolver a opacidade — e a pessoa veria um estado que nunca
+         existiu. Por isso ele também é o único que entra no histórico. */
+      const comHistorico = campo === "__tudo";
+      atualizarConfig((prev) => ({
+        ...prev,
+        highlightStyles: prev.highlightStyles.map((row, i) => {
+          if (i !== indice) return row;
+          return campo === "__tudo" ? { ...row, ...(html || {}) } : { ...row, [campo]: html };
+        }),
+      }), comHistorico ? { comHistorico: true } : undefined);
+      return;
+    }
+
     if (partes[0] === "highlight") {
       const indice = parseInt(partes[1], 10);
       atualizarConfig((prev) => ({
@@ -878,23 +971,18 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
     }
 
     if (partes[0] === "widget") {
-      /* `widget|<id>|stat|<par>|<celula>` — o bloco de números guarda tudo numa
-         string com barras, e cada célula é editada no lugar. A recomposição
-         mora no próprio componente, que é quem conhece o formato. */
-      if (partes[2] === "stat") {
-        const par = parseInt(partes[3], 10);
-        const celula = parseInt(partes[4], 10);
-        atualizarConfig((prev) => ({
-          ...prev,
-          widgets: prev.widgets.map((w) =>
-            w.id === partes[1] ? { ...w, content: comCelulaTrocada(w.content, par, celula, html) } : w
-          ),
-        }));
-        return;
-      }
-      atualizarWidget(partes[1], partes[2], html);
+      /* O que a edição faz com o widget mora em `utils/edicaoDeWidget`, e não
+         mais aqui: o editor do Puck precisa da MESMA regra, e uma segunda
+         interpretação do endereço é como o bloco de números passaria a aceitar
+         edição num editor e recusar no outro. Ver o cabeçalho de lá. */
+      atualizarConfig((prev) => ({
+        ...prev,
+        widgets: prev.widgets.map((w) => (
+          w.id === partes[1] ? aplicarEdicaoNoWidget(w, partes.slice(2), html) : w
+        )),
+      }));
     }
-  }, [atualizarConfig, atualizarCampo, atualizarWidget]);
+  }, [atualizarConfig, atualizarCampo]);
 
   // ── Feixe de ações de peça entregue ao canvas ─────────────────────────────
   const acoesCanvas = useMemo(() => ({
@@ -1101,8 +1189,39 @@ export function ShowcaseEditorPage({ session, onSessionUpdate }) {
             }
           />
 
-          <div className="editor-stage" ref={stageRef}>
-            <div className="editor-stage-inner showcase-body" style={previewStyle}>
+          {/* ── O VAZIO EM VOLTA DA FOLHA TAMBÉM DESELECIONA ──────────────────
+              Para chegar ao "Documento · Página" no inspetor era preciso achar
+              um ponto vazio DENTRO da folha — e numa página cheia esse ponto
+              às vezes não existe. A margem cinza em volta é a maior área
+              clicável da tela e não fazia nada.
+
+              `onMouseDown` e não `onClick`: o gesto de arrastar uma peça
+              termina com o ponteiro frequentemente fora da folha, e um `click`
+              ali chegaria depois do arrasto e limparia a seleção que a pessoa
+              acabou de fazer. O mousedown acontece ANTES de qualquer arrasto
+              começar, então só dispara quando o gesto de fato nasce no vazio.
+
+              `e.target === e.currentTarget` fecha o resto: o palco é ancestral
+              da folha inteira, e sem essa comparação todo clique numa peça
+              subiria até aqui e desfaria a própria seleção. */}
+          <div
+            className="editor-stage"
+            ref={stageRef}
+            onMouseDown={(e) => {
+              if (e.target !== e.currentTarget) return;
+              setSelecionada(null);
+              setMultiSelecao(new Set());
+            }}
+          >
+            <div
+              className="editor-stage-inner showcase-body"
+              style={previewStyle}
+              onMouseDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                setSelecionada(null);
+                setMultiSelecao(new Set());
+              }}
+            >
               {isMobile ? <span className="editor-mode-badge">Layout mobile</span> : null}
               {/* ── Por que a folha vive dentro de um invólucro dimensionado ──
                   `transform: scale()` não muda a CAIXA do elemento, só o

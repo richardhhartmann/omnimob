@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FONTES_REAIS } from "../data/fontesReais.js";
 import { IconeLua, IconeSol } from "../../Icones.jsx";
 import { SelectCustom } from "../../SelectCustom";
 import { FONT_OPTIONS, PRESET_THEMES, THEME_LABELS } from "../data/temas";
@@ -116,11 +117,31 @@ function CampoNumero({ label, value, onChange, aoFocar, sufixo, passo = 1, min, 
   );
 }
 
+/* ── SEM COR ESCOLHIDA NÃO É UMA COR ─────────────────────────────────────────
+
+   O campo pintava o `fallback` (branco no tema escuro) e ficava indistinguível
+   de alguém ter ESCOLHIDO branco. Só que ninguém escolheu: sem valor, quem
+   pinta é a folha de estilo — e ela usa tons diferentes para cada elemento (o
+   título de um destaque sai em `--text-main`, a descrição em `--text-muted`).
+   O resultado era o campo anunciando branco ao lado de um texto cinza.
+
+   Agora o estado "não escolhido" tem aparência própria: um xadrez discreto com
+   a palavra `auto`. O `<input>` continua carregando o fallback porque ele
+   PRECISA de uma cor concreta para abrir o seletor do sistema — mas a caixa
+   não afirma mais que aquela é a cor em uso.
+
+   Quem escolhe uma cor vê a cor. Quem não escolheu vê que não escolheu. */
 function CampoCor({ label, value, fallback, onChange }) {
+  const escolhida = Boolean(value);
   return (
     <label className="editor-field">
       <span className="editor-field-label">{label}</span>
-      <span className="editor-color" style={{ background: value || fallback }}>
+      <span
+        className={`editor-color${escolhida ? "" : " is-auto"}`}
+        style={escolhida ? { background: value } : undefined}
+        title={escolhida ? value : "Sem cor definida — quem pinta é o tema da vitrine"}
+      >
+        {escolhida ? null : <em>auto</em>}
         <input type="color" value={value || fallback} onChange={(e) => onChange(e.target.value)} />
       </span>
     </label>
@@ -320,62 +341,6 @@ function salvarDadosWidget(widget, acoes, fallback, proximo, tituloAoMigrar = ""
   acoes.atualizarWidget("content", serializarDadosWidget(dados));
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   De onde a peça tira o conteúdo.
-
-   Sete widgets sabem ler o cadastro da imobiliária: a Equipe lista os
-   corretores marcados como visíveis, Localização desenha o mapa do endereço,
-   Números conta imóveis e vendas, Regiões sai do acervo, Horários vem do
-   atendimento, Busca oferece os tipos que existem e Redes usa os perfis
-   conectados.
-
-   O alternador começa LIGADO, e é isso que muda o padrão do produto: arrastar a
-   peça já traz o que é verdade. Antes vinha "Ana Souza, João Lima e Marina
-   Alves" — três pessoas inventadas no código — e só saía dali se alguém
-   apagasse campo por campo.
-
-   Desligar é uma escolha legítima, e por isso existe: a imobiliária que ainda
-   não cadastrou a equipe, ou que quer um texto próprio, recupera os campos
-   manuais intactos. Nada se perde na troca — o conteúdo digitado continua
-   guardado no widget enquanto a fonte real está no ar.
-   ────────────────────────────────────────────────────────────────────────── */
-const FONTES_REAIS = {
-  team: {
-    rotulo: "Equipe cadastrada",
-    onde: "Usuários",
-    explica: "Lista quem está ativo e marcado como “aparecer na vitrine”.",
-  },
-  map: {
-    rotulo: "Endereço da imobiliária",
-    onde: "Configurações › Perfil",
-    explica: "Desenha o mapa e o botão de rota a partir do endereço cadastrado.",
-  },
-  hours: {
-    rotulo: "Horário de atendimento",
-    onde: "Configurações › Perfil",
-    explica: "Mostra as faixas cadastradas e um selo de aberto ou fechado agora.",
-  },
-  stats: {
-    rotulo: "Números do sistema",
-    onde: "seu acervo",
-    explica: "Conta imóveis ativos, negócios fechados, anos de mercado e cidades atendidas.",
-  },
-  regions: {
-    rotulo: "Regiões do acervo",
-    onde: "seus imóveis",
-    explica: "Lista os bairros onde você tem imóvel, e o clique filtra a vitrine.",
-  },
-  "property-search": {
-    rotulo: "Filtros do acervo",
-    onde: "seus imóveis",
-    explica: "Oferece os tipos e regiões que existem, e a busca filtra a página.",
-  },
-  social: {
-    rotulo: "Perfis conectados",
-    onde: "Configurações › Redes Sociais",
-    explica: "Usa o WhatsApp do cadastro e as páginas da Meta conectadas.",
-  },
-};
 
 function PainelFonteDeDados({ widget, acoes }) {
   const fonte = FONTES_REAIS[widget.type];
@@ -409,102 +374,29 @@ function PainelFonteDeDados({ widget, acoes }) {
   );
 }
 
-function PainelConteudoEstruturado({ widget, acoes }) {
-  if (widget.type === "property-search") {
-    const dados = lerDadosWidget(widget.content, DADOS_BUSCA_PADRAO);
-    return (
-      <Secao titulo="Busca de imóveis">
-        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
-        <CampoArea label="Objetivos" rows={3} value={listaParaTexto(dados.negocios)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, negocios: textoParaLista(v) }))} placeholder={'Comprar\nAlugar'} />
-        <CampoArea label="Tipos de imóvel" rows={4} value={listaParaTexto(dados.tipos)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, tipos: textoParaLista(v) }))} placeholder={'Apartamento\nCasa\nTerreno'} />
-        <CampoArea label="Regiões" rows={4} value={listaParaTexto(dados.localizacoes)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_BUSCA_PADRAO, (d) => ({ ...d, localizacoes: textoParaLista(v) }))} />
-        <CampoTexto label="WhatsApp/base do atendimento" value={widget.ctaUrl} onChange={(v) => acoes.atualizarWidget("ctaUrl", v)} placeholder="https://wa.me/5511999999999" />
-        <p className="editor-hint" style={{ margin: 0 }}>O visitante escolhe o perfil e o botão abre o atendimento com a busca já escrita.</p>
-      </Secao>
-    );
-  }
+/* ────────────────────────────────────────────────────────────────────────────
+   NÃO EXISTE MAIS UM PAINEL DE CONTEÚDO AQUI.
 
-  if (widget.type === "regions") {
-    const dados = lerDadosWidget(widget.content, DADOS_REGIOES_PADRAO);
-    return (
-      <Secao titulo="Regiões">
-        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_REGIOES_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
-        <CampoArea label="Regiões (uma por linha)" rows={7} value={listaParaTexto(dados.regioes)} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_REGIOES_PADRAO, (d) => ({ ...d, regioes: textoParaLista(v) }))} />
-        <CampoTexto label="WhatsApp/base do atendimento" value={widget.ctaUrl} onChange={(v) => acoes.atualizarWidget("ctaUrl", v)} placeholder="https://wa.me/5511999999999" />
-      </Secao>
-    );
-  }
+   Havia um, e ele desenhava caixas de texto para o que a peça já mostrava na
+   folha: os corretores da Equipe (numa lista `Nome :: cargo :: CRECI`), as
+   perguntas do FAQ, as etapas do "Como funciona", as opções da Busca, as
+   regiões, o aviso legal do Financiamento.
 
-  if (widget.type === "faq") {
-    const legado = !conteudoEhJson(widget.content);
-    const fallback = legado
-      ? { itens: [{ pergunta: somenteTexto(widget.title) || "Pergunta frequente", resposta: somenteTexto(widget.content) || "Resposta" }] }
-      : DADOS_FAQ_PADRAO;
-    const dados = lerDadosWidget(widget.content, fallback);
-    return (
-      <Secao titulo="Perguntas frequentes">
-        <CampoArea
-          label="Uma pergunta por linha"
-          rows={8}
-          value={itensParaLinhas(dados.itens, ["pergunta", "resposta"])}
-          onChange={(v) => salvarDadosWidget(widget, acoes, fallback, { itens: linhasParaItens(v, ["pergunta", "resposta"]) }, "Perguntas frequentes")}
-          placeholder="Como agendo uma visita? :: Fale com nossa equipe e escolha um horário."
-        />
-        <p className="editor-hint" style={{ margin: 0 }}>Use <b>::</b> entre a pergunta e a resposta. O FAQ antigo é migrado automaticamente na primeira edição.</p>
-      </Secao>
-    );
-  }
+   Todos foram para DENTRO do widget, onde a coisa aparece. O que a caixa do
+   inspetor fazia era pedir que a pessoa escrevesse num formato inventado e
+   depois procurasse na folha o que tinha mudado — duas telas, e um formato a
+   decorar, para editar uma frase.
 
-  if (widget.type === "steps") {
-    const dados = lerDadosWidget(widget.content, DADOS_PASSOS_PADRAO);
-    return (
-      <Secao titulo="Etapas">
-        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_PASSOS_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
-        <CampoArea
-          label="Etapas"
-          rows={8}
-          value={itensParaLinhas(dados.itens, ["titulo", "descricao"])}
-          onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_PASSOS_PADRAO, (d) => ({ ...d, itens: linhasParaItens(v, ["titulo", "descricao"]) }))}
-          placeholder="Escolha :: Compare os imóveis que combinam com você."
-        />
-        <p className="editor-hint" style={{ margin: 0 }}>Formato: <b>Título :: descrição</b>. Até seis etapas são exibidas.</p>
-      </Secao>
-    );
-  }
+   O inspetor ficou com o que ele sempre deveria ter tido: LAYOUT, APARÊNCIA e
+   AÇÕES. Ação é endereço de destino (o WhatsApp do botão, os links das redes):
+   não aparece como texto na página publicada, então desenhá-lo no canvas
+   mostraria algo que a vitrine não tem.
 
-  if (widget.type === "team") {
-    const dados = lerDadosWidget(widget.content, DADOS_EQUIPE_PADRAO);
-    return (
-      <Secao titulo="Equipe">
-        <CampoTexto label="Texto de apoio" value={dados.subtitulo} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_EQUIPE_PADRAO, (d) => ({ ...d, subtitulo: v }))} />
-        <CampoArea
-          label="Corretores"
-          rows={9}
-          value={itensParaLinhas(dados.pessoas, ["nome", "cargo", "creci", "whatsapp", "foto"])}
-          onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_EQUIPE_PADRAO, (d) => ({ ...d, pessoas: linhasParaItens(v, ["nome", "cargo", "creci", "whatsapp", "foto"]) }))}
-          placeholder="Ana Souza :: Corretora :: CRECI 12345 :: 5511999999999 :: https://.../foto.jpg"
-        />
-        <CampoTexto label="WhatsApp fallback" value={widget.ctaUrl} onChange={(v) => acoes.atualizarWidget("ctaUrl", v)} placeholder="https://wa.me/5511999999999" />
-        <p className="editor-hint" style={{ margin: 0 }}>Formato: <b>Nome :: cargo :: CRECI :: WhatsApp :: URL da foto</b>. Campos finais podem ficar vazios.</p>
-      </Secao>
-    );
-  }
+   Se você veio aqui para acrescentar um campo de conteúdo: ele não vai neste
+   arquivo. Vai no widget, com `ShowcaseTexto` e o caminho
+   `widget|<id>|dados|<campo>` — ver `FaqWidget` ou `StepsWidget`.
+   ──────────────────────────────────────────────────────────────────────────── */
 
-  if (widget.type === "finance") {
-    const dados = lerDadosWidget(widget.content, DADOS_FINANCIAMENTO_PADRAO);
-    return (
-      <Secao titulo="Simulação padrão">
-        <CampoNumero label="Imóvel" sufixo="R$" value={dados.valorImovel} min={0} passo={10000} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, valorImovel: v }))} />
-        <CampoNumero label="Entrada" sufixo="R$" value={dados.entrada} min={0} passo={5000} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, entrada: v }))} />
-        <CampoNumero label="Prazo" sufixo="meses" value={dados.prazoMeses} min={12} max={480} passo={12} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, prazoMeses: v }))} />
-        <CampoNumero label="Taxa" sufixo="% a.a." value={dados.taxaAnual} min={0} max={100} passo={0.1} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, taxaAnual: v }))} />
-        <CampoArea label="Aviso legal" rows={4} value={dados.aviso} onChange={(v) => salvarDadosWidget(widget, acoes, DADOS_FINANCIAMENTO_PADRAO, (d) => ({ ...d, aviso: v }))} />
-      </Secao>
-    );
-  }
-
-  return null;
-}
 
 /* ── Peça selecionada ──────────────────────────────────────────────────────── */
 function PainelDaPeca({ pieceId, config, rect, mode, isLightMode, acoes }) {
@@ -578,6 +470,10 @@ function PainelDaPeca({ pieceId, config, rect, mode, isLightMode, acoes }) {
               </>
             ) : null}
             <CampoCor label="Texto" value={estilo.color} fallback={corTextoPadrao} onChange={(v) => acoes.atualizarEstiloBloco("color", v)} />
+            {/* O aviso de "alguns destaques têm cor própria" saiu junto com a
+                seção que os editava: sem campo por destaque, ele apontaria para
+                um lugar que não existe mais. Quem tem cor gravada de antes
+                continua com ela, e "Limpar estilos" resolve. */}
             <div className="editor-field-row">
               <button type="button" className="editor-button is-quiet" onClick={acoes.copiarEstilo}>Copiar estilo</button>
               {acoes.podeColar ? (
@@ -589,38 +485,17 @@ function PainelDaPeca({ pieceId, config, rect, mode, isLightMode, acoes }) {
         )}
       </Secao>
 
-      {!ehWidget && alvo.key === "highlights" ? (
-        <Secao titulo="Destaques">
-          <button type="button" className="editor-button is-dashed" onClick={acoes.adicionarDestaque}>
-            + Adicionar destaque
-          </button>
-          <div className="editor-sublist">
-            {config.highlights.map((item, index) => {
-              const hs = config.highlightStyles[index] || {};
-              return (
-                <div key={`hl-${index}`} className="editor-subitem">
-                  <div className="editor-subitem-head">
-                    <span dangerouslySetInnerHTML={{ __html: (item.title || "").replace(/<[^>]+>/g, "") }} />
-                    <button
-                      type="button"
-                      className="editor-icon-button is-ghost"
-                      disabled={config.highlights.length <= 1}
-                      title="Remover destaque"
-                      onClick={() => acoes.removerDestaque(index)}
-                    >
-                      <IconeOlhoCortado size={12} />
-                    </button>
-                  </div>
-                  <div className="editor-field-row">
-                    <CampoCor label="Fundo" value={hs.backgroundColor} fallback={corFundoPadrao} onChange={(v) => acoes.atualizarEstiloDestaque(index, "backgroundColor", v)} />
-                    <CampoCor label="Texto" value={hs.color} fallback={corTextoPadrao} onChange={(v) => acoes.atualizarEstiloDestaque(index, "color", v)} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Secao>
-      ) : null}
+      {/* ── A SEÇÃO "DESTAQUES" SAIU DAQUI ──────────────────────────────────
+          Era uma lista de cartõezinhos com "Fundo" e "Texto" por destaque, mais
+          o botão de acrescentar. Ela repetia na mesma tela os cartões que já
+          estavam na folha — e a cor de cada um, aplicada por estilo inline,
+          vencia em silêncio a cor do bloco em Aparência: escolher uma cor lá
+          não fazia nada, e nada dizia por quê.
+
+          Acrescentar, remover e escrever acontecem agora no próprio bloco, na
+          folha, com a mesma gramática das etapas de "Como funciona". A cor por
+          destaque deixou de ter campo; quem tiver uma gravada de antes continua
+          com ela, e "Limpar estilos" é a saída. */}
 
       {!ehWidget && alvo.key === "properties" ? (
         <Secao titulo="Conteúdo">
@@ -641,23 +516,13 @@ function PainelDaPeca({ pieceId, config, rect, mode, isLightMode, acoes }) {
         </Secao>
       ) : null}
 
-      {ehWidget && widget.type === "social" ? (
-        <Secao titulo="Conteúdo">
-          <CampoTexto
-            label="Endereços (separados por |)"
-            value={widget.content}
-            onChange={(v) => acoes.atualizarWidget("content", v)}
-            placeholder="https://wa.me/…|https://instagram.com/…"
-          />
-          <p className="editor-hint" style={{ margin: 0 }}>
-            Cada endereço vira um botão. WhatsApp, Instagram e Facebook são reconhecidos pela cor e pelo nome.
-          </p>
-        </Secao>
-      ) : null}
+      {/* Os endereços das redes saíram daqui: eram UMA caixa com os três
+          separados por `|`, formato que ninguém adivinha e que quebra com um
+          separador esquecido. Agora cada um é um campo dentro do próprio
+          widget, ao lado do botão que ele vira. Ver `SocialWidget`. */}
 
       {ehWidget ? <PainelFonteDeDados widget={widget} acoes={acoes} /> : null}
 
-      {ehWidget ? <PainelConteudoEstruturado widget={widget} acoes={acoes} /> : null}
 
       <Secao titulo="Ações">
         <div className="editor-actions-grid">

@@ -136,6 +136,19 @@ function normalizeHighlightStylesRow(row) {
   return {
     backgroundColor: typeof r.backgroundColor === "string" ? r.backgroundColor : "",
     color: typeof r.color === "string" ? r.color : "",
+    /* Opacidade do FUNDO do cartão, de 0 a 1.
+
+       Guardada à parte da cor, e não embutida num `rgba(...)`, por uma razão
+       prática: o `<input type="color">` do navegador só fala hexadecimal, e um
+       valor com alfa dentro voltaria dele truncado — a pessoa mexeria na cor e
+       perderia a transparência sem entender por quê.
+
+       `null` é "não escolhida", e é diferente de `0`: zero é um cartão
+       invisível que alguém pediu; ausente é o cartão herdando o fundo do bloco,
+       que é como todos nascem. */
+    backgroundOpacity: r.backgroundOpacity === null || r.backgroundOpacity === undefined
+      ? null
+      : Math.min(1, Math.max(0, num(r.backgroundOpacity, 1))),
   };
 }
 
@@ -321,7 +334,21 @@ export function normalizeShowcaseConfig(raw) {
   const widgetsRaw = Array.isArray(cfg.widgets) ? cfg.widgets : null;
   const widgets = widgetsRaw === null
     ? DEFAULT_WIDGETS.map((w) => ({ ...w }))
-    : widgetsRaw.map(normalizeWidget);
+    /* ── O "Divisor" foi APOSENTADO ─────────────────────────────────────────
+       Era um traço com "✦ Seção ✦" no meio, e as duas linhas dele eram
+       gradientes de branco fixo — só funcionavam sobre vitrine escura. Saiu da
+       biblioteca e do despachante.
+
+       Aqui ele sai também do que JÁ ESTÁ GRAVADO, e isso é apagar conteúdo do
+       cliente, coisa que esta migração não faz em nenhum outro caso. A exceção
+       se justifica porque o divisor não CARREGA conteúdo: o texto dele é o
+       enfeite padrão, e nenhum dado do cliente vive ali. A alternativa era
+       deixá-lo cair no renderizador de reserva (o de texto), e aí a vitrine
+       publicada passaria a exibir "✦ Seção ✦" como um parágrafo solto — pior
+       que o vão que a remoção deixa.
+
+       As posições das outras peças não mudam: elas são absolutas. */
+    : widgetsRaw.filter((w) => w?.type !== "divider").map(normalizeWidget);
 
   const hiddenBlocksRaw = Array.isArray(cfg.hiddenBlocks) ? cfg.hiddenBlocks : [];
   const hiddenBlocks = hiddenBlocksRaw.filter((key) => BLOCK_KEYS.includes(key));
@@ -344,12 +371,34 @@ export function normalizeShowcaseConfig(raw) {
           subtitle: "Converse com nossa equipe e encontre o imovel ideal mais rapido.",
         };
 
+  /* ── O DOCUMENTO DO PUCK, QUANDO EXISTE ────────────────────────────────────
+     A migração para o Puck é ligada POR IMOBILIÁRIA, e é este campo que a liga:
+     havendo um documento aqui, a vitrine pública desenha por ele; não havendo,
+     desenha pela engine de coordenadas, exatamente como sempre desenhou.
+
+     Ele fica AO LADO do formato antigo, e não no lugar dele. É o que torna a
+     troca reversível: `layout`, `mobileLayout` e `widgets` continuam gravados e
+     intocados, então apagar esta chave devolve a página anterior byte por byte.
+     Um cliente que não gostar do editor novo volta atrás sem perder nada — e
+     sem isso a migração seria uma porta de mão única no meio de um beta.
+
+     A conferência é de FORMA, não de conteúdo: `content` array e `root` objeto,
+     que é o contrato do Puck. Validar peça por peça aqui significaria uma
+     segunda cópia da lista de componentes, e ela divergiria da primeira —
+     é o mesmo motivo pelo qual `vitrineIA.js` peneira num lugar só. */
+  const puckRaw = cfg.puck;
+  const puck =
+    puckRaw && typeof puckRaw === "object" && Array.isArray(puckRaw.content)
+      ? { content: puckRaw.content, root: puckRaw.root && typeof puckRaw.root === "object" ? puckRaw.root : {} }
+      : null;
+
   return {
     /* Versão do formato. Serve para distinguir, sem adivinhação, um config
        gravado antes do layout por modo dos widgets (ausente/1) de um já
        migrado (2) — a migração em si é idempotente, mas o número deixa
        telemetria e depuração honestas sobre o que veio do banco. */
     version: 2,
+    puck,
     highlights,
     footerTitle: typeof cfg.footerTitle === "string" && cfg.footerTitle ? cfg.footerTitle : "Atendimento especializado",
     layout: mergedLayout,
@@ -375,9 +424,29 @@ export function mergeBlockWrapperStyle(blockStyle) {
   const s = blockStyle || emptyBlockStyle();
   const out = {};
   const hasBgImage = typeof s.backgroundImage === "string" && s.backgroundImage.trim() !== "";
-  if (s.backgroundColor && !hasBgImage) out.backgroundColor = s.backgroundColor;
+  if (s.backgroundColor && !hasBgImage) {
+    out.backgroundColor = comOpacidade(s.backgroundColor, s.backgroundOpacity);
+  }
   if (s.color) out.color = s.color;
   return out;
+}
+
+/* Aplica a opacidade escolhida sobre uma cor hexadecimal.
+
+   Só age quando há as duas coisas — cor e opacidade escolhidas. Sem opacidade,
+   devolve a cor como está; sem cor, não há o que pintar. E `#rgb` de três
+   dígitos é expandido antes, senão a conta leria os pares errados. */
+function comOpacidade(cor, opacidade) {
+  if (opacidade === null || opacidade === undefined || opacidade >= 1) return cor;
+  const hex = String(cor).trim();
+  const curto = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex);
+  const longo = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(
+    curto ? `#${curto[1]}${curto[1]}${curto[2]}${curto[2]}${curto[3]}${curto[3]}` : hex,
+  );
+  // Não é hexadecimal (pode ser `rgba(...)` de um config antigo): devolve como veio.
+  if (!longo) return cor;
+  const [r, g, b] = [longo[1], longo[2], longo[3]].map((p) => parseInt(p, 16));
+  return `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, opacidade))})`;
 }
 
 function escapeUrlForCss(url) {

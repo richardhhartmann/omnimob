@@ -1,5 +1,6 @@
 import { IconeEstrela } from "../../Icones.jsx";
 import { ShowcaseTexto } from "../contexto.jsx";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* As estrelas eram cinco `IconeEstrela` na vitrine e a string "★★★★★" no
    editor. O glifo depende da fonte do sistema e nem sequer tem o mesmo tamanho;
@@ -23,11 +24,9 @@ export function TestimonialWidget({ widget }) {
         html={widget.content}
         style={cor}
       />
-      <ShowcaseTexto
-        as="h3"
-        campo={`widget|${widget.id}|title`}
+      <TituloDoWidget
+        widget={widget}
         umaLinha
-        html={widget.title}
         style={{ fontSize: "16px", fontWeight: 600, color: "var(--accent)", margin: 0, ...cor }}
       />
     </div>

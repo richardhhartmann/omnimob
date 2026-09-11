@@ -16,6 +16,7 @@ import { ShieldPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
+import { mesmoId } from "../utils/mesmoId";
 
 /* Cada permissão carrega o ÍCONE do lugar que ela abre — o mesmo da barra
    lateral e do painel inicial. Marcar "Ver Relatórios" e reconhecer ali o
@@ -206,7 +207,7 @@ export function CargosPage({ session, onSessionUpdate }) {
     if (!cargoId) { preenchidoPara.current = null; return; }
     if (preenchidoPara.current === cargoId) return;
 
-    const achado = cargos.find((c) => c.id === cargoId);
+    const achado = cargos.find((c) => mesmoId(c.id, cargoId));
     if (achado) { preenchidoPara.current = cargoId; preencherCom(achado); return; }
     if (initialLoading) return;   // a lista ainda não chegou
 

@@ -1,4 +1,5 @@
 import { ShowcaseTexto, usaFonteReal, useDadosDaVitrine } from "../contexto.jsx";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Bloco de números.
@@ -70,11 +71,9 @@ export function StatsWidget({ widget }) {
 
   return (
     <div style={{ padding: "8px" }}>
-      <ShowcaseTexto
-        as="h3"
-        campo={`widget|${widget.id}|title`}
+      <TituloDoWidget
+        widget={widget}
         umaLinha
-        html={widget.title}
         style={{ textAlign: "center", marginBottom: "24px", ...cor }}
       />
       <div className="widget-stats-grid">

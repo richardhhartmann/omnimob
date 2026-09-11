@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useBotaoDeNovo } from "../../utils/registroDeNovo";
+import { TeclaDeAtalho } from "../../components/ContextoDeAtalhos.jsx";
 import { useOutletContext } from "react-router-dom";
 import { Plus, Trash, Scroll, Copy } from "@phosphor-icons/react";
 import { api } from "../../api";
@@ -26,6 +28,9 @@ import { SelectCustom } from "../../components/SelectCustom.jsx";
    ──────────────────────────────────────────────────────────────────────────── */
 
 export function ModelosPage({ session }) {
+  /* O "N" desta tela clica ESTE botao — as telas do Flow nao usam o `BtnNovo`,
+     que e quem registra o atalho no resto do painel. Ver `useBotaoDeNovo`. */
+  const novoRef = useBotaoDeNovo();
   const tenantSlug = session?.tenant?.slug;
   const showToast = useOutletContext()?.showToast;
 
@@ -111,10 +116,11 @@ export function ModelosPage({ session }) {
         action={
           !editando && !semNenhum ? (
             <button
-              type="button" className="btn-primary"
+              type="button" ref={novoRef} className="btn-primary"
               onClick={() => setEditando({ nome: "", tipo: "VENDA", corpo: "", ativo: true })}
             >
               <Plus size={15} weight="bold" style={{ marginRight: 6 }} /> Nova minuta
+              <TeclaDeAtalho acao="global.novo" className="tecla-atalho--no-botao" />
             </button>
           ) : null
         }

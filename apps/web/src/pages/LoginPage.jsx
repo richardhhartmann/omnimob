@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { BotaoGoogle } from "../components/BotaoGoogle.jsx";
-import { CascaDeAcesso, DivisorDeAcesso } from "../components/CascaDeAcesso.jsx";
+import { CascaDeAcesso, DivisorDeAcesso, UltimoUtilizado } from "../components/CascaDeAcesso.jsx";
+import { GOOGLE, SENHA, lerUltimoAcesso, registrarUltimoAcesso } from "../utils/ultimoAcesso";
 import { Button, Field, useSaidaDeAuth } from "../styles/omnimobKit";
 
 /* Login do painel do tenant.
@@ -54,6 +55,11 @@ export function LoginPage({ onLogin }) {
   const [error, setError] = useState("");
   const { saindo, sair } = useSaidaDeAuth();
 
+  /* Qual caminho funcionou nesta máquina da última vez. Lido UMA vez, na
+     montagem: ele muda no meio do login bem-sucedido, e reler faria o marcador
+     saltar para o outro botão no instante em que a tela está saindo. */
+  const [ultimoAcesso] = useState(lerUltimoAcesso);
+
   /* Limpa o state assim que ele é lido: sem isso a senha ficaria no
      history.state do navegador e voltaria a cada F5 ou passo para trás. */
   useEffect(() => {
@@ -86,6 +92,7 @@ export function LoginPage({ onLogin }) {
     try {
       const session = await api.entrarComGoogle(credencial);
       if (!validarTenant(session)) return;
+      registrarUltimoAcesso(GOOGLE);
       sair(() => onLogin(session));
     } catch (err) {
       /* A mensagem do servidor já explica o caso mais comum — conta sem vínculo
@@ -104,6 +111,9 @@ export function LoginPage({ onLogin }) {
     try {
       const session = await api.login(form);
       if (!validarTenant(session)) return;
+      /* Só depois de a sessão vir. Gravar no envio marcaria como "último
+         utilizado" um caminho que acabou de recusar a senha. */
+      registrarUltimoAcesso(SENHA);
       // A troca de sessão só acontece quando a tela terminar de sair.
       sair(() => onLogin(session));
     } catch (err) {
@@ -203,9 +213,11 @@ export function LoginPage({ onLogin }) {
         />
       </Field>
 
-      <Button as="button" type="submit" variant="accent" className="dl-btn--block" disabled={loading}>
-        {loading ? "Entrando…" : "Acessar painel"}
-      </Button>
+      <UltimoUtilizado marcado={ultimoAcesso === SENHA}>
+        <Button as="button" type="submit" variant="accent" className="dl-btn--block" disabled={loading}>
+          {loading ? "Entrando…" : "Acessar painel"}
+        </Button>
+      </UltimoUtilizado>
 
       {/* ── Entrar com Google ────────────────────────────────────────────────
           Só aparece se o servidor tiver client id configurado. Um botão de
@@ -225,7 +237,11 @@ export function LoginPage({ onLogin }) {
               `utils/google.js`. */}
           {comGoogle
             ? <p className="dl-mono ax-nota" style={{ marginTop: 0 }}>Entrando…</p>
-            : <BotaoGoogle clientId={google.clientId} aoReceber={entrarComGoogle} largura={320} />}
+            : (
+              <UltimoUtilizado marcado={ultimoAcesso === GOOGLE}>
+                <BotaoGoogle clientId={google.clientId} aoReceber={entrarComGoogle} largura={320} />
+              </UltimoUtilizado>
+            )}
         </>
       ) : null}
     </CascaDeAcesso>

@@ -31,7 +31,6 @@ import {
    e um desenho; o modelo precisa saber quando usar um. */
 const PARA_QUE = {
   text: "parágrafo livre para diferenciais, condições ou avisos.",
-  divider: "separador entre seções, com um título curto no meio.",
   note: "aviso destacado, tipo observação legal ou condição.",
   steps: "passo a passo de como funciona o atendimento.",
   stats: "números da imobiliária (anos de mercado, imóveis vendidos).",

@@ -644,6 +644,34 @@ publicRouter.get("/dominio", async (req, res) => {
   return res.json({ slug: t.slug, nome: t.name });
 });
 
+/* A MARCA da imobiliária, e só ela: nome e logo.
+
+   Existe porque a tela de acesso precisa saber de quem é a casa, e o único
+   outro caminho para isso era `GET /:slug/properties`, que devolve o acervo
+   inteiro — dezenas de imóveis com fotos para desenhar um logotipo de 40px.
+
+   Devolve apenas o que já está estampado na vitrine pública, então não abre
+   nada: quem consegue ler isto consegue ler o site da imobiliária.
+
+   Cor da marca NÃO sai daqui de propósito. A tela de acesso é escura e fixa, e
+   pintar o botão de entrar com um valor escolhido pelo cliente produz, mais
+   cedo ou mais tarde, texto branco sobre amarelo — a vitrine tem máquina de
+   tema para lidar com isso, o login não. */
+publicRouter.get("/:slug/marca", async (req, res) => {
+  try {
+    const t = await prisma.tenant.findUnique({
+      where: { slug: req.params.slug },
+      select: { name: true, slug: true, logoUrl: true, ativo: true },
+    });
+    // Imobiliária desativada não empresta a marca dela para tela nenhuma.
+    if (!t || t.ativo === false) return res.status(404).json({ error: "Nao encontrada." });
+    return res.json({ nome: t.name, slug: t.slug, logoUrl: t.logoUrl || null });
+  } catch (erro) {
+    console.error("[GET /public/:slug/marca]", erro);
+    return res.status(500).json({ error: "Erro interno no servidor." });
+  }
+});
+
 publicRouter.get("/planos", async (_req, res) => {
   try {
     return res.json({ precos: await precosDosPlanos() });

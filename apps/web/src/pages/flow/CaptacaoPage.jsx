@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useBotaoDeNovo } from "../../utils/registroDeNovo";
+import { TeclaDeAtalho } from "../../components/ContextoDeAtalhos.jsx";
 import { useOutletContext } from "react-router-dom";
 import { Plus, Copy, Trash, Broadcast, CheckCircle, XCircle, Eye } from "@phosphor-icons/react";
 import { api } from "../../api";
@@ -27,6 +29,9 @@ import { SelectCustom } from "../../components/SelectCustom.jsx";
    ──────────────────────────────────────────────────────────────────────────── */
 
 export function CaptacaoPage({ session }) {
+  /* O "N" desta tela clica ESTE botao — as telas do Flow nao usam o `BtnNovo`,
+     que e quem registra o atalho no resto do painel. Ver `useBotaoDeNovo`. */
+  const novoRef = useBotaoDeNovo();
   const tenantSlug = session?.tenant?.slug;
   const showToast = useOutletContext()?.showToast;
 
@@ -99,8 +104,9 @@ export function CaptacaoPage({ session }) {
            Mesma regra que Modelos de minuta já segue com `editando`. */
         action={
           liberado && !semNenhuma && !criando ? (
-            <button type="button" className="btn-primary" onClick={() => setCriando(true)}>
+            <button type="button" ref={novoRef} className="btn-primary" onClick={() => setCriando(true)}>
               <Plus size={15} weight="bold" style={{ marginRight: 6 }} /> Nova fonte
+              <TeclaDeAtalho acao="global.novo" className="tecla-atalho--no-botao" />
             </button>
           ) : null
         }

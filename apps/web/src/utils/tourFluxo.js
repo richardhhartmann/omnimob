@@ -194,10 +194,14 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
             "quer ver, clique no nome dele aqui.",
           lado: "right",
           respiro: 6,
-          /* Menu recolhido não desenha submenu — em 64px não cabe "Relatório
+          /* Menu recolhido não desenha submenu — na tira não cabe "Relatório
              mensal". Sem isto o passo ficaria 3,5s procurando um botão que a
-             barra decidiu não ter. */
-          pularSe: ".ds-side.is-collapsed",
+             barra decidiu não ter.
+
+             A marca é `is-aberta`, posta pelo hambúrguer. Ela substituiu um
+             `is-collapsed` que ninguém mais escrevia desde que a barra passou
+             a abrir por hover — o guarda existia e nunca disparava. */
+          pularSe: ".ds-side:not(.is-aberta)",
         },
       ],
     },
@@ -312,7 +316,7 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
             "quando precisar de mais espaço — sem passar pelos cartões de novo.",
           lado: "right",
           respiro: 6,
-          pularSe: ".ds-side.is-collapsed",
+          pularSe: ".ds-side:not(.is-aberta)",
         },
       ],
     },

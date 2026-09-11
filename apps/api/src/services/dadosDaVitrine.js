@@ -17,9 +17,10 @@ import { prisma } from "../db.js";
    ── Três regras que este arquivo segue ────────────────────────────────────
 
    1. SÓ O QUE JÁ É PÚBLICO. Tudo aqui sai numa página sem autenticação. Imóvel
-      só entra se estiver ACTIVE; pessoa só entra se tiver marcado
-      `exibirNaVitrine`. Nenhum e-mail de usuário, nenhum valor de venda
-      individual, nenhum token de rede social.
+      só entra se estiver ACTIVE; pessoa só entra se o widget de Equipe a tiver
+      escolhido (ou, nas vitrines que nunca usaram o seletor, se ela tiver
+      marcado `exibirNaVitrine` — ver `equipeDaVitrine`). Nenhum e-mail de
+      usuário, nenhum valor de venda individual, nenhum token de rede social.
 
    2. NÚMERO QUE NÃO EXISTE NÃO É ZERO, É AUSÊNCIA. Uma imobiliária sem vendas
       registradas não deve anunciar "0 imóveis vendidos" — deve não mostrar
@@ -93,9 +94,42 @@ function horariosDoTenant(tenant) {
    Quem a imobiliária decidiu mostrar, e nada além. O `select` é explícito e
    curto de propósito: um `include` traria senha e e-mail para dentro de um
    payload público, e a distância entre "trouxe" e "vazou" é uma linha de JSON. */
-async function equipeDaVitrine(tenantId) {
+/* Os ids que o widget de Equipe escolheu, na ORDEM em que foram escolhidos.
+   Lista vazia quer dizer "ninguém escolheu ainda", e não "ninguém deve
+   aparecer" — a diferença é o que decide o caminho abaixo. */
+function idsDaEquipeEscolhida(showcaseConfig) {
+  const widgets = Array.isArray(showcaseConfig?.widgets) ? showcaseConfig.widgets : [];
+  const equipe = widgets.find((w) => w?.type === "team" && !w?.hidden);
+  if (!equipe) return [];
+  try {
+    const dados = JSON.parse(String(equipe.content || ""));
+    return Array.isArray(dados?.ids) ? dados.ids.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/* ── QUEM APARECE, E POR QUE HÁ DOIS CAMINHOS ────────────────────────────────
+
+   Hoje quem escolhe é o WIDGET: a pessoa monta a equipe da vitrine dentro da
+   própria peça, e o que sai aqui são exatamente os escolhidos, na ordem em que
+   foram postos.
+
+   O caminho antigo — `exibirNaVitrine`, um opt-in no cadastro de cada usuário —
+   continua valendo para quem NUNCA usou o seletor. Não é indecisão: é o que
+   impede que toda vitrine já publicada acorde com a seção de equipe vazia no
+   dia do deploy. Na primeira vez que alguém mexer no seletor, a lista vira
+   explícita e o opt-in deixa de ser consultado para aquele tenant.
+
+   O campo saiu da tela de cadastro de usuários, mas continua na coluna
+   justamente por causa desta reserva. */
+async function equipeDaVitrine(tenantId, showcaseConfig) {
+  const escolhidos = idsDaEquipeEscolhida(showcaseConfig);
+
   const pessoas = await prisma.usuario.findMany({
-    where: { tenantId, ativo: true, exibirNaVitrine: true },
+    where: escolhidos.length
+      ? { tenantId, ativo: true, id: { in: escolhidos } }
+      : { tenantId, ativo: true, exibirNaVitrine: true },
     orderBy: { nome: "asc" },
     take: 12,
     select: {
@@ -109,7 +143,15 @@ async function equipeDaVitrine(tenantId) {
     },
   });
 
-  return pessoas.map((p) => ({
+  /* A ordem do BANCO é alfabética; a que importa é a que a pessoa montou no
+     widget. Reordenar aqui, e não no cliente, mantém a página pública e o
+     editor mostrando a mesma sequência — que é a regra de sempre desta
+     vitrine. */
+  const ordenadas = escolhidos.length
+    ? escolhidos.map((id) => pessoas.find((p) => p.id === id)).filter(Boolean)
+    : pessoas;
+
+  return ordenadas.map((p) => ({
     id: p.id,
     nome: p.nome,
     /* O rótulo público, com uma escolha e um fallback. `cargoVitrine` existe
@@ -269,7 +311,7 @@ export async function dadosDaVitrine(tenant) {
   if (emCache && Date.now() - emCache.em < VALIDADE_MS) return emCache.dados;
 
   const [equipe, numeros, acervo] = await Promise.all([
-    equipeDaVitrine(tenant.id),
+    equipeDaVitrine(tenant.id, tenant.showcaseConfig),
     numerosDaVitrine(tenant),
     acervoDaVitrine(tenant.id),
   ]);

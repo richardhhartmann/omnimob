@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
 import {
   getTrialStatusCompartilhado,
@@ -81,7 +82,13 @@ function plural(n, singular, pluralForma) {
   return `${n} ${n === 1 ? singular : pluralForma}`;
 }
 
-export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
+/* `mostrarSelo={false}` deixa só o FLUXO: os três passos, o Pix, o Stripe e a
+   escuta de `pedirTelaDeAssinatura`. É como o painel o usa hoje — quem diz a
+   situação da conta é a `FaixaDeConta`, abaixo do cabeçalho, e ela abre este
+   fluxo emitindo aquele pedido. O selo continua existindo para quem quiser um
+   gatilho próprio, e é por isso que o padrão é `true`: a prop tira uma peça,
+   não muda o que o componente é. */
+export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar, mostrarSelo = true }) {
   const [situacao, setSituacao] = useState(null);
   const [aberto, setAberto] = useState(false);
   const [passo, setPasso] = useState(1);
@@ -450,6 +457,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
     <>
       <style>{CSS + CODIGO_PIX_CSS + ABAS_PAGAMENTO_CSS}</style>
 
+      {!mostrarSelo ? null : (
       <button
         type="button"
         className={`tv-botao${restante.expirado || graca?.venceu ? " is-expirado" : ""}${cobranca?.situacao === "aberta" ? " is-aguardando" : ""}`}
@@ -468,6 +476,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
           <span className="tv-rotulo__cta">Assine já</span>
         </span>
       </button>
+      )}
 
       {/* ── Quem não é Administrador não entra no fluxo de assinatura ─────────
           A caixa de planos mostra valores, escolhe o pacote e coleta cartão —
@@ -483,7 +492,17 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
           O selo com os dias continua visível para todo mundo: saber que o teste
           está correndo é informação de trabalho, e quem descobre agora tem
           quem avisar. */}
-      {aberto && !podeAssinar ? (
+      {/* ── O MODAL SAI DA ARVORE, POR PORTAL ────────────────────────────────
+          O veu tem z-index 9998 e a faixa do topo tem 50, entao ele deveria
+          cobri-la — e nao cobria. O motivo e que `.ds-shell > main` declara
+          `position: relative; z-index: 1`, e isso abre um CONTEXTO DE
+          EMPILHAMENTO: dentro dele o 9998 so disputa com irmaos, e o conjunto
+          inteiro entra na pagina valendo 1. Numero grande nao atravessa
+          contexto — sair dele atravessa.
+
+          E a mesma armadilha que o `position: fixed` dentro de ancestral
+          transformado ja pregou neste projeto duas vezes. */}
+      {aberto && !podeAssinar ? createPortal((
         <div className="tv-veu" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
           <div className="tv-caixa tv-caixa--recado" role="dialog" aria-modal="true" aria-labelledby="tv-titulo">
             <span className="tv-eyebrow">● SEU TESTE ESTÁ CORRENDO</span>
@@ -505,9 +524,9 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
             </div>
           </div>
         </div>
-      ) : null}
+      ), document.body) : null}
 
-      {aberto && podeAssinar ? (
+      {aberto && podeAssinar ? createPortal((
         <div className="tv-veu" onMouseDown={(e) => e.target === e.currentTarget && !enviando && fechar()}>
           <div className="tv-caixa" ref={caixaRef} role="dialog" aria-modal="true" aria-labelledby="tv-titulo">
             <div className="tv-passos" aria-hidden="true">
@@ -909,7 +928,7 @@ export function TrialAviso({ tenantSlug, podeAssinar, aoAssinar }) {
             ) : null}
           </div>
         </div>
-      ) : null}
+      ), document.body) : null}
     </>
   );
 }
@@ -918,16 +937,16 @@ const CSS = `
 /* Guia do boleto: linha digitavel, PDF e pagina hospedada.
    (Sem crases neste comentario: template literal.) */
 .tv-guia { display: flex; flex-direction: column; gap: 8px; }
-.tv-guia__rotulo { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
+.tv-guia__rotulo { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tv-tinta-4); }
 .tv-guia__numero {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px; line-height: 1.6; word-break: break-all;
   padding: 10px 12px; border-radius: 8px;
-  background: var(--sup-05, rgba(255,255,255,0.05)); border: 1px solid var(--linha-10, rgba(255,255,255,0.1));
+  background: var(--sup-05, var(--tv-preenche)); border: 1px solid var(--linha-10, var(--tv-linha));
 }
 .tv-guia__links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
 .tv-guia__links a { color: #a5b4fc; }
-.tv-guia__prazo { font-size: 12px; color: #94a3b8; }
+.tv-guia__prazo { font-size: 12px; color: var(--tv-tinta-3); }
 
 
 /* Selo do rodape com cobranca esperando pagamento: ambar, entre o normal e o
@@ -941,15 +960,15 @@ const CSS = `
 .tv-meio { display: flex; padding: 3px; border-radius: 10px; margin-bottom: 4px; }
 .tv-meio__op {
   width: auto; flex: 1; padding: 7px 14px; border-radius: 8px; border: none;
-  background: transparent; color: #94a3b8; font-size: 13px; font-weight: 600;
+  background: transparent; color: var(--tv-tinta-3); font-size: 13px; font-weight: 600;
   cursor: pointer; box-shadow: none; transform: none;
 }
-.tv-meio__op.is-on { background: var(--sup-10, rgba(255,255,255,0.1)); color: #f8fafc; }
+.tv-meio__op.is-on { background: var(--tv-linha); color: var(--tv-tinta); }
 .tv-meio__op:hover { transform: none; box-shadow: none; }
 .tv-campo { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
 .tv-campo--curto { flex: 0 0 92px; }
 .tv-linha { display: flex; gap: 10px; flex-wrap: wrap; }
-.tv-campo span { font-size: 12px; font-weight: 600; color: #94a3b8; }
+.tv-campo span { font-size: 12px; font-weight: 600; color: var(--tv-tinta-3); }
 .tv-campo input {
   width: 100%; box-sizing: border-box; padding: 11px 14px; border-radius: 10px;
   background: var(--campo-fundo, rgba(255,255,255,0.04));
@@ -998,10 +1017,64 @@ const CSS = `
 .ds-side.is-collapsed .tv-rotulo { display: none; }
 .ds-side.is-collapsed .tv-botao { justify-content: center; padding: 9px; }
 
+/* ── AS DUAS PALETAS DO MODAL ──────────────────────────────────────────────
+
+   Ele nasceu escuro e com as cores escritas uma a uma: 64 literais espalhados
+   por trinta regras. No painel claro isso virava uma janela preta no meio de
+   uma tela branca — nao errada por gosto, errada por ser a unica coisa da tela
+   que ignora o tema que a pessoa escolheu.
+
+   Em vez de duplicar as regras, os literais viraram DOZE tokens, e o tema claro
+   redefine so os doze. Regra nova nasce nos dois temas de graca; regra que
+   escreve um hexadecimal a mao volta a ficar de fora — e e por isso que os
+   tokens tem nome de PAPEL (superficie, tinta, linha) e nao de cor.
+
+   O acento continua fora da lista de proposito: indigo, dourado, verde e
+   vermelho dizem PLANO, PIX, sucesso e erro, e essas quatro coisas significam o
+   mesmo nos dois temas.
+
+   Quem carimba o tema e o <html data-tema-painel>, e nao a .ds-shell: o modal
+   agora sai por portal para o body (ver o comentario no JSX), entao ele nao e
+   mais descendente da casca.
+   (Sem crases nestes comentarios: template literal.) */
+.tv-veu {
+  --tv-veu-cor: rgba(5,5,7,0.74);
+  --tv-superficie: #141821;
+  --tv-fundo: #0c0f1a;
+  --tv-tinta: #f1f5f9;
+  --tv-tinta-2: #cbd5e1;
+  --tv-tinta-3: #94a3b8;
+  --tv-tinta-4: #64748b;
+  --tv-linha: rgba(255,255,255,0.10);
+  --tv-preenche: rgba(255,255,255,0.05);
+  --tv-preenche-fraco: rgba(255,255,255,0.03);
+}
+
+html[data-tema-painel="claro"] .tv-veu {
+  --tv-veu-cor: rgba(15,23,42,0.46);
+  --tv-superficie: #ffffff;
+  --tv-fundo: #f6f7f9;
+  --tv-tinta: #0f172a;
+  --tv-tinta-2: #334155;
+  --tv-tinta-3: #64748b;
+  --tv-tinta-4: #94a3b8;
+  --tv-linha: rgba(15,23,42,0.12);
+  --tv-preenche: rgba(15,23,42,0.04);
+  --tv-preenche-fraco: rgba(15,23,42,0.025);
+}
+
+/* A sombra e a unica coisa que nao vira token: no escuro ela e um poco preto
+   que separa a janela do veu; no claro, um preto a 90% desenharia uma mancha
+   suja em volta de uma caixa branca. Sao dois efeitos diferentes, nao dois
+   valores da mesma variavel. */
+html[data-tema-painel="claro"] .tv-caixa {
+  box-shadow: 0 24px 60px -22px rgba(15,23,42,0.28);
+}
+
 /* ── Modal ── */
 .tv-veu {
   position: fixed; inset: 0; z-index: 9998; display: grid; place-items: center; padding: 24px;
-  background: rgba(5,5,7,0.74);
+  background: var(--tv-veu-cor);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   animation: tvVeu 0.22s ease both;
 }
@@ -1009,7 +1082,17 @@ const CSS = `
 
 .tv-caixa {
   width: min(520px, 100%); max-height: calc(100vh - 48px); overflow-y: auto;
-  background: #141821; border: 1px solid var(--linha-10, rgba(255,255,255,0.10)); border-radius: 18px;
+  background: var(--tv-superficie);
+  /* Tinta EXPLICITA, e nao herdada. Enquanto o modal vivia dentro da casca ele
+     herdava a cor do painel; agora ele sai por portal para o <body>, e ali a
+     cor e a do tema escuro do aplicativo — texto quase branco sobre a caixa
+     branca do tema claro. Quem sai da arvore leva a propria tinta.
+
+     A borda tambem parou de aceitar --linha-10 como preferencia pelo mesmo
+     motivo: aquele token e da casca, e do lado de fora ele nao existe ou vale o
+     valor do outro tema. */
+  color: var(--tv-tinta);
+  border: 1px solid var(--tv-linha); border-radius: 18px;
   padding: 28px 28px 24px;
   box-shadow: 0 30px 70px -24px rgba(0,0,0,0.9);
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
@@ -1025,11 +1108,11 @@ const CSS = `
    de texto lê como algo que faltou carregar. */
 .tv-caixa--recado { width: min(430px, 100%); }
 .tv-caixa--recado .tv-eyebrow { margin-bottom: 10px; }
-.tv-caixa--recado strong { color: #f1f5f9; font-weight: 700; }
+.tv-caixa--recado strong { color: var(--tv-tinta); font-weight: 700; }
 
 .tv-passos { display: flex; gap: 5px; margin-bottom: 18px; }
 .tv-passo {
-  height: 3px; flex: 1; border-radius: 999px; background: var(--sup-10, rgba(255,255,255,0.10));
+  height: 3px; flex: 1; border-radius: 999px; background: var(--sup-10, var(--tv-linha));
   transition: background 0.3s ease;
 }
 .tv-passo.is-on { background: #818cf8; }
@@ -1041,11 +1124,11 @@ const CSS = `
 }
 .tv-titulo {
   margin: 0 0 10px; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;
-  color: #f1f5f9; line-height: 1.28;
+  color: var(--tv-tinta); line-height: 1.28;
 }
-.tv-texto { margin: 0 0 14px; font-size: 13.5px; line-height: 1.68; color: #94a3b8; }
-.tv-texto strong { color: #f1f5f9; font-weight: 600; }
-.tv-texto--fraco { font-size: 12.5px; color: #64748b; }
+.tv-texto { margin: 0 0 14px; font-size: 13.5px; line-height: 1.68; color: var(--tv-tinta-3); }
+.tv-texto strong { color: var(--tv-tinta); font-weight: 600; }
+.tv-texto--fraco { font-size: 12.5px; color: var(--tv-tinta-4); }
 
 .tv-perdas {
   list-style: none; margin: 0 0 16px; padding: 14px 16px;
@@ -1053,7 +1136,7 @@ const CSS = `
   border: 1px solid rgba(239,68,68,0.20); display: grid; gap: 7px;
 }
 .tv-perdas li {
-  position: relative; padding-left: 18px; font-size: 13px; color: #e2e8f0; line-height: 1.5;
+  position: relative; padding-left: 18px; font-size: 13px; color: var(--tv-tinta-2); line-height: 1.5;
 }
 .tv-perdas li::before { color: #f87171; content: ""; position: absolute; left: 0; top: 0.4em; width: 10px; height: 10px; background-color: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'%3E%3Cline x1='5.5' y1='5.5' x2='18.5' y2='18.5'/%3E%3Cline x1='18.5' y1='5.5' x2='5.5' y2='18.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'%3E%3Cline x1='5.5' y1='5.5' x2='18.5' y2='18.5'/%3E%3Cline x1='18.5' y1='5.5' x2='5.5' y2='18.5'/%3E%3C/svg%3E") center / contain no-repeat; }
 
@@ -1061,7 +1144,7 @@ const CSS = `
 .ds-shell .tv-plano, .tv-plano {
   display: grid; gap: 3px; width: 100%; text-align: left; cursor: pointer;
   padding: 12px 14px; border-radius: 12px;
-  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--linha-09, rgba(255,255,255,0.09));
+  background: var(--sup-03, var(--tv-preenche-fraco)); border: 1px solid var(--linha-09, var(--tv-linha));
   font-family: inherit; box-shadow: none; transform: none;
   transition: border-color 0.18s ease, background 0.18s ease;
 }
@@ -1069,7 +1152,7 @@ const CSS = `
 .tv-plano.is-on { border-color: rgba(129,140,248,0.6); background: rgba(129,140,248,0.12); }
 .tv-plano:active { scale: 1; }
 .tv-plano__topo { display: flex; align-items: center; gap: 8px; }
-.tv-plano__nome { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+.tv-plano__nome { font-size: 14px; font-weight: 700; color: var(--tv-tinta); }
 .tv-plano__tag {
   font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 8px; letter-spacing: 0.1em;
   padding: 2px 7px; border-radius: 999px; color: #d4af37;
@@ -1082,7 +1165,7 @@ const CSS = `
   padding: 2px 7px; border-radius: 999px; color: #34d399;
   background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.3);
 }
-.tv-plano__desc { font-size: 12px; line-height: 1.5; color: #64748b; }
+.tv-plano__desc { font-size: 12px; line-height: 1.5; color: var(--tv-tinta-4); }
 
 /* A caixa do interruptor do Flow. O desenho vem do componente; aqui so o
    respiro ate o alternador de periodo, logo abaixo. */
@@ -1095,16 +1178,16 @@ const CSS = `
   display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
   padding: 4px; margin-bottom: 12px;
   border-radius: 999px;
-  background: var(--sup-03, rgba(255,255,255,0.03)); border: 1px solid var(--linha-09, rgba(255,255,255,0.09));
+  background: var(--sup-03, var(--tv-preenche-fraco)); border: 1px solid var(--linha-09, var(--tv-linha));
 }
 .ds-shell .tv-periodo__opt, .tv-periodo__opt {
   padding: 7px 10px; border-radius: 999px; border: 0; cursor: pointer;
   font-family: inherit; font-size: 12.5px; font-weight: 600;
-  background: transparent; color: #94a3b8;
+  background: transparent; color: var(--tv-tinta-3);
   box-shadow: none; transform: none;
   transition: background 0.18s ease, color 0.18s ease;
 }
-.tv-periodo__opt:hover { background: var(--sup-05, rgba(255,255,255,0.05)); color: #f1f5f9; box-shadow: none; transform: none; }
+.tv-periodo__opt:hover { background: var(--sup-05, var(--tv-preenche)); color: var(--tv-tinta); box-shadow: none; transform: none; }
 .tv-periodo__opt.is-on { background: rgba(129,140,248,0.18); color: #c7d2fe; }
 .tv-periodo__opt:active { scale: 1; }
 
@@ -1143,21 +1226,21 @@ const CSS = `
 .tv-resumo {
   width: 100%; margin: 4px 0 16px; display: grid; gap: 1px;
   border-radius: 12px; overflow: hidden;
-  border: 1px solid var(--linha-09, rgba(255,255,255,0.09)); background: var(--sup-09, rgba(255,255,255,0.09));
+  border: 1px solid var(--linha-09, var(--tv-linha)); background: var(--sup-09, var(--tv-linha));
 }
 .tv-resumo__linha {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 11px 14px; background: #10141d; text-align: left;
 }
-.tv-resumo__linha span { font-size: 12px; color: #64748b; }
-.tv-resumo__linha strong { font-size: 13.5px; font-weight: 600; color: #f1f5f9; }
+.tv-resumo__linha span { font-size: 12px; color: var(--tv-tinta-4); }
+.tv-resumo__linha strong { font-size: 13.5px; font-weight: 600; color: var(--tv-tinta); }
 
 .tv-ganhos {
   list-style: none; width: 100%; margin: 0 0 16px; padding: 0;
   display: grid; gap: 7px; text-align: left;
 }
 .tv-ganhos li {
-  position: relative; padding-left: 20px; font-size: 12.5px; line-height: 1.55; color: #cbd5e1;
+  position: relative; padding-left: 20px; font-size: 12.5px; line-height: 1.55; color: var(--tv-tinta-2);
 }
 .tv-ganhos li::before {
   color: #34d399; content: ""; position: absolute; left: 0; top: 0.36em; width: 11px; height: 11px; background-color: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 12.5 9.5 18 20 6.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 12.5 9.5 18 20 6.5'/%3E%3C/svg%3E") center / contain no-repeat;
@@ -1166,14 +1249,14 @@ const CSS = `
   width: auto; padding: 10px 18px; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 13px; font-weight: 600; text-decoration: none;
   display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid var(--linha-14, rgba(255,255,255,0.14)); color: #cbd5e1;
+  background: transparent; border: 1px solid var(--linha-14, rgba(255,255,255,0.14)); color: var(--tv-tinta-2);
   box-shadow: none; transform: none;
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
-.tv-btn:hover { background: var(--sup-07, rgba(255,255,255,0.07)); color: #f1f5f9; box-shadow: none; transform: none; }
+.tv-btn:hover { background: var(--sup-07, rgba(255,255,255,0.07)); color: var(--tv-tinta); box-shadow: none; transform: none; }
 .tv-btn:active { scale: 1; }
-.tv-btn--primario { background: #f1f5f9; border-color: #f1f5f9; color: #0c0f1a; }
-.tv-btn--primario:hover { background: #fff; color: #0c0f1a; }
+.tv-btn--primario { background: var(--tv-tinta); border-color: var(--tv-tinta); color: var(--tv-fundo); }
+.tv-btn--primario:hover { background: #fff; color: var(--tv-fundo); }
 .tv-btn:disabled { opacity: 0.5; cursor: default; }
 
 @media (prefers-reduced-motion: reduce) {

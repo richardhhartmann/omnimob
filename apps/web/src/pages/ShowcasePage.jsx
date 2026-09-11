@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { api } from "../api";
 import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
@@ -33,7 +33,26 @@ import { classeDeAparencia, estiloDoTema, linkWhatsApp, modoDoViewport } from ".
      · `widgetPos()` e a medição por `document.querySelector`.
 
    Tudo isso virou uma chamada a `useLayoutResolvido`.
+
+   ── E AGORA HÁ DOIS CAMINHOS ──
+
+   Havendo `showcaseConfig.puck`, esta página desenha pelo Puck; não havendo,
+   pela engine, como sempre. A chave é o interruptor, e ele é por imobiliária:
+   quem ainda não migrou não sente diferença nenhuma, nem no que baixa — o Puck
+   entra por `lazy()`, então o pacote da vitrine só cresce para quem migrou.
+
+   Os dois caminhos param no MESMO invólucro (`showcase-body`, tema, fonte,
+   cores). O que muda é só quem coloca as peças ali dentro. Um segundo invólucro
+   seria a divergência de sempre: a página migrada com um padding diferente da
+   não migrada, e ninguém sabendo qual das duas está certa.
    ──────────────────────────────────────────────────────────────────────────── */
+
+/* Sob demanda, e por dois motivos: o Puck é grande, e a vitrine pública é a
+   página mais sensível a peso do produto inteiro — é ela que o visitante abre
+   pelo link do WhatsApp, no celular, na rua. */
+const VitrinePorPuck = lazy(() =>
+  import("../components/showcase/VitrinePorPuck.jsx").then((m) => ({ default: m.VitrinePorPuck }))
+);
 
 export function ShowcasePage({ slugFixo }) {
   /* Em domínio próprio não há slug na URL — ele vem resolvido do host, por
@@ -144,6 +163,38 @@ export function ShowcasePage({ slugFixo }) {
        resolver que é mais fácil o widget buscar sozinho. */
     <VitrineProvider modo="public" tenantSlug={tenantSlug} dados={payload?.vitrine}>
       <div className={`showcase-body ${classeDeAparencia(layout)}`} style={estiloDoTema(tenant, layout)}>
+        {config.puck ? (
+          /* ── O caminho novo ────────────────────────────────────────────────
+             Sem palco, sem altura calculada, sem posição absoluta: a árvore do
+             Puck empilha sozinha, e a responsividade é do CSS.
+
+             O `VitrineProvider` acima continua valendo — o `root` da config
+             abre outro, e o de dentro vence. Os dois dizem a mesma coisa; ter o
+             de fora aqui é o que mantém o caminho antigo e o novo com um
+             invólucro só. */
+          <Suspense fallback={<div style={{ minHeight: "100vh" }} />}>
+            {/* Sem `showcase-container` aqui: a folha agora é a raiz da config
+                (`.vitrine-puck`), para que o EDITOR e a página publicada tenham
+                a mesma largura. Ver o bloco da folha no styles.css. */}
+            <div className="showcase-puck">
+              <VitrinePorPuck
+                documento={config.puck}
+                metadata={{
+                  tenantSlug,
+                  dadosDaVitrine: payload?.vitrine || null,
+                  pagina: {
+                    tenant: vitrineTenant,
+                    tenantSlug,
+                    properties,
+                    whatsappHref,
+                    carregando,
+                    erro,
+                  },
+                }}
+              />
+            </div>
+          </Suspense>
+        ) : (
         <div
           className="showcase-container showcase-builder-canvas showcase-palco"
           style={{ minHeight: `${alturaDoConteudo(layout, mode)}px`, position: "relative" }}
@@ -173,6 +224,7 @@ export function ShowcasePage({ slugFixo }) {
             )}
           />
         </div>
+        )}
       </div>
     </VitrineProvider>
   );

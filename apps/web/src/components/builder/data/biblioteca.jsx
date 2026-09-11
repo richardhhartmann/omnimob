@@ -35,21 +35,6 @@ export const WIDGET_LIBRARY = [
     preview: <div style={{ display: "grid", gap: 4 }}>{linha("100%")} {linha("85%", 0.35)} {linha("60%", 0.35)}</div>,
   },
   {
-    type: "divider",
-    categoria: "basicos",
-    nome: "Divisor",
-    title: "✦  Seção  ✦",
-    content: "",
-    tamanho: { w: 100, h: 120 },
-    preview: (
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <div style={{ flex: 1, height: 1, background: "currentColor", opacity: 0.4 }} />
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)" }} />
-        <div style={{ flex: 1, height: 1, background: "currentColor", opacity: 0.4 }} />
-      </div>
-    ),
-  },
-  {
     type: "note",
     categoria: "basicos",
     nome: "Aviso",

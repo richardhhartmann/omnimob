@@ -821,6 +821,136 @@ button:disabled {
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
 
+/* ── Os enderecos das redes, dentro do widget ────────────────────────────────
+   Um campo por rede, na ordem dos botoes. O quadradinho a esquerda ganha a cor
+   da rede reconhecida enquanto se digita — e o dela e o unico jeito de saber,
+   antes de salvar, que o endereco foi entendido.
+
+   Cores literais e nao tokens: isto e desenhado DENTRO da folha, e os tokens do
+   editor sao do eixo do painel. Ver o comentario das fichas de opcao. */
+.social-editor {
+  display: grid; gap: 5px; justify-items: stretch;
+  max-width: 420px; margin: 16px auto 0;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(255,255,255,0.18);
+  text-align: left;
+}
+.social-editor__linha { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 6px; }
+.social-editor__marca {
+  width: 22px; height: 22px; border-radius: 7px; flex: none;
+  display: grid; place-items: center; color: #fff;
+  background: rgba(255,255,255,0.08);
+}
+.editor-shell .social-editor input {
+  width: 100%; padding: 5px 9px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  color: #e6e8ee; font-family: inherit; font-size: 12px;
+  box-shadow: none;
+}
+.editor-shell .social-editor input:focus { outline: none; border-color: #818cf8; background: rgba(255,255,255,0.09); }
+.editor-shell .social-editor input::placeholder { color: rgba(230,232,238,0.38); }
+.editor-shell .social-editor__linha > button {
+  width: 22px; height: 22px; padding: 0; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18); background: transparent;
+  color: rgba(230,232,238,0.55); font-size: 12px; line-height: 1;
+  cursor: pointer; box-shadow: none; transform: none;
+}
+.editor-shell .social-editor__linha > button:hover { color: #fca5a5; border-color: rgba(248,113,113,0.5); background: transparent; }
+.editor-shell button.social-editor__mais {
+  justify-self: start; width: auto; padding: 5px 11px; border-radius: 999px;
+  border: 1px dashed rgba(255,255,255,0.2); background: transparent;
+  color: rgba(230,232,238,0.6); font-size: 11.5px; font-weight: 600;
+  cursor: pointer; box-shadow: none; transform: none;
+}
+.editor-shell button.social-editor__mais:hover { color: #e6e8ee; border-color: #818cf8; background: transparent; }
+
+/* Folha clara: a mesma dupla invertida. */
+.showcase-theme-light .social-editor { border-top-color: rgba(15,23,42,0.18); }
+.editor-shell .showcase-theme-light .social-editor input {
+  border-color: rgba(15,23,42,0.18); background: rgba(15,23,42,0.04); color: #0f172a;
+}
+.editor-shell .showcase-theme-light .social-editor input::placeholder { color: rgba(15,23,42,0.42); }
+.editor-shell .showcase-theme-light .social-editor__linha > button { border-color: rgba(15,23,42,0.18); color: rgba(15,23,42,0.5); }
+.editor-shell .showcase-theme-light button.social-editor__mais { border-color: rgba(15,23,42,0.22); color: rgba(15,23,42,0.6); }
+
+/* ── Acrescentar e remover destaque, na propria faixa ── */
+.highlight-box { position: relative; }
+/* A fileira de controles do cartao: cor do fundo, opacidade e remover.
+   Escondida ate o ponteiro entrar — dentro de um cartao de conteudo, controle
+   sempre visivel compete com o que o cartao diz. */
+.highlight-box__acoes {
+  position: absolute; top: 8px; right: 8px;
+  display: flex; align-items: center; gap: 6px;
+  opacity: 0; transition: opacity 0.14s ease;
+}
+.highlight-box:hover .highlight-box__acoes,
+.highlight-box:focus-within .highlight-box__acoes { opacity: 1; }
+
+.highlight-box__cor { width: 20px; height: 20px; border-radius: 6px; flex: none; }
+.highlight-box__cor.is-auto em { font-size: 6.5px; }
+
+/* O deslizante e curto de proposito: ele mora dentro do cartao, e um controle
+   de 120px empurraria o texto para baixo em cartao estreito. */
+.highlight-box__opacidade { width: 54px; height: 14px; padding: 0; accent-color: currentColor; cursor: pointer; }
+.highlight-box__opacidade:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Os controles do cartao sao todos redondos e do mesmo tamanho — cor,
+   copiar/colar e remover formam uma fileira so, sem um deles puxando a fila
+   para o lado. Era texto ("Copiar", "Colar") e desalinhava tudo: a largura
+   mudava conforme a palavra, e a fileira dancava a cada estado. */
+.highlight-box__estilo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border-radius: 999px;
+  border: 1px solid currentColor; background: transparent;
+  color: currentColor; opacity: 0.55;
+  cursor: pointer; box-shadow: none; transform: none;
+  transition: opacity 0.14s ease, background 0.14s ease, transform 0.14s ease;
+}
+.highlight-box__estilo:hover { opacity: 1; background: color-mix(in srgb, currentColor 12%, transparent); }
+.highlight-box__estilo:active { transform: scale(0.92); }
+
+/* O cartao de ORIGEM fica aceso e com borda tracejada enquanto o estilo esta na
+   area de transferencia: sem isso a pessoa nao sabe de onde veio o que ela esta
+   prestes a colar. O tracejado repete a linguagem do `+` de acrescentar — nos
+   dois casos ele quer dizer "isto ainda nao aconteceu". */
+.highlight-box__estilo.is-copiado {
+  opacity: 1; border-style: dashed;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+/* E o destino pulsa de leve, uma vez: e o convite para o segundo gesto. */
+.highlight-box__estilo.is-colar { opacity: 0.85; animation: destaqueColar 1.6s ease-in-out infinite; }
+@keyframes destaqueColar {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .highlight-box__estilo.is-colar { animation: none; }
+}
+/* Com algo copiado, os controles de TODOS os cartoes ficam visiveis: o proximo
+   gesto e noutro cartao, e passar o mouse para descobrir onde colar seria
+   procurar as portas de uma casa no escuro. */
+.showcase-highlights:has(.highlight-box__estilo.is-copiado) .highlight-box__acoes { opacity: 1; }
+
+.highlight-box__tirar {
+  width: 20px; height: 20px; padding: 0; border-radius: 999px;
+  border: 1px solid currentColor; background: transparent;
+  color: currentColor; opacity: 0.55;
+  font-size: 12px; line-height: 1; cursor: pointer;
+  box-shadow: none; transform: none;
+}
+.highlight-box__tirar:hover { opacity: 1; color: #fca5a5; border-color: #fca5a5; background: transparent; }
+/* O `+` e um cartao como os outros: ele ocupa o lugar do destaque que vai
+   nascer, e a fileira nao muda de forma quando ele nasce. */
+.highlight-box--mais {
+  display: grid; place-items: center;
+  border-style: dashed; background: transparent;
+  color: inherit; opacity: 0.5;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  box-shadow: none; transform: none; width: auto;
+}
+.highlight-box--mais:hover { opacity: 1; border-style: solid; background: transparent; }
+
 .highlight-box:hover {
   transform: translateY(-8px) scale(1.02);
   background: rgba(255, 255, 255, 0.04);
@@ -1050,6 +1180,310 @@ button:disabled {
   font-size: 13px;
   color: var(--text-muted);
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   OS WIDGETS MUDAM DE FORMA COM O TAMANHO
+   ════════════════════════════════════════════════════════════════════════════
+
+   `data-faixa` no `.widget-card` diz em que largura a peca esta (xs/s/m/g —
+   ver `useFaixaDoWidget`). Redimensionar deixa de ser so encolher a mesma
+   grade: em xs a peca vira uma coluna densa, em g ela respira.
+
+   ── POR QUE CSS, E NAO JAVASCRIPT ──
+
+   Quase tudo que muda aqui e grade, gap e tamanho de fonte — coisas que o CSS
+   faz sem re-render. So a QUANTIDADE de itens (quantos corretores, quantas
+   perguntas) precisa da prop `faixa`, porque nao existe jeito honesto de "nao
+   renderizar" no CSS: `display: none` ainda monta, ainda baixa a foto e ainda
+   entra no leitor de tela.
+
+   ── POR QUE NAO CONTAINER QUERIES ──
+
+   Elas resolveriam isto sem observador nenhum. O impedimento e que o valor
+   precisa chegar ao JSX tambem (a contagem de itens), e um `@container` nao
+   tem como ser lido de dentro do componente. Com o observador ja no lugar, um
+   atributo serve as duas pontas e evita ter duas fontes para a mesma pergunta.
+   (Sem crases nestes comentarios: nao, este e o styles.css — mas a regra de
+   nao usar crase em comentario vale so nos template literals.) */
+
+/* ── Equipe ── */
+.widget-card[data-faixa="xs"] .widget-team__grid,
+.widget-card[data-faixa="s"] /* ── O aparato de edicao da Equipe ──────────────────────────────────────────
+   So aparece no editor (o widget o desenha por modo). O botao de tirar mora no
+   canto do cartao da pessoa e so acende no hover: com ele sempre visivel, o
+   cartao passaria a ter um x competindo com o nome. */
+.widget-team__convite {
+  display: grid; gap: 3px; padding: 14px; border-radius: 14px;
+  border: 1px dashed rgba(255,255,255,0.18);
+  text-align: center;
+}
+.widget-team__convite strong { font-size: 13px; }
+.widget-team__convite span { font-size: 12px; opacity: 0.65; }
+.showcase-theme-light .widget-team__convite { border-color: rgba(15,23,42,0.18); }
+
+.widget-team__gerir { margin-top: 12px; }
+.widget-team__mais {
+  width: 100%; padding: 9px 12px; border-radius: 12px;
+  border: 1px dashed var(--ed-line-strong, rgba(255,255,255,0.22));
+  background: transparent; color: var(--ed-muted, #94a3b8);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.widget-team__mais:hover { color: var(--ed-text, #e6e8ee); border-color: var(--ed-accent, #818cf8); }
+
+.widget-team__person { position: relative; }
+.widget-team__tirar {
+  position: absolute; top: 6px; right: 6px;
+  width: 20px; height: 20px; padding: 0; border-radius: 999px;
+  border: 1px solid var(--ed-line-strong, rgba(255,255,255,0.2));
+  background: rgba(12,12,18,0.9); color: #fca5a5;
+  font-size: 12px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity 0.14s ease;
+}
+.widget-team__person:hover .widget-team__tirar { opacity: 1; }
+.showcase-theme-light .widget-team__tirar { background: rgba(255,255,255,0.94); color: #b91c1c; }
+
+/* ── O seletor de quem aparece ── */
+.seq-veu {
+  position: fixed; inset: 0; z-index: 9500;
+  display: grid; place-items: center; padding: 24px;
+  background: rgba(8, 10, 18, 0.62);
+  backdrop-filter: blur(6px);
+}
+/* ── O SELETOR SAI POR PORTAL, E ISSO TEM DUAS CONSEQUENCIAS ─────────────────
+
+   1. Ele nao esta dentro do `.editor-shell`, entao NENHUM token `--ed-*` chega
+      ate ele. Os `.editor-button` do rodape ficavam sem cor de fundo e sem
+      borda — invisiveis, principalmente no tema claro, onde texto claro em
+      fundo branco simplesmente some. Por isso os tokens sao declarados AQUI, na
+      propria caixa: ela e a raiz do que esta dentro dela.
+
+   2. Ele leva `modal-cartao`, entao o tema claro do painel ja o alcanca pelo
+      `html[data-tema-painel]` — o mesmo caminho dos outros modais. O que este
+      bloco faz e so nao atrapalhar aquele: nada de cor de fundo cravada. */
+.seq-caixa {
+  width: min(520px, 100%); max-height: min(78vh, 700px);
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 22px; border-radius: 18px;
+  background: #12121a; border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 30px 80px -30px rgba(0,0,0,0.8);
+
+  --ed-line-strong: rgba(255,255,255,0.14);
+  --ed-fill: rgba(255,255,255,0.05);
+  --ed-fill-forte: rgba(255,255,255,0.1);
+  --ed-text: #e6e8ee;
+  --ed-muted: #8b94a8;
+  --ed-accent: #818cf8;
+  --ed-accent-tinta: #0b0b12;
+  --ed-accent-hover: #9aa2fa;
+}
+html[data-tema-painel="claro"] .seq-caixa {
+  border-color: rgba(15,23,42,0.12);
+  --ed-line-strong: rgba(15,23,42,0.18);
+  --ed-fill: rgba(15,23,42,0.05);
+  --ed-fill-forte: rgba(15,23,42,0.1);
+  --ed-text: #0f172a;
+  --ed-muted: #64748b;
+  --ed-accent: #4f46e5;
+  --ed-accent-tinta: #ffffff;
+  --ed-accent-hover: #4338ca;
+}
+html[data-tema-painel="claro"] .seq-item { background: rgba(15,23,42,0.035); }
+html[data-tema-painel="claro"] .seq-item:hover { background: rgba(15,23,42,0.07); }
+html[data-tema-painel="claro"] .seq-avatar { background: rgba(79,70,229,0.12); color: #4338ca; }
+html[data-tema-painel="claro"] .seq-marca { background: rgba(15,23,42,0.08); }
+.seq-topo h2 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.seq-topo p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.6; opacity: 0.72; }
+.seq-erro { margin: 0; font-size: 12.5px; color: #fca5a5; }
+.seq-vazio { margin: 0; font-size: 12.5px; line-height: 1.6; opacity: 0.7; }
+.seq-lista { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 6px; }
+.seq-item {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center; gap: 11px;
+  padding: 9px 11px; border-radius: 12px; cursor: pointer;
+  border: 1px solid transparent; background: rgba(255,255,255,0.03);
+  text-align: left; color: inherit;
+}
+.seq-item:hover { background: rgba(255,255,255,0.06); }
+.seq-item.is-marcado { border-color: var(--ed-accent, #818cf8); background: rgba(129,140,248,0.1); }
+.seq-avatar {
+  width: 34px; height: 34px; border-radius: 10px; overflow: hidden;
+  display: grid; place-items: center; flex: none;
+  background: rgba(129,140,248,0.16); color: #c7ccff; font-size: 12px; font-weight: 800;
+}
+.seq-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.seq-texto { min-width: 0; display: grid; gap: 1px; }
+.seq-texto strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seq-texto span { font-size: 11.5px; opacity: 0.66; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seq-marca {
+  min-width: 22px; height: 22px; border-radius: 999px;
+  display: grid; place-items: center; flex: none;
+  font-size: 11px; font-weight: 800;
+  background: rgba(255,255,255,0.07); color: inherit;
+}
+.seq-item.is-marcado .seq-marca { background: var(--ed-accent, #818cf8); color: var(--ed-accent-tinta, #0b0b12); }
+.seq-acoes { display: flex; align-items: center; gap: 8px; }
+.seq-conta { margin-right: auto; font-size: 12px; opacity: 0.6; }
+
+/* ── O EDITOR DE LISTAS DENTRO DA PECA ───────────────────────────────────────
+   Alimenta os seletores da Busca e os chips de Regioes. So aparece no editor —
+   quem decide e o widget, pelo modo. Ele fica ABAIXO do que edita, separado por
+   um fio, para nao ser confundido com conteudo da vitrine.
+
+   As cores saem dos tokens do EDITOR (--ed-*), e nao das da vitrine: isto e
+   ferramenta desenhada dentro da folha, e precisa acompanhar o tema do editor
+   como o rail. Os literais depois da virgula sao a reserva para quando o widget
+   for renderizado fora do `.editor-shell` — no teste, por exemplo. */
+.lista-editavel {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed rgba(255,255,255,0.18);
+  display: grid; gap: 7px;
+}
+.lista-editavel__rotulo {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: rgba(230,232,238,0.6);
+}
+.lista-editavel__itens { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.lista-editavel__itens li { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px; }
+
+/* ── AS FICHAS DE OPCAO ──────────────────────────────────────────────────────
+
+   Uma fila de fichas editaveis com um `+` no fim — a mesma gramatica dos chips
+   de Regiao e das etapas de "Como funciona". Aparecem so no editor.
+
+   ── POR QUE OS SELETORES SAO TAO ESPECIFICOS ──
+
+   O campo estava BRANCO NO BRANCO, e a causa eram os dois eixos de tema
+   brigando dentro do mesmo elemento: o fundo vinha de
+   `main[data-tema="claro"] input` (o eixo do PAINEL) e a cor do texto vinha da
+   FOLHA, que estava escura. Aquela regra ganhou uma fronteira (`:not(.showcase-body
+   input)`) e o problema morreu na raiz — estes seletores continuam explicitos
+   porque isto e aparato desenhado SOBRE a folha e precisa declarar de que lado
+   esta, sem depender da ordem do arquivo.
+
+   E sem `--ed-*`: aqueles tokens sao do editor, e o editor e o eixo do painel.
+   (Sem crases nestes comentarios: convencao do arquivo.) */
+.lista-editavel {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  margin-top: 7px;
+}
+.lista-editavel__ficha {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px 4px 2px 8px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+}
+.editor-shell .lista-editavel input.lista-editavel__campo {
+  width: auto; min-width: 42px; padding: 2px 0; border: 0; border-radius: 0;
+  background: transparent; color: #e6e8ee;
+  font-family: inherit; font-size: 11.5px; box-shadow: none;
+}
+.editor-shell .lista-editavel input.lista-editavel__campo:focus { outline: none; box-shadow: none; background: transparent; }
+.editor-shell .lista-editavel input.lista-editavel__campo::placeholder { color: rgba(230,232,238,0.4); }
+.editor-shell .lista-editavel button.lista-editavel__tirar {
+  width: 16px; height: 16px; padding: 0; border: 0; border-radius: 999px;
+  background: transparent; color: rgba(230,232,238,0.5);
+  font-size: 12px; line-height: 1; cursor: pointer; box-shadow: none; transform: none;
+}
+.editor-shell .lista-editavel button.lista-editavel__tirar:hover { color: #fca5a5; background: transparent; }
+.editor-shell .lista-editavel button.lista-editavel__mais {
+  width: 22px; height: 22px; padding: 0; border-radius: 999px;
+  border: 1px dashed rgba(255,255,255,0.24);
+  background: transparent; color: rgba(230,232,238,0.6);
+  font-size: 13px; line-height: 1; cursor: pointer; box-shadow: none; transform: none;
+}
+.editor-shell .lista-editavel button.lista-editavel__mais:hover { color: #e6e8ee; border-color: #818cf8; background: transparent; }
+
+/* A folha clara inverte a dupla, como o resto do aparato sobre a folha. */
+.showcase-theme-light .lista-editavel__ficha { border-color: rgba(15,23,42,0.18); background: rgba(15,23,42,0.04); }
+.editor-shell .showcase-theme-light .lista-editavel input.lista-editavel__campo { color: #0f172a; }
+.editor-shell .showcase-theme-light .lista-editavel input.lista-editavel__campo::placeholder { color: rgba(15,23,42,0.42); }
+.editor-shell .showcase-theme-light .lista-editavel button.lista-editavel__tirar { color: rgba(15,23,42,0.5); }
+.editor-shell .showcase-theme-light .lista-editavel button.lista-editavel__mais { border-color: rgba(15,23,42,0.24); color: rgba(15,23,42,0.6); }
+
+/* ── Perguntas: remover uma, acrescentar a proxima ── */
+.widget-faq__tirar {
+  margin-top: 8px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid currentColor; background: transparent;
+  color: currentColor; opacity: 0.4;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  box-shadow: none; transform: none; width: auto;
+}
+.widget-faq__tirar:hover { opacity: 1; color: #fca5a5; border-color: #fca5a5; background: transparent; }
+.widget-faq__mais {
+  width: 100%; margin-top: 6px; padding: 9px 12px; border-radius: 12px;
+  border: 1px dashed currentColor; background: transparent;
+  color: inherit; opacity: 0.5;
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  box-shadow: none; transform: none;
+}
+.widget-faq__mais:hover { opacity: 1; border-style: solid; background: transparent; }
+
+/* ── O chip de regiao vira o proprio campo ── */
+.widget-regions__tirar {
+  width: 16px; height: 16px; margin-left: 2px; padding: 0;
+  border: 0; border-radius: 999px; background: transparent;
+  color: currentColor; opacity: 0.45;
+  font-size: 12px; line-height: 1; cursor: pointer; box-shadow: none; transform: none;
+}
+.widget-regions__tirar:hover { opacity: 1; color: #fca5a5; background: transparent; }
+.widget-regions__mais {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border-radius: 999px;
+  border: 1px dashed currentColor; background: transparent;
+  color: inherit; opacity: 0.5;
+  font-size: 15px; line-height: 1; cursor: pointer; box-shadow: none; transform: none;
+}
+.widget-regions__mais:hover { opacity: 1; border-style: solid; background: transparent; }
+
+/* ── Acrescentar e remover etapas ── */
+.widget-steps__item { position: relative; }
+.widget-steps__tirar {
+  position: absolute; top: 6px; right: 6px;
+  width: 20px; height: 20px; padding: 0; border-radius: 999px;
+  border: 1px solid var(--ed-line-strong, rgba(255,255,255,0.18));
+  background: var(--ed-panel, rgba(12,12,18,0.9)); color: var(--ed-danger, #fca5a5);
+  font-size: 12px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity 0.14s ease;
+}
+.widget-steps__item:hover .widget-steps__tirar { opacity: 1; }
+.widget-steps__mais {
+  min-height: 90px; border-radius: 16px; cursor: pointer;
+  border: 1px dashed var(--ed-line-strong, rgba(255,255,255,0.18));
+  background: transparent; color: var(--ed-muted, #8b94a8);
+  font-size: 12.5px; font-weight: 600;
+}
+.widget-steps__mais:hover { color: var(--ed-text, #e6e8ee); border-color: var(--ed-accent, #818cf8); }
+
+.widget-team__grid { grid-template-columns: 1fr; gap: 8px; }
+.widget-card[data-faixa="m"] .widget-team__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.widget-card[data-faixa="g"] .widget-team__grid { grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 14px; }
+/* Em xs o cartao da pessoa perde o retrato grande e a moldura: sobra o nome e o
+   contato, que e o que ainda se le em 240px. */
+.widget-card[data-faixa="xs"] .widget-team__person { padding: 8px; gap: 9px; border-radius: 12px; }
+.widget-card[data-faixa="xs"] .widget-team__avatar { width: 34px; height: 34px; border-radius: 10px; font-size: 11px; }
+.widget-card[data-faixa="xs"] .widget-team__info strong { font-size: 13px; }
+.widget-card[data-faixa="xs"] .widget-team__info span { font-size: 11px; }
+
+/* ── Como funciona ── */
+.widget-card[data-faixa="xs"] .widget-steps__grid,
+.widget-card[data-faixa="s"] .widget-steps__grid { grid-template-columns: 1fr; gap: 8px; }
+.widget-card[data-faixa="m"] .widget-steps__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* O item perde a altura minima quando e uma coluna so: 150px de altura para uma
+   linha de texto vira um vao. */
+.widget-card[data-faixa="xs"] .widget-steps__item,
+.widget-card[data-faixa="s"] .widget-steps__item { min-height: 0; padding: 12px 14px; }
+
+/* ── Numeros ── */
+.widget-card[data-faixa="xs"] .widget-stats-grid { grid-template-columns: 1fr; gap: 10px; }
+.widget-card[data-faixa="s"] .widget-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.widget-card[data-faixa="xs"] .widget-stat-number { font-size: 26px; }
+
+/* ── Financiamento ── */
+.widget-card[data-faixa="xs"] .widget-finance__fields,
+.widget-card[data-faixa="s"] .widget-finance__fields { grid-template-columns: 1fr; }
+
+/* ── Regioes ── */
+.widget-card[data-faixa="xs"] .widget-regions__chip { font-size: 11.5px; padding: 5px 10px; }
 
 .widget-stats-grid {
   display: grid;
@@ -1401,12 +1835,27 @@ button:disabled {
    `--text-main` e `--text-muted` redefinidas no tema claro (logo acima), tudo
    que herda cor fica legível sozinho, e quem declara a própria cor — accent,
    branco sobre botão — continua com ela. */
+/* ── SEM `!important` NO QUE O CLIENTE PODE PINTAR ───────────────────────────
+
+   `.highlight-box p` saiu deste bloco. O `!important` de uma folha de estilo
+   vence ESTILO INLINE — e é inline que o construtor usa para aplicar a cor
+   escolhida no inspetor. O efeito era exatamente o que se esperaria: escolher
+   vermelho na descrição de um destaque não mudava nada, sem nenhum aviso.
+
+   E ele nem era necessário aqui: `.showcase-theme-light .highlight-box p` tem
+   duas classes contra uma da regra base, então já vence sem forçar.
+
+   Os outros seletores continuam com `!important` porque não há nada no
+   construtor que pinte aqueles elementos — ninguém escolhe a cor da localização
+   de um cartão de imóvel. O dia em que houver, este `!important` volta a ser um
+   defeito silencioso. */
+.showcase-theme-light .highlight-box p { color: #0f172a; }
+
 .showcase-theme-light .showcase-title-section:not(.showcase-title-section--custom-text) p,
 .showcase-theme-light .card-location,
 .showcase-theme-light .stat-item,
 .showcase-theme-light .detail-description,
-.showcase-theme-light .detail-location,
-.showcase-theme-light .highlight-box p {
+.showcase-theme-light .detail-location {
   color: #0f172a !important;
 }
 
@@ -2769,7 +3218,8 @@ html[data-tema-painel="claro"] {
    página é dela.
    ════════════════════════════════════════════════════════════════════════════ */
 
-.editor-shell {
+.editor-shell,
+.puck-caixa {
   /* O fundo da prancheta é mais ESCURO que a página desenhada — o contrário do
      Figma, e de propósito: a vitrine já é escura, e um chão claro em volta
      brilharia mais que o próprio trabalho. Escuro embaixo, a folha sobe. */
@@ -2782,6 +3232,13 @@ html[data-tema-painel="claro"] {
   --ed-muted: #7e879a;
   --ed-accent: #818cf8;
   --ed-accent-soft: rgba(129, 140, 248, 0.14);
+  /* A tinta que vai SOBRE o acento, e o acento do hover. Eram literais dentro
+     da regra do botão primário — e literais escolhidos para o tema escuro, onde
+     o acento é um índigo CLARO e pede tinta escura. No claro o acento inverte
+     (índigo escuro), e a mesma tinta escura virava texto quase invisível sobre
+     ele. Como token, cada tema responde por si. */
+  --ed-accent-tinta: #0b0b12;
+  --ed-accent-hover: #9aa2fa;
   --ed-danger: #f87171;
 
   /* ── OS QUATRO DEGRAUS DE SUPERFÍCIE ────────────────────────────────
@@ -2818,22 +3275,31 @@ html[data-tema-painel="claro"] {
   /* O fundo e o traço das miniaturas da biblioteca. */
   --ed-preview-bg: rgba(0, 0, 0, 0.3);
   --ed-preview-ink: #8b94a8;
+  /* O esqueleto de carregamento. Ver a regra de `.ed-esq .skeleton-block`. */
+  --ed-shimmer: rgba(255, 255, 255, 0.045);
+  --ed-shimmer-brilho: rgba(255, 255, 255, 0.06);
 
   height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--ed-bg);
   color: var(--ed-text);
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 }
 
 /* Reinício do botão dentro do editor. Tudo o que vier depois constrói em cima
    disto, e nada precisa desfazer o botão global peça por peça. */
+/* Os controles que a config do Puck desenha entram no MESMO reinício: eles
+   usam as classes do editor clássico mas vivem fora do `.editor-shell`, e sem
+   isto o botão global do painel vencia — o lado INATIVO do alternador saía
+   pintado de índigo, exatamente com a cara do lado ativo. É o segundo tropeço
+   igual nesta tela; o primeiro foi o "×" dos avisos de tradução. */
 .editor-shell button,
 .editor-format-bar button,
 .editor-ghost button,
-.editor-modal button {
+.editor-modal button,
+.puck-alternador button,
+.puck-campo-cor button {
   width: auto;
   padding: 0;
   border-radius: 8px;
@@ -2846,7 +3312,9 @@ html[data-tema-painel="claro"] {
 }
 
 .editor-shell button:hover,
-.editor-modal button:hover {
+.editor-modal button:hover,
+.puck-alternador button:hover,
+.puck-campo-cor button:hover {
   transform: none;
 }
 
@@ -3000,11 +3468,11 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
 .editor-button.is-primary {
   background: var(--ed-accent);
   border-color: transparent;
-  color: #0b0b12;
+  color: var(--ed-accent-tinta);
   text-decoration: none;
 }
 
-.editor-button.is-primary:hover { background: #9aa2fa; }
+.editor-button.is-primary:hover { background: var(--ed-accent-hover); }
 
 .editor-button.is-accent {
   background: var(--ed-accent-soft);
@@ -3122,6 +3590,11 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
 .editor-menu-spacer { width: 13px; }
 .editor-menu-sep { height: 1px; margin: 5px 8px; border: 0; background: var(--ed-line); }
 
+/* O alerta da barra do editor. Os literais são do tema ESCURO — vermelho claro
+   sobre um véu vermelho quase preto. No painel claro o mesmo par vira rosa
+   pálido sobre branco: contraste abaixo de 2, num aviso que só existe para ser
+   lido. O tema claro inverte a dupla (tinta escura, véu suave) em vez de
+   ajustar a opacidade, que é o que produzia o rosa lavado. */
 .editor-alerta {
   flex-shrink: 0;
   padding: 8px 16px;
@@ -3129,6 +3602,12 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
   color: #fca5a5;
   background: rgba(248, 113, 113, 0.1);
   border-bottom: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+main[data-tema="claro"] .editor-alerta {
+  color: #9f1239;
+  background: rgba(225, 29, 72, 0.08);
+  border-bottom-color: rgba(159, 18, 57, 0.22);
 }
 
 /* ── Espaço de trabalho ───────────────────────────────────────────────────── */
@@ -3272,6 +3751,189 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
   font-size: 11.5px;
   font-weight: 600;
   color: inherit;
+  pointer-events: none;
+}
+
+/* ── PEÇA ESCOLHIDA POR CTRL/SHIFT ──────────────────────────────────────────
+
+   Realce SEPARADO do que o Puck usa para a peça selecionada dele: as duas
+   seleções convivem (a dele governa o inspetor, a nossa governa a barra de
+   ações), e um contorno igual faria parecer que uma anulou a outra.
+
+   Tracejado, e não sólido, pela mesma razão: sólido é a linguagem da seleção
+   única, que já está em uso ali. Tracejado lê como "faz parte de um conjunto".
+
+   Vale nos dois lugares — na prancheta e na Estrutura. O `outline` não ocupa
+   espaço no layout, então a peça não se mexe ao ser escolhida. */
+[data-puck-component].puck-multi {
+  outline: 2px dashed var(--ed-accent, #818cf8);
+  outline-offset: -2px;
+}
+[data-puck-layer-tree-id].puck-multi > * {
+  background: rgba(129, 140, 248, 0.14);
+  border-radius: 6px;
+}
+
+/* ── A LINHA ACENDE QUANDO O PONTEIRO ESTA NA PECA ──────────────────────────
+
+   O caminho de volta do realce que o Puck ja faz no sentido lista → prancheta.
+   Ver `useAcenderNaEstrutura`: o `:hover` dele nao serve porque o ponteiro esta
+   dentro do iframe e a linha esta fora dele.
+
+   Mais discreto que o da selecao multipla, mas nao apagado: aquele diz "esta
+   escolhida" e dura, este diz "e esta aqui" e some quando o ponteiro anda. A
+   primeira versao usava 9% de fundo e sumia — sobre o painel escuro, um realce
+   assim so aparece se a pessoa ja souber onde olhar, que e o contrario do que
+   ele existe para fazer. O fio a esquerda e o que o torna achavel de relance
+   numa lista de vinte linhas iguais. */
+[data-puck-layer-tree-id].puck-estrutura-aceso > * {
+  background: rgba(129, 140, 248, 0.22);
+  box-shadow: inset 3px 0 0 var(--ed-accent, #818cf8);
+  border-radius: 6px;
+}
+
+/* ── A BARRA DAS PEÇAS SELECIONADAS ─────────────────────────────────────────
+
+   Fixa embaixo e centrada: o inspetor da direita é do Puck e fala com uma peça
+   só, então a barra não tem como morar lá. Embaixo ela não cobre a prancheta
+   nem a gaveta, e é onde este tipo de barra aparece em todo editor.
+
+   `z-index` acima do quadro da prévia — ela precisa flutuar sobre o iframe. */
+.puck-selecao {
+  position: fixed;
+  left: 50%;
+  /* Acima da faixa de situação, que mora em `bottom: 16px` e tem a mesma
+     camada: empilhadas no mesmo lugar, a que chegasse depois no DOM cobria a
+     outra — e foi a nossa que ficou por baixo. Aqui as duas convivem. */
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 121;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 16px;
+  border-radius: 12px;
+  /* ── CORES LITERAIS, E ISSO É DELIBERADO ─────────────────────────────────
+     A barra sai por portal para o `body` (ver `BarraDaSelecao`), então ela vive
+     FORA do `.puck-caixa` — e é lá que os tokens `--ed-*` são declarados. A
+     primeira versão os usava e chegou na tela sem fundo, sem borda e com os
+     botões caindo no reset global: `var()` sem valor não é erro, é nada.
+
+     Mesma situação do `.mp-balao` e do balão do seletor de módulo, e a mesma
+     saída que este arquivo já documenta nos dois: valor escrito. */
+  background: #131320;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.65);
+  color: #e6e8ee;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+.puck-selecao strong { font-weight: 600; white-space: nowrap; }
+.puck-selecao button {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  /* Sem isto "Agrupar em seção" quebrava em três linhas e a barra virava um
+     bloco: o reset global de botão não define largura, e o flex aperta. */
+  white-space: nowrap;
+  box-shadow: none;
+  transform: none;
+  cursor: pointer;
+}
+.puck-selecao button:hover {
+  background: rgba(129, 140, 248, 0.16);
+  border-color: rgba(129, 140, 248, 0.45);
+  box-shadow: none;
+  transform: none;
+}
+.puck-selecao .puck-selecao--perigo:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.42);
+  color: #fca5a5;
+}
+.puck-selecao .puck-selecao__fechar {
+  padding: 4px 10px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 16px;
+}
+
+/* No painel claro ela inverte, como o menu do perfil e os três pontinhos. */
+html[data-tema-painel="claro"] .puck-selecao {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 18px 44px -18px rgba(15, 23, 42, 0.28);
+  color: #0f172a;
+}
+html[data-tema-painel="claro"] .puck-selecao button {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(15, 23, 42, 0.04);
+}
+
+/* ── O CARTÃO DA GAVETA DO PUCK ─────────────────────────────────────────────
+
+   A gaveta do editor novo desenhava uma lista de rótulos, e escolher peça pelo
+   nome vira tentativa e erro — "Aviso" não diz se é faixa ou balão. O cartão
+   ganhou a MESMA miniatura do editor clássico, lida do mesmo catálogo (ver
+   `puck/PreviaDaPeca`).
+
+   A miniatura entra ACIMA do que o Puck já desenhava, e não no lugar: o nome e,
+   principalmente, a alça de arrasto continuam sendo dele. Substituir o filho
+   por marcação nossa levaria o gesto junto.
+
+   `pointer-events: none` na miniatura pelo mesmo motivo: o alvo do arrasto é o
+   cartão inteiro, e um desenho que capture o ponteiro cria um buraco no meio
+   dele. Os tokens são os do clássico — uma aparência só para a mesma coisa. */
+/* ── QUEM É O CARTÃO PASSA A SER O INVÓLUCRO ────────────────────────────────
+   O `drawerItem` do Puck envolve o item por FORA, então a miniatura nasce acima
+   do cartão branco dele — duas caixas empilhadas, lidas como duas coisas. A
+   correção é inverter os papéis: o invólucro vira o cartão, e o item de dentro
+   perde o fundo, a borda e o respiro próprios.
+
+   Os seletores por `[class*='DrawerItem']` são a única forma de alcançá-lo: o
+   Puck gera as classes com sufixo de build (`_DrawerItem_1n90m_22`), e o
+   pedaço estável do nome é o começo. */
+.puck-cartao {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--ed-fill-sutil);
+  border: 1px solid var(--ed-line);
+  color: var(--ed-muted);
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+/* Os mesmos tons do cartão do clássico (`.editor-lib-card`), e de propósito: as
+   duas gavetas oferecem as mesmas peças e não deviam parecer produtos
+   diferentes. */
+.puck-cartao:hover {
+  background: rgba(129, 140, 248, 0.07);
+  border-color: rgba(129, 140, 248, 0.45);
+  color: var(--ed-text);
+}
+.puck-cartao [class*="DrawerItem"] {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+}
+.puck-cartao__previa {
+  display: block;
+  height: 34px;
+  padding: 7px;
+  border-radius: 7px;
+  background: var(--ed-preview-bg);
+  color: var(--ed-preview-ink);
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -3497,6 +4159,23 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
   border-radius: 7px;
   border: 1px solid var(--ed-line-strong);
   overflow: hidden;
+}
+
+/* O estado "nao escolhido": xadrez discreto e a palavra `auto`. Ele precisa ser
+   distinguivel de QUALQUER cor que alguem possa escolher — dai o xadrez, que
+   nenhum valor solido produz. */
+.editor-color.is-auto {
+  display: grid; place-items: center;
+  background:
+    linear-gradient(45deg, rgba(127,127,127,0.22) 25%, transparent 25%, transparent 75%, rgba(127,127,127,0.22) 75%),
+    linear-gradient(45deg, rgba(127,127,127,0.22) 25%, transparent 25%, transparent 75%, rgba(127,127,127,0.22) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+}
+.editor-color.is-auto em {
+  font-style: normal; font-size: 9px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ed-muted); pointer-events: none;
 }
 
 .editor-color input[type="color"] {
@@ -3819,7 +4498,10 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
 .builder-piece.is-selected .builder-piece-label {
   background: var(--ed-accent, #818cf8);
   border-color: transparent;
-  color: #0b0b12;
+  /* A mesma dupla do botão primário: no escuro o acento é claro e pede tinta
+     escura; no claro ele inverte. Token, e não literal, para os dois lugares
+     que pintam sobre o acento nunca discordarem. */
+  color: var(--ed-accent-tinta, #0b0b12);
 }
 
 .builder-piece-actions {
@@ -3862,6 +4544,40 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
   pointer-events: none;
   z-index: 7;
 }
+
+/* ── O APARATO DE EDIÇÃO SOBRE FOLHA CLARA ───────────────────────────────────
+
+   A etiqueta, a barra de ações e as alças nasceram com preto literal
+   (`rgba(12,12,18,0.94)`, `#0b0b12`) e tinta clara — e ficavam assim sobre uma
+   vitrine branca.
+
+   ── O EIXO É A FOLHA, NÃO O PAINEL ──
+
+   Elas são ferramenta, como o rail e o fantasma do arrasto, e a tentação é
+   fazê-las seguir o tema do PAINEL como aqueles dois. A diferença é onde cada
+   coisa é desenhada: o rail tem fundo próprio, o fantasma voa sobre a área
+   cinza — estes aqui grudam NA FOLHA, e é contra ela que precisam se destacar.
+   Seguindo o painel, um painel claro poria etiqueta branca sobre vitrine
+   branca.
+
+   Por isso o que muda é o par tinta/fundo, e NÃO a opacidade: os 94% e a borda
+   continuam, e são eles que garantem o destaque. A alça mantém o miolo
+   preenchido pelo mesmo motivo — precisa ser um ponto sólido contra o
+   conteúdo, não um contorno vazado que some sobre textura. */
+.showcase-theme-light .builder-piece-label,
+.showcase-theme-light .builder-piece-actions {
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+  /* A sombra substitui o contraste que o fundo escuro dava de graça: sobre uma
+     vitrine clara, branco em branco precisa de borda E de profundidade. */
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+}
+/* Selecionada, a etiqueta vira o acento cheio — e no claro o acento é escuro,
+   então a tinta inverte. Mesma dupla de tokens do botão primário. */
+/* Selecionada ela vira o acento cheio; o que sai aqui é a sombra, que só existe
+   para a etiqueta NÃO selecionada se destacar de uma folha clara. */
+.showcase-theme-light .builder-piece.is-selected .builder-piece-label { box-shadow: none; }
+.showcase-theme-light .builder-piece-handle { background: #ffffff; }
 
 .builder-piece.is-selected .builder-piece-handle { opacity: 1; }
 .builder-piece-handle.is-se { right: -5px; bottom: -5px; cursor: nwse-resize; pointer-events: auto; }
@@ -3963,6 +4679,24 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
 
 
 
+/* ── Título de widget vazio, no editor ───────────────────────────────────────
+
+   Na vitrine ele não existe — o `TituloDoWidget` não renderiza nada, e o
+   conteúdo sobe. No editor ele fica, apagado, porque é a única forma de
+   escrever o título de volta.
+
+   `:empty::before` e não um texto no JSX: o marca-lugar precisa sumir na
+   PRIMEIRA letra digitada, e um elemento de verdade dentro de um
+   `contentEditable` viraria conteúdo que a pessoa apaga junto. O componente
+   manda string vazia quando o título é só marcação, e é isso que garante o
+   `:empty`. */
+.editor-shell .widget-titulo--vazio:empty::before {
+  content: "Título da peça (opcional)";
+  opacity: 0.34;
+  font-weight: inherit;
+  font-size: inherit;
+}
+
 /* ── Fantasma do arrasto da biblioteca ────────────────────────────────────── */
 
 .editor-ghost {
@@ -4006,6 +4740,39 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
   text-transform: uppercase;
   color: #818cf8;
 }
+
+/* ── O FANTASMA NO PAINEL CLARO ──────────────────────────────────────────────
+
+   Ele nascia escuro em qualquer tema, e a causa não é o CSS acima ter cores
+   fixas — é ONDE ele mora. O fantasma sai por PORTAL para o `body` (precisa
+   disso: `position: fixed` dentro do `<main>` seria quebrado pelo `transform`
+   residual da animação de entrada), e por isso nenhum seletor que comece em
+   `main[data-tema="claro"]` o alcança. Trocar os literais por tokens do editor
+   não teria resolvido nada: os tokens também vivem dentro do `.editor-shell`.
+
+   O sinal que ATRAVESSA o portal é o `data-tema-painel`, que o `AdminLayout`
+   carimba no `<html>`. É o mesmo caminho que o selo BETA já usa.
+
+   E a escolha é do painel, não da vitrine: o fantasma é FERRAMENTA — ele é a
+   peça que ainda não existe, viajando na mão de quem edita —, e ferramenta
+   segue o tema do painel, como o rail e o inspetor. A folha continua com o tema
+   dela. */
+html[data-tema-painel="claro"] .editor-ghost {
+  border-color: #4f46e5;
+  background: #ffffff;
+  color: #0f172a;
+  /* Sombra mais leve: a de 70% de preto foi desenhada para flutuar sobre um
+     fundo quase preto, e sobre cinza claro ela lê como borrão. */
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+}
+
+html[data-tema-painel="claro"] .editor-ghost-preview {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(15, 23, 42, 0.04);
+  color: #64748b;
+}
+
+html[data-tema-painel="claro"] .editor-ghost em { color: #4f46e5; }
 
 /* ── Foco visível ────────────────────────────────────────────────────────────
    O editor não tinha nenhum: quem navega por Tab percorria trinta controles
@@ -4079,13 +4846,48 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
   user-select: none;
 }
 
-.editor-format-cor input[type="color"] {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
+/* Ela É o `.editor-color` do inspetor; o que muda aqui é só a medida, porque a
+   barra flutuante é mais baixa que o campo de um painel. O input nativo
+   continua invisível por trás, como lá. */
+.editor-format-cor { width: 28px; height: 28px; flex: none; border-radius: 7px; }
+
+/* ── A BARRA DE FORMATAÇÃO NO PAINEL CLARO ───────────────────────────────────
+
+   Ela sai por PORTAL para o `body` (position: fixed com z-index máximo), então
+   nem `main[data-tema]` nem `.showcase-theme-light` a alcançam — o mesmo caso
+   do fantasma de arrasto e dos modais. O sinal que atravessa o portal é o
+   `data-tema-painel` no `<html>`.
+
+   E o eixo é o do PAINEL, como o do fantasma: ela flutua ACIMA de tudo, com
+   sombra e fundo opaco, e não encosta na folha. Aparato que gruda na folha
+   (etiqueta da peça, fichas) é que segue a vitrine. */
+html[data-tema-painel="claro"] .editor-format-bar {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.22);
+  color: #0f172a;
+
+  /* Os dois seletores da barra são `SelectCustom`, e ele desenha o gatilho com
+     estilo INLINE — inline vence folha, então não adianta escrever regras para
+     o `button` daqui. O que ele deixa aberto são estas variáveis, com reserva
+     escura embutida; defini-las é a única costura que existe, e é a costura
+     certa: quem desenha continua sendo o componente. */
+  --campo-fundo: rgba(15, 23, 42, 0.04);
+  --campo-borda: rgba(15, 23, 42, 0.16);
+  --campo-placeholder: rgba(15, 23, 42, 0.45);
+}
+html[data-tema-painel="claro"] .editor-format-cor { border-color: rgba(15, 23, 42, 0.18); }
+
+/* A lista do seletor sai por portal SEPARADO da barra — ela não é filha dela —,
+   então precisa do mesmo tratamento por conta própria. E, como o gatilho, ela é
+   desenhada com estilo inline: o que se define aqui são as variáveis que o
+   componente deixa abertas, não as propriedades. */
+html[data-tema-painel="claro"] .sel-menu {
+  --menu-fundo: #ffffff;
+  --menu-borda: rgba(15, 23, 42, 0.12);
+  --menu-sombra: 0 22px 48px rgba(15, 23, 42, 0.20);
+  --menu-cor: #0f172a;
+  --menu-barra: rgba(15, 23, 42, 0.22);
 }
 
 .editor-modal-backdrop {
@@ -4731,18 +5533,47 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
 
 .builder-multi-toolbar button.is-active:not(:disabled) {
   background: var(--ed-accent, #818cf8);
-  color: #090a10;
+  /* Terceiro lugar que pinta sobre o acento — botão primário, etiqueta da peça
+     e aqui. Todos pelo mesmo token, senão o dia em que o acento mudar deixa um
+     dos três com texto invisível. */
+  color: var(--ed-accent-tinta, #090a10);
   box-shadow:
     0 0 0 1px rgba(129, 140, 248, 0.35),
     0 3px 10px rgba(129, 140, 248, 0.22);
 }
 
 .builder-multi-toolbar button.is-active:hover:not(:disabled) {
-  background: #929bf9;
-  color: #090a10;
+  background: var(--ed-accent-hover, #929bf9);
+  color: var(--ed-accent-tinta, #090a10);
 }
 
 .builder-multi-toolbar button:disabled { opacity: 0.25; cursor: default; }
+
+/* ── A BARRA DA SELEÇÃO MÚLTIPLA SOBRE FOLHA CLARA ───────────────────────────
+
+   ── O EIXO CERTO É A FOLHA, E NÃO O PAINEL ──
+
+   Ela flutua SOBRE a folha, e é contra a folha que ela precisa se destacar. Se
+   seguisse o tema do painel, um painel claro poria uma barra branca em cima de
+   uma vitrine branca — invisível justamente quando há peças selecionadas.
+
+   Por isso as regras abaixo casam com `.showcase-theme-light`, que vem de
+   `config.appearanceMode` (o tema da VITRINE), e não com `data-tema` (o do
+   painel). É a mesma divisão que o cabeçalho do bloco de temas do editor
+   descreve: a moldura é do painel, o que está sobre a folha é da folha.
+
+   ── O DEFEITO QUE ISTO CONSERTA ──
+
+   O bloco de folha clara já existia — mas só para os BOTÕES, o divisor e o
+   contador. A barra em si continuava `rgba(12,12,18,0.96)`. O resultado sobre
+   uma vitrine clara era o pior dos dois mundos: ícones cinza-ardósia (#64748b,
+   escolhidos para fundo branco) desenhados sobre uma barra quase preta. Meio
+   tema é menos legível que nenhum. */
+.showcase-theme-light .builder-multi-toolbar {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.20);
+}
 
 .showcase-theme-light
   .builder-multi-toolbar
@@ -5428,6 +6259,14 @@ html[data-tema-painel="claro"] .editor-save-status.is-salvo { color: #15803d; }
 .usuario-vitrine__chave strong { font-size: 14px; }
 .usuario-vitrine__chave small { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
 
+.usuario-vitrine__aviso {
+  display: grid; gap: 3px; padding: 10px 12px; margin-bottom: 12px;
+  border-radius: 10px; border: 1px solid var(--linha-08, rgba(255,255,255,0.08));
+  background: rgba(255,255,255,0.02);
+}
+.usuario-vitrine__aviso strong { font-size: 13px; }
+.usuario-vitrine__aviso small { font-size: 11.5px; line-height: 1.55; opacity: 0.7; }
+
 .usuario-vitrine__campos {
   display: flex;
   flex-direction: column;
@@ -6059,15 +6898,46 @@ main[data-tema="claro"] .glass-panel {
 /* Campos de formulário. Muitos são estilizados inline com
    `rgba(255,255,255,0.04)` — quase invisível sobre branco. Aqui o seletor pega
    o controle em si, que é o que o inline não alcança com especificidade. */
-main[data-tema="claro"] input,
-main[data-tema="claro"] select,
-main[data-tema="claro"] textarea {
+/* ── O TEMA DO PAINEL PARA NA BORDA DA FOLHA ─────────────────────────────────
+
+   Esta regra pinta de branco todo campo do painel quando o tema claro esta
+   ligado — e estava alcancando tambem os campos DESENHADOS DENTRO DA VITRINE:
+   os seletores da Busca de imoveis, os do Financiamento, o editor de listas.
+
+   Aqueles campos nao sao do painel. Eles sao a vitrine, e a vitrine tem tema
+   proprio (`appearanceMode`). Com painel claro e vitrine escura o resultado era
+   fundo branco com letra branca — cada eixo pintando metade do controle, e
+   nenhum dos dois errado sozinho.
+
+   O `:not(.showcase-body …)` e a fronteira. E a mesma divisao que o bloco de
+   temas do editor descreve: a moldura e do painel, o que esta dentro da folha e
+   da folha. Dentro dela mandam a regra generica de `input` (escura, o padrao da
+   vitrine) e o bloco de `.showcase-theme-light` logo abaixo.
+   (Sem crases nestes comentarios: convencao do arquivo.) */
+main[data-tema="claro"] input:not(.showcase-body input),
+main[data-tema="claro"] select:not(.showcase-body select),
+main[data-tema="claro"] textarea:not(.showcase-body textarea) {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.14);
   color: var(--text-main);
 }
-main[data-tema="claro"] input::placeholder,
-main[data-tema="claro"] textarea::placeholder { color: #94a3b8; }
+main[data-tema="claro"] input:not(.showcase-body input)::placeholder,
+main[data-tema="claro"] textarea:not(.showcase-body textarea)::placeholder { color: #94a3b8; }
+
+/* ── E a folha CLARA pinta os proprios campos ────────────────────────────────
+   Sem isto, uma vitrine clara herdaria o input escuro do padrao geral — preto
+   translucido sobre branco — e teria o problema simetrico do que a fronteira
+   acima consertou. */
+.showcase-theme-light input,
+.showcase-theme-light select,
+.showcase-theme-light textarea {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+}
+.showcase-theme-light input::placeholder,
+.showcase-theme-light textarea::placeholder { color: rgba(15, 23, 42, 0.45); }
+.showcase-theme-light select option { background: #ffffff; color: #0f172a; }
 
 /* Bordas e divisórias escritas à mão em branco translúcido. Sobre claro elas
    desaparecem, e a tela perde a separação entre blocos. */
@@ -6190,23 +7060,42 @@ main[data-tema="claro"] .button-secondary:hover { background: rgba(15, 23, 42, 0
    claro parece de outro produto.
 
    Aqui ele vira claro, e as cores do texto interno são recuperadas por token —
-   o que o JSX crava é `#e2e8f0` e `#94a3b8`, então precisam de `!important`. */
-main[data-tema="claro"] .modal-cartao {
+   o que o JSX crava é `#e2e8f0` e `#94a3b8`, então precisam de `!important`.
+
+   ── POR QUE ISTO NÃO FUNCIONAVA ──
+
+   A regra existia e estava certa; o SELETOR é que não alcançava nada. Todo
+   modal do painel sai por `createPortal` para o `<body>` — e precisa sair: o
+   `<main>` tem `transform` residual da animação de entrada, e isso quebra
+   `position: fixed` lá dentro (ver o cabeçalho de `Modal.jsx`). Sendo filho do
+   `body`, ele nunca é descendente de `main[data-tema="claro"]`, e a folha
+   inteira era letra morta.
+
+   O sinal que ATRAVESSA o portal é o `data-tema-painel`, que o `AdminLayout`
+   carimba no `<html>`. É o mesmo caminho do fantasma de arrasto do editor e do
+   selo BETA — três lugares que aprenderam a mesma lição por três defeitos
+   iguais. Regra nova que precise de tema E saia por portal: comece por aqui. */
+html[data-tema-painel="claro"] .modal-cartao {
   background: #ffffff !important;
   border-color: rgba(15, 23, 42, 0.12) !important;
   box-shadow: 0 30px 80px -30px rgba(15, 23, 42, 0.35) !important;
 }
-main[data-tema="claro"] .modal-cartao h2,
-main[data-tema="claro"] .modal-cartao h3,
-main[data-tema="claro"] .modal-cartao strong { color: #0f172a !important; }
-main[data-tema="claro"] .modal-cartao p,
-main[data-tema="claro"] .modal-cartao span,
-main[data-tema="claro"] .modal-cartao li,
-main[data-tema="claro"] .modal-cartao label { color: #334155 !important; }
+html[data-tema-painel="claro"] .modal-cartao h2,
+html[data-tema-painel="claro"] .modal-cartao h3,
+html[data-tema-painel="claro"] .modal-cartao strong { color: #0f172a !important; }
+html[data-tema-painel="claro"] .modal-cartao p,
+html[data-tema-painel="claro"] .modal-cartao span,
+html[data-tema-painel="claro"] .modal-cartao li,
+html[data-tema-painel="claro"] .modal-cartao label { color: #334155 !important; }
 /* Menos os que carregam cor de estado (perigo, aviso): ali a cor É a mensagem. */
-main[data-tema="claro"] .modal-cartao [style*="fca5a5"],
-main[data-tema="claro"] .modal-cartao [style*="fbbf24"],
-main[data-tema="claro"] .modal-cartao [style*="6ee7b7"] { color: inherit; }
+html[data-tema-painel="claro"] .modal-cartao [style*="fca5a5"],
+html[data-tema-painel="claro"] .modal-cartao [style*="fbbf24"],
+html[data-tema-painel="claro"] .modal-cartao [style*="6ee7b7"] { color: inherit; }
+/* O véu por trás. Só o do `Modal` tem classe (`mdl-veu`); o do `ConfirmModal`
+   está em estilo inline no JSX e não é alcançável daqui — fica como está, e o
+   preto a 55% dele funciona nos dois temas por ser um véu de confirmação, que
+   quer mesmo apagar o resto da tela. */
+html[data-tema-painel="claro"] .mdl-veu { background: rgba(15, 23, 42, 0.38); }
 
 /* ── Toasts ──────────────────────────────────────────────────────────────────
    Ficam no `.ds-shell`, fora do `main`, então não seguem o tema — e é o certo:
@@ -6335,7 +7224,8 @@ html[data-tema-painel="claro"] .pt-caixa textarea {
    vitrine escura num painel claro vê exatamente isso — que é o resultado
    correto, e não um acidente.
    ────────────────────────────────────────────────────────────────────────── */
-main[data-tema="claro"] .editor-shell {
+main[data-tema="claro"] .editor-shell,
+main[data-tema="claro"] .puck-caixa {
   --ed-bg: #eceef2;
   --ed-panel: #ffffff;
   --ed-panel-2: #f5f6f9;
@@ -6345,7 +7235,13 @@ main[data-tema="claro"] .editor-shell {
   --ed-muted: #64748b;
   --ed-accent: #4f46e5;
   --ed-accent-soft: rgba(79, 70, 229, 0.12);
+  /* Invertidos em relação ao escuro: aqui o acento é um índigo forte, então a
+     tinta é branca e o hover ESCURECE em vez de clarear. */
+  --ed-accent-tinta: #ffffff;
+  --ed-accent-hover: #4338ca;
   --ed-danger: #dc2626;
+  --ed-shimmer: rgba(15, 23, 42, 0.07);
+  --ed-shimmer-brilho: rgba(15, 23, 42, 0.05);
 
   /* Os quatro degraus invertidos: tinta escura translucida sobre o branco do
      painel. Ver o bloco de tokens em `.editor-shell` para o defeito que isto
@@ -7295,9 +8191,14 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
 
 /* ── O balão ────────────────────────────────────────────────────────────────
    `fixed` porque sai por portal, ancorado em coordenadas de tela; o JSX injeta
-   `right` mais `top` OU `bottom`. Escuro nos dois temas, como o menu do perfil:
-   os dois nascem colados na moldura, e alternar a cor de um só faria dois menus
-   da mesma barra parecerem de programas diferentes. */
+   `right` mais `top` OU `bottom`.
+
+   Ele seguia o menu do perfil em ficar escuro nos dois temas — os dois nascem
+   colados na moldura, e alternar a cor de um só faria dois menus da mesma barra
+   parecerem de programas diferentes. O argumento continua valendo, e é por isso
+   que os dois trocaram JUNTOS: a moldura passou a acompanhar o tema, e no claro
+   os dois eram as únicas peças pretas da tela. Ver o bloco de tema claro logo
+   abaixo, e o gêmeo dele em `.mp-balao`. */
 .mkb-balao {
   /* Largura FIXA, e o mesmo 260 que `MenuDeCanto` usa para decidir onde o balão
      cabe. Com `min`/`max` o JS não teria como saber a largura antes da primeira
@@ -7334,6 +8235,30 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   background: #f59e0b; color: #111827; font-size: 10px; font-weight: 700;
 }
+
+/* ── O BALÃO NO TEMA CLARO ──────────────────────────────────────────────────
+   Gêmeo do bloco de `.mp-balao`, e pelas mesmas razões: o marcador é
+   `html[data-tema-painel]` porque o balão sai por portal para o `body` e
+   nenhuma classe do shell o alcança; e o que se redeclara é COR, nunca
+   estrutura — largura, raio e animação continuam vindo das regras acima.
+
+   O âmbar do contador (`__badge`) fica: ele é legível sobre claro e sobre
+   escuro, e é a única cor aqui que carrega significado. */
+html[data-tema-painel="claro"] .mkb-balao {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 18px 44px -18px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.03);
+}
+html[data-tema-painel="claro"] .ds-shell .mkb-linha,
+html[data-tema-painel="claro"] .mkb-linha { color: #334155; }
+html[data-tema-painel="claro"] .ds-shell .mkb-linha:hover,
+html[data-tema-painel="claro"] .mkb-linha:hover {
+  background: rgba(15, 23, 42, 0.055); color: #0f172a;
+}
+html[data-tema-painel="claro"] .ds-shell .mkb-linha:disabled:hover,
+html[data-tema-painel="claro"] .mkb-linha:disabled:hover { background: transparent; color: #334155; }
+html[data-tema-painel="claro"] .mkb-linha__icone { color: #64748b; }
+html[data-tema-painel="claro"] .mkb-linha__texto small { color: #7c8797; }
 
 /* ── Onde o "⋮" senta em cada dono ─────────────────────────────────────────
    Na barra, no lugar onde o contador de leads já mora — à direita, centrado.
@@ -7453,6 +8378,27 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
 .mp-conta__texto strong { font-size: 13.5px; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-conta__texto small { font-size: 11.5px; color: #94a3b8; }
 
+/* ── A linha da imobiliária ─────────────────────────────────────────────────
+   Nome à esquerda, selo do plano à direita. Ver `LinhaDaImobiliaria` em
+   `MenuDoPerfil.jsx` para por que o plano mora aqui e não mais no seletor de
+   módulo.
+
+   O nome encolhe e o selo não: a pílula tem `flex-shrink: 0` na regra dela
+   (`.ds-plano`), e é ela que precisa ficar inteira — "Premi…" não diz nada. Com
+   232px de linha, o nome só chega às reticências quando é bem comprido, que era
+   exatamente o que faltava nos ~146px de onde ele saiu. */
+.mp-casa {
+  display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%;
+}
+.mp-casa__nome {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Dentro do balão a pílula é um degrau menor que na moldura: ali ela era a
+   única coisa colorida da faixa, aqui divide a linha com um ícone e um
+   subtítulo. */
+.mp-casa .ds-plano { margin-left: 0; padding: 2px 7px; font-size: 9px; }
+
 /* ── Submenu, à direita ──────────────────────────────────────────────────────
    `left: 100%` e não `right`: a barra fica na borda esquerda da tela, então há
    espaço à direita e nunca à esquerda.
@@ -7474,15 +8420,51 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
   display: flex; flex-direction: column; gap: 1px;
 }
 
-/* ── O balão NÃO segue o tema do painel ──────────────────────────────────────
-   Ele brota colado na barra lateral, que é escura nos dois temas de propósito
-   (é a âncora visual que identifica o produto). Um balão branco saindo de uma
-   barra preta lê como um programa diferente aberto por cima.
+/* ── O BALÃO SEGUE O TEMA ────────────────────────────────────────────────────
 
-   Quem segue o tema são os MODAIS que este menu abre — eles aparecem
-   centralizados sobre o conteúdo, que é a área que muda de cor.
+   Aqui havia um bloco explicando por que ele NÃO seguia: brotava colado na
+   barra lateral, que era escura nos dois temas de propósito, e um balão branco
+   saindo de uma barra preta leria como outro programa aberto por cima.
 
-   Por isso não há bloco de tema claro aqui, e a ausência é a decisão. */
+   A premissa caiu. A barra passou a acompanhar o tema (ver `--s-bg` no
+   `AdminLayout`), então no tema claro o argumento se INVERTEU: o balão escuro
+   é agora a única peça preta da tela, saindo de uma barra clara.
+
+   O marcador é `html[data-tema-painel]` e não `.ds-shell[data-tema]`: o balão
+   sai por portal para o `body`, então nenhuma classe do shell o alcança. Ver
+   `utils/temaDoPainel.js`, que é quem carimba a raiz.
+
+   Redeclara COR, e não estrutura: geometria, raio, animação e o submenu
+   continuam vindo das regras acima, uma vez só. */
+html[data-tema-painel="claro"] .mp-balao,
+html[data-tema-painel="claro"] .mp-flutuante {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+  /* A sombra preta a 90% do escuro vira uma nuvem cinza sobre fundo claro.
+     Encolhe, clareia, e ganha um fio de contorno para o cartão não flutuar sem
+     borda sobre o cinza-claro do painel. */
+  box-shadow: 0 18px 44px -18px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.03);
+}
+html[data-tema-painel="claro"] .ds-shell .mp-linha,
+html[data-tema-painel="claro"] .mp-linha { color: #334155; }
+html[data-tema-painel="claro"] .ds-shell .mp-linha:hover,
+html[data-tema-painel="claro"] .mp-linha:hover,
+html[data-tema-painel="claro"] .ds-shell .mp-linha.is-aberta {
+  background: rgba(15, 23, 42, 0.055); color: #0f172a;
+}
+html[data-tema-painel="claro"] .mp-linha.is-informativa,
+html[data-tema-painel="claro"] .mp-linha.is-informativa:hover { background: transparent; }
+html[data-tema-painel="claro"] .mp-linha__texto small { color: #7c8797; }
+html[data-tema-painel="claro"] .mp-risco { background: rgba(15, 23, 42, 0.09); }
+html[data-tema-painel="claro"] .mp-conta__texto strong { color: #0f172a; }
+html[data-tema-painel="claro"] .mp-conta__texto small { color: #64748b; }
+/* O verde do "vinculada" clareia demais sobre branco — #34d399 sobre #fff é
+   ilegível. O mesmo verde, dois degraus mais escuro. */
+html[data-tema-painel="claro"] .mp-linha__ok { color: #059669; }
+
+/* Quem segue o tema também são os MODAIS que este menu abre — eles aparecem
+   centralizados sobre o conteúdo, e o bloco deles é o `.modal-cartao`, mais
+   acima neste arquivo. */
 
 /* ═══ MODAIS DO PERFIL ═══════════════════════════════════════════════════════ */
 .mp-veu {
@@ -7677,9 +8659,9 @@ html[data-tema-painel="claro"] .aj-caixa textarea::placeholder { color: #9b95ab;
    "há algo aqui sobre a sua conta". O número volta quando a barra abre.
 
    Fora do `main`, então quem o alcança é a barra, não o tema. */
-.ds-side:not(:hover):not(:focus-within) .tv-rotulo { display: none; }
-.ds-side:not(:hover):not(:focus-within) .ds-shell .tv-botao,
-.ds-side:not(:hover):not(:focus-within) .tv-botao {
+.ds-side:not(.is-aberta) .tv-rotulo { display: none; }
+.ds-side:not(.is-aberta) .ds-shell .tv-botao,
+.ds-side:not(.is-aberta) .tv-botao {
   justify-content: center; padding: 9px 0; gap: 0;
 }
 
@@ -8081,21 +9063,24 @@ html[data-tema-painel="claro"] .perm-item.is-on .perm-marca { color: #4f46e5; }
    é o `.skeleton-block` de sempre; aqui só a paleta muda, porque o editor tem
    a própria (`--ed-*`) e é sempre escuro, independente do tema do painel. */
 
+/* ── O SHIMMER PRECISA DE TOKEN ────────────────────────────────────────────
+
+   Ele era branco translucido fixo, com um comentario dizendo que o editor e
+   escuro nos dois temas do painel. Nao e: `main[data-tema="claro"] .editor-shell`
+   inverte a paleta inteira logo abaixo neste arquivo, e sobre o painel branco o
+   shimmer branco simplesmente nao existia. O carregamento aparecia como uma
+   area vazia — o oposto do que um esqueleto faz.
+
+   Com token, cada tema responde por si, e o esqueleto do editor novo (que usa
+   estas mesmas classes) acompanha de graca. */
 .ed-esq .skeleton-block {
-  background-color: rgba(255, 255, 255, 0.045);
+  background-color: var(--ed-shimmer, rgba(255, 255, 255, 0.045));
   background-image: linear-gradient(90deg,
-    rgba(255, 255, 255, 0) 20%,
-    rgba(255, 255, 255, 0.06) 50%,
-    rgba(255, 255, 255, 0) 80%);
+    transparent 20%,
+    var(--ed-shimmer-brilho, rgba(255, 255, 255, 0.06)) 50%,
+    transparent 80%);
   display: block;
 }
-/* O editor é escuro nos dois temas do painel, então a versão clara do
-   `.skeleton-block` não pode alcançar estes blocos. */
-main[data-tema="claro"] .ed-esq .skeleton-block,
-html[data-tema-painel="claro"] .ed-esq .skeleton-block {
-  background-color: rgba(255, 255, 255, 0.045);
-}
-
 .ed-esq__rail,
 .ed-esq__inspetor {
   flex-shrink: 0;
@@ -8180,23 +9165,48 @@ html[data-tema-painel="claro"] .ed-esq .skeleton-block {
      só, e não uma coisa perseguindo a outra. */
   transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1), width 0.18s ease;
 }
-.ds-side:hover ~ .ds-coluna main .editor-rail,
-.ds-side:hover ~ .ds-coluna main .ed-esq__rail,
-/* `focus-within` porque quem navega por teclado nunca passa o mouse — sem isto
-   o rail continuaria enterrado justamente para quem mais precisa vê-lo. */
-.ds-side:focus-within ~ .ds-coluna main .editor-rail,
-.ds-side:focus-within ~ .ds-coluna main .ed-esq__rail,
-/* O terceiro estado: a barra PRESA aberta, que é o que acontece enquanto o
-   seletor de módulo está no ar. Sem ele o rail voltava para baixo da barra
-   assim que o ponteiro entrava no balão do seletor. */
-.ds-side.is-mod-aberto ~ .ds-coluna main .editor-rail,
-.ds-side.is-mod-aberto ~ .ds-coluna main .ed-esq__rail {
-  margin-left: 176px; /* 240 (aberta) − 64 (recolhida) */
+/* A barra de ferramentas anda por padding, mas na mesma curva e no mesmo tempo:
+   ela e o rail têm de parecer uma peça só se movendo. */
+.ds-side ~ .ds-coluna main .editor-topbar {
+  transition: padding-left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* A barra abre por CLIQUE no hambúrguer, e o estado dela é uma classe. Eram
+   três seletores aqui — `:hover`, `:focus-within` e a barra presa aberta pelo
+   balão do seletor de módulo —, e os três existiam por causa da expansão por
+   hover. Ver o cabeçalho de `.ds-side` no `AdminLayout.jsx`.
+
+   `--s-avanco` é a diferença entre a barra aberta e a recolhida, declarada no
+   `.ds-shell`. Era 176px cravado aqui e em mais cinco lugares. */
+.ds-side.is-aberta ~ .ds-coluna main .editor-rail,
+.ds-side.is-aberta ~ .ds-coluna main .ed-esq__rail {
+  margin-left: var(--s-avanco);
+}
+
+/* ── E A BARRA DE FERRAMENTAS DO EDITOR, PELO MESMO MOTIVO ───────────────────
+
+   Ela ficou de fora quando isto foi escrito, e o sintoma era o mesmo do rail: a
+   barra lateral aberta passava por cima do nome do documento e do "Tudo salvo",
+   que moram justamente na ponta esquerda dela. O editor não tem `.ds-topo` —
+   troca o cabeçalho do painel pela barra própria —, então nenhuma das regras de
+   cabeçalho o alcançava.
+
+   Aqui é PADDING, e não `margin-left` como no rail: a barra precisa continuar
+   ocupando a largura inteira, senão abre uma calha escura entre ela e a
+   sidebar e as duas param de parecer a mesma tela. O que anda é só o conteúdo.
+
+   O alternador Desktop/Mobile continua centrado por consequência: as três
+   faixas são `1fr auto 1fr` DENTRO da caixa com padding, então o centro
+   acompanha o centro do que está visível — que é o que a barra aberta muda.
+
+   O 14px somado é o respiro que a barra já tinha no estado normal. */
+.ds-side.is-aberta ~ .ds-coluna main .editor-topbar {
+  padding-left: calc(var(--s-avanco) + 14px);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ds-side ~ .ds-coluna main .editor-rail,
-  .ds-side ~ .ds-coluna main .ed-esq__rail { transition: none; }
+  .ds-side ~ .ds-coluna main .ed-esq__rail,
+  .ds-side ~ .ds-coluna main .editor-topbar { transition: none; }
 }
 
 /* ── Modal global (`components/Modal.jsx`) ───────────────────────────────────
@@ -11744,3 +12754,1128 @@ button.mpx-acao-texto:focus-visible {
   }
 }
 /* === OMNIMOB MODAL PERFIL V2 :: FIM === */
+
+/* === PROVA DE CONCEITO DO PUCK :: INÍCIO ===================================
+   Só a rota /vitrine/:slug/puck usa estas classes. Elas vestem o aparato em
+   volta do editor — marcador de bloco ainda não portado, inventário da
+   tradução, saída do publicar. Nada aqui desenha vitrine: o conteúdo continua
+   sendo dos componentes de sempre.
+   ========================================================================= */
+
+/* A caixa do editor. Ela ganha a altura por medição no JSX; aqui fica só o que
+   nao muda: ser a referencia de posicionamento do aparato em volta. */
+.puck-caixa {
+  position: relative;
+  overflow: hidden;
+  /* A MESMA curva e a mesma duracao da barra lateral (ver .ds-side__interno):
+     com tempos diferentes, o editor chegava no lugar antes ou depois da barra e
+     o gesto lia como dois movimentos em vez de um. */
+  transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── O EDITOR ANDA COM A BARRA LATERAL ──────────────────────────────────────
+
+   Esta rota e tratada como editor de vitrine no AdminLayout, entao ela NAO
+   recebe o .main-content — e era dele que vinha o padding que acompanha a barra
+   abrindo. Sem esta regra a barra aberta passava por cima da gaveta de pecas,
+   que mora justamente na ponta esquerda do editor.
+
+   Mesmo mecanismo do editor classico, logo abaixo neste arquivo: margem, e nao
+   padding, porque a caixa ja e medida em altura e mexer no padding dela
+   mudaria a conta.
+
+   O estado da barra e uma CLASSE desde que ela passou a abrir por clique no
+   hamburguer: eram tres seletores aqui (:hover, :focus-within e a barra presa
+   pelo balao do seletor de modulo), e os tres eram consequencia do hover.
+   --s-avanco e a diferenca entre os dois tamanhos, declarada no .ds-shell. */
+.ds-side.is-aberta ~ .ds-coluna main .puck-caixa {
+  margin-left: var(--s-avanco);
+}
+
+/* Bloco que a tradução reconheceu mas a fase 2 ainda não desenha. Ele se
+   ANUNCIA de propósito: um bloco que sumisse em silêncio faria a pessoa achar
+   que a migração comeu a peça dela. */
+.puck-marcador {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 22px 24px;
+  border: 1px dashed rgba(99, 102, 241, 0.55);
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.06);
+  color: #4338ca;
+  font-size: 13px;
+}
+
+.puck-marcador strong {
+  font-size: 14px;
+}
+
+.puck-marcador span {
+  opacity: 0.75;
+}
+
+/* O inventário do que a tradução perdeu. Fica na tela, e não no console: quem
+   precisa ler isso é quem está avaliando a migração. */
+/* ABSOLUTE, e não fixed: a rota vive dentro do AdminLayout, cujo main-content
+   tem transform para acompanhar a barra lateral — e transform faz do elemento o
+   bloco de contenção de qualquer fixed lá dentro. O aviso ancorado ao rodapé da
+   janela ia parar no topo, cortado. Ancorado ao invólucro, ele fica onde se
+   pretende nas duas situações.
+   O invólucro é position:fixed, então serve de referência. */
+.puck-avisos {
+  position: absolute;
+  left: 50%;
+  /* Acima da barra de situação: as duas vivem no meio do rodapé. */
+  bottom: 68px;
+  z-index: 120;
+  transform: translateX(-50%);
+  max-width: 620px;
+  padding: 14px 40px 14px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  background: rgba(20, 18, 8, 0.95);
+  color: #fde68a;
+  font-size: 12.5px;
+  line-height: 1.5;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.puck-avisos strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #fef3c7;
+}
+
+.puck-avisos ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* Especificidade dobrada de proposito: o reset de botao do painel e mais forte
+   que uma classe sozinha, e vinha vencendo com position:relative e largura
+   esticada — o X ia parar no meio do aviso. Medido, nao adivinhado. */
+.puck-avisos .puck-avisos__fechar {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  top: 8px;
+  right: 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.puck-avisos .puck-avisos__fechar:hover {
+  opacity: 1;
+}
+
+
+.puck-aviso-tela {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 24px;
+  color: var(--muted, #94a3b8);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* A barra de situacao: o que esta NO AR. Com dois renderizadores para a mesma
+   pagina, essa e a unica pergunta que importa — e a volta fica no mesmo lugar,
+   porque quem precisa dela ja esta insatisfeito. */
+/* Centralizada sobre a PRANCHETA, e não no canto esquerdo.
+
+   No canto ela cobria os primeiros itens da gaveta de peças — justamente a
+   lista que se usa o tempo todo. O meio do rodapé é o único espaço que não
+   disputa com painel nenhum, e é onde os avisos de tradução já ficam; os dois
+   se empilham em vez de se sobrepor (ver o `bottom` de cada um). */
+.puck-situacao {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 16px;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 60%;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.92);
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.puck-situacao__ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex: none;
+}
+
+.puck-situacao--no-ar {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #bbf7d0;
+}
+
+.puck-situacao--no-ar .puck-situacao__ponto {
+  background: #22c55e;
+}
+
+.puck-situacao__recado {
+  font-style: normal;
+  opacity: 0.75;
+}
+
+.puck-situacao .puck-situacao__voltar {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.puck-situacao .puck-situacao__voltar:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+/* A vitrine desenhada pelo Puck: sem palco absoluto e sem altura calculada. A
+   arvore empilha sozinha, que era o ponto da migracao. */
+/* ── A FOLHA É A RAIZ DA CONFIG, NAS DUAS TELAS ────────────────────────────
+
+   `.vitrine-puck` é o que `root.render` desenha, e por isso é o único elemento
+   que o EDITOR e a vitrine publicada têm em comum. A largura da folha mora aqui
+   pelo mesmo motivo que o tema mora: qualquer geometria posta só de um lado é
+   uma divergência esperando para aparecer.
+
+   E apareceu. A folha do editor não tinha largura máxima, então esticava até a
+   borda da prévia — enquanto o rodapé traz `max-width: 1360px` por conta
+   própria. O resultado: mudar a cor de fundo do rodapé pintava uma ilha no meio
+   de uma folha larga, e a pessoa concluía, com razão, que a cor não pegou.
+
+   Os números são os de `.showcase-container`, que é o que a vitrine sempre
+   usou. O padding lateral fica aqui também, para o editor mostrar o mesmo
+   respiro que o ar tem. */
+.vitrine-puck {
+  max-width: 1400px;
+  margin-inline: auto;
+  padding: 0 20px 40px;
+}
+
+.showcase-puck {
+  display: block;
+}
+
+/* ── O CABECALHO PRECISA OCUPAR LUGAR ───────────────────────────────────────
+
+   Ele nasceu "position: fixed", e na engine isso nao tinha custo: cada bloco
+   era desenhado num "y" absoluto, entao nao importava que o cabecalho ocupasse
+   zero altura no fluxo.
+
+   Numa arvore importa, e muito: fora do fluxo, ele deixa de empurrar o que vem
+   depois, e a pagina inteira comeca embaixo dele. Foi exatamente o que
+   apareceu na primeira vitrine publicada pelo Puck.
+
+   "sticky" e nao "relative" de proposito: assim ele ocupa o lugar dele E
+   continua grudando no topo ao rolar, que e o comportamento que a vitrine
+   sempre teve — inclusive o vidro do ".is-scrolled", que depende disso para
+   fazer sentido. Trocar por "relative" consertaria a sobreposicao e perderia a
+   barra fixa junto.
+
+   "left: auto" porque a regra base traz "left: 0", e num sticky isso gruda
+   tambem na horizontal.
+
+   A sangria e o mesmo truque de sempre em outra roupa: no fluxo nao da para
+   usar --sangria-x, que foi feito para o "left" de um absoluto. Margem negativa
+   de meia janela mais 100vw da a largura cheia sem tirar o elemento do fluxo.
+   O mesmo precedente ja existe logo acima, na pagina de detalhe do imovel.
+
+   O seletor e .vitrine-puck, a raiz da config, e nao .showcase-puck, que e o
+   conteiner da pagina publica: escopada na pagina, a correcao nao chegava ao
+   EDITOR, cuja previa mora num iframe proprio — e la o cabecalho seguia
+   sobrepondo a pagina inteira. */
+.vitrine-puck .luxury-header-wrapper {
+  position: sticky;
+  top: 0;
+  left: auto;
+  margin-left: calc(50% - 50vw);
+  width: 100vw;
+}
+/* === PROVA DE CONCEITO DO PUCK :: FIM === */
+
+/* === A IDENTIDADE DO EDITOR, APLICADA NO PUCK :: INÍCIO ====================
+
+   O editor de vitrine tem paleta e tipografia próprias desde que existe:
+   --ed-bg, --ed-panel, --ed-accent, Plus Jakarta Sans. Trocar a engine por uma
+   biblioteca não podia significar trocar a identidade do produto por um branco
+   de demonstração — a tela é a mesma para quem usa, e precisa continuar
+   parecendo parte da Omnimob.
+
+   ── POR TOKEN, E NÃO CLASSE POR CLASSE ──
+
+   O Puck expõe tokens semânticos (superfície, borda, texto, interativo) e usa
+   classes com hash no nome (_PuckHeader_c2nei_1). Repintar por classe seria
+   caçar dezenas de seletores a cada versão da dependência. Aqui os tokens dele
+   apontam para os NOSSOS, que já existem, já respondem ao tema claro e já são a
+   paleta do resto do editor.
+
+   Isso resolve o tema claro junto e de graça: --ed-* já inverte em
+   main[data-tema="claro"], e o Puck acompanha sem uma segunda tabela. A caixa
+   do editor foi acrescentada ao seletor que define esses tokens, lá em cima.
+
+   As poucas regras por classe embaixo são o que não tem token: a fonte, o chão
+   da prancheta e o vidro da barra do topo.
+   ========================================================================= */
+
+.puck-caixa {
+  --puck-color-surface: var(--ed-panel);
+  --puck-color-surface-muted: var(--ed-panel-2);
+  --puck-color-surface-subtle: var(--ed-fill-sutil);
+  --puck-color-surface-inverse: var(--ed-text);
+
+  --puck-color-border: var(--ed-line);
+  --puck-color-border-hover: var(--ed-line-strong);
+  --puck-color-border-muted: var(--ed-line);
+  --puck-color-border-inverse: var(--ed-line-strong);
+
+  --puck-color-text: var(--ed-text);
+  --puck-color-text-secondary: var(--ed-muted);
+  --puck-color-text-muted: var(--ed-muted);
+  --puck-color-text-subtle: var(--ed-muted);
+  --puck-color-text-inverse: var(--ed-accent-tinta);
+
+  /* O acento e o indigo da marca, e nao o azul de fabrica do Puck. E ele que
+     pinta o Publicar, a peca selecionada e a aba ativa. */
+  --puck-color-interactive: var(--ed-accent);
+  --puck-color-interactive-hover: var(--ed-accent-hover);
+  --puck-color-interactive-active: var(--ed-accent-hover);
+  --puck-color-interactive-subtle: var(--ed-accent-soft);
+  --puck-color-interactive-soft: var(--ed-accent-soft);
+  --puck-color-interactive-soft-hover: var(--ed-fill-hover);
+  --puck-color-interactive-neutral-hover: var(--ed-fill-hover);
+  --puck-color-interactive-inverse-hover: var(--ed-accent-hover);
+  --puck-color-focus-ring: var(--ed-accent);
+
+  --puck-field-color-bg: var(--ed-fill);
+  --puck-field-color-bg-disabled: var(--ed-fill-sutil);
+  --puck-field-color-border: var(--ed-line-strong);
+  --puck-field-color-border-hover: var(--ed-accent);
+  --puck-field-color-border-focus: var(--ed-accent);
+  --puck-field-color-text: var(--ed-text);
+  --puck-field-color-text-disabled: var(--ed-muted);
+
+  --puck-iconbutton-color-bg: transparent;
+  --puck-iconbutton-color-bg-hover: var(--ed-fill-hover);
+  --puck-iconbutton-color-bg-active: var(--ed-fill-forte);
+  --puck-iconbutton-color-icon: var(--ed-muted);
+  --puck-iconbutton-color-icon-hover: var(--ed-text);
+  --puck-iconbutton-color-icon-disabled: var(--ed-line-strong);
+
+  --puck-actionbar-color-bg: var(--ed-panel-2);
+  --puck-actionbar-color-text: var(--ed-text);
+  --puck-actionbar-color-separator: var(--ed-line);
+  --puck-actionbar-color-action-hover: var(--ed-fill-hover);
+  --puck-actionbar-color-action-active: var(--ed-fill-forte);
+
+  /* A tarja da zona de arrasto: transparente no hover (ver o bloco da zona),
+     mas quando a zona esta de fato selecionada ela usa o acento da casa. */
+  --puck-slot-color-bg: var(--ed-accent-soft);
+
+  /* ── OS COMPARTIMENTOS NAO PINTAM ────────────────────────────────────────
+
+     O Puck tem um token proprio para o fundo de cada peca da moldura, e os
+     quatro apontam para transparente. Ver o bloco "A MOLDURA VIRA AR", logo
+     abaixo, para o porque; aqui ficam so os que o Puck ja abre.
+
+     O `--_puck-menu-bar-color-bg` volta a ter cor porque o cabecalho o repassa
+     para o menu suspenso da largura pequena — e menu suspenso e balao, nao
+     compartimento: sem fundo ele sairia por cima do que estiver embaixo. */
+  --puck-header-color-bg: transparent;
+  --puck-pluginbar-color-bg: transparent;
+  --puck-sidebar-left-color-bg: transparent;
+  --puck-sidebar-right-color-bg: transparent;
+  --puck-canvas-color-bg: transparent;
+
+  /* A tipografia do editor, e nao a de fabrica. */
+  font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+}
+
+.puck-caixa [class*="Puck_"],
+.puck-caixa [class*="PuckLayout"],
+.puck-caixa [class*="PuckHeader"] {
+  font-family: inherit;
+}
+
+/* ── A MOLDURA VIRA AR ─────────────────────────────────────────────────────
+
+   O Puck pinta cada compartimento da casca: a moldura, a barra do topo, a tira
+   de icones da esquerda, os dois paineis laterais e o titulo de cada secao
+   deles. Sao seis tons de cinza empilhados, cada um com o seu fio de borda, em
+   volta da UNICA coisa que interessa ali — a folha da vitrine. O contorno das
+   caixas competia com o contorno das pecas que a pessoa esta montando.
+
+   Aqui a casca some: fundo e borda saem de tudo que e COMPARTIMENTO — a
+   prancheta inclusive. O chao dela era o unico cinza que sobrevivera a primeira
+   passada (ele era mais ESCURO que a folha de proposito, para a vitrine escura
+   nao brilhar menos que a moldura em volta), e caiu junto: com todo o resto
+   plano, ele voltou a ser a caixa que sobra.
+
+   O que segue pintado e o que precisa se destacar do ar por natureza — a FOLHA
+   (o trabalho, por `--puck-canvas-preview-color-bg`, que fica de fora da lista)
+   e os CONTROLES: campo, botao, menu suspenso, balao, barra de acao da peca.
+   Ninguem clica no que nao consegue ver.
+
+   O fundo, quando o Puck abre um token para ele, sai la em cima junto dos
+   demais (`--puck-header-color-bg` e companhia). Sobra para ca o que so tem
+   classe: a moldura de dentro — que le `--puck-color-surface-subtle`, um token
+   que o modal de fonte externa e o menu de texto rico TAMBEM leem, entao zera-lo
+   apagaria os dois — e as bordas, que nao tem token nenhum.
+
+   O vidro que a barra do topo tinha (o mesmo da `.editor-topbar`) saiu junto:
+   vidro e uma superficie, e uma superficie a menos era o pedido. */
+.puck-caixa [class*="PuckLayout-inner"] {
+  background-color: transparent;
+}
+
+/* O cabecalho repassa o proprio fundo para o menu suspenso da largura pequena.
+   Como o dele agora e transparente, o balao precisa recuperar o seu. */
+.puck-caixa [class*="PuckHeader_"] {
+  --_puck-menu-bar-color-bg: var(--ed-panel-2);
+}
+
+.puck-caixa [class*="PuckLayout-nav"],
+.puck-caixa [class*="Sidebar_"],
+.puck-caixa [class*="Sidebar--"],
+.puck-caixa [class*="SidebarSection-title"],
+.puck-caixa [class*="PuckHeader_"],
+.puck-caixa [class*="PuckHeader-inner"] {
+  border-color: transparent;
+}
+
+/* O campo de cor no inspetor do Puck usa as classes do editor classico
+   (.editor-field, .editor-color), entao o desenho vem de graca. O que falta e o
+   espacamento, porque ali ele vive dentro do formulario do Puck. */
+.puck-campo-cor {
+  gap: 6px;
+}
+
+.puck-campo-cor__limpar {
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ed-muted);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.puck-campo-cor__limpar:hover {
+  color: var(--ed-text);
+}
+
+/* O esqueleto de carregamento e o mesmo do editor classico, e ele se dimensiona
+   pela .editor-workspace. Dentro da caixa do Puck nao ha essa casca, entao a
+   altura vem daqui. */
+.puck-caixa .ed-esq {
+  height: 100%;
+}
+
+/* ── E O ESQUELETO IMITA A MOLDURA NOVA ────────────────────────────────────
+
+   `EditorEsqueleto` desenha a casca do editor CLASSICO: rail pintado, folha
+   sobre chao escuro, inspetor com fio na borda. Ele e o mesmo componente nas
+   duas telas, e no classico esses fundos continuam certos — a moldura de la nao
+   mudou.
+
+   Dentro da caixa do Puck ele passou a mentir: mostrava as caixas por um
+   instante e entregava uma tela sem caixa nenhuma. Um esqueleto existe para
+   dizer o formato do que vem; se ele diz o formato errado, o carregamento
+   termina em salto.
+
+   Some so o CHAO. Os tracos (`.skeleton-block`) ficam — sao eles o esqueleto, e
+   apaga-los deixaria a espera como area vazia, que e o oposto. */
+.puck-caixa .ed-esq__rail,
+.puck-caixa .ed-esq__inspetor,
+.puck-caixa .ed-esq__palco,
+.puck-caixa .ed-esq__folha {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* ── A AMOSTRA DE COR PRECISA DE CONTORNO ──────────────────────────────────
+
+   Escolher a cor de fundo de um widget pintava a amostra com ela — e o painel
+   do inspetor tem essa mesma cor por baixo. O quadrado sumia no fundo, e o
+   campo passava a parecer vazio justamente depois de a pessoa escolher algo.
+
+   Um anel de contraste resolve nos dois sentidos: linha clara para cor escura,
+   sombra escura para cor clara. As duas em cima do mesmo elemento, porque não
+   dá para saber de antemão qual das duas vai fazer falta. */
+.puck-campo-cor .editor-color {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 0 0 1px rgba(15, 23, 42, 0.28),
+    0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* ── A ÁRVORE DE CAMADAS ───────────────────────────────────────────────────
+
+   A Estrutura vinha com os nomes centralizados e todos os níveis no mesmo
+   recuo — o que apagava exatamente a informação que ela existe para dar: o que
+   está DENTRO do quê. Numa página com duas seções de colunas, saber que um
+   widget mora dentro de uma seção é a diferença entre achar a peça e caçá-la.
+
+   Alinhamento à esquerda, e a hierarquia por recuo crescente: cada nível de
+   aninhamento entra um degrau, com um fio vertical marcando a coluna do pai.
+   O espaço entre grupos separa o que é irmão do que é filho. */
+.puck-caixa [class*="LayerTree"] {
+  text-align: left;
+}
+
+.puck-caixa [class*="LayerTree"] [class*="Layer-name"],
+.puck-caixa [class*="LayerTree"] [class*="Layer-title"],
+.puck-caixa [class*="LayerTree"] button {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* O fio do nível: aparece só nas árvores ANINHADAS, que são as que têm pai. */
+.puck-caixa [class*="LayerTree"] [class*="LayerTree"] {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--ed-line);
+}
+
+/* Respiro entre grupos: um item que abre uma árvore embaixo ganha ar acima,
+   para o olho separar a lista rasa dos blocos aninhados. */
+.puck-caixa [class*="LayerTree"] [class*="LayerTree"] {
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+/* ── OS ALTERNADORES DO INSPETOR ───────────────────────────────────────────
+
+   Visibilidade, posição, conteúdo e tema: quatro perguntas de duas vias que
+   saíam cruas como radio do Puck. Aqui elas usam o `.editor-segmented` da barra
+   do editor clássico — o desenho, o estado ativo e as duas paletas já vêm de
+   lá. O que este bloco acrescenta é só o que muda de contexto: dentro do
+   inspetor o alternador ocupa a largura toda, e ganha uma linha de apoio.
+   ========================================================================= */
+
+.puck-alternador {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Largura cheia: na barra superior o alternador é um chip entre outros; aqui
+   ele é o campo, e um controle encolhido no canto de uma coluna de 300px fica
+   com cara de sobra. */
+.puck-alternador .editor-segmented {
+  display: flex;
+  width: 100%;
+}
+
+.puck-alternador .editor-segmented button {
+  min-width: 0;
+  padding: 0 8px;
+  /* O rótulo da fonte de dados pode ser longo ("Horário de atendimento").
+     Cortar é melhor que empurrar o botão vizinho para fora do campo. */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.puck-alternador .editor-segmented button svg {
+  flex: none;
+}
+
+/* A linha de apoio diz o que o estado ESCOLHIDO significa. Discreta de
+   propósito: quem já sabe não precisa lê-la duas vezes. */
+.puck-alternador__apoio {
+  margin: 0;
+  color: var(--ed-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+/* === A IDENTIDADE DO EDITOR, APLICADA NO PUCK :: FIM === */
+
+
+/* === A ZONA DE ARRASTO NÃO PINTA POR CIMA DA PÁGINA :: INÍCIO ==============
+
+   Era o pisca-pisca. Ao apontar uma seção de colunas, o Puck pintava a área
+   inteira de cinza — a tarja que aparecia e sumia várias vezes por segundo,
+   cobrindo os widgets.
+
+   Por que ligava e desligava: a ponte de edição abre um furo na sobreposição de
+   cada peça, para o texto e os botões dos widgets receberem o clique. Dentro do
+   furo o Puck deixa de enxergar a PEÇA e passa a enxergar a ZONA que a contém —
+   e zona apontada é zona pintada. Andando com o mouse, o par alternava sem
+   parar. Tirar os furos consertaria o pisca e mataria a edição no lugar; então
+   o que sai é a pintura.
+
+   Sai só o FUNDO, e só no hover. A borda tracejada continua: ela é o que diz
+   onde a peça vai cair, e é fina demais para incomodar. E `--isAreaSelected`
+   fica intacta — quando a zona está de fato selecionada, o destaque é
+   informação, não ruído.
+
+   Demorou três tentativas para achar isto, e o que resolveu não foi medir mais
+   fundo: foi um gif da tela do cliente e a comparação de dois quadros. Nenhuma
+   das medições de DOM pegava, porque o DOM não mudava — mudava a pintura.
+   ========================================================================= */
+
+.vitrine-puck [class*="DropZone--hoveringOverArea"]:not([class*="DropZone--isAreaSelected"]) {
+  background: transparent;
+}
+/* === A ZONA DE ARRASTO NÃO PINTA POR CIMA DA PÁGINA :: FIM === */
+
+/* === PEÇA OCULTA, NO EDITOR :: INÍCIO ======================================
+   Aparato de edição: existe na prancheta e NÃO existe na página publicada — a
+   peça oculta desenha `null` no ar. É a mesma natureza da etiqueta de seleção.
+
+   Sumir por completo também no editor foi a primeira ideia, e é o que o editor
+   clássico fazia. Ali as Camadas ficavam sempre à vista e a peça continuava
+   listada; aqui a Estrutura é uma aba entre duas, e peça que evapora sem deixar
+   marca é peça que a pessoa dá por perdida.
+   ========================================================================= */
+
+.puck-oculta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 18px;
+  border: 1px dashed rgba(148, 163, 184, 0.45);
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.06);
+  color: #94a3b8;
+  font-size: 12.5px;
+}
+
+.puck-oculta strong {
+  color: #cbd5e1;
+  font-size: 13px;
+}
+/* === PEÇA OCULTA, NO EDITOR :: FIM === */
+
+/* === A PRÉVIA DO ARRASTO :: INÍCIO =========================================
+
+   Sobreposicao que aparece sobre a peca sob o ponteiro durante um arrasto, e
+   diz o que vai acontecer ao soltar. Tres modos, um por resposta possivel:
+
+     colunas   a area do alvo se divide em duas, com o nome da peca que entra
+     pilha     um contorno so — soltar aqui empilha, que e o gesto comum
+     recusa    a mesma moldura em tom de aviso, com o MOTIVO
+
+   O modo `recusa` existe porque soltar e nada mudar e indistinguivel de
+   defeito: a pessoa repete o gesto, conclui que a ferramenta falhou, e nunca
+   descobre que o limite era de quatro colunas.
+
+   A RECUSA continua sendo sobreposicao pura — ela so precisa dizer uma frase.
+
+   As COLUNAS deixaram de ser: a pagina se reorganiza de verdade, o alvo encolhe
+   e a peca arrastada pula para o espaco que abriu. O que se mexe e classe, e
+   nada disso chega ao documento. O porque de isso ter ficado seguro esta no
+   cabecalho de `previaDeSecao.js`.
+   ========================================================================= */
+
+/* ── O ALVO ENCOLHE DE VERDADE, EM LARGURA ──────────────────────────────────
+
+   Metade da largura, com margem do lado oposto ao que a peca entra.
+
+   Isto ja foi `transform: scale(.5)`, e a razao era boa — transform nao mexe no
+   layout, entao nada reflui e nada abaixo anda. Mas o resultado mentia: as duas
+   pecas apareciam com METADE DA FONTE, e o que acontece de verdade ao soltar e
+   outra coisa — a coluna estreita, o texto reflui e a altura cresce. Quem
+   olhava a previa via um tamanho que nao ia existir.
+
+   A previa e para mostrar o que vai acontecer. Entao ela reflui igual, e o
+   texto que vai quebrar quebra ali mesmo.
+
+   O que tornou isto seguro foi a trava da decisao (ver `mira`, em
+   `PonteDeEdicao`): antes dela, o layout mudando por baixo do gesto
+   realimentava o teste de acerto e a previa piscava. Com a decisao congelada na
+   caixa medida ANTES de encolher, o reflow nao tem como mudar o alvo.
+
+   `!important` na largura porque a peca pode trazer largura propria; esta e
+   temporaria e tem de vencer enquanto o gesto dura.
+   (Sem crases nestes comentarios: convencao do arquivo.) */
+[data-puck-component].puck-encolhe {
+  width: 50% !important;
+  transition: width 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+              margin-left 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: width, margin-left;
+}
+/* A peca entra pela esquerda: quem anda para a direita e o alvo. */
+[data-puck-component].puck-encolhe.is-esquerda { margin-left: 50%; }
+[data-puck-component].puck-encolhe.is-direita { margin-left: 0; }
+
+/* ── A ORIGINAL FICA, APAGADA ───────────────────────────────────────────────
+   Ela nao sai do lugar: sair deixaria um buraco no meio da pagina. Apagada, ela
+   diz "esta e a que voce esta segurando" sem competir com a copia que pulou. */
+[data-puck-component].puck-fantasma {
+  /* Só a transição. O VALOR vai inline, de `previaDeSecao`: o Puck pinta a
+     própria opacidade na peça arrastada e ganhava daqui — medido, a original
+     ficava em 0.9 e disputava o olho com a cópia que pulou. */
+  transition: opacity 0.16s ease;
+}
+
+/* O involucro da ponte de edicao. So existe para ser bloco de contencao da
+   copia que a previa desenha — sem `position`, `absolute` sobe ate achar
+   qualquer ancestral posicionado e a copia sai da folha. Nao move nada: sem
+   deslocamento, `relative` e inerte no layout. */
+.puck-ponte { position: relative; }
+
+/* ── A COPIA QUE PULA PARA O ESPACO ─────────────────────────────────────────
+
+   Absoluta dentro do involucro da ponte, surda ao ponteiro e translucida — e a
+   peca "na mao", ja no lugar onde ela vai cair.
+
+   Ela ocupa a METADE LIVRE da caixa do alvo, no tamanho final: sem escala
+   nenhuma. O conteudo dela reflui na largura estreita exatamente como vai
+   refluir depois de soltar — que e a diferenca entre uma previa e um icone.
+
+   A altura e do CONTEUDO (`height: auto`): a linha resultante fica com a altura
+   da peca mais alta, e cravar a altura do alvo cortava a copia no meio.
+
+   A entrada e um deslize curto de opacidade: ela CHEGA, em vez de aparecer.
+   Escala nao serve aqui — ela mudaria o tamanho que a copia existe para
+   mostrar. */
+.puck-clone {
+  position: absolute;
+  z-index: 59;
+  pointer-events: none;
+  border-radius: 12px;
+  opacity: 0;
+  transform: translateY(6px);
+  outline: 2px dashed var(--ed-accent, #818cf8);
+  outline-offset: -2px;
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+              top 0.16s ease, left 0.16s ease, width 0.16s ease;
+}
+.puck-clone.is-posto {
+  opacity: 0.62;
+  transform: none;
+}
+/* O conteudo copiado nao pode reagir a nada: ele e retrato, nao peca. */
+.puck-clone > * {
+  pointer-events: none;
+  width: 100%;
+}
+/* Vinda da gaveta nao ha o que copiar — o nome dela e o que se sabe dizer. */
+.puck-clone__nome {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 90%;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--ed-accent, #818cf8);
+  color: var(--ed-accent-tinta, #0b0b12);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-puck-component].puck-encolhe,
+  [data-puck-component].puck-fantasma,
+  .puck-clone { transition: none; }
+}
+
+.puck-previa {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 14px;
+  pointer-events: none;
+  outline-offset: 2px;
+  /* A transicao e o que da a sensacao "magnetica": ao passar de uma peca para
+     outra, a previa desliza ate a nova em vez de piscar no lugar novo. */
+  transition: top 0.12s ease, left 0.12s ease, width 0.12s ease, height 0.12s ease;
+}
+
+.puck-previa__col {
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+}
+
+.puck-previa__col--nova {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.puck-previa__col--nova span {
+  max-width: 92%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ── Vai virar duas colunas ─────────────────────────────────────────────── */
+.puck-previa[data-modo="colunas"] {
+  background: color-mix(in srgb, var(--ed-accent, #818cf8) 10%, transparent);
+  outline: 2px solid var(--ed-accent, #818cf8);
+}
+
+.puck-previa[data-modo="colunas"] .puck-previa__col--alvo {
+  background: color-mix(in srgb, var(--ed-accent, #818cf8) 8%, transparent);
+}
+
+.puck-previa[data-modo="colunas"] .puck-previa__col--nova {
+  border: 2px dashed var(--ed-accent, #818cf8);
+  background: color-mix(in srgb, var(--ed-accent, #818cf8) 16%, transparent);
+}
+
+.puck-previa[data-modo="colunas"] .puck-previa__col--nova span {
+  background: var(--ed-accent, #818cf8);
+  color: var(--ed-accent-tinta, #0b0b12);
+}
+
+/* ── Nao da, e o motivo esta na etiqueta ──────────────────────────────────── */
+.puck-previa[data-modo="recusa"] {
+  background: color-mix(in srgb, var(--ed-danger, #f87171) 8%, transparent);
+  outline: 2px dashed var(--ed-danger, #f87171);
+}
+
+.puck-previa[data-modo="recusa"] .puck-previa__col--alvo {
+  display: none;
+}
+
+.puck-previa[data-modo="recusa"] .puck-previa__col--nova span {
+  max-width: 96%;
+  background: var(--ed-danger, #f87171);
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .puck-previa { transition: none; }
+}
+/* === A PRÉVIA DO ARRASTO :: FIM === */
+
+/* === O MENU DE AÇÕES RARAS E AS GAVETAS :: INÍCIO ==========================
+   Modelos, historico de versoes, copiar link e recomecar — as quatro coisas que
+   o "•••" do editor classico tinha e que se perderam na migracao.
+
+   Elas ficam num menu, e nao soltas na barra, porque sao raras e duas delas sao
+   DESTRUTIVAS. "Recomecar" ao lado de "Publicar" seria o pior vizinho possivel.
+   ========================================================================= */
+
+.puck-menu { position: relative; }
+
+.puck-menu .puck-menu__abrir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--ed-line);
+  background: transparent;
+  color: var(--ed-muted);
+  cursor: pointer;
+}
+
+.puck-menu .puck-menu__abrir:hover {
+  background: var(--ed-fill-hover);
+  color: var(--ed-text);
+}
+
+/* `fixed` porque a lista vive no `body`, por portal: dentro da barra do Puck
+   ela ficava presa num contexto de empilhamento e aparecia atrás da prancheta.
+   Ver o cabeçalho de `MenuDoEditor`. A posição vem medida do botão, inline. */
+.puck-menu__lista {
+  position: fixed;
+  z-index: 400;
+  width: 288px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--ed-line-strong);
+  background: var(--ed-panel, #0e0e14);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+}
+
+/* No `body` não há `.puck-caixa` acima, então os tokens do editor não chegam.
+   O menu carrega os seus — os mesmos valores, herdados do tema do painel. */
+.puck-menu__lista {
+  --ed-panel: #0e0e14;
+  --ed-line-strong: rgba(255, 255, 255, 0.13);
+  --ed-text: #e6e8ee;
+  --ed-muted: #7e879a;
+  --ed-fill-hover: rgba(255, 255, 255, 0.06);
+  --ed-danger: #f87171;
+}
+
+html[data-tema-painel="claro"] .puck-menu__lista {
+  --ed-panel: #ffffff;
+  --ed-line-strong: rgba(15, 23, 42, 0.18);
+  --ed-text: #0f172a;
+  --ed-muted: #64748b;
+  --ed-fill-hover: rgba(15, 23, 42, 0.06);
+  --ed-danger: #dc2626;
+}
+
+.puck-menu__lista button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ed-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.puck-menu__lista button:hover:not(:disabled) { background: var(--ed-fill-hover); }
+.puck-menu__lista button:disabled { opacity: 0.45; cursor: default; }
+.puck-menu__lista button.is-perigo { color: var(--ed-danger); }
+.puck-menu__lista button svg { flex: none; margin-top: 2px; }
+
+.puck-menu__lista span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.puck-menu__lista strong { font-size: 13px; font-weight: 600; }
+
+.puck-menu__lista em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ed-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── A gaveta ──────────────────────────────────────────────────────────────
+   Painel a direita, sobre o inspetor. Nao e modal de proposito: o que ela
+   oferece — trocar de modelo, voltar a uma versao — e melhor decidido vendo a
+   pagina atras, e um veu escuro esconderia justamente a comparacao. */
+.puck-gaveta {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  border-radius: 14px;
+  border: 1px solid var(--ed-line-strong);
+  background: var(--ed-panel);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.puck-gaveta__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ed-line);
+  color: var(--ed-text);
+  font-size: 13px;
+}
+
+.puck-gaveta .puck-gaveta__topo button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ed-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.puck-gaveta .puck-gaveta__topo button:hover { background: var(--ed-fill-hover); color: var(--ed-text); }
+
+.puck-gaveta__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.puck-gaveta__corpo > p {
+  margin: 0 0 6px;
+  color: var(--ed-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.puck-gaveta .puck-gaveta__item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ed-line);
+  border-radius: 10px;
+  background: var(--ed-fill-sutil);
+  color: var(--ed-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.puck-gaveta .puck-gaveta__item:hover {
+  border-color: var(--ed-accent);
+  background: var(--ed-accent-soft);
+}
+
+.puck-gaveta__item strong { font-size: 13px; font-weight: 600; }
+.puck-gaveta__item em { font-style: normal; font-size: 11px; color: var(--ed-muted); }
+/* === O MENU DE AÇÕES RARAS E AS GAVETAS :: FIM === */
+
+
+
+
+/* === O RESPIRO ENTRE AS PEÇAS :: INÍCIO ====================================
+
+   A árvore do Puck empilha as pecas encostadas: cada uma desenha a si mesma e
+   nada existe entre elas. Na engine de coordenadas o espaço vinha de graça —
+   era a diferença entre os `y` de duas peças, e quem montava a página escolhia
+   olhando. Aqui ninguem escolhe, entao o padrao precisa ser bom.
+
+   ── ONDE O NUMERO SE AJUSTA ──
+
+   `--vitrine-espaco`, e so aqui. Ele vale para o editor e para a pagina
+   publicada, porque as duas atravessam `.vitrine-puck` — que e a raiz da
+   config. Escrever a margem direto na regra faria a proxima mudanca virar uma
+   caçada por seletores.
+
+   ── SO ENTRE IRMAOS DE RAIZ ──
+
+   `+` em vez de margem em toda peca: a primeira nao ganha espaço acima, senao a
+   pagina abriria com um vao antes do cabecalho. E dentro de uma `Secao` quem
+   separa e o `gap` do grid — somar margem ali daria duas contas para a mesma
+   distancia, e elas divergiriam.
+   ========================================================================= */
+
+.vitrine-puck {
+  --vitrine-espaco: 28px;
+}
+
+.vitrine-puck > [data-puck-dropzone] > [data-puck-component] + [data-puck-component] {
+  margin-top: var(--vitrine-espaco);
+}
+/* === O RESPIRO ENTRE AS PEÇAS :: FIM === */
+
+/* === O INVÓLUCRO DO BANNER :: INÍCIO =======================================
+
+   O banner e desenhado por dois pseudo-elementos com `position: absolute;
+   inset: 0` (ver `.showcase-section-has-bg`, acima). Absoluto se resolve contra
+   o ANCESTRAL POSICIONADO mais proximo — e o invólucro que o `ComBanner` cria
+   nao tinha posicao nenhuma.
+
+   O efeito era espetacular: a imagem de fundo de um widget vazava e cobria
+   quase a tela inteira, porque o ancestral posicionado mais proximo era a caixa
+   do editor. Na engine de coordenadas isso nunca aparecia — cada peca ja vinha
+   dentro de uma `<section>` posicionada em absoluto.
+
+   `overflow: hidden` pelo mesmo motivo que `.showcase-layout-block` tem: a
+   imagem cobre a area e o arredondamento precisa recortá-la.
+   ========================================================================= */
+
+.puck-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+}
+/* === O INVÓLUCRO DO BANNER :: FIM === */
+/* === O TERCEIRO PONTILHADO :: INICIO =======================================
+
+   Apontar um widget dentro de uma secao desenhava TRES retangulos tracejados,
+   um dentro do outro. Medi os tres:
+
+     1. `[data-puck-overlay-portal]:hover`  → tracejado azure, no portal da SECAO
+     2. `_DropZone--hoveringOverArea`       → tracejado da ZONA de arrasto
+     3. `[data-puck-overlay-portal]:hover`  → o mesmo tracejado, no portal do WIDGET
+
+   Dois dos tres saem da MESMA regra, e a razao e velha conhecida: `:hover` casa
+   com o elemento sob o cursor E com todos os ancestrais dele. Como
+   `useLiberarInterativos` registra um portal de sobreposicao em cada
+   `[data-puck-component] > *` — para que botao, campo e texto la dentro voltem
+   a receber o ponteiro —, uma peca dentro de uma secao tem DOIS portais na
+   linhagem, e os dois acendem.
+
+   Apagar os dois foi a primeira tentativa, e estava errada: esse contorno e o
+   unico "a peca sob o cursor e esta" que existe aqui — o Puck nao desenha
+   outro. A pagina ficou sem indicador nenhum.
+
+   O certo e apagar so o ANCESTRAL: portal que contem outro portal apontado
+   cala-se, e sobra o mais interno. Ficam dois retangulos, cada um dizendo uma
+   coisa diferente — "esta e a peca" e "aqui cabe uma peca" —, que e o que a
+   pessoa esperava ver.
+
+   ── ESPECIFICIDADE ──
+
+   A regra do Puck e
+   `[data-puck-entry][data-puck-preview-mode=edit] [data-puck-overlay-portal]:hover`,
+   quatro passos. `:has()` vale pelo argumento mais especifico que carrega, o
+   que leva esta a cinco — vence sem depender da ordem das folhas nem de
+   ancestral nenhum do Puck, que e contrato que ele pode mudar sem aviso.
+   ========================================================================= */
+
+.vitrine-puck [data-puck-overlay-portal]:hover:has([data-puck-overlay-portal]:hover),
+.vitrine-puck [data-puck-overlay-portal]:focus-within:has([data-puck-overlay-portal]:focus-within) {
+  outline: none;
+}
+/* === O TERCEIRO PONTILHADO :: FIM === */
+
+
+/* === APONTAR NA PÁGINA ACENDE A PEÇA NA GAVETA :: INÍCIO ===================
+   O caminho inverso ja existia. Este e o de volta: apontar um widget na
+   prancheta e descobrir de qual item da lista ele veio.
+
+   O realce imita o hover da gaveta em vez de inventar um segundo destaque —
+   duas linguagens para a mesma relacao fariam a pessoa procurar diferenca onde
+   nao ha.
+   ========================================================================= */
+
+.puck-gaveta-aceso {
+  border-radius: 10px;
+  background: var(--ed-accent-soft, rgba(129, 140, 248, 0.14));
+  box-shadow: inset 0 0 0 1px var(--ed-accent, #818cf8);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+/* === APONTAR NA PÁGINA ACENDE A PEÇA NA GAVETA :: FIM === */

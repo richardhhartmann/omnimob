@@ -1,4 +1,5 @@
 import { ShowcaseLinkExterno, ShowcaseTexto } from "../contexto.jsx";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Chamada para ação.
@@ -29,7 +30,7 @@ export function CtaWidget({ widget }) {
 
   return (
     <div className="widget-cta-box">
-      <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} html={widget.title} style={cor} />
+      <TituloDoWidget widget={widget} style={cor} />
       <ShowcaseTexto
         as="p"
         campo={`widget|${widget.id}|content`}

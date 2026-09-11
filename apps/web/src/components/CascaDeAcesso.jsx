@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState } from "react";
 import { Link } from "react-router-dom";
 import { COMPLETO, useCapacidade } from "../utils/capacidadeDaMaquina";
+import { useMarcaDoAcesso } from "../utils/marcaDoAcesso";
 import { Alert, Eyebrow, LogoLockup, OmnimobStyles, Reveal } from "../styles/omnimobKit";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -33,11 +34,13 @@ import { Alert, Eyebrow, LogoLockup, OmnimobStyles, Reveal } from "../styles/omn
 
    ── O CUSTO DO FLUIDO, E COMO ELE É PAGO ──
 
-   `LiquidEther` traz o `three` (734 kB) e roda um solver de fluidos por
-   quadro. Duas travas, as duas necessárias:
+   `Grainient` é um shader de tela cheia sobre `ogl` — que já estava no projeto.
+   Ele substituiu o `LiquidEther`, que trazia o `three` (734 kB) e resolvia um
+   campo de fluidos a 32 iterações de Poisson por quadro; a troca é de ordem de
+   grandeza, não de gosto. Duas travas continuam de pé:
 
      · entra por `lazy()`, então o pacote comum — que TODA sessão baixa —
-       continua sem o three; quem paga é só quem abre uma tela de acesso;
+       continua sem ele; quem paga é só quem abre uma tela de acesso;
      · só monta em máquina classificada como `completo`
        (`utils/capacidadeDaMaquina`), o que já embute "reduzir movimento",
        `saveData` e a ausência de WebGL. Nas outras, um degradê parado ocupa a
@@ -47,23 +50,35 @@ import { Alert, Eyebrow, LogoLockup, OmnimobStyles, Reveal } from "../styles/omn
    nível 1,2s depois, e desmontar um canvas WebGL debaixo de quem já está
    digitando a senha seria pior que o efeito que se quis economizar.
 
+   ── A MARCA DE QUEM ESTÁ ENTRANDO ──
+
+   Quando dá para saber a imobiliária antes do login, o logo do canto é o DELA,
+   com um crédito discreto à Omnimob embaixo. A resolução mora aqui, e não em
+   cada página, para que login, recuperação de senha e primeiro acesso nunca
+   apareçam vestidos de forma diferente — nessas telas, diferença de aparência
+   entre uma e outra é o que faz a pessoa suspeitar de golpe.
+
+   Só no tom `cliente`. O super-admin é a Omnimob olhando os clientes dela; ali
+   a marca de uma imobiliária não teria significado nenhum.
+
    ── O QUE NÃO MUDA ──
 
    A saída animada (`authx-out` + `authx-card`), o reveal de entrada e as
    primitivas do kit.
    ──────────────────────────────────────────────────────────────────────────── */
 
-const LiquidEther = lazy(() => import("./LiquidEther.jsx"));
+const Grainient = lazy(() => import("./Grainient.jsx"));
 
-/* As paletas moram FORA do componente porque `LiquidEther` tem o array de cores
-   na lista de dependências do efeito que monta a simulação inteira: um literal
-   novo a cada render reconstruiria o solver a cada tecla digitada. */
-const FLUIDO_CLIENTE = ["#312e81", "#6366f1", "#a5b4fc"];
-const FLUIDO_ADMIN = ["#4c1d95", "#a78bfa", "#f0abfc"];
+/* As três paradas do degradê. O `Grainient` recebe cada uma como prop separada
+   (`color1/2/3`), então não há array de dependência a estabilizar como havia no
+   `LiquidEther` — mas elas ficam aqui de qualquer forma: é a paleta do produto,
+   e paleta é decisão de identidade, não detalhe de render.
 
+   O tom do super-admin puxa para o violeta pelo mesmo motivo de sempre: é a
+   única pista, antes de digitar, de que esta não é a porta do cliente. */
 const TONS = {
-  cliente: FLUIDO_CLIENTE,
-  admin: FLUIDO_ADMIN,
+  cliente: { c1: "#ebab97", c2: "#6d48ff", c3: "#B497CF" },
+  admin: { c1: "#ffb69f", c2: "#4c1d95", c3: "#a78bfa" },
 };
 
 export function CascaDeAcesso({
@@ -81,6 +96,7 @@ export function CascaDeAcesso({
   children,
 }) {
   const cores = TONS[tom] || TONS.cliente;
+  const marca = useMarcaDoAcesso(tom === "cliente");
   const { nivel } = useCapacidade();
   // Congelado na montagem — ver o cabeçalho.
   const [comFluido] = useState(() => nivel === COMPLETO);
@@ -91,9 +107,21 @@ export function CascaDeAcesso({
 
       {/* ── Seção 1: o acesso ─────────────────────────────────────────────── */}
       <section className="ax-acesso">
-        <Link to="/" className="dl-logo ax-logo" aria-label="Omnimob — início">
-          <LogoLockup height={34} />
-        </Link>
+        {marca ? (
+          /* Sem `Link` aqui: na tela vestida com a marca da imobiliária, um
+             logotipo clicável levaria à landing da Omnimob — que é a última
+             página que o corretor dela quer abrir no meio do login. */
+          <div className="ax-logo ax-logo--cliente">
+            {marca.logoUrl
+              ? <img src={marca.logoUrl} alt={marca.nome} className="ax-logo__img" />
+              : <span className="ax-logo__nome">{marca.nome}</span>}
+            <span className="dl-mono ax-logo__credito">acesso por Omnimob</span>
+          </div>
+        ) : (
+          <Link to="/" className="dl-logo ax-logo" aria-label="Omnimob — início">
+            <LogoLockup height={34} />
+          </Link>
+        )}
 
         <Reveal as="form" className="ax-form authx-card" onSubmit={onSubmit}>
           <Eyebrow>{eyebrow}</Eyebrow>
@@ -128,26 +156,58 @@ export function CascaDeAcesso({
              seção, então o fluido só aparece por cima quando termina de baixar
              — sem lampejo de caixa vazia no meio da tela. */
           <Suspense fallback={null}>
-            <LiquidEther
-              colors={cores}
-              mouseForce={20}
-              cursorSize={100}
-              isViscous={false}
-              viscous={30}
-              iterationsViscous={32}
-              iterationsPoisson={32}
-              resolution={0.5}
-              isBounce={false}
-              autoDemo
-              autoSpeed={0.5}
-              autoIntensity={2.2}
-              takeoverDuration={0.25}
-              autoResumeDelay={3000}
-              autoRampDuration={0.6}
+            <Grainient
+              color1={cores.c1}
+              color2={cores.c2}
+              color3={cores.c3}
+              timeSpeed={0.25}
+              colorBalance={0.0}
+              warpStrength={1.0}
+              warpFrequency={5.0}
+              warpSpeed={2.0}
+              warpAmplitude={50.0}
+              blendAngle={0.0}
+              blendSoftness={0.05}
+              rotationAmount={500.0}
+              noiseScale={2.0}
+              grainAmount={0.1}
+              grainScale={2.0}
+              grainAnimated={false}
+              contrast={1.5}
+              gamma={1.0}
+              saturation={1.0}
+              centerX={0.0}
+              centerY={0.0}
+              zoom={0.9}
             />
           </Suspense>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   O marcador de "último utilizado".
+
+   Envolve o botão do caminho que funcionou nesta máquina da última vez — a
+   senha ou o Google — com um contorno que gira e uma etiqueta em cima. Ver
+   `utils/ultimoAcesso` para por que a memória é da MÁQUINA e não da pessoa.
+
+   Ele é uma DICA, e o desenho diz isso: não preenche campo, não move foco, não
+   reordena os botões. Os dois caminhos continuam à mesma distância de um
+   clique — num computador compartilhado o último a entrar não é
+   necessariamente quem está chegando.
+
+   Sem `marcado`, ele devolve o filho sem invólucro nenhum: um elemento a mais
+   no caminho mudaria a caixa do botão em toda a tela para nada.
+   ──────────────────────────────────────────────────────────────────────────── */
+export function UltimoUtilizado({ marcado, children }) {
+  if (!marcado) return children;
+  return (
+    <div className="ax-ultimo">
+      <span className="dl-mono ax-ultimo__selo">último utilizado</span>
+      <span className="ax-ultimo__flare">{children}</span>
     </div>
   );
 }
@@ -159,9 +219,9 @@ export function DivisorDeAcesso({ children = "ou continuar com" }) {
   return <div className="ax-divisor"><span>{children}</span></div>;
 }
 
-/* ── Estilos ─────────────────────────────────────────────────────────────────
-   A planta das duas seções + a sobrescrita de tokens por tom. Botões, inputs,
-   eyebrow e reveal vêm do kit e se adaptam à paleta.
+/* ── Estilos ───────────────────────────────────────────────────────────────── 
+   A planta das duas seções + a sobrescrita de tokens por tom. Botões, inputs,  
+   eyebrow e reveal vêm do kit e se adaptam à paleta.                           
    ────────────────────────────────────────────────────────────────────────── */
 
 const CSS = `
@@ -174,7 +234,7 @@ const CSS = `
   --line-soft: rgba(255,255,255,0.07);
   position: relative;
   display: grid;
-  grid-template-columns: 51% 49%;
+  grid-template-columns: 40% 100%;
   /* dvh, com vh de reserva para quem nao conhece a unidade: no celular, 100vh
      conta a barra de endereco que ainda esta na tela, e a tela de acesso
      nascia um naco mais alta que a janela so por causa disso. */
@@ -200,14 +260,17 @@ const CSS = `
 .ax-root--cliente .dl-btn--accent .dl-btn__arrow { background: rgba(255,255,255,0.20); }
 .ax-root--cliente .dl-btn--accent:hover { background: #6366f1; box-shadow: 0 14px 34px -14px rgba(99,102,241,0.7); }
 .ax-root--cliente .dl-input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,0.18); }
-/* O degrade parado que ocupa a metade do fluido em maquina fraca. Ele fica no
-   FUNDO da secao mesmo quando o fluido monta: e o que o canvas transparente
-   tem por baixo. */
+/* O degrade PARADO, para a maquina que nao monta o shader. As paradas sao as
+   mesmas tres cores do Grainient, so que fixas: quem cai aqui ve a mesma
+   familia de cor que os outros veem se mexendo, e nao outra tela.
+   Ele fica no fundo da secao mesmo quando o shader monta — e o que o canvas
+   tem por baixo enquanto o pedaco baixa. */
 .ax-root--cliente .ax-fluido {
   background:
-    radial-gradient(760px 620px at 62% 34%, rgba(99,102,241,0.34), transparent 72%),
-    radial-gradient(520px 480px at 22% 82%, rgba(165,180,252,0.16), transparent 72%),
-    #06070d;
+    radial-gradient(820px 660px at 70% 24%, rgba(255,182,159,0.34), transparent 70%),
+    radial-gradient(780px 640px at 22% 80%, rgba(109,72,255,0.42), transparent 72%),
+    radial-gradient(600px 520px at 50% 50%, rgba(180,151,207,0.18), transparent 74%),
+    #140f24;
 }
 
 /* Tom do super-admin: mais violeta. A diferença é de propósito — é a única
@@ -220,9 +283,10 @@ const CSS = `
 .ax-root--admin .dl-input:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167,139,250,0.18); }
 .ax-root--admin .ax-fluido {
   background:
-    radial-gradient(760px 620px at 62% 34%, rgba(139,92,246,0.34), transparent 72%),
-    radial-gradient(520px 480px at 22% 82%, rgba(240,171,252,0.14), transparent 72%),
-    #06050c;
+    radial-gradient(820px 660px at 70% 24%, rgba(255,182,159,0.26), transparent 70%),
+    radial-gradient(780px 640px at 22% 80%, rgba(76,29,149,0.55), transparent 72%),
+    radial-gradient(600px 520px at 50% 50%, rgba(167,139,250,0.20), transparent 74%),
+    #100a1e;
 }
 
 /* ── Seção 1: o acesso ── */
@@ -240,6 +304,15 @@ const CSS = `
   background: radial-gradient(560px 420px at 12% 6%, rgba(255,255,255,0.05), transparent 72%);
 }
 .ax-logo { position: absolute; top: 36px; left: 48px; z-index: 2; }
+/* A arte do cliente vem de onde ele subiu: pode ser larga, alta, clara ou
+   escura. A caixa manda na ALTURA e deixa a largura livre, senao logotipo
+   horizontal achata e logotipo quadrado estoura a coluna. */
+.ax-logo--cliente { display: grid; gap: 6px; max-width: 260px; }
+.ax-logo__img { max-height: 44px; max-width: 100%; width: auto; object-fit: contain; display: block; }
+.ax-logo__nome { font-size: 17px; font-weight: 800; letter-spacing: -0.03em; color: var(--strong); }
+/* O credito e discreto de proposito: a casa e da imobiliaria, mas quem responde
+   pela seguranca desta tela e a Omnimob, e esconder isso seria pior. */
+.ax-logo__credito { font-size: 8.5px; letter-spacing: 0.16em; color: var(--placeholder); }
 
 /* O formulário: sem fundo, sem borda, sem sombra. */
 .ax-form {
@@ -258,6 +331,54 @@ const CSS = `
 .ax-campos { display: grid; gap: 15px; margin: 26px 0 0; }
 .ax-acoes { display: grid; gap: 10px; }
 
+/* ── O CONTORNO QUE GIRA ─────────────────────────────────────────────────────
+
+   Um degrade conico girando atras do botao, com uma tampa por cima deixando so
+   a moldura de 2px a mostra. E o jeito mais barato de fazer isto: uma
+   propriedade animada (transform), numa camada propria, sem JavaScript e sem
+   laco de quadro.
+
+   Sem @property de proposito — animar o angulo de um gradiente exigiria
+   registrar a variavel, e nem todo navegador que este produto atende faz isso.
+   Girar o elemento inteiro resolve igual e funciona em qualquer lugar.
+
+   O ::before precisa TRANSBORDAR a caixa (inset negativo): um conico do tamanho
+   exato, ao girar, deixaria os cantos sem cor por um instante a cada volta.
+   (Sem crases nestes comentarios: template literal.) */
+.ax-ultimo { display: grid; gap: 7px; justify-items: start; }
+.ax-ultimo__selo {
+  font-size: 8.5px; letter-spacing: 0.16em; color: var(--accent-soft);
+  padding-left: 2px;
+}
+.ax-ultimo__flare {
+  position: relative; display: block; width: 100%;
+  padding: 2px; border-radius: 999px; overflow: hidden;
+  isolation: isolate;
+}
+.ax-ultimo__flare::before {
+  content: ""; position: absolute; inset: -75%;
+  background: conic-gradient(
+    from 0turn,
+    transparent 0 58%,
+    #ffb69f 74%,
+    var(--accent-soft) 86%,
+    transparent 100%
+  );
+  animation: axFlareGira 3.6s linear infinite;
+}
+/* A tampa: o fundo da coluna de acesso, deixando so a borda do gradiente. */
+.ax-ultimo__flare::after {
+  content: ""; position: absolute; inset: 2px;
+  border-radius: inherit; background: var(--bg);
+}
+.ax-ultimo__flare > * { position: relative; z-index: 1; }
+@keyframes axFlareGira { to { transform: rotate(1turn); } }
+/* Sem movimento, o contorno fica PARADO e visivel — some-lo levaria junto a
+   informacao, que e o que o marcador existe para dar. */
+@media (prefers-reduced-motion: reduce) {
+  .ax-ultimo__flare::before { animation: none; }
+}
+
 .ax-divisor {
   display: flex; align-items: center; gap: 12px; margin: 4px 0 0;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -273,7 +394,17 @@ const CSS = `
   text-transform: none; letter-spacing: 0.04em; font-size: 9.5px; line-height: 1.7;
 }
 .ax-foot {
-  margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line-soft);
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  text-align: center;
 }
 .ax-legal { display: block; margin-top: 8px; font-size: 11.5px; opacity: 0.72; }
 .ax-alt { font-size: 12.5px; color: var(--subtle); transition: color 0.18s ease; }

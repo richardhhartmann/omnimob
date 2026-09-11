@@ -1,4 +1,5 @@
 import { ShowcaseTexto, usaFonteReal, useDadosDaVitrine } from "../contexto.jsx";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Horário de atendimento.
@@ -105,7 +106,7 @@ export function HoursWidget({ widget }) {
   if (!real) {
     return (
       <div className="widget-hours">
-        <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} umaLinha html={widget.title} style={cor} />
+        <TituloDoWidget widget={widget} umaLinha style={cor} />
         <ShowcaseTexto as="div" className="widget-hours__texto" campo={`widget|${widget.id}|content`} html={widget.content} />
       </div>
     );
@@ -116,7 +117,7 @@ export function HoursWidget({ widget }) {
   return (
     <div className="widget-hours">
       <div className="widget-hours__head">
-        <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} umaLinha html={widget.title} style={cor} />
+        <TituloDoWidget widget={widget} umaLinha style={cor} />
         {aberto === null ? null : (
           <span className={`widget-hours__selo${aberto ? " is-aberto" : ""}`}>
             <span className="widget-hours__ponto" aria-hidden />

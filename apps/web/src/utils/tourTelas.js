@@ -659,6 +659,18 @@ function tourCargos() {
   };
 }
 
+/* ── Editor de vitrine ──────────────────────────────────────────────────────
+   Reescrito quando o editor virou Puck. Os alvos continuam sendo
+   `data-tour`, como nas outras onze telas — mas quem desenha a barra e os
+   painéis agora é a biblioteca, então quem põe o atributo é
+   `puck/alvosDoTour.js`. É lá que mora o que sabemos sobre as classes dela.
+
+   Dois passos SUMIRAM, e é bom que se diga por quê: "desktop e celular são
+   layouts separados" deixou de ser verdade (há um documento só, e a
+   responsividade é do CSS), e o menu de ações com Histórico e Resetar posições
+   ainda não foi portado. Tour que promete botão inexistente é pior que tour
+   curto.
+   ────────────────────────────────────────────────────────────────────────── */
 function tourVitrineEditor() {
   return {
     chave: chave("vitrine-editor"),
@@ -669,49 +681,48 @@ function tourVitrineEditor() {
         alvo: '[data-tour="vitrine-canvas"]',
         titulo: "Sua página, do seu jeito",
         texto:
-          "Esta é a vitrine que o cliente vê. Cada bloco — cabeçalho, destaques, imóveis, rodapé — " +
-          "pode ser <strong>arrastado e redimensionado</strong> direto aqui. Nada de código.",
+          "Esta é a vitrine que o cliente vê. Clique num bloco para selecioná-lo e " +
+          "<strong>arraste para mudar a ordem</strong>. O texto se edita no lugar: clique nele e escreva.",
         lado: ["left", "top"],
+      },
+      {
+        alvo: '[data-tour="vitrine-biblioteca"]',
+        titulo: "Peças e Estrutura",
+        texto:
+          "<strong>Peças</strong> é a biblioteca — depoimento, números, horários, CTA. " +
+          "Arraste para a página no ponto que quiser. <strong>Estrutura</strong> lista a página inteira, " +
+          "para achar e selecionar sem caçar no meio do conteúdo.",
+        lado: ["right", "bottom"],
       },
       {
         alvo: '[data-tour="vitrine-painel"]',
         titulo: "O painel muda com o que você seleciona",
         texto:
-          "Sem nada selecionado, ele mostra os ajustes da <strong>página</strong>: tema, cores, dados da empresa. " +
-          "Clicando num bloco, ele troca para os ajustes <strong>daquele bloco</strong> — cor, banner, brilho, texto.",
+          "Sem nada selecionado, ele mostra os ajustes da <strong>página</strong>: tema, fonte e cores. " +
+          "Clicando num bloco, troca para os ajustes <strong>daquele bloco</strong>.",
         lado: ["left", "bottom"],
       },
       {
         alvo: '[data-tour="vitrine-modo"]',
-        titulo: "Desktop e celular são layouts separados",
+        titulo: "Confira em telas menores",
         texto:
-          "Isto não é uma pré-visualização: são <strong>duas montagens independentes</strong>. " +
-          "Mover um bloco no celular não mexe no desktop. Existe um botão para copiar um no outro quando você quiser partir do pronto.",
+          "Estes botões mudam a <strong>largura da prévia</strong> para você ver como a página fica no celular " +
+          "e no tablet. É só visualização: a página é uma só, e ela se adapta sozinha.",
         lado: "bottom",
-      },
-      {
-        alvo: '[data-tour="vitrine-biblioteca"]',
-        titulo: "Tudo o que dá para acrescentar mora aqui",
-        texto:
-          "<strong>Adicionar</strong> traz a biblioteca de peças — depoimento, números, horários, CTA. " +
-          "Clique para pôr no fim da página ou arraste para soltar num ponto exato. " +
-          "<strong>Camadas</strong> lista a página inteira, para selecionar, ocultar ou travar sem caçar no canvas.",
-        lado: ["right", "bottom"],
       },
       {
         alvo: '[data-tour="vitrine-acoes"]',
         titulo: "Errou? Nada aqui é definitivo",
         texto:
-          "Não existe botão de salvar: cada ajuste vai para o banco em segundos. " +
-          "Neste menu ficam o <strong>Histórico</strong> de versões e o <strong>Resetar posições</strong>, " +
-          "que devolve o layout ao padrão sem tocar nas suas cores e textos. E Ctrl+Z desfaz movimento por movimento.",
+          "Cada ajuste é gravado sozinho em segundos — e <strong>Ctrl+Z</strong> desfaz passo a passo. " +
+          "O <strong>Publicar</strong> confirma o que já está no ar.",
         lado: "bottom",
       },
       {
         alvo: null,
         titulo: "Agora é brincar",
         texto:
-          "Mexa à vontade — dá para desfazer tudo. Quando gostar do resultado, use <em>Ver Página</em> " +
+          "Mexa à vontade — dá para desfazer tudo. Quando gostar do resultado, abra a vitrine " +
           "para conferir como ficou para quem chega de fora.",
       },
     ],

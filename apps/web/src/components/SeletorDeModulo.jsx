@@ -1,15 +1,37 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { CaretUpDown, Check } from "@phosphor-icons/react";
-import { MenuFluido } from "./MenuFluido.jsx";
-import { MODULOS, SIMBOLO_OMNIMOB, moduloInfo } from "../utils/modulos";
+import { SIMBOLO_OMNIMOB, moduloInfo } from "../utils/modulos";
 
 /* ────────────────────────────────────────────────────────────────────────────
-   O SELETOR DE MÓDULO — a peça mais alta da barra lateral.
+   A MARCA DO MÓDULO — hoje na faixa do topo, e sem o seletor.
 
-   Fica ACIMA do `ds-head` (a marca da imobiliária) e a ordem diz o que cada um
-   responde: primeiro "em que produto eu estou", depois "de quem é esta conta".
-   Invertida, a marca da imobiliária pareceria o título do módulo.
+   Ela responde DUAS perguntas no mesmo lugar — "em que produto eu estou" e "de
+   quem é esta conta" — e o `ds-head` que respondia a segunda deixou de existir.
+
+   ⚠ O NOME DO ARQUIVO É HISTÓRIA, não descrição. Ele já teve um chevron que
+   abria a lista de módulos; a troca virou um item da navegação, no fim da barra
+   lateral (ver `.ds-modulos` no `AdminLayout`). O que sobrou aqui é a marca mais
+   a porta do Painel do Gestor. Renomear custa um import — ficou para quando
+   alguém mexer aqui de novo, em vez de virar ruído no meio de outra mudança.
+
+   ── O ROLO ──
+
+   Parado, a faixa é o wordmark do módulo. Ao passar o ponteiro, ela ROLA para
+   cima e a segunda face entra: a marca da imobiliária, o nome e o slug. Clicar
+   leva ao Painel do Gestor.
+
+   Duas peças eram uma repetição: o antigo `ds-head` ocupava mais 56px logo
+   abaixo para mostrar a mesma marca, e as duas juntas comiam 108px do topo da
+   barra antes do primeiro item de menu. A informação não sumiu, mudou de
+   estado — ela está a um gesto de distância em vez de permanentemente ocupando
+   espaço.
+
+   Duas coisas que o rolo NÃO faz:
+
+   1. **Não promete clique para quem não pode clicar.** Sem `verPainelGestor` o
+      rolo é uma `<div>`: a informação aparece igual — saber de que imobiliária
+      é o painel interessa a todo mundo —, mas sem cursor de mão e sem destino.
+      Um botão desabilitado prometeria uma tela que aquela pessoa nunca verá.
+   2. **Não rola sozinho na tela do Painel do Gestor.** Ali ele fica travado na
+      segunda face: é onde a pessoa está, e a face que diz isso é a da casa.
 
    ── UM WORDMARK FECHADO POR MÓDULO ──
 
@@ -27,55 +49,18 @@ import { MODULOS, SIMBOLO_OMNIMOB, moduloInfo } from "../utils/modulos";
    junto: as duas artes têm o mesmo quadro (2852×603) e o símbolo na mesma
    posição, então uma altura só serve para as duas.
 
-   ── DUAS FORMAS, CONFORME A BARRA ──
+   ── ONDE ELA MORA ──
 
-   ABERTA: só o wordmark. O ladrilho do símbolo some — ele repetiria o
-   prédio que já está dentro da arte, e dois prédios lado a lado
-   na mesma linha leem como erro de montagem.
+   Na `.ds-topbar`, a faixa que atravessa o topo da tela, ao lado do hambúrguer.
+   Nasceu no alto da barra LATERAL, e é de lá que vem quase todo o desenho — o
+   que a faixa muda (altura, fundo, o ladrilho por tema) está no bloco
+   `.ds-topbar` do `AdminLayout`.
 
-   RECOLHIDA (64px): só o ladrilho do símbolo. A logo é larga demais e sairia
-   ilegível; quem diz qual módulo é, ali, é o anel na cor do acento.
-
-   Os dois ficam SEMPRE no DOM e quem esconde é o CSS, como o resto da barra: o
-   React não sabe que o ponteiro entrou, e um estado só para isso traria de
-   volta o re-render que a expansão por CSS existe para evitar.
-
-   ── O DROPDOWN SAI PELA DIREITA, E POR PORTAL ──
-
-   Mesmo gesto e mesmo desenho do submenu do menu do perfil: a lista brota ao
-   LADO da barra, e não empurrando o conteúdo dela para baixo. Empurrar a
-   navegação inteira dois centímetros para baixo a cada passada de mouse no topo
-   é um sobressalto por um gesto que quase sempre é acidental.
-
-   ⚠ E ele PRECISA sair por portal. `.ds-side__interno` tem `overflow-x: hidden`
-   — é o que impede o conteúdo de vazar enquanto a barra está em 64px — e isso
-   RECORTA qualquer filho posicionado para fora, inclusive um `position:
-   absolute` com `left: 100%`. O balão media certo no `getBoundingClientRect` e
-   simplesmente não aparecia; foi preciso uma captura de tela para ver, porque a
-   geometria estava toda correta.
-
-   Por isso ele vai para o `document.body` com coordenadas de tela, calculadas a
-   partir do gatilho. É o que `MenuDoPerfil` faz com o `mp-balao`, pelo mesmo
-   motivo.
-
-   Quem abre é o CARET, e não a faixa inteira: a faixa é onde o ponteiro passa
-   de raspão; o chevron é onde ele para de propósito.
+   O ladrilho do símbolo aparece só no tema CLARO, e a razão está em
+   `NomeDoModulo`, logo abaixo: é ali que a arte do wordmark dá lugar ao texto, e
+   sem o ladrilho a faixa ficaria sem marca. No escuro a arte já traz o prédio, e
+   dois prédios na mesma linha leem como erro de montagem.
    ──────────────────────────────────────────────────────────────────────────── */
-
-/* O ponteiro (ou o foco) saiu do conjunto gatilho + balão?
-
-   Os dois são um controle só para quem usa e dois lugares distantes no DOM para
-   o navegador — o balão sai por portal para o `body`. Sem esta função, cada
-   caminho (mouse e teclado) precisaria da sua própria versão da mesma conta, e
-   as duas já divergiram uma vez.
-
-   `relatedTarget` nulo é sair de verdade: acontece ao clicar fora, ao trocar de
-   janela, ao mandar o foco para o `body`. */
-function saiuDeVerdade(e) {
-  const destino = e.relatedTarget;
-  if (!destino || typeof destino.closest !== "function") return true;
-  return !destino.closest(".ds-mod__gatilho") && !destino.closest(".ds-mod__balao");
-}
 
 /** O símbolo sozinho, tintado pelo acento. É o que sobra na barra recolhida. */
 function SimboloModulo({ modulo }) {
@@ -93,158 +78,166 @@ function SimboloModulo({ modulo }) {
 /** O wordmark do módulo.
  *
  *  O `alt` continua no invólucro, e não na imagem: o nome do módulo é o rótulo
- *  do CONJUNTO, e é ele que o leitor de tela anuncia. */
+ *  do CONJUNTO, e é ele que o leitor de tela anuncia — e é por isso que as duas
+ *  artes entram com `aria-hidden`. São duas renderizações de UM nome, não duas
+ *  informações; quem escolhe entre elas é o tema, no CSS, como o resto desta
+ *  barra faz.
+ *
+ *  A segunda arte (`logoClaro`, letras pretas) é OPCIONAL: só o Omnimob a tem.
+ *  Sem ela o módulo cai no nome em texto — ver `NomeDoModulo`, logo abaixo. */
 function LogoModulo({ modulo, className = "" }) {
   return (
     <span className={`ds-mod__logo ${className}`.trim()} role="img" aria-label={modulo.nome}>
       <img className="ds-mod__tipo" src={modulo.logo} alt="" aria-hidden="true" />
+      {modulo.logoClaro ? (
+        <img className="ds-mod__tipo ds-mod__tipo--claro" src={modulo.logoClaro} alt="" aria-hidden="true" />
+      ) : null}
     </span>
   );
 }
 
-export function SeletorDeModulo({ atual, disponiveis, aoTrocar, aoAlternarAberto }) {
-  const info = moduloInfo(atual);
-  const opcoes = MODULOS.filter((m) => disponiveis.includes(m.key));
-  const [aberto, setAberto] = useState(false);
-  const gatilhoRef = useRef(null);
-  const [caixa, setCaixa] = useState(null); // { left, top } em coordenadas de tela
+/** ── O nome do módulo em TEXTO, para superfície clara ────────────────────────
+ *
+ *  A arte do wordmark (`modulo.logo`) tem as letras BRANCAS — as duas, tanto o
+ *  `tipo_header_alt` quanto o `omnimob_flow`, e não existe versão escura no
+ *  `public/`. Sobre a faixa clara do painel ela simplesmente desaparecia: a
+ *  captura mostrava "OMNIMOB" quase invisível ao lado da marca.
+ *
+ *  Filtro não resolve. `brightness(0)` escurece tudo e mata o ROSA do "flow",
+ *  que é justamente o sinal do módulo — a cor que diz de relance em que metade
+ *  do sistema a pessoa está; e `invert()` transforma o dourado do prédio em
+ *  azul. Filtro age na imagem inteira, e aqui as duas metades precisam de
+ *  tratamentos opostos.
+ *
+ *  Texto resolve os dois: ele lê o `--modulo-acento` (índigo no Omnimob, rosa
+ *  no Omniflow) e nasce legível nos dois temas. A fonte é a do produto, e o
+ *  nome sai de `modulo.nome` — a MESMA fonte de verdade que o `alt` da arte
+ *  usa, então as duas formas nunca discordam.
+ *
+ *  ── HOJE ELE É O PLANO B ──
+ *
+ *  Existe uma segunda arte com as letras pretas (`modulo.logoClaro`), e o
+ *  módulo que a tiver mostra a TIPOGRAFIA no claro, e não a palavra. O texto
+ *  ficou para quem não tem: hoje o Omniflow, amanhã um módulo novo cuja arte
+ *  clara ainda não foi desenhada. Apagá-lo faria esse caso aparecer sem marca
+ *  nenhuma — é ele que garante que faltar um arquivo degrade em vez de quebrar.
+ *
+ *  As duas formas ficam SEMPRE no DOM e quem esconde uma é o CSS, pelo tema do
+ *  shell — o mesmo arranjo que o resto desta barra usa. Não são duas versões do
+ *  mesmo componente: são duas renderizações de UM nome, e o nome tem uma fonte
+ *  só. No tema escuro vale a arte, no claro vale a palavra.
+ *
+ *  A arte era a única forma na lista do balão de módulos, que era uma superfície
+ *  escura de propósito. O balão foi embora com o chevron — ver o comentário do
+ *  componente, no fim do arquivo. */
+function NomeDoModulo({ modulo }) {
+  return <span className="ds-mod__palavra">{modulo.nome}</span>;
+}
 
-  useEffect(() => {
-    if (!aberto) return undefined;
-    function aoTeclar(e) { if (e.key === "Escape") setAberto(false); }
-    document.addEventListener("keydown", aoTeclar);
-    return () => document.removeEventListener("keydown", aoTeclar);
-  }, [aberto]);
+/* ── O SELO DO PLANO SAIU DAQUI ──────────────────────────────────────────────
 
-  /* Onde o balão nasce. `useLayoutEffect` e não `useEffect`: medido depois da
-     pintura, ele apareceria por um quadro no canto superior esquerdo e saltaria
-     para o lugar. */
-  useLayoutEffect(() => {
-    if (!aberto || !gatilhoRef.current) return;
-    const r = gatilhoRef.current.getBoundingClientRect();
-    setCaixa({ left: r.right + 12, top: Math.max(8, r.top - 10) });
-  }, [aberto]);
+   Ele era a terceira coisa da face da imobiliária, ao lado do nome e do slug, e
+   funcionou enquanto o rolo tinha a largura de uma barra lateral aberta. Quando
+   o seletor mudou para a faixa do topo, o rolo passou a viver em ~146px: a
+   pílula é a única peça de largura fixa ali (`flex-shrink: 0`, para não virar
+   "Premi…"), então quem encolheu foram as outras duas. O resultado na tela era
+   `P…` de nome e `pap…` de slug ao lado de um PREMIUM inteiro — o selo comeu
+   justamente a informação que a face existe para dar.
 
-  /* ── A BARRA PRECISA FICAR ABERTA ENQUANTO O BALÃO ESTIVER NO AR ───────────
+   A pergunta que ele responde continua valendo ("que Omnimob é esta?", e por
+   que metade das telas esconde recurso). Ela agora é respondida no MENU DO
+   PERFIL, onde a linha tem 232px e o plano fica ao lado do nome da imobiliária,
+   a um clique de Configurações › Plano. Ver `MenuDoPerfil`.
 
-     O balão vive no `body`, então mover o ponteiro para ele é SAIR da barra — e
-     a barra, que abre por `:hover`, recolhe no meio do caminho. O resultado era
-     absurdo de usar: a lista aparecia, a pessoa ia clicar numa opção e a barra
-     encolhia por baixo, tirando o balão de posição.
+   O CSS `.ds-plano` continua na folha do `AdminLayout`: é lá que vive o resto
+   da moldura, e o menu do perfil já lê de lá.
+   ────────────────────────────────────────────────────────────────────────────── */
 
-     Do ponto de vista de quem usa, o balão é uma extensão da barra, e é isso
-     que o layout precisa saber. Ele põe `is-mod-aberto` no `.ds-side`, e o CSS
-     trata essa classe como mais um motivo para a barra estar aberta — ao lado
-     de `:hover` e `:focus-within`. */
-  useEffect(() => {
-    aoAlternarAberto?.(aberto);
-  }, [aberto, aoAlternarAberto]);
-
-  // Sem para onde ir: faixa de identidade, e nada mais.
-  if (opcoes.length < 2) {
-    return (
-      <div className="ds-mod is-solo" data-tour="seletor-modulo">
-        <SimboloModulo modulo={info} />
-        <LogoModulo modulo={info} />
-      </div>
-    );
-  }
+/* As duas faces do rolo. A de baixo é a imobiliária — logo, nome e slug juntos,
+   que é o que o `ds-head` mostrava em alturas separadas. O selo do plano era a
+   quarta peça e mudou de casa: ver a nota acima. */
+function RoloDaMarca({ modulo, imobiliaria, podeVerPainel, painelAtivo, aoAbrirPainel }) {
+  const nome = imobiliaria?.nome || "Minha imobiliária";
+  const Tag = podeVerPainel ? "button" : "div";
 
   return (
-    <div className="ds-mod" data-tour="seletor-modulo">
-      <div className="ds-mod__atual">
-        <SimboloModulo modulo={info} />
-        <LogoModulo modulo={info} />
+    <Tag
+      type={podeVerPainel ? "button" : undefined}
+      className={`ds-mod__rolo${podeVerPainel ? " is-link" : ""}${painelAtivo ? " is-ativo" : ""}`}
+      onClick={podeVerPainel ? aoAbrirPainel : undefined}
+      title={podeVerPainel ? "Painel do Gestor" : undefined}
+      aria-current={painelAtivo ? "page" : undefined}
+    >
+      <span className="ds-mod__trilho">
+        {/* As DUAS formas do nome do módulo, e quem escolhe é o tema — no CSS,
+            como o resto desta barra faz. Ver `NomeDoModulo`. */}
+        <span className="ds-mod__face">
+          <LogoModulo modulo={modulo} />
+          <NomeDoModulo modulo={modulo} />
+        </span>
 
-        {/* ── O gatilho ────────────────────────────────────────────────────
-            O invólucro é quem escuta o ponteiro, e não o botão: com o listener
-            no botão, sair dele em direção ao balão fecharia a lista antes de o
-            ponteiro chegar lá. É a mesma montagem de `mp-linha-caixa`. */}
-        <div
-          className="ds-mod__gatilho"
-          ref={gatilhoRef}
-          onMouseEnter={() => setAberto(true)}
-          /* ── O PORTAL QUEBRA AS DUAS CHECAGENS DE "SAIU DAQUI" ──────────
-             O balão vive no `body`, então ele NÃO é descendente do gatilho.
-             Isso derruba tanto o `contains` do blur quanto a leitura ingênua do
-             mouseleave: ir do chevron até a lista conta como sair de tudo.
+        <span className="ds-mod__face ds-mod__face--casa">
+          <span className={`ds-mark${imobiliaria?.logoUrl ? " has-logo" : ""}`}>
+            {imobiliaria?.logoUrl
+              ? <img src={imobiliaria.logoUrl} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+              : nome.charAt(0).toUpperCase()}
+          </span>
+          <span className="ds-mod__casa">
+            <span className="ds-mod__nome">{nome}</span>
+            {imobiliaria?.slug ? <span className="ds-mod__slug">{imobiliaria.slug}</span> : null}
+          </span>
+        </span>
+      </span>
+    </Tag>
+  );
+}
 
-             O sintoma era diferente em cada caminho, e os dois apareceram:
-             com o mouse a barra recolhia por baixo do balão no meio do gesto;
-             com o teclado, dar Tab para dentro da lista a fechava antes de a
-             primeira opção receber o foco.
+export function SeletorDeModulo({
+  atual,
+  imobiliaria,
+  podeVerPainel = false,
+  painelAtivo = false,
+  aoAbrirPainel,
+}) {
+  const info = moduloInfo(atual);
 
-             `saiuDeVerdade` responde a pergunta certa — "o destino está no
-             gatilho OU no balão?" — e é usada nos dois. */
-          onMouseLeave={(e) => { if (saiuDeVerdade(e)) setAberto(false); }}
-          onBlur={(e) => { if (saiuDeVerdade(e)) setAberto(false); }}
-        >
-          <button
-            type="button"
-            className={`ds-mod__caret${aberto ? " is-aberto" : ""}`}
-            onClick={() => setAberto((a) => !a)}
-            onFocus={() => setAberto(true)}
-            aria-haspopup="listbox"
-            aria-expanded={aberto}
-            aria-label={`Módulo atual: ${info.nome}. Trocar de módulo`}
-          >
-            <CaretUpDown size={14} weight="bold" />
-          </button>
+  /* ── ELE NAO SELECIONA MAIS: A TROCA MUDOU DE LUGAR ────────────────────────
 
-          {/* Fora do DOM quando fechado, ao contrário do submenu do perfil.
-              Ali o balão anima a entrada e precisa existir antes; aqui ele é
-              posicionado por CSS e montar/desmontar é mais barato que manter
-              dois botões invisíveis na ordem do Tab. */}
-          {aberto && caixa ? createPortal(
-            <div
-              className="ds-mod__balao"
-              role="listbox"
-              aria-label="Módulos disponíveis"
-              style={{ left: caixa.left, top: caixa.top }}
-              onMouseEnter={() => setAberto(true)}
-              /* Mesma pergunta do outro lado: voltar do balão para o chevron
-                 não é sair. */
-              onMouseLeave={(e) => { if (saiuDeVerdade(e)) setAberto(false); }}
-              onBlur={(e) => { if (saiuDeVerdade(e)) setAberto(false); }}
-            >
-              {/* ── As opções agora são o MENU FLUIDO ─────────────────────
-                  Ao passar o ponteiro, uma faixa entra pela borda mais próxima
-                  do cursor com o nome do módulo correndo, tingida do acento
-                  dele. O efeito é do React Bits (`FlowingMenu`), adaptado à
-                  escala do balão — ver `MenuFluido.jsx`, que lista o que mudou
-                  e por quê.
+     Havia um chevron (`.ds-mod__gatilho`) ao lado do wordmark, e clicar nele
+     abria um balao por portal com os modulos disponiveis. Ele foi embora, e com
+     ele o estado de aberto, o posicionamento por coordenadas de tela, a ponte
+     invisivel contra o vao do ponteiro e o `MenuFluido`.
 
-                  A face parada continua sendo o que estava aqui: a logo e a
-                  tagline. Ela não foi substituída pelo efeito, ficou POR BAIXO
-                  dele — quem não passa o mouse vê exatamente a lista de antes,
-                  e o balão continua legível de relance. */}
-              <MenuFluido
-                aoEscolher={aoTrocar}
-                itens={opcoes.map((m) => ({
-                  chave: m.key,
-                  texto: m.nome,
-                  imagem: SIMBOLO_OMNIMOB,
-                  acento: m.acento,
-                  acentoSuave: m.acentoSuave,
-                  tinta: m.tinta,
-                  atual: m.key === atual,
-                  conteudo: (
-                    <>
-                      {/* O atual entra na lista também, marcado. Um seletor que
-                          mostra só as opções NÃO escolhidas obriga a pessoa a
-                          lembrar onde estava para saber o que o clique faz. */}
-                      <LogoModulo modulo={m} className="is-na-lista" />
-                      <span className="ds-mod__tagline">{m.tagline}</span>
-                      {m.key === atual ? <Check size={13} weight="bold" className="ds-mod__check" /> : null}
-                    </>
-                  ),
-                }))}
-              />
-            </div>,
-            document.body,
-          ) : null}
-        </div>
-      </div>
+     A troca agora e um ITEM DA NAVEGACAO, no fim da barra lateral — do jeito
+     que o YouTube oferece os outros produtos dele. Ver `.ds-modulos` no
+     `AdminLayout`. O motivo e que o chevron era um controle escondido dentro
+     da marca: quem nunca clicou nele nao sabia que existia outro modulo, e o
+     Flow e justamente o que a imobiliaria pode nao ter descoberto ainda. Um
+     item com nome, na lista que a pessoa le todo dia, se anuncia sozinho.
+
+     O nome do arquivo ficou. Ele descreve o que a peca FOI, e nao o que ela e
+     — hoje ela e a marca do modulo mais a porta do Painel do Gestor. Renomear
+     custa um import e nada mais; ficou para quando alguem mexer aqui de novo,
+     em vez de virar ruido no meio de uma mudanca de layout.
+     ────────────────────────────────────────────────────────────────────────── */
+  return (
+    /* `ds-mod--arte-clara` diz ao CSS que este módulo tem a segunda arte, e com
+       isso o tema claro troca a IMAGEM em vez de cair no texto. Modificador na
+       raiz, e não `:has()`: quem sabe da arte é o catálogo, e daqui o CSS
+       alcança tanto o wordmark quanto o ladrilho do símbolo — que precisa sumir
+       de novo, porque a arte já traz o prédio dentro dela. */
+    <div
+      className={`ds-mod is-solo${info.logoClaro ? " ds-mod--arte-clara" : ""}`}
+      data-tour="seletor-modulo"
+    >
+      <SimboloModulo modulo={info} />
+      <RoloDaMarca
+        modulo={info}
+        imobiliaria={imobiliaria}
+        podeVerPainel={podeVerPainel}
+        painelAtivo={painelAtivo}
+        aoAbrirPainel={aoAbrirPainel}
+      />
     </div>
   );
 }

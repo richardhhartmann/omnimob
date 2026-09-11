@@ -3,14 +3,15 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { BotaoGoogle } from "./BotaoGoogle.jsx";
 import { TrialAviso } from "./TrialAviso";
+import { FaixaDeConta } from "./FaixaDeConta.jsx";
 import { BoasVindasModal } from "./BoasVindasModal";
 import { PulsoTrialModal } from "./PulsoTrialModal";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
 import { relatoriosVisiveis, PARAMETRO_DE } from "../utils/relatorios";
-import { SeletorDeModulo } from "./SeletorDeModulo.jsx";
 import { gruposDoModulo } from "./navegacaoDoPainel.jsx";
-import { FLOW, HUB, moduloDaRota, moduloInfo, modulosDoUsuario } from "../utils/modulos";
+import { FLOW, HUB, MODULOS, SIMBOLO_OMNIMOB, moduloDaRota, moduloInfo, modulosDoUsuario } from "../utils/modulos";
+import { SeletorDeModulo } from "./SeletorDeModulo.jsx";
 import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
 import { PrimeiroAcessoFlow } from "./PrimeiroAcessoFlow.jsx";
 import { TourDeTela } from "./TourDeTela";
@@ -24,6 +25,8 @@ import { SeloBeta } from "./SeloBeta.jsx";
 import { MenuDoPerfil } from "./MenuDoPerfil.jsx";
 import { MenuDeCanto } from "./MenuDeCanto.jsx";
 import { CabecalhoDoPainel } from "./CabecalhoDoPainel.jsx";
+import { TrilhaDoConteudo } from "./TrilhaDoConteudo.jsx";
+import { lerHistorico, registrarTela } from "../utils/historicoDeTelas";
 import { BuscaDeAtalhos } from "./BuscaDeAtalhos.jsx";
 import { ProvedorDeCabecalho } from "../utils/contextoDeCabecalho.jsx";
 import { ModalRascunhosDeImovel } from "./RascunhosDeImovel.jsx";
@@ -52,6 +55,8 @@ import {
   PlusCircle,
   Tag,
   ClockCounterClockwise,
+  List,
+  MagnifyingGlass,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -100,21 +105,10 @@ function SideTooltip({ label, collapsed, children }) {
   );
 }
 
-/* Selo do plano contratado, no alto da sidebar.
-
-   Fica ao lado do nome da imobiliária porque responde uma pergunta de
-   identidade — "que Omnimob é esta?" — e não de navegação. Quem opera o painel
-   precisa saber disso de relance: metade das telas esconde recurso por plano, e
-   sem o selo a ausência de um botão parece defeito em vez de limite do plano. */
-function SeloPlano({ plano }) {
-  const info = planoInfo(plano);
-  if (!info) return null;
-  return (
-    <span className="ds-plano" style={{ "--plano": info.cor }} title={`Plano ${info.nome}`}>
-      {info.nome}
-    </span>
-  );
-}
+/* O `SeloPlano` mudou de casa: ele desenhava o plano dentro do `ds-head`, que
+   deixou de existir, e hoje vive na segunda face do rolo — ver
+   `SeletorDeModulo`. O CSS dele (`.ds-plano`) continua aqui, junto com o resto
+   da folha da barra. */
 
 // ── Item de navegação ──────────────────────────────────────────────────────────
 /* `tourId` vira `data-tour` no elemento. É o gancho que o tour guiado usa para
@@ -130,16 +124,17 @@ function NavItem({ Icon, label, active, onClick, href, collapsed, external, badg
   const content = (
     <>
       <span className="ds-item__icon">
-        <Icon size={16} weight={active ? "fill" : "regular"} />
+        <Icon size={22} weight={active ? "fill" : "regular"} />
         {/* O pip é o contador na forma recolhida: ponto vermelho no canto do
-            ícone, porque o número não cabe em 28px. Os dois no DOM, um visível
-            de cada vez. */}
+            ícone, porque o número não cabe embaixo do rótulo de 9px. Os dois no
+            DOM, um visível de cada vez. */}
         {badge > 0 ? <span className="ds-item__pip" /> : null}
       </span>
-      {/* Rótulo, selo e contador existem SEMPRE no DOM; quem os mostra é o CSS,
-          conforme a barra esteja recolhida ou aberta pelo hover. O React não
-          fica sabendo da entrada do ponteiro, e um estado só para isso traria
-          de volta o re-render que a expansão por CSS evita. */}
+      {/* O rótulo é UM só nos dois estados da barra, e é o CSS que o veste:
+          ao lado do ícone com a barra aberta, embaixo dele e em 9px com a barra
+          recolhida. Dois elementos — um "nome" e uma "legenda" — divergiriam no
+          primeiro item renomeado, e o repositório já pagou esse preço no editor
+          de vitrine. */}
       <span className="ds-item__label">{label}</span>
       {beta ? <SeloBeta /> : null}
       {/* O degrau de plano, dito no próprio item. O item continua CLICÁVEL: a
@@ -321,18 +316,36 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const shellRef = useRef(null);
   useBrilhoDeBorda(shellRef);
 
-  /* ── A barra não tem mais estado de colapso ────────────────────────────────
-     Ela vive recolhida e abre no hover, por CSS. Havia um botão para alternar e
-     uma preferência guardada, e os dois foram embora pelo mesmo motivo: eram
-     uma pergunta que o produto fazia à pessoa e que ela não tinha como
-     responder bem. Quem recolhe ganha espaço e perde os rótulos; quem deixa
-     aberta perde 240px em toda tela. O hover dá os dois — espaço o tempo todo,
-     rótulo quando o olho vai lá.
+  /* ── A BARRA ABRE POR CLIQUE, E NÃO MAIS POR HOVER ─────────────────────────
 
-     Sem estado em JavaScript de propósito: `:hover` no CSS não re-renderiza
-     nada, e uma barra que remonta a cada entrada e saída do ponteiro seria cara
-     numa tela que já tem submenu animado.
+     Ela já viveu recolhida abrindo no `:hover`, e o argumento era que o gesto
+     dá os dois — espaço o tempo todo, rótulo quando o olho vai lá. O que ele
+     dava de fato era uma barra que se mexia sozinha: atravessar a tela em
+     diagonal para chegar num botão do conteúdo abria 176px de menu no caminho,
+     e o submenu do índice entrava animando por um gesto que ninguém pediu.
+
+     Agora quem manda é o hambúrguer, no topo da barra. É o arranjo do YouTube,
+     e ele resolve o que o hover não resolvia: a barra só muda de tamanho quando
+     a pessoa diz para mudar, e recolhida ela continua legível porque cada ícone
+     leva o nome embaixo — que era o único trabalho que o hover fazia bem.
+
+     O estado é da PESSOA e mora no navegador dela, como o módulo ativo e a
+     última tela: numa recepção com computador compartilhado, quem gosta da
+     barra aberta não impõe isso a quem trabalha o dia inteiro no portfólio.
      ────────────────────────────────────────────────────────────────────────── */
+  const [barraAberta, setBarraAberta] = useState(() => {
+    const guardado = lerDoUsuario(CHAVES.barraAberta, tenantId, session?.usuario?.id);
+    /* Recolhida é o padrão: é o estado que devolve a tela inteira ao conteúdo,
+       e com os rótulos embaixo dos ícones ele não esconde mais nada. */
+    return guardado === "1";
+  });
+  const alternarBarra = useCallback(() => {
+    setBarraAberta((v) => {
+      const proximo = !v;
+      gravarNoUsuario(CHAVES.barraAberta, tenantId, session?.usuario?.id, proximo ? "1" : "0");
+      return proximo;
+    });
+  }, [tenantId, session?.usuario?.id]);
 
   // ── Fila de modais de entrada ─────────────────────────────────────────────────
   /* O tour só entra depois que o aviso de conta se resolve (ver o JSX abaixo).
@@ -527,10 +540,13 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
   const infoModulo = moduloInfo(moduloAtivo);
 
-  /* Enquanto o balão do seletor está no ar, a barra continua aberta. Ver o
-     comentário em `SeletorDeModulo`: o balão sai por portal para o `body`, e o
-     `:hover` da barra não o alcança. */
-  const [seletorAberto, setSeletorAberto] = useState(false);
+  /* Os módulos que esta pessoa alcança MENOS o que ela está usando. É o que a
+     seção "Mais da Omnimob" desenha no fim da barra; vazio, ela não existe. */
+  const outrosModulos = useMemo(
+    () => MODULOS.filter((m) => disponiveis.includes(m.key) && m.key !== moduloAtivo),
+    [disponiveis, moduloAtivo],
+  );
+
   /* A paleta de busca. Ctrl+K (⌘K no Mac) é a tecla que todo produto usa para
      isto, e é por isso que ela não passa pelo catálogo de atalhos do painel:
      aquele catálogo é o que a imobiliária PODE remapear, e remapear o ⌘K seria
@@ -554,81 +570,14 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
   }, []);
-  /* O balão dos três pontinhos segura a barra aberta pela MESMA razão que o
-     seletor de módulo: os dois saem por portal, e alcançá-los com o ponteiro é
-     sair do `<aside>` que expande por hover. Ver `MenuDeCanto`. */
-  const [menuDeCantoAberto, setMenuDeCantoAberto] = useState(false);
 
-  /* ── A BARRA FICA PRESA DEPOIS DE TROCAR DE MÓDULO ────────────────────────
+  /* ── A troca de módulo ──────────────────────────────────────────────────
 
-     A barra abre por `:hover`. O balão do seletor vive num PORTAL, no `body`,
-     e é justamente por isso que `is-mod-aberto` existe — enquanto ele está no
-     ar, a barra conta como aberta mesmo com o ponteiro fora dela.
+     O seletor mudou de casa: ele ocupava o topo da barra lateral, onde hoje
+     mora o hambúrguer, e agora vive na faixa de marca que atravessa o topo da
+     tela. O que ele FAZ não mudou nada.
 
-     O problema aparecia no instante do CLIQUE. Escolher um módulo fecha o
-     balão, e nesse quadro o ponteiro está sobre o lugar onde o balão estava —
-     que não é a `.ds-side`. Sem `:hover` e sem `is-mod-aberto`, a barra
-     recolhia sozinha no meio do gesto, e a pessoa acabava de trocar de módulo
-     olhando para uma tira de 64px de ícones.
-
-     `presa` é o que segura: entra na troca e só sai quando o ponteiro DEIXA a
-     barra de verdade. Nada de temporizador — quem decide é o gesto, e um
-     `setTimeout` de meio segundo acertaria umas vezes e erraria outras. */
-  const [presa, setPresa] = useState(false);
-  const barraRef = useRef(null);
-
-  /* ── A REDE DE SEGURANÇA DO "PRESA" ───────────────────────────────────────
-
-     `onMouseLeave` sozinho não basta, e a brecha é sutil: ele só dispara se o
-     ponteiro tiver ENTRADO no elemento. Quando a troca acontece por um clique
-     no balão — que vive no `body`, ao lado da barra e não dentro dela —, o
-     ponteiro pode nunca ter pisado na `.ds-side`. Aí não há `mouseleave` para
-     acontecer, e a barra ficaria aberta para sempre, até alguém passar o mouse
-     por cima e tirar.
-
-     Este efeito responde a pergunta certa — "o ponteiro está sobre a barra
-     AGORA?" — pela geometria, e não pelo histórico de eventos. Só existe
-     enquanto `presa` está ligado; no resto do tempo não há ouvinte nenhum. */
-  useEffect(() => {
-    if (!presa) return undefined;
-
-    function conferir(e) {
-      const caixa = barraRef.current?.getBoundingClientRect();
-      if (!caixa) return;
-
-      /* ── A REGIÃO INCLUI ONDE O BALÃO ESTAVA ────────────────────────────
-
-         A primeira versão conferia só a caixa da barra, com 8px de folga, e
-         não funcionava — o que era invisível na sondagem porque ela clicava e
-         NÃO mexia mais o mouse.
-
-         No uso real o gesto termina com o ponteiro em cima da opção clicada, e
-         a opção vive no balão, que abre À DIREITA da barra. Ou seja: no
-         instante seguinte à troca o ponteiro está legitimamente fora da barra.
-         Bastava um tremor de dois pixels para o `pointermove` disparar, ver
-         "fora" e recolher tudo — exatamente o defeito que este estado existe
-         para corrigir, reaparecendo por outro caminho.
-
-         `FOLGA_DO_BALAO` estica a região para a direita o bastante para cobrir
-         o balão (que nasce em `barra.right + 12` e tem ~260px). Não precisa ser
-         exato: ela só vale enquanto `presa` está ligado, e o único efeito de
-         sobrar espaço é a barra continuar aberta por mais alguns pixels de
-         movimento — que é o comportamento pedido, não um defeito.
-
-         Na vertical a folga é a mesma dos 8px: mover para cima ou para baixo
-         saindo da barra é sair de verdade. */
-      const FOLGA_DO_BALAO = 380;
-      const dentro =
-        e.clientX >= caixa.left - 8 && e.clientX <= caixa.right + FOLGA_DO_BALAO
-        && e.clientY >= caixa.top - 8 && e.clientY <= caixa.bottom + 8;
-      if (!dentro) setPresa(false);
-    }
-
-    document.addEventListener("pointermove", conferir);
-    return () => document.removeEventListener("pointermove", conferir);
-  }, [presa]);
-
-  /* Trocar de módulo NAVEGA. Só mudar a barra deixaria a pessoa no Dashboard do
+     Trocar de módulo NAVEGA. Só mudar a barra deixaria a pessoa no Dashboard do
      Hub com o menu do Flow em volta — e o primeiro clique dela seria num item
      que não tem nada a ver com o que está na tela. O destino de cada módulo
      mora em `utils/modulos.js`, junto do resto da definição dele. */
@@ -671,9 +620,6 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       gravarNoUsuario(CHAVES.moduloAtivo, tenantId, usuarioId, proximo);
     }
     setModuloPreferido(proximo);
-    /* Antes de navegar: a barra tem de já estar presa quando a árvore nova
-       montar, senão há um quadro com ela recolhida. */
-    setPresa(true);
     navigate(destino);
   }, [cargo, navigate, tenantId, session?.usuario?.id, location.pathname, location.search]);
 
@@ -779,9 +725,13 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     return {
       rotulo: "Mais opções de Gerenciar Imóveis",
       badge: rascunhos.length,
-      /* Viaja junto do menu porque quem monta o JSX do item é o `NavItem`, três
-         níveis abaixo — e ele não tem como conhecer o estado da barra. */
-      aoAlternarAberto: setMenuDeCantoAberto,
+      /* Aqui viajava um `aoAlternarAberto` avisando o layout de que o balão dos
+         três pontinhos estava no ar — a barra precisava saber disso para não se
+         recolher por baixo dele, já que o balão sai por portal e alcançá-lo com
+         o ponteiro era sair do `<aside>`.
+
+         A barra não abre mais por hover: ela fica onde a pessoa a deixou, e o
+         balão pode nascer onde quiser. O aviso deixou de ter destinatário. */
       itens: [
         {
           key: "rascunhos",
@@ -825,8 +775,8 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
   /* ── A navegação sai daqui ─────────────────────────────────────────────────
      Os itens de cada módulo moram em `navegacaoDoPainel.jsx`. O layout continua
-     sendo UM: o que troca é o conteúdo da <nav>, e nada mais. `ds-head`,
-     `ds-head--link`, `ds-foot` e a mecânica de recolher/expandir são os mesmos
+     sendo UM: o que troca é o conteúdo da <nav>, e nada mais. `ds-mod`,
+     `ds-foot` e a mecânica de recolher/expandir são os mesmos
      elementos nos dois módulos, na mesma posição — é isso que faz a troca
      parecer virar de página em vez de entrar em outro sistema. */
   const grupos = useMemo(
@@ -855,6 +805,31 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       p, ver,
     ],
   );
+
+  /* ── O ÍCONE DA TELA, no cabeçalho ────────────────────────────────────────
+     Ele sai da MESMA lista que a barra lateral desenha, e não de uma tabela
+     rota → ícone escrita à parte. É o que garante que o desenho ao lado do
+     título e o item aceso no menu nunca discordem — com duas listas, a
+     primeira tela nova entraria numa e não na outra.
+
+     O item mais ESPECÍFICO vence: "Categoria de Imóvel" e o pai dela
+     "Gerenciar Imóveis" podem estar acesos ao mesmo tempo, e o ícone certo é o
+     da tela em que a pessoa está. Como o subitem vem depois do pai na lista
+     achatada, o último aceso é o mais fundo. */
+  const itemDaTela = useMemo(() => {
+    const achatar = (itens) => (itens || []).flatMap((i) => (i ? [i, ...(i.subitens || [])] : []));
+    const acesos = grupos.flatMap((g) => achatar(g.itens)).filter((i) => i?.active);
+    return acesos.length ? acesos[acesos.length - 1] : null;
+  }, [grupos]);
+  const IconeDaTela = itemDaTela?.Icon || null;
+
+  /* E o mesmo item alimenta o HISTÓRICO das sugestões da paleta de busca. A
+     fonte é uma só de propósito: uma segunda tabela rota → tela discordaria do
+     item aceso no menu na primeira tela nova, e o histórico passaria a sugerir
+     um nome que a barra não usa. Ver `utils/historicoDeTelas`. */
+  useEffect(() => {
+    registrarTela(session?.tenant?.id, session?.usuario?.id, itemDaTela?.key);
+  }, [itemDaTela?.key, session?.tenant?.id, session?.usuario?.id]);
 
   /* Os rótulos são SEMPRE desenhados agora, e quem os esconde é o CSS.
      Antes o JSX os removia do DOM quando recolhida — com a expansão por hover
@@ -999,6 +974,10 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         aoFechar={() => setBuscaAberta(false)}
         grupos={grupos}
         modulo={moduloAtivo}
+        /* Lido a cada ABERTURA, e não na montagem do layout: o layout não
+           remonta ao trocar de tela, então um valor lido lá ficaria congelado
+           no que o histórico era quando a sessão começou. */
+        historico={buscaAberta ? lerHistorico(session?.tenant?.id, session?.usuario?.id) : null}
       />
 
       <AjudaModal
@@ -1040,114 +1019,133 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
           "--modulo-acento-suave": infoModulo.acentoSuave,
         }}
       >
-        {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-        {/* `ds-side` reserva os 64px no fluxo; `ds-side__interno` é quem cresce,
-            por cima do conteúdo. Fosse a própria `aside` a crescer, cada passada
-            de mouse empurraria a página inteira para o lado. */}
-        <aside
-          ref={barraRef}
-          className={`ds-side${seletorAberto || presa || menuDeCantoAberto ? " is-mod-aberto" : ""}`}
-          data-tour="sidebar"
-          /* Solta a barra quando o ponteiro sai DE VERDADE. `mouseleave` no
-             `<aside>` já ignora a viagem entre os filhos dele — é `mouseout`
-             que dispararia a cada troca de elemento lá dentro.
+        {/* ══ A FAIXA DO TOPO ══════════════════════════════════════════════
+            Uma linha atravessando a tela, acima da barra lateral e da coluna, e
+            dentro dela UMA caixa com o hambúrguer e o wordmark lado a lado.
 
-             O balão do seletor não é filho daqui (vive no `body`), mas isso não
-             atrapalha: enquanto ele está aberto, `seletorAberto` segura a
-             barra sozinho. */
-          onMouseLeave={() => setPresa(false)}
-          /* Teclado: sair da barra com Tab também solta. Sem isto, quem trocasse
-             de módulo pelo teclado deixaria a barra presa até mexer o mouse. */
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget)) setPresa(false);
-          }}
+            ── POR QUE OS DOIS NA MESMA CAIXA ──
+
+            Eles já moraram em divs separadas — o hambúrguer no alto da barra, o
+            wordmark no alto da coluna —, e o preço era um vão de 38px entre os
+            dois com uma fronteira invisível no meio: a borda da tira de 92px.
+            Duas peças que se leem como um controle único não podem depender de
+            duas caixas ficarem alinhadas por coincidência de números.
+
+            ── E A CAIXA É O QUE DEFINE A LARGURA DA BARRA ──
+
+            `.ds-topbar__grupo` mede exatamente `--s-aberta`. Então a barra
+            aberta termina onde o grupo termina, e a fronteira entre a moldura e
+            o conteúdo é UMA linha vertical contínua do topo ao rodapé — em vez
+            de um degrau. Quem manda no número é o token, num lugar só.
+
+            Clicar no wordmark abre o Painel do Gestor; o chevron ao lado troca
+            de módulo. Ver `SeletorDeModulo`. */}
+        <header className="ds-topbar">
+          <div className="ds-topbar__grupo">
+            {/* O ÚNICO jeito de a barra mudar de tamanho: sem ele, ela fica
+                onde a pessoa deixou. Ele não anda quando a barra abre — está
+                fora dela agora, o que resolve por construção o passo para a
+                esquerda que o recuo calculado corrigia à mão. */}
+            <button
+              type="button"
+              className="ds-hamburguer"
+              onClick={alternarBarra}
+              aria-expanded={barraAberta}
+              aria-controls="ds-navegacao"
+              aria-label={barraAberta ? "Recolher menu" : "Expandir menu"}
+              title={barraAberta ? "Recolher menu" : "Expandir menu"}
+            >
+              <List size={22} weight="bold" />
+            </button>
+
+            <SeletorDeModulo
+              atual={moduloAtivo}
+              imobiliaria={{
+                nome: tenantName,
+                slug: session?.tenant?.slug,
+                logoUrl: session?.tenant?.logoUrl,
+                plano: session?.tenant?.plano,
+              }}
+              podeVerPainel={podeVerPainel}
+              painelAtivo={isInicio}
+              aoAbrirPainel={() => navigate("/inicio")}
+            />
+          </div>
+
+          {/* ── A SITUAÇÃO DA CONTA, NO MEIO DA FAIXA ──────────────────────
+              Ela era uma tarja de largura inteira logo abaixo do cabeçalho, e
+              cobrava a altura dela de toda tela do painel, o dia inteiro. Aqui
+              vira uma pílula do tamanho do próprio recado, centrada na faixa
+              que já existe — a mesma informação, sem uma linha nova na página.
+
+              Centro de verdade: `position: absolute` mais `left/right: 0` e
+              `margin: auto` na pílula. Como item do flex ela seria empurrada
+              pelo grupo da esquerda (que tem `--s-aberta` de largura) e pela
+              busca da direita, e o "meio" cairia diferente conforme a barra
+              estivesse aberta ou fechada. Absoluta, ela ignora os dois.
+
+              O `pointer-events` volta só na pílula: a faixa de posicionamento
+              atravessa a barra inteira e engoliria o clique do hambúrguer e o
+              da busca se recebesse ponteiro. */}
+          <div className="ds-topbar__conta">
+            <FaixaDeConta tenantSlug={session?.tenant?.slug} />
+          </div>
+
+          {/* ── A BUSCA MORA AQUI, E NÃO NO CABEÇALHO DA TELA ───────────────
+              Ela desenhava no `.ds-topo__dir`, ao lado do botão primário da
+              página. Só que a paleta não é da PÁGINA: ela abre qualquer tela do
+              painel, e o que serve a todas as telas pertence à moldura — foi o
+              mesmo argumento que trouxe o título da tela para o cabeçalho e a
+              navegação para a barra.
+
+              Duas consequências práticas. O botão primário fica sozinho no
+              `__dir`, e deixa de disputar o canto com um controle que não tem
+              nada a ver com ele. E o editor de vitrine, que troca o cabeçalho
+              do painel pela barra de ferramentas própria, passa a ter busca —
+              lá só existia o Ctrl+K, para quem soubesse dele.
+
+              O botão tem CARA de campo e é um `<button>` de propósito: o que ele
+              abre é a paleta, e um `<input>` aqui prometeria digitar num lugar
+              onde ninguém vai digitar. */}
+          <button
+            type="button"
+            className="ds-busca"
+            onClick={() => setBuscaAberta(true)}
+            aria-label="Buscar telas do painel"
+          >
+            <MagnifyingGlass size={15} weight="bold" />
+            <span className="ds-busca__texto">Buscar no painel…</span>
+            <kbd className="ds-busca__tecla">{atalhoDeBusca}</kbd>
+          </button>
+        </header>
+
+        {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
+        {/* `ds-side` reserva a tira no fluxo; `ds-side__interno` é quem cresce,
+            por cima do conteúdo. Fosse a própria `aside` a crescer, abrir o menu
+            refluiria a página inteira em vez de passar por cima dela. */}
+        <aside
+          className={`ds-side${barraAberta ? " is-aberta" : ""}`}
+          data-tour="sidebar"
         >
           <div className="ds-side__interno">
 
-          {/* ── O seletor de módulo ────────────────────────────────────────
-              Em cima de tudo, e antes da marca da imobiliária. A ordem responde
-              duas perguntas na sequência em que elas se fazem: "que produto é
-              este?" e só então "de quem é esta conta?".
-
-              Com um módulo só ele vira uma faixa de identidade — sem chevron,
-              sem hover, sem clique. Ver `SeletorDeModulo`. */}
-          <SeletorDeModulo
-            atual={moduloAtivo}
-            disponiveis={disponiveis}
-            aoTrocar={trocarDeModulo}
-            aoAlternarAberto={setSeletorAberto}
-          />
-
-          {/* ── Header: a porta do Painel do Gestor ────────────────────────
-              Ele é a marca da imobiliária, e é por isso que serve: "clicar no
-              logotipo para ver como a casa está" é o gesto que a pessoa já tem.
-
-              Vira BOTÃO só para quem tem `verPainelGestor`. Para os outros
-              continua sendo uma `<div>` — e não um botão desabilitado: um
-              cursor de mão que não leva a lugar nenhum promete uma tela que
-              aquela pessoa não vai ver nunca. */}
-          {podeVerPainel ? (
-          <button
-            type="button"
-            className={`ds-head ds-head--link${isInicio ? " is-ativo" : ""}`}
-            onClick={() => navigate("/inicio")}
-            title="Painel do Gestor"
-            aria-current={isInicio ? "page" : undefined}
-          >
-            <div className={`ds-mark${session?.tenant?.logoUrl ? " has-logo" : ""}`}>
-              {session?.tenant?.logoUrl
-                ? <img src={session.tenant.logoUrl} alt={tenantName} onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                : tenantName.charAt(0).toUpperCase()}
-            </div>
-            {!c ? (
-              <>
-                {/* Só o nome. O slug era detalhe de endereço num lugar que
-                    responde "de quem é este painel" — e com o selo do plano ao
-                    lado, três informações empilhadas em 56px de altura viravam
-                    ruído. Quem precisa do endereço tem "Ver página" no menu e a
-                    seção de endereço em Configurações. */}
-                <div className="ds-head__text">
-                  <span className="ds-head__name">{tenantName}</span>
-                </div>
-                {/* Selo do plano. Some com a sidebar recolhida: ali sobram 28px
-                    e a marca tem prioridade. A cor vem de `planos.js`, a mesma
-                    que a landing e o painel super-admin usam — plano é uma só
-                    ideia no produto e deve ter uma só aparência. */}
-                <SeloPlano plano={session?.tenant?.plano} />
-              </>
-            ) : null}
-          </button>
-          ) : (
-          <div className="ds-head">
-            <div className={`ds-mark${session?.tenant?.logoUrl ? " has-logo" : ""}`}>
-              {session?.tenant?.logoUrl
-                ? <img src={session.tenant.logoUrl} alt={tenantName} onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                : tenantName.charAt(0).toUpperCase()}
-            </div>
-            {!c ? (
-              <>
-                <div className="ds-head__text">
-                  <span className="ds-head__name">{tenantName}</span>
-                </div>
-                <SeloPlano plano={session?.tenant?.plano} />
-              </>
-            ) : null}
-          </div>
-          )}
+          {/* O hambúrguer subiu para a faixa do topo, junto do wordmark: os
+              dois são um controle só para quem olha, e estavam em duas caixas.
+              Ver o cabeçalho da `.ds-topbar`, acima. */}
 
           {/* Navegação */}
-          <nav className="ds-nav">
+          <nav className="ds-nav" id="ds-navegacao">
             {grupos.map((grupo, gi) => (
               <div className="ds-group" key={grupo.label || `g-${gi}`}>
-                {/* Recolhida, o nome do grupo vira um fio: ele separa sem
-                    precisar de largura. Os dois no DOM pelo mesmo motivo do
-                    rótulo acima. */}
-                {grupo.label ? (
-                  <>
-                    <span className="ds-group__rule" aria-hidden="true" />
-                    <span className="ds-group__label">{grupo.label}</span>
-                  </>
-                ) : null}
+                {/* Recolhida, o nome do grupo simplesmente NÃO aparece.
+
+                    Havia um fio (`ds-group__rule`) fazendo o papel dele ali —
+                    separar sem precisar de largura. Ele saiu: com o rótulo
+                    embaixo de cada ícone, a tira já tem texto suficiente para
+                    o olho achar onde uma coisa termina e outra começa, e o fio
+                    virou uma terceira linha horizontal disputando atenção com
+                    esses nomes. O que separa os grupos agora é o espaço. */}
+                {grupo.label ? <span className="ds-group__label">{grupo.label}</span> : null}
                 {grupo.itens.map((item) => (
                   <div key={item.key}>
                     <NavItem
@@ -1192,7 +1190,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                               onClick={sub.onClick}
                             >
                               <span className="ds-subitem__icon">
-                                <sub.Icon size={14} weight={sub.active ? "fill" : "regular"} />
+                                <sub.Icon size={17} weight={sub.active ? "fill" : "regular"} />
                               </span>
                               <span className="ds-subitem__label">{sub.label}</span>
                             </button>
@@ -1204,24 +1202,95 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 ))}
               </div>
             ))}
+
+            {/* ══ OS OUTROS MÓDULOS ═════════════════════════════════════════
+                O esquema do "Mais do YouTube": uma seção no fim da lista, com
+                título próprio, oferecendo os OUTROS produtos da casa.
+
+                ── POR QUE ELA SUBSTITUI O CHEVRON ──
+
+                A troca de módulo era um chevron colado no wordmark, no alto da
+                barra. Ele funcionava para quem já sabia que existia — e o
+                Omniflow é justamente o que a imobiliária pode ainda não ter
+                descoberto. Um item com nome, na lista que a pessoa lê todo dia,
+                se anuncia sozinho; um chevron dentro da marca, não.
+
+                ── SÓ QUEM TEM O OUTRO MÓDULO VÊ ──
+
+                `disponiveis` já responde as duas perguntas que importam: a
+                imobiliária CONTRATOU (`Tenant.modulos`) e este cargo ALCANÇA
+                (`Cargo.acessarFlow`). Quem tem um módulo só não vê seção
+                nenhuma — e não uma seção vazia, nem um convite de upgrade
+                disfarçado de navegação.
+
+                A lista é simétrica: no Omnimob ela oferece o Omniflow, no
+                Omniflow ela oferece o Omnimob. É a mesma volta, e é por isso
+                que ela sai de `disponiveis` filtrando o atual, em vez de
+                perguntar "tem Flow?".
+
+                ── SÓ COM A BARRA ABERTA ──
+
+                Quem esconde é o CSS (`.ds-modulos`), como o resto da barra.
+                Recolhida, o nome do módulo não caberia embaixo do ícone sem
+                virar duas linhas de três letras, e um símbolo sozinho ali seria
+                indistinguível dos onze ícones acima dele. */}
+            {outrosModulos.length ? (
+              <div className="ds-group ds-modulos">
+                <span className="ds-group__label">Mais da Omnimob</span>
+                {outrosModulos.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className="ds-item ds-modulos__item"
+                    onClick={() => trocarDeModulo(m.key)}
+                    title={m.descricao}
+                  >
+                    {/* O WORDMARK INTEIRO, e não ícone mais texto.
+
+                        Aqui estava o símbolo da casa dentro de um anel na cor
+                        do acento, mais o nome ao lado — e o símbolo é o MESMO
+                        nos dois módulos, então quem diferenciava era só a
+                        tinta do anel. Um item que leva para outro produto pede
+                        a marca daquele produto, não uma pista de cor.
+
+                        As duas artes entram, e quem escolhe é o tema, pelo
+                        mesmo mecanismo da faixa do topo: `logoClaro` (letras
+                        pretas) quando o painel está claro, `logo` (letras
+                        brancas) quando está escuro. Módulo sem arte clara cai
+                        no `logo` e no nome em texto — ver `.ds-modulos__tipo`
+                        no CSS. */}
+                    <img className="ds-modulos__tipo" src={m.logo} alt={m.nome} />
+                    {m.logoClaro ? (
+                      <img className="ds-modulos__tipo ds-modulos__tipo--claro" src={m.logoClaro} alt={m.nome} />
+                    ) : null}
+                    {m.logoClaro ? null : <span className="ds-item__label">{m.nome}</span>}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </nav>
 
           {/* Rodapé */}
           <div className="ds-foot">
-            {/* Só aparece enquanto o tenant estiver em teste; some ao assinar.
+            {/* ── O fluxo de assinatura, SEM o selo ─────────────────────────
+                O selo de dias restantes saiu daqui: quem diz a situação da
+                conta agora é a `FaixaDeConta`, abaixo do cabeçalho. Manter os
+                dois faria a mesma contagem aparecer duas vezes na tela e
+                discordar no dia em que uma das regras mudasse.
+
+                O COMPONENTE fica: ele é o fluxo inteiro — três passos, Pix,
+                Stripe — e escuta `pedirTelaDeAssinatura`, que é o que a faixa
+                emite ao ser clicada. Tirá-lo daqui levaria o checkout junto.
 
                 `podeAssinar` segue `verConfiguracoes` — assinar é decisão de
                 quem responde pela conta, e é a mesma permissão que abre
                 Configurações, onde o plano vive. Era `gerenciarUsuarios`. */}
-            <SideTooltip label="Assinar a Omnimob" collapsed={c}>
-              <div>
-                <TrialAviso
-                  tenantSlug={tenantSlug}
-                  podeAssinar={Boolean(cargo?.verConfiguracoes)}
-                  aoAssinar={() => window.location.reload()}
-                />
-              </div>
-            </SideTooltip>
+            <TrialAviso
+              tenantSlug={tenantSlug}
+              podeAssinar={Boolean(cargo?.verConfiguracoes)}
+              aoAssinar={() => window.location.reload()}
+              mostrarSelo={false}
+            />
 
             {/* Ajuda e Encerrar Sessão saíram daqui para o menu do perfil.
 
@@ -1313,14 +1382,25 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             salvamento, e dois cabeçalhos empilhados comeriam um terço da
             prancheta. */}
         {isShowcaseEditor ? null : (
-          <CabecalhoDoPainel aoBuscar={() => setBuscaAberta(true)} atalhoDeBusca={atalhoDeBusca} />
+          <>
+            <CabecalhoDoPainel Icone={IconeDaTela} />
+            {/* A situação da conta MUDOU DE LUGAR: agora é uma pílula no meio
+                da `.ds-topbar`. Ver o comentário lá em cima, no cabeçalho. */}
+          </>
         )}
         <main
           className={isShowcaseEditor ? "main-content--editor-vitrine" : "main-content"}
           data-tema={efetivo}
           style={{ flex: 1, minWidth: 0 }}
         >
+          {/* A trilha abre o CONTEÚDO, e não o cabeçalho. Dentro do bloco
+              animado de propósito: ela é a primeira linha da página e entra
+              junto com ela — fora dele, ficaria parada enquanto o resto desliza,
+              e o degrau que muda de tela seria o único elemento sem transição.
+              O editor de vitrine não a desenha porque não tem cabeçalho nem
+              trilha: `main-content--editor-vitrine` é outra casca. */}
           <div key={location.pathname} style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}>
+            {isShowcaseEditor ? null : <TrilhaDoConteudo />}
             {/* O provedor envolve só o CONTEÚDO, e não a barra: os selos de
                 tecla vivem nos botões das telas, e a barra tem os próprios
                 rótulos. Envolver tudo obrigaria a barra a re-renderizar a cada
@@ -1396,15 +1476,16 @@ const CSS = `
 
    O conserto e um recuo, nao uma largura: a faixa continua ocupando a coluna
    toda (o fundo desfocado precisa disso, senao aparece uma falha clara entre a
-   barra e ela) e apenas o CONTEUDO dela anda para a direita. E CSS puro, pelo
-   seletor de irmao — o React nao fica sabendo do hover, e um estado so para
-   isso traria de volta o re-render que a expansao por CSS evita.
+   barra e ela) e apenas o CONTEUDO dela anda para a direita. Continua CSS puro,
+   pelo seletor de irmao: a classe muda no <aside> e a coluna inteira responde
+   sem que nenhuma tela do painel precise saber que a barra existe.
 
-   Os 176px sao a diferenca entre os dois estados da barra (240 - 64). O padding
-   base de 28px entra somado, no proprio calc. */
-.ds-side:hover ~ .ds-coluna .ds-topo,
-.ds-side:focus-within ~ .ds-coluna .ds-topo,
-.ds-side.is-mod-aberto ~ .ds-coluna .ds-topo { padding-left: calc(176px + 28px); }
+   O avanco e a diferenca entre os dois estados da barra, e mora em --s-avanco
+   (ver o bloco do .ds-shell). Era 176px cravado em seis lugares deste
+   repositorio; qualquer mexida na largura da tira exigia acertar todos, e o
+   sintoma de esquecer um e o conteudo escondido atras da barra. O padding base
+   de 28px entra somado, no proprio calc. */
+.ds-side.is-aberta ~ .ds-coluna .ds-topo { padding-left: calc(var(--s-avanco) + 28px); }
 
 /* O conteudo anda junto com a faixa. Antes ele nao precisava: com o teto de
    1200px e a margem automatica sobrava calha dos dois lados, e a barra aberta
@@ -1412,30 +1493,98 @@ const CSS = `
    comeca na borda — e a barra a cobria.
 
    O padding-left aqui SUBSTITUI o das 32/28px do estado normal, entao a conta e
-   a mesma da faixa: 176 de diferenca entre os dois estados da barra, mais o
-   respiro que ja existia. As duas transicoes compartilham curva e duracao, para
-   o cabecalho e a tabela andarem como uma coisa so. */
-.ds-side:hover ~ .ds-coluna .main-content,
-.ds-side:focus-within ~ .ds-coluna .main-content,
-.ds-side.is-mod-aberto ~ .ds-coluna .main-content { padding-left: calc(176px + 28px); }
+   a mesma da faixa: o avanco da barra mais o respiro que ja existia. As duas
+   transicoes compartilham curva e duracao, para o cabecalho e a tabela andarem
+   como uma coisa so. */
+.ds-side.is-aberta ~ .ds-coluna .main-content { padding-left: calc(var(--s-avanco) + 28px); }
 .ds-coluna .main-content { transition: padding-left 0.2s cubic-bezier(0.4,0,0.2,1); }
 
+/* ── A FAIXA DE MARCA NAO SE MEXE, E ISSO E O DESENHO ──────────────────────
+   Ela e a unica peca da coluna que nao cede espaco, e o hamburguer ao lado dela
+   tambem nao: os dois formam UMA linha no topo da tela, e uma linha que anda
+   quando o menu abre deixa de ser moldura.
+
+   Ela sobrevive a barra aberta porque a barra nao tem fundo, e porque o topo
+   dela guarda so o hamburguer: na altura que a faixa ocupa, a barra aberta esta
+   vazia, e o wordmark continua visivel atraves dela. Se um dia a barra voltar a
+   ser opaca, e ESTA a regra que passa a precisar de um recuo. */
+
+/* ── E A FAIXA DE CONTA, QUE CEDE POR MARGEM E NAO POR PADDING ─────────────
+   Ela ficou para tras das outras tres, e o sintoma dela era diferente: o
+   conteudo e CENTRALIZADO, entao nada desaparecia atras da barra — o aviso so
+   deixava de estar no meio do espaco livre, e caminhava para a esquerda a cada
+   abertura do menu.
+
+   MARGEM, e nao padding como o cabecalho e o conteudo usam. A faixa e a unica
+   peca com fundo de COR PROPRIA (papel quente, ambar ou vermelho conforme a
+   situacao da conta), e com padding a CAIXA continuaria comecando nos 92px: o
+   papel colorido aparecia por baixo da barra aberta — que nao tem fundo — como
+   uma tira rosa atravessando o menu. A margem move a caixa inteira, e a cor
+   passa a comecar onde a barra termina.
+
+   O respiro base dela e 20px, e nao 28 como o do cabecalho: a conta e a mesma,
+   o numero e o dela. A regra vence a de .fc-faixa (que mora no style do proprio
+   componente) por especificidade, e nao por ordem de folha — as duas folhas
+   entram em momentos diferentes, e a ordem nao e coisa que este arquivo
+   controle.
+   (Sem crases nestes comentarios: template literal.) */
 .ds-topo {
-  position: sticky; top: 0; z-index: 30;
+  /* Cola embaixo da faixa de marca, que e sticky no topo da mesma coluna: as
+     duas coladas no topo ao mesmo tempo se sobreporiam. Ver --s-topbar no
+     bloco do .ds-shell. */
+  position: sticky; top: var(--s-topbar); z-index: 30;
   display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
   padding: 18px 28px 14px;
-  border-bottom: 1px solid var(--linha-08, rgba(255,255,255,0.08));
   /* O desfoque e o que permite a faixa ser translucida sem o texto de baixo
      atravessar. O prefixo -webkit- junto porque o Safari ainda o exige. */
-  background: color-mix(in srgb, var(--bg-gradient-1, #0a0a0b) 82%, transparent);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   /* A MESMA curva e a mesma duracao da barra (ver .ds-side__interno): com
      tempos diferentes, o titulo chegava no lugar antes ou depois da barra e o
      gesto lia como dois movimentos em vez de um. */
   transition: padding-left 0.2s cubic-bezier(0.4,0,0.2,1);
 }
-.ds-topo__esq { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.ds-topo__trilha { margin-bottom: 4px; }
+/* ── COM A FAIXA, O CABECALHO PERDE A PROPRIA LINHA ─────────────────────────
+
+   Cabecalho e faixa sao coisas diferentes no codigo e UMA coisa so para quem
+   olha: as duas ficam grudadas no topo, na largura inteira, acima do conteudo.
+   Com duas bordas de baixo elas se leem como dois blocos empilhados; com uma
+   so, embaixo da faixa, leem-se como um cabecalho de duas alturas — que e o que
+   sao.
+
+   Vale para os tres tons da faixa, e nao so para o de teste. Eles sao estados
+   do mesmo componente, no mesmo lugar, e nunca aparecem juntos: a linha que
+   fecha o topo e a da faixa que estiver ali.
+
+   Especificidade dobrada com .ds-shell de proposito. A regra do tema claro no
+   styles.css repinta border-bottom-color com o mesmo peso (0,3,0), e qual das
+   duas venceria passaria a depender da ordem em que as folhas entram — que nao
+   e coisa que este arquivo controle.
+   (Sem crases nestes comentarios: template literal.) */
+/* A esquerda do cabecalho e uma LINHA: o icone da tela, e ao lado a coluna com
+   titulo e subtitulo. Era so a coluna — o icone entrou depois que a trilha
+   desceu para o conteudo e sobrou ar aqui.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-topo__esq { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.ds-topo__texto { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Tingido pelo acento do MODULO, como o resto da moldura: e ele que diz se voce
+   esta no Omnimob ou no Omniflow, e o icone da tela e o lugar mais visivel onde
+   essa distincao cabe sem ocupar espaco novo. */
+.ds-topo__icone {
+  flex: none; width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--modulo-acento, #6366f1);
+  background: color-mix(in srgb, var(--modulo-acento, #6366f1) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--modulo-acento, #6366f1) 22%, transparent);
+}
+/* Em tela estreita ele sai: ali a largura toda e do titulo. */
+@media (max-width: 560px) {
+  .ds-topo__icone { display: none; }
+}
+/* A trilha vive no conteudo, nao mais no cabecalho. A margem embaixo e maior
+   que os 4px de antes: ali ela colava no titulo logo abaixo; aqui ela precisa
+   se separar do primeiro bloco da pagina.
+   (Sem crases neste comentario: template literal.) */
+.ds-trilha-conteudo { margin: 0 0 14px; }
 .ds-topo__titulo {
   margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.3px;
   color: var(--text-main); line-height: 1.2;
@@ -1479,17 +1628,41 @@ const CSS = `
    botao primario tem prioridade sobre um atalho que, no celular, nem existe. */
 @media (max-width: 900px) {
   .ds-topo { padding: 14px 18px 12px; gap: 12px; }
-  .ds-side:hover ~ .ds-coluna .ds-topo,
-  .ds-side:focus-within ~ .ds-coluna .ds-topo,
-  .ds-side.is-mod-aberto ~ .ds-coluna .ds-topo,
-  .ds-side:hover ~ .ds-coluna .main-content,
-  .ds-side:focus-within ~ .ds-coluna .main-content,
-  .ds-side.is-mod-aberto ~ .ds-coluna .main-content { padding-left: 18px; }
+  .ds-side.is-aberta ~ .ds-coluna .ds-topo,
+  .ds-side.is-aberta ~ .ds-coluna .main-content { padding-left: 18px; }
   .ds-busca__texto, .ds-busca__tecla { display: none; }
   .ds-busca { padding: 8px; }
+  .ds-topbar { padding-right: 18px; }
 }
 
 .ds-shell {
+  /* ── A GEOMETRIA DA BARRA, NUM LUGAR SO ──────────────────────────────────
+     --s-rail e a tira recolhida, --s-aberta e a barra aberta, e --s-avanco e a
+     diferenca entre as duas — que e o quanto o conteudo ao lado precisa ceder.
+     Estavam cravadas como 64px, 240px e 176px espalhadas por este arquivo e
+     pelo styles.css; mudar a tira de tamanho pedia acertar seis lugares.
+
+     A tira cresceu de 64 para 92px porque agora ela carrega o NOME embaixo de
+     cada icone. Em 64px o rotulo saia em duas linhas de tres letras; em 84 a
+     palavra mais longa do menu ("Configuracoes") ainda quebrava e deixava um
+     "s" orfao na segunda linha. Quem manda no numero e a palavra mais longa,
+     nao a estetica da tira.
+     (Sem crases nestes comentarios: template literal.) */
+  --s-rail: 92px;
+  /* ── A LARGURA DA BARRA ABERTA E A DO GRUPO DO TOPO ──────────────────────
+     Os 268px nao sao gosto: e o que [hamburguer + ladrilho + wordmark +
+     chevron] pede para caber lado a lado sem apertar a arte. E como a
+     .ds-topbar__grupo mede exatamente este token, a barra aberta termina onde o
+     wordmark termina e a fronteira da moldura vira uma linha vertical unica.
+     Encolher isto aperta o grupo; alargar abre um vao a direita do chevron. */
+  --s-aberta: 268px;
+  --s-avanco: calc(var(--s-aberta) - var(--s-rail));
+  /* A faixa de marca do topo. Tres elementos leem este numero — o padding do
+     shell, o topo da barra lateral e o do cabecalho sticky —, e um deles
+     ficando para tras e o sintoma classico: conteudo escondido atras de barra.
+     (Sem crases nestes comentarios: template literal.) */
+  --s-topbar: 52px;
+
   /* Acompanha o escurecimento do fundo: contra o novo #0a0a0b quase neutro, o
      azul-noite que a sidebar tinha (#0c0f1a) deixava de ser sutil e passava a
      ler como um painel de outra cor. Continua um degrau acima do conteúdo, para
@@ -1497,11 +1670,17 @@ const CSS = `
   --s-bg: #0d0d12;
   --s-border: rgba(255,255,255,0.07);
   --s-sep: rgba(255,255,255,0.06);
-  --s-text: #64748b;
+  --s-text: #94a3b8;
+  --s-rotulo: #64748b;
   --s-strong: #f1f5f9;
   --s-hover: rgba(255,255,255,0.05);
-  --s-active: rgba(129,140,248,0.10);
+  /* A pilula do item ativo. NEUTRA, e nao tingida pelo acento do modulo: o
+     acento ja diz em que modulo a pessoa esta em quatro outros lugares da
+     moldura, e aqui ele competia com o proprio icone preenchido. Cinza a 50%
+     sobre o quase-preto da barra da o degrau sem virar uma cor. */
+  --s-ativo: rgba(70,70,70,0.5);
   --s-accent: #818cf8;
+  --s-sombra: 24px 0 60px -24px rgba(0,0,0,0.75);
   /* Vem do perfil do tenant (inline, logo acima no JSX). O #4f46e5 é só a rede
      de segurança para quando a sessão ainda não trouxe a cor. */
   --s-avatar: var(--tenant-primary, #4f46e5);
@@ -1511,6 +1690,266 @@ const CSS = `
   display: flex; min-height: 100vh;
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   position: relative;
+  /* O espaco da faixa fixa do topo. Com o box-sizing border-box global
+     (styles.css, no reset) ele entra DENTRO dos 100vh e nao cria rolagem. */
+  padding-top: var(--s-topbar);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A FAIXA DO TOPO, E O GRUPO QUE DEFINE A LARGURA DA BARRA
+   ══════════════════════════════════════════════════════════════════════════
+
+   Uma linha atravessando a tela inteira, acima da barra lateral e da coluna.
+
+   Ela ja morou dentro da coluna, comecando onde a tira de 92px terminava. O que
+   isso custava era o hamburguer de um lado da fronteira e o wordmark do outro,
+   com um vao de 38px no meio — duas caixas que precisavam ficar alinhadas por
+   coincidencia de numeros para se lerem como um controle unico.
+
+   ── O GRUPO ──
+
+   .ds-topbar__grupo mede exatamente --s-aberta, e e isso que amarra as duas
+   metades da moldura: a barra aberta termina onde o grupo termina, e a fronteira
+   entre moldura e conteudo passa a ser UMA linha vertical continua, do topo ao
+   rodape, em vez de um degrau. Mexer no token move as duas juntas.
+
+   z-index 50 e ela ACIMA da barra (que tem 10 no aside e 40 no interno): a barra
+   aberta desliza por baixo da faixa, e o hamburguer nao fica coberto pelo painel
+   que ele mesmo abriu.
+
+   Fixed e nao sticky: a barra lateral tambem e fixa, e uma faixa que rolasse
+   para fora deixaria uma tira vazia de 52px acima dela no primeiro scroll.
+
+   Pinta com --s-bg, a familia da barra e nao a do conteudo: as duas sao a
+   MOLDURA, e o L so se le como uma peca se tiverem o mesmo tom.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  height: var(--s-topbar);
+  display: flex; align-items: center;
+  /* So a direita: o recuo da esquerda e do grupo, que alinha o hamburguer com o
+     eixo dos icones da tira. Os 28px sao os mesmos que o cabecalho da tela usa
+     do outro lado — a busca desceu de altura, nao de coluna, e continua na
+     mesma vertical em que a mao ja a procurava. */
+  padding-right: 28px;
+}
+.ds-topbar__grupo {
+  width: var(--s-aberta); flex: none; box-sizing: border-box;
+  display: flex; align-items: center; gap: 8px;
+  /* O recuo alinha o hamburguer com o EIXO dos icones da tira recolhida: 92px
+     de tira menos os 40 do botao, dividido por dois. Sem isso ele senta uns
+     pixels a esquerda do que a coluna de icones abaixo dele. */
+}
+
+/* ── A PILULA DA CONTA, NO CENTRO DA FAIXA ────────────────────────────────
+   O invólucro só posiciona; quem desenha continua sendo a .fc-faixa, na folha
+   do proprio FaixaDeConta. Ele atravessa a barra de ponta a ponta para o
+   margin:auto ter contra o que centralizar, e por isso NAO recebe ponteiro:
+   se recebesse, engoliria o clique do hamburguer e o da busca, que ficam por
+   baixo dele nas pontas.
+
+   max-width em vez de largura: o recado encolhe com a tela em vez de passar
+   por cima da busca. Abaixo de 900px ela sai — ali a faixa ja esta apertada
+   entre o hamburguer e a busca, e uma pilula de 200px cortada no meio nao
+   informa nada. Quem precisa da situacao da conta continua tendo o modal.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-topbar__conta {
+  position: absolute; left: 0; right: 0; margin: 0 auto;
+  width: max-content; max-width: min(560px, calc(100% - var(--s-aberta) - 260px));
+  pointer-events: none;
+}
+.ds-topbar__conta > * { pointer-events: auto; }
+
+/* A tarja vira pilula: cantos redondos, sem borda de baixo (ela nao separa mais
+   nada — nao ha conteudo embaixo dela), e o respiro apertado para caber na
+   altura da faixa sem empurra-la. */
+.ds-topbar__conta .fc-faixa {
+  --fc-respiro: 4px;
+  border-radius: 999px;
+  border-bottom: 0;
+  padding-right: 38px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10), inset 0 0 0 1px rgba(255,255,255,0.07);
+  white-space: nowrap;
+}
+.ds-topbar__conta .fc-sub { overflow: hidden; text-overflow: ellipsis; }
+.ds-topbar__conta .fc-fechar { right: 8px; }
+
+@media (max-width: 900px) {
+  .ds-topbar__conta { display: none; }
+}
+
+/* ── A BUSCA DENTRO DA FAIXA ───────────────────────────────────────────────
+   margin-left auto e o que a joga para a direita: a faixa e um flex de dois
+   filhos, e o grupo da esquerda tem largura fixa. Ela fica no mesmo canto da
+   tela onde ja estava quando morava no cabecalho — o que mudou foi a altura,
+   nao o lado, e a mao vai para o mesmo lugar.
+
+   As cores saem da familia --s-*, e nao dos tokens de conteudo. A regra base
+   dela le --text-muted e --sup-04, que o tema claro so redefine DENTRO do
+   <main>: fora dali ela ficaria com os valores do escuro — texto cinza-claro e
+   fundo branco a 4% sobre uma faixa clara, ou seja, quase invisivel. Aqui ela e
+   moldura, e moldura le os tokens da moldura.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-shell .ds-topbar .ds-busca {
+  margin-left: auto; flex: none;
+  color: var(--s-text);
+  background: var(--s-hover);
+  border-color: var(--s-border);
+}
+.ds-shell .ds-topbar .ds-busca:hover {
+  color: var(--s-strong);
+  background: var(--s-hover);
+  border-color: color-mix(in srgb, var(--s-strong) 22%, transparent);
+}
+.ds-topbar .ds-busca__tecla {
+  background: color-mix(in srgb, var(--s-strong) 8%, transparent);
+  border-color: var(--s-border);
+}
+
+/* ── O SELETOR DE MODULO DENTRO DA FAIXA ───────────────────────────────────
+   A folha dele nasceu para o alto da barra lateral: uma faixa de identidade da
+   largura da barra, com fundo tingido pelo acento e borda embaixo. Numa barra
+   horizontal isso vira uma segunda faixa dentro da faixa.
+
+   Aqui ele volta a ser o que e — um controle inline. Especificidade dupla
+   (.ds-topbar .ds-mod) vence a regra base sem depender da ordem da folha, que e
+   o que impede este bloco de virar um jogo de quem vem primeiro.
+
+   O ladrilho do simbolo continua escondido, e agora por um motivo novo: a marca
+   a esquerda ja desenha o predio, e dois predios na mesma linha leem como erro
+   de montagem — o mesmo argumento que ja valia com a barra aberta.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-topbar .ds-mod {
+  border-bottom: 0; border-radius: 10px;
+  background: transparent;
+}
+.ds-topbar .ds-mod__atual, .ds-topbar .ds-mod.is-solo {
+  height: 36px; padding: 0 6px 0 10px; gap: 8px;
+}
+/* O rolo encolhe para caber nos 36px da faixa. A janela e o trilho vivem de
+   --altura, entao um numero resolve os dois.
+
+   flex 1 e min-width 0, e nao uma largura minima: o rolo e a peca ELASTICA do
+   grupo, entao a soma [hamburguer + ladrilho + rolo + chevron] fecha exatamente
+   nos --s-aberta e o chevron encosta na borda direita do grupo. Com min-width
+   fixo, mexer no token de largura da barra ou trocar a arte do wordmark
+   estouraria o grupo e o chevron sairia do lugar. */
+.ds-shell .ds-topbar .ds-mod { flex: 1; min-width: 0; }
+.ds-shell .ds-topbar .ds-mod__rolo { --altura: 32px; flex: 1; min-width: 0; }
+.ds-topbar .ds-mod__face { padding: 0 6px; }
+/* O ladrilho do simbolo volta SO NO TEMA CLARO, e a condicao nao e estetica: e
+   ali que a arte do wordmark da lugar ao texto (ver abaixo), e sem o ladrilho a
+   faixa ficaria sem marca nenhuma. No escuro a arte JA traz o predio dentro
+   dela, e os dois lado a lado leem como erro de montagem — foi o que a captura
+   mostrou: dois predios dourados em sequencia antes da palavra. */
+.ds-shell[data-tema="claro"] .ds-topbar .ds-mod__marca { display: flex; }
+/* ... menos quando o modulo TEM a arte clara: ai a tipografia volta inteira,
+   com o predio dentro dela, e o ladrilho voltaria a ser o segundo predio. */
+.ds-shell[data-tema="claro"] .ds-topbar .ds-mod--arte-clara .ds-mod__marca { display: none; }
+
+/* ── O NOME DO MODULO NA FAIXA CLARA ───────────────────────────────────────
+   As artes do wordmark tem as letras BRANCAS. Sobre a faixa clara do painel
+   elas desapareciam: a captura mostrava "OMNIMOB" invisivel ao lado do
+   ladrilho.
+
+   Filtro nao resolve. brightness(0) escurece a imagem inteira e mata o ROSA do
+   "flow", que e o sinal do modulo; invert() vira o dourado do predio em azul.
+   As duas metades da arte precisam de tratamentos opostos, e filtro so sabe
+   fazer um. Entao sao DUAS SAIDAS, e o modulo escolhe pela arte que tem:
+
+   1. TEM arte clara (logoClaro, letras pretas) — hoje so o Omnimob. Troca-se
+      a imagem, e nada mais muda: as duas tem o mesmo quadro 2852x603 e o
+      simbolo em x 0..499, entao a altura serve para as duas. E a saida boa: a
+      tipografia da marca aparece nos dois temas.
+
+   2. NAO TEM — hoje o Omniflow. Entra a PALAVRA, tingida pelo acento (rosa no
+      Omniflow), que e o que os dois faziam antes de a arte preta existir. Nao
+      e sobra de codigo: e o que faz um modulo novo, ou uma arte que ainda nao
+      foi desenhada, aparecer com marca em vez de aparecer vazio.
+
+   As formas ficam TODAS no DOM e quem escolhe e o tema, no CSS. Nao sao versoes
+   de um componente: sao renderizacoes de UM nome, que sai de modulo.nome nas
+   tres. Ver LogoModulo e NomeDoModulo, no componente.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-mod__palavra { display: none; }
+/* Um seletor a mais do que parece preciso, e por um motivo: a arte clara TAMBEM
+   e um .ds-mod__tipo, e a regra de tamanho dela (mais abaixo neste arquivo)
+   declara display:block. Com a mesma especificidade, quem vem depois ganha — e
+   as duas artes apareciam juntas no escuro. O .ds-mod__logo desempata. */
+.ds-mod__logo .ds-mod__tipo--claro { display: none; }
+
+/* 1. Com arte clara: troca-se a imagem. */
+.ds-shell[data-tema="claro"] .ds-mod--arte-clara .ds-mod__tipo { display: none; }
+.ds-shell[data-tema="claro"] .ds-mod--arte-clara .ds-mod__tipo--claro { display: block; }
+
+/* 2. Sem arte clara: a arte branca sai e entra a palavra. */
+.ds-shell[data-tema="claro"] .ds-mod:not(.ds-mod--arte-clara) .ds-mod__face .ds-mod__logo {
+  display: none;
+}
+.ds-shell[data-tema="claro"] .ds-mod:not(.ds-mod--arte-clara) .ds-mod__palavra {
+  display: block;
+  font-size: 15px; font-weight: 700; letter-spacing: -0.015em;
+  color: var(--modulo-acento, #6366f1); white-space: nowrap;
+}
+
+/* Em tela estreita a faixa aperta, e o nome da imobiliaria dentro do rolo do
+   seletor e o primeiro a sobrar. */
+@media (max-width: 560px) {
+  .ds-shell .ds-topbar .ds-mod__rolo { min-width: 120px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A BARRA ACOMPANHA O TEMA
+   ══════════════════════════════════════════════════════════════════════════
+
+   Ate aqui a barra ficava escura nos dois temas, e o argumento estava escrito
+   em tres arquivos: ela e a moldura do produto, e uma tira escura na esquerda
+   seria a ancora visual que identifica o Omnimob.
+
+   O argumento nao se sustentou no uso. No tema claro o painel inteiro e #f6f7f9
+   e a barra era uma faixa quase preta colada nele — nao lia como moldura, lia
+   como um painel de outro programa aberto do lado. Tema e uma escolha da
+   PESSOA, e escolher o claro e escolher a tela toda clara.
+
+   Sao os mesmos tokens --s-*, redefinidos. Nenhuma regra da barra e reescrita:
+   quem le --s-bg, --s-text e --s-hover ja e todo mundo aqui, e escrever um
+   segundo bloco de regras por tema seria a segunda folha de estilo que este
+   arquivo passa o tempo todo evitando.
+
+   O fundo e EXATAMENTE o do shell (#f6f7f9), e nao um branco ou um cinza um
+   degrau acima: no claro a separacao quem faz e a borda de 1px: um degrau de
+   tom viraria uma tira cinza atravessando a tela.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-shell[data-tema="claro"] {
+  --s-bg: #f6f7f9;
+  --s-border: rgba(15,23,42,0.10);
+  --s-sep: rgba(15,23,42,0.08);
+  /* O icone nao selecionado: contorno ESCURO sobre o claro, como o claro pede.
+     E o simetrico do #94a3b8 do tema escuro — mesmo papel, tinta invertida. */
+  --s-text: #475569;
+  --s-rotulo: #7c8797;
+  --s-strong: #0f172a;
+  --s-hover: rgba(15,23,42,0.055);
+  /* O simetrico da pilula: sobre #f6f7f9 quem da o degrau e a tinta ESCURA a
+     8%. O cinza a 50% do tema escuro, aqui, seria mais claro que o fundo. */
+  --s-ativo: rgba(15,23,42,0.08);
+  --s-accent: #4f46e5;
+  /* A sombra preta a 75% do escuro vira uma nuvem cinza sobre fundo claro.
+     Aqui ela encolhe e clareia — mesma funcao, tinta de novo invertida. */
+  --s-sombra: 18px 0 40px -22px rgba(15,23,42,0.30);
+}
+
+/* O selo do teste vive na barra e nao no conteudo, entao ele nao alcanca os
+   tokens do tema — as cores dele sao literais. No claro, o dourado claro
+   (#e8d79b) sobre fundo claro era texto quase invisivel. */
+.ds-shell[data-tema="claro"] .tv-botao {
+  background: rgba(212,175,55,0.16); border-color: rgba(212,175,55,0.45); color: #7a611a;
+}
+.ds-shell[data-tema="claro"] .tv-botao:hover {
+  background: rgba(212,175,55,0.26); border-color: rgba(212,175,55,0.65); color: #5c480f;
+}
+.ds-shell[data-tema="claro"] .tv-botao.is-expirado {
+  background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.32); color: #b91c1c;
 }
 
 /* Os detalhes da marca sobre o preto: dois halos roxos e um dourado, a mesma
@@ -1529,86 +1968,158 @@ const CSS = `
   background:
     radial-gradient(880px 460px at 82% -6%, rgba(139,92,246,0.11), transparent 68%),
     radial-gradient(560px 340px at 14% 2%, rgba(212,175,55,0.075), transparent 62%),
-    radial-gradient(700px 500px at 98% 92%, rgba(99,102,241,0.07), transparent 70%),
-    radial-gradient(420px 300px at 2% 96%, rgba(212,175,55,0.05), transparent 64%);
+    radial-gradient(700px 500px at 98% 92%, rgba(99,102,241,0.07), transparent 70%);
 }
 
 /* Acima da iluminação. A sidebar já tinha z-index próprio; o conteúdo não. */
 .ds-shell > main { position: relative; z-index: 1; }
 
-/* ── A barra vive RECOLHIDA e abre no hover ──────────────────────────────────
-   A aside guarda 64px no fluxo e nunca muda de tamanho. Quem cresce e a
+/* ── A barra vive RECOLHIDA e abre no HAMBURGUER ─────────────────────────────
+   A aside guarda a tira no fluxo e nunca muda de tamanho. Quem cresce e a
    sobrepõe é o filho, em position fixed — assim o conteúdo ao lado não é
-   empurrado a cada passada de mouse. Empurrar refazia o layout da tela inteira
-   por um gesto que costuma durar meio segundo.
+   empurrado, e a página não refaz o layout inteiro por causa de um clique.
+
+   O gatilho e uma CLASSE agora (.is-aberta), e nao mais :hover/:focus-within.
+   Com o hover, a barra se abria sozinha quando o ponteiro cruzava a esquerda
+   da tela a caminho de outra coisa; e para nao recolher por baixo dos baloes
+   que saem por portal, ela precisava de um estado preso, de um ouvinte de
+   pointermove e de uma folga medida em pixels. Tudo isso saiu junto.
    (Sem crases nestes comentarios: eles vivem dentro de um template literal.) */
+/* A barra comeca EMBAIXO da faixa do topo e vai ate o rodape da janela. O
+   hamburguer que a abre mora la em cima agora, junto do wordmark, e e por isso
+   que ela pode ceder esses 52px sem perder nada.
+
+   Escrito aqui, e nao num bloco de correcao mais adiante, porque esta regra e a
+   ULTIMA a falar de .ds-side na folha — um override antes dela perderia por
+   ordem, calado. */
 .ds-side {
-  width: 64px; min-width: 64px; flex-shrink: 0;
-  height: 100vh; position: sticky; top: 0; z-index: 10;
+  width: var(--s-rail); min-width: var(--s-rail); flex-shrink: 0;
+  height: calc(100vh - var(--s-topbar));
+  position: sticky; top: var(--s-topbar); z-index: 10;
 }
 .ds-side__interno {
-  position: fixed; left: 0; top: 0; bottom: 0; z-index: 40;
-  width: 64px;
+  position: fixed; left: 0; top: var(--s-topbar); bottom: 0; z-index: 40;
+  width: var(--s-rail);
   display: flex; flex-direction: column;
-  background: var(--s-bg);
-  border-right: 1px solid var(--s-border);
   overflow-x: hidden; overflow-y: auto;
   transition: width 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease;
 }
-.ds-side:hover .ds-side__interno,
-/* focus-within porque quem navega por teclado nunca passa o mouse: sem isto a
-   barra ficaria de 64px com o foco dentro, e o item focado seria invisivel.
-   (Sem crases: template literal.) */
-.ds-side:focus-within .ds-side__interno,
-/* is-mod-aberto: o balao do seletor de modulo esta no ar. Ele sai por portal
-   para o body, entao mover o ponteiro ate ele e SAIR da barra — e sem esta
-   terceira condicao a barra recolhia por baixo do balao no meio do gesto.
-   Ver SeletorDeModulo. */
-.ds-side.is-mod-aberto .ds-side__interno {
-  width: 240px;
-  box-shadow: 24px 0 60px -24px rgba(0,0,0,0.75);
+.ds-side.is-aberta .ds-side__interno {
+  width: var(--s-aberta);
 }
 
 /* ── O que some ao recolher ──────────────────────────────────────────────────
    display: none, e NAO opacity. Elemento invisivel por opacidade continua
    ocupando a caixa dele e continua contando como item de flex — o resultado
-   era uma barra de 64px cheia de vaos, com o gap de 10px separando icones de
-   rotulos que ninguem via. Fora do fluxo, o item recolhido fica do tamanho do
-   icone, que e o comportamento que a versao com botao tinha.
+   era uma tira cheia de vaos, com o gap separando icones de rotulos que
+   ninguem via.
 
-   O preco e a transicao: nao da para animar display. Some seco, como antes.
+   O ROTULO DO ITEM NAO ESTA MAIS NESTA LISTA. Ele e o que mudou de verdade
+   nesta refatoracao: recolhida, a barra continua mostrando o nome de cada
+   destino, so que embaixo do icone e em 9px. Era o unico servico que a
+   expansao por hover prestava, e agora ele nao custa gesto nenhum.
    (Sem crases nestes comentarios: template literal.) */
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-item__label,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-head__text,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-plano,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-profile__text,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-group__label,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-item__badge,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .selo-beta,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .mkb-caixa,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-sub { display: none; }
+.ds-side:not(.is-aberta) .ds-profile__text,
+.ds-side:not(.is-aberta) .ds-group__label,
+.ds-side:not(.is-aberta) .ds-item__badge,
+.ds-side:not(.is-aberta) .ds-item__cadeado,
+.ds-side:not(.is-aberta) .selo-beta,
+.ds-side:not(.is-aberta) .mkb-caixa,
+.ds-side:not(.is-aberta) .ds-sub { display: none; }
 
-/* E o que some ao ABRIR: as formas recolhidas dos mesmos elementos. */
-.ds-side:hover .ds-group__rule,
-.ds-side:focus-within .ds-group__rule,
-.ds-side.is-mod-aberto .ds-group__rule,
-.ds-side:hover .ds-item__pip,
-.ds-side:focus-within .ds-item__pip,
-.ds-side.is-mod-aberto .ds-item__pip { display: none; }
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-group__rule { display: block; }
+/* E o que some ao ABRIR: as formas recolhidas dos mesmos elementos. O pip e o
+   contador de leads em ponto vermelho, que substitui o numero quando ele nao
+   caberia. */
+.ds-side.is-aberta .ds-item__pip { display: none; }
 
-/* Geometria da barra recolhida — os mesmos valores que a classe is-collapsed
-   tinha. O gap zerado importa: com ele, o icone centralizado ficava deslocado
-   pela metade da folga que sobrava do rotulo ausente. */
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-shell .ds-item,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-item { justify-content: center; padding: 8px; gap: 0; }
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-head { justify-content: center; padding: 0; gap: 0; }
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-shell button.ds-profile,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) button.ds-profile { justify-content: center; padding: 10px 8px; gap: 0; }
+/* ── RECOLHIDA, O ITEM ATIVO NAO GANHA PILULA ──────────────────────────────
+   O fundo tingido e a borda de acento continuam na barra ABERTA, onde o item e
+   uma faixa larga e a pilula tem forma. Na tira eles viravam um retangulo
+   apertado em volta de um icone com legenda — cabendo mal, e brigando com o
+   proprio rotulo por espaco.
+
+   O que diz onde a pessoa esta, ali, e o ICONE: preenchido (weight fill, no
+   JSX) e na tinta forte do tema, contra o contorno em tinta fraca dos outros.
+   E a mesma distincao que a barra do YouTube usa recolhida, e ela basta.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-side:not(.is-aberta) .ds-shell .ds-item.is-active,
+.ds-side:not(.is-aberta) .ds-item.is-active {
+  background: transparent; border-color: transparent;
+}
+
+/* ── Geometria da barra recolhida: o icone com o NOME embaixo ───────────────
+   Coluna em vez de linha, e o rotulo vira legenda. Duas linhas no maximo:
+   "Registro de Atividade" e "Fontes de Captacao" nao cabem em uma so, e cortar
+   no meio da primeira palavra ("Regis…") nao diz nada. Em duas linhas o corte
+   cai depois de uma palavra inteira, que ainda identifica o destino.
+
+   text-align center e nao left: em 84px o bloco de texto e quase tao largo
+   quanto a caixa, e o eixo do icone e o unico alinhamento que sobra.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-side:not(.is-aberta) .ds-shell .ds-item,
+.ds-side:not(.is-aberta) .ds-item {
+  flex-direction: column; justify-content: center; align-items: center;
+  gap: 6px; padding: 10px 3px 8px; white-space: normal;
+}
+.ds-side:not(.is-aberta) .ds-item__label {
+  flex: none; width: 100%; text-align: center;
+  font-size: 9px; font-weight: 600; line-height: 1.25; letter-spacing: 0.01em;
+  /* O clamp de duas linhas. -webkit-box e o unico jeito que funciona em todos
+     os navegadores que o painel atende; o overflow hidden do .ds-item ja
+     estava la. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis; word-break: break-word;
+}
+/* O perfil nao ganha legenda: o avatar E o rotulo dele, e "Voce" embaixo de
+   uma foto da propria pessoa seria a unica linha da barra que nao informa
+   nada. */
+.ds-side:not(.is-aberta) .ds-shell button.ds-profile,
+.ds-side:not(.is-aberta) button.ds-profile { justify-content: center; padding: 10px 8px; gap: 0; }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   O SELETOR DE MODULO — a peca mais alta da barra
+   O HAMBURGUER — o unico controle do tamanho da barra
    ══════════════════════════════════════════════════════════════════════════
+
+   Ele fica no topo, no mesmo canto nos dois estados. Recolhido, a caixa e a
+   tira inteira e ele senta no meio dela; aberto, a caixa e a coluna inteira e
+   ele fica na ponta esquerda — o botao nao anda, o que anda e a borda direita
+   da caixa. E o arranjo do YouTube, e a razao e a mesma: um controle que muda
+   de lugar conforme o estado obriga a procura-lo duas vezes.
+
+   ── E ELE NAO ANDA, AGORA POR CONSTRUCAO ──
+
+   Ele ficava dentro da barra, numa .ds-barra-topo que crescia junto com ela: 26px
+   de recuo viravam 12, e o botao dava um passo para a esquerda no meio do
+   proprio gesto que o disparou. Houve um recuo calculado para corrigir isso, e
+   depois ele saiu da barra — de dentro do grupo da faixa, que tem largura fixa,
+   nao ha o que o mova.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-shell .ds-hamburguer {
+  width: 40px; height: 40px; padding: 0; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; border: 1px solid transparent;
+  background: transparent; box-shadow: none; transform: none;
+  color: var(--s-text); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ds-shell .ds-hamburguer:hover {
+  background: var(--s-hover); color: var(--s-strong);
+  box-shadow: none; transform: none; border-color: transparent;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O SELETOR DE MODULO — agora na faixa do topo
+   ══════════════════════════════════════════════════════════════════════════
+
+   Ele morou no alto da barra lateral, e a folha nasceu para lá: uma faixa de
+   identidade com borda embaixo, ocupando a largura da barra. Hoje ele vive na
+   .ds-topbar, e as diferencas estao no bloco DELA (fundo, borda, altura) — o
+   que sobrou aqui e o que nao depende de onde ele esta: o rolo, o balao, o
+   dimensionamento do wordmark por tinta.
+
+   As regras que ainda falam de .ds-side continuam escritas: elas descrevem a
+   forma RECOLHIDA do seletor, que nao e desenhada hoje mas custa duas linhas de
+   guarda-chuva — e voltam a valer no dia em que ele reaparecer numa barra.
 
    Uma faixa de identidade com um chevron no canto. A lista de modulos NAO
    cresce para dentro da barra: ela brota ao LADO, como o submenu do menu do
@@ -1637,7 +2148,7 @@ const CSS = `
   display: none; align-items: center; justify-content: center;
 }
 .ds-mod__marca img { width: 68%; height: 68%; object-fit: contain; }
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__marca { display: flex; }
+.ds-side:not(.is-aberta) .ds-mod__marca { display: flex; }
 
 /* ── O WORDMARK DO MODULO ───────────────────────────────────────────────────
 
@@ -1670,121 +2181,80 @@ const CSS = `
 .ds-mod__tipo {
   height: calc(var(--tinta) * 2.913); width: auto; flex: none; display: block;
 }
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__logo { display: none; }
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__atual,
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod.is-solo { justify-content: center; padding: 0; gap: 0; }
+.ds-side:not(.is-aberta) .ds-mod__atual,
+.ds-side:not(.is-aberta) .ds-mod.is-solo { justify-content: center; padding: 0; gap: 0; }
 
-/* ── O gatilho e o balao ────────────────────────────────────────────────────
-   O INVOLUCRO escuta o ponteiro, e nao o botao: com o listener no botao, sair
-   dele em direcao ao balao fecharia a lista antes de o ponteiro chegar la. E a
-   mesma montagem de .mp-linha-caixa. */
-.ds-mod__gatilho { position: relative; flex: none; display: flex; }
-.ds-shell .ds-mod__caret {
-  width: 24px; height: 24px; padding: 0; border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  background: transparent; border: 0; box-shadow: none; transform: none;
-  color: var(--s-text); cursor: pointer;
-  transition: background 0.13s ease, color 0.13s ease;
-}
-.ds-shell .ds-mod__caret:hover, .ds-shell .ds-mod__caret.is-aberto {
-  background: var(--s-hover); color: var(--modulo-acento, #6366f1);
+/* O gatilho (.ds-mod__gatilho), o chevron e o balao de modulos sairam daqui
+   junto com o dropdown. A troca de modulo virou um item da navegacao — ver
+   .ds-modulos, mais abaixo, e o comentario no SeletorDeModulo. */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O ROLO — a marca da imobiliaria dentro da faixa do modulo
+   ══════════════════════════════════════════════════════════════════════════
+
+   Duas faces empilhadas num trilho de altura dupla, dentro de uma janela com
+   overflow hidden. O hover desloca o trilho em metade da altura dele, e a face
+   de baixo toma o lugar da de cima. So transform entra na conta: e propriedade
+   de composicao, entao a animacao nao repinta a barra inteira a cada quadro.
+
+   O tamanho vive num lugar so (--altura). As faces usam 50% do trilho e o
+   trilho usa 200% da janela, entao mexer na altura da janela move tudo junto.
+   (SEM CRASES nestes comentarios: template literal.) */
+.ds-shell .ds-mod__rolo {
+  --altura: 36px;
+  flex: 1; min-width: 0; height: var(--altura);
+  position: relative; overflow: hidden;
+  /* ── display BLOCK, e isto custou uma captura de tela para achar ──────────
+     Como <button>, ele herda o reset do painel, que e display:flex com
+     align-items:center. Um trilho de 72px CENTRALIZADO numa janela de 36px
+     sobra 18px para cada lado — e o que aparecia era meia face de cima e meia
+     de baixo ao mesmo tempo, com o wordmark cortado no meio. A geometria media
+     toda certa (36 / 72 / 36+36); o que estava errado era o alinhamento.
+     Por isso o trilho tambem e ABSOLUTO logo abaixo: ancorado no topo, ele
+     ignora qualquer alinhamento que o reset de botao traga no futuro. */
+  display: block;
+  /* O resto do reset: sem isto ele nasce com o padding global de 14px/20px e a
+     faixa ganha uma altura que nao e a dela. */
+  width: auto; margin: 0; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: inherit; font: inherit; text-align: left;
   box-shadow: none; transform: none;
-}
-.ds-side:not(:hover):not(:focus-within):not(.is-mod-aberto) .ds-mod__gatilho { display: none; }
-
-/* ── O balao vive no BODY, por portal ───────────────────────────────────────
-   position fixed, com left/top vindos do JSX. Nao e absolute com left 100%:
-   .ds-side__interno tem overflow-x hidden — o que impede o conteudo de vazar
-   com a barra em 64px — e isso RECORTA qualquer filho posicionado para fora. O
-   balao media certo e simplesmente nao aparecia na tela. Mesma solucao do
-   .mp-balao. Alinhado pelo TOPO (e nao pela base, como o do perfil) porque este
-   nasce no alto da barra: la o espaco sobra em cima, aqui sobra embaixo. */
-.ds-mod__balao {
-  position: fixed;
-  min-width: 228px; z-index: 61;
-  padding: 6px; border-radius: 14px;
-  background: #141821; border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.9);
-  display: flex; flex-direction: column; gap: 3px;
-  animation: dsModAbre 0.15s cubic-bezier(0.22, 1, 0.36, 1);
-}
-@keyframes dsModAbre { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .ds-mod__balao { animation: none; } }
-
-/* Uma ponte invisivel entre o chevron e o balao. Sem ela, os 10px de folga
-   entre os dois sao um vao onde o ponteiro sai do involucro e a lista fecha no
-   meio do caminho. */
-.ds-mod__balao::before {
-  content: ""; position: absolute; left: -16px; top: 0; width: 16px; height: 100%;
-}
-
-/* ── ATENCAO AO SELETOR: o balao NAO esta dentro do .ds-shell ───────────────
-   Ele vai para o document.body por portal, entao qualquer regra escrita como
-   .ds-shell .ds-mod__opcao simplesmente nao casa — e o botao cai no reset
-   global do painel, que pinta fundo indigo e sombra. Foi exatamente o que
-   aconteceu: as duas opcoes apareceram como dois botoes roxos.
-
-   A saida e a mesma do .mp-linha, que tem o mesmo problema pelo mesmo motivo:
-   declarar os DOIS seletores. O .ds-shell na frente existe so para vencer o
-   reset global em especificidade; quem de fato casa, aqui, e o segundo. */
-.ds-shell .ds-mod__opcao, .ds-mod__opcao {
-  position: relative;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
-  width: 100%; padding: 11px 12px; border-radius: 11px;
-  font-family: inherit; text-align: left; cursor: pointer;
-  color: #cbd5e1; background: transparent;
-  border: 1px solid transparent; box-shadow: none; transform: none;
-  transition: background 0.13s ease, border-color 0.13s ease;
-}
-.ds-shell .ds-mod__opcao:hover, .ds-mod__opcao:hover {
-  background: var(--acento-suave);
-  border-color: color-mix(in srgb, var(--acento) 34%, transparent);
-  box-shadow: none; transform: none;
-}
-.ds-shell .ds-mod__opcao.is-atual, .ds-mod__opcao.is-atual {
-  background: var(--acento-suave);
-  border-color: color-mix(in srgb, var(--acento) 30%, transparent);
-  cursor: default;
-}
-/* No balao a logo tem espaco e vai maior que na barra. */
-/* No balao ha ~204px uteis contra ~182 na barra, entao a tinta vai um ponto
-   maior. Um numero so, e o resto acompanha. */
-.ds-mod__logo.is-na-lista { flex: none; --tinta: 11px; }
-/* Fora do .ds-shell, entao --s-mono e --s-text nao existem aqui: as variaveis
-   da barra sao declaradas no shell. Valores literais, os mesmos que o
-   .mp-balao usa — ele tem exatamente o mesmo problema. */
-.ds-mod__opcao .ds-mod__tagline {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  /* 10px e nao 8,5: aqui a tagline e a UNICA coisa que diferencia os dois para
-     quem nunca abriu o outro modulo, e no tamanho da barra ela era decorativa
-     em vez de legivel. */
-  font-size: 10px; letter-spacing: 0.03em;
-  color: #94a3b8; white-space: normal; line-height: 1.45;
-}
-.ds-mod__check { position: absolute; top: 9px; right: 10px; color: var(--acento); }
-
-/* ── Header ── */
-.ds-head {
-  display: flex; align-items: center; gap: 10px;
-  height: 56px; padding: 0 14px; flex-shrink: 0;
-  border-bottom: 1px solid var(--s-border);
-}
-/* O cabecalho vira a porta do Painel do Gestor para quem tem a permissao.
-   Como <button>, ele herda o reset de botao do painel — dai zerar largura,
-   fundo e alinhamento aqui, senao ele nasce com o padding global de 14px/20px
-   e a barra ganha uma altura que nao e a dela.
-   (Sem crases nestes comentarios: eles vivem dentro de um template literal.) */
-.ds-head--link {
-  width: 100%; margin: 0; border: 0; border-bottom: 1px solid var(--s-border);
-  border-radius: 0; background: transparent; color: inherit;
-  text-align: left; cursor: pointer; font: inherit;
   transition: background 0.15s ease;
 }
-.ds-head--link:hover { background: var(--s-hover); }
-.ds-head--link.is-ativo { background: var(--s-hover); }
-/* A marca ganha o realce quando a tela esta aberta: a barra recolhida mostra so
-   ela, e sem isto nao haveria como saber que o Painel do Gestor e o atual. */
-.ds-head--link.is-ativo .ds-mark { box-shadow: 0 0 0 2px var(--tenant-primary, #6366f1); }
+.ds-mod__rolo.is-link { cursor: pointer; }
+.ds-shell .ds-mod__rolo:hover, .ds-shell .ds-mod__rolo.is-ativo {
+  background: var(--s-hover); box-shadow: none; transform: none;
+}
+/* Sem hover para quem nao pode entrar: o fundo aceso seria a promessa de
+   clique que a <div> nao cumpre. */
+.ds-shell .ds-mod__rolo:not(.is-link):hover { background: transparent; }
+
+.ds-mod__trilho {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: block; height: 200%;
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ds-mod__face {
+  height: 50%; display: flex; align-items: center; gap: 9px;
+  padding: 0 8px; box-sizing: border-box;
+}
+/* O gesto: hover, foco de teclado, ou estar NO Painel do Gestor. O ultimo trava
+   a segunda face — e onde a pessoa esta, e a face que diz isso e a da casa. */
+.ds-mod__rolo.is-link:hover .ds-mod__trilho,
+.ds-mod__rolo.is-link:focus-visible .ds-mod__trilho,
+.ds-mod__rolo:not(.is-link):hover .ds-mod__trilho,
+.ds-mod__rolo.is-ativo .ds-mod__trilho { transform: translateY(-50%); }
+
+.ds-mod__casa { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+/* A face da casa e mais apertada que o cabecalho antigo: o mesmo conteudo em
+   36px em vez de 56px. Dai a marca menor. */
+.ds-mod__face--casa .ds-mark { width: 24px; height: 24px; border-radius: 7px; font-size: 12px; }
+.ds-mod__face--casa .ds-plano { padding: 2px 7px; font-size: 9px; }
+.ds-mod__face--casa .ds-mod__nome { font-size: 12.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-mod__trilho { transition: none; }
+}
+
 .ds-mark {
   width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
@@ -1792,7 +2262,6 @@ const CSS = `
 }
 .ds-mark.has-logo { background: transparent; }
 .ds-mark img { width: 100%; height: 100%; object-fit: contain; }
-.ds-head__text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 /* Pílula do plano. O margin-left auto empurra para a direita sem depender de
    ninguém no meio; o flex-shrink zero impede que ela vire "Premi…" quando o
    nome da imobiliária é comprido — quem encolhe é o nome, que tem reticências.
@@ -1809,24 +2278,100 @@ const CSS = `
   border: 1px solid color-mix(in srgb, var(--plano) 34%, transparent);
   line-height: 1.5; white-space: nowrap;
 }
-.ds-head__name {
+.ds-mod__nome {
   font-size: 13px; font-weight: 600; color: var(--s-strong); letter-spacing: -0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ds-head__slug {
+.ds-mod__slug {
   font-family: var(--s-mono); font-size: 8.5px; letter-spacing: 0.08em;
   color: var(--s-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ── Navegação ── */
-.ds-nav { flex: 1; overflow-y: auto; padding: 10px 8px; display: flex; flex-direction: column; gap: 12px; }
-.ds-group { display: flex; flex-direction: column; gap: 2px; }
+/* ── Navegação ──────────────────────────────────────────────────────────────
+   Os itens respiram. Eles estavam a 2px um do outro, herdado de quando o item
+   tinha 32px de altura e a barra precisava caber tudo em 64px de largura; com o
+   icone maior e o nome embaixo dele, essa colagem virava um bloco unico de
+   desenhos onde nada tinha comeco nem fim.
+
+   O gap e maior na tira recolhida que na barra aberta, e nao por simetria: ali
+   cada item tem DUAS linhas de altura (icone + nome), e sem a folga extra o
+   nome de um encostava no icone do seguinte.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-nav { flex: 1; overflow-y: auto; padding: 12px 8px; display: flex; flex-direction: column; gap: 14px; }
+.ds-group { display: flex; flex-direction: column; gap: 6px; }
+.ds-side:not(.is-aberta) .ds-group { gap: 10px; }
+.ds-side:not(.is-aberta) .ds-nav { padding: 10px 3px; gap: 12px; }
 .ds-group__label {
   font-family: var(--s-mono); font-size: 8.5px; letter-spacing: 0.16em;
-  text-transform: uppercase; color: #475569; font-weight: 500;
+  text-transform: uppercase; color: var(--s-rotulo); font-weight: 600;
   padding: 4px 10px 5px;
 }
-.ds-group__rule { display: none; height: 1px; background: var(--s-sep); margin: 4px 6px 5px; }
+/* O .ds-group__rule foi embora. Ver o comentario no JSX: com o nome de cada
+   destino desenhado embaixo do icone, o fio passou a ser uma terceira linha
+   horizontal competindo com esses nomes. Quem separa os grupos e o espaco.
+   (SEM CRASES neste comentario: ele vive dentro de um template literal, e uma
+   crase aqui encerra a folha no meio — foi exatamente o que aconteceu.) */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MAIS DA OMNIMOB — os outros modulos, no fim da navegacao
+   ══════════════════════════════════════════════════════════════════════════
+
+   O esquema do "Mais do YouTube": uma secao com titulo proprio, separada por um
+   fio, oferecendo os outros produtos da casa. Ver o JSX para por que ela
+   substituiu o chevron que ficava colado no wordmark.
+
+   SO COM A BARRA ABERTA. Na tira, o nome do modulo sairia em duas linhas de
+   tres letras embaixo de um simbolo que e IGUAL ao dos onze itens acima — a
+   entrada nao se distinguiria de mais um destino do modulo atual, que e
+   exatamente o contrario do que ela diz.
+
+   O fio no topo e a excecao a regra que tirou os separadores da navegacao: os
+   grupos dali sao telas do MESMO modulo, e o espaco basta para separa-los; esta
+   secao leva para FORA, e a mudanca de natureza merece a linha.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-modulos {
+  margin-top: 6px; padding-top: 12px;
+  border-top: 1px solid var(--s-sep);
+}
+.ds-side:not(.is-aberta) .ds-modulos { display: none; }
+
+/* ── O ITEM E A ARTE, E MAIS NADA ──────────────────────────────────────────
+
+   Ele era um .ds-item como os outros: fundo no hover, icone num anel colorido,
+   rotulo ao lado. Agora e o wordmark do outro modulo, cru — sem caixa, sem
+   anel, sem texto ao lado, porque a arte JA traz o nome dentro dela e repeti-lo
+   seria ler "Omniflow" duas vezes na mesma linha.
+
+   O reset e explicito (padding, fundo, borda, gap) porque .ds-item continua
+   valendo por cima: a classe fica no elemento para o alinhamento e a altura da
+   lista continuarem os mesmos dos itens de navegacao.
+
+   A altura sai de --tinta, como na faixa do topo, e pelo mesmo motivo: as duas
+   artes tem o quadro 2852x603, entao um numero serve para as duas. Modulo sem
+   arte clara mantem o rotulo em texto (o JSX so o desenha nesse caso) — e e o
+   que faz um modulo novo aparecer nomeado em vez de aparecer vazio.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-shell .ds-modulos__item {
+  padding: 8px 10px; gap: 8px;
+  background: none; border: 0;
+  justify-content: flex-start;
+}
+.ds-shell .ds-modulos__item:hover { background: var(--s-fill-hover, rgba(127,127,127,0.12)); }
+
+.ds-modulos__tipo {
+  --tinta: 9px;
+  height: calc(var(--tinta) * 2.913); width: auto; flex: none;
+  display: block; opacity: 0.86;
+}
+.ds-shell .ds-modulos__item:hover .ds-modulos__tipo { opacity: 1; }
+
+/* A escolha por tema, igual a da faixa do topo. O seletor tem um nivel a mais
+   do que parece preciso porque a arte clara TAMBEM e um .ds-modulos__tipo, e a
+   regra de tamanho dela declara display:block — com a mesma especificidade,
+   quem vem depois ganha, e as duas apareceriam juntas. */
+.ds-modulos__item .ds-modulos__tipo--claro { display: none; }
+.ds-shell[data-tema="claro"] .ds-modulos__item .ds-modulos__tipo { display: none; }
+.ds-shell[data-tema="claro"] .ds-modulos__item .ds-modulos__tipo--claro { display: block; }
 
 /* A caixa que abraca o item e os tres pontinhos. Ocupa a largura inteira porque
    o "⋮" e absoluto e se ancora nela: numa caixa do tamanho do texto ele
@@ -1834,18 +2379,28 @@ const CSS = `
    que impede o rotulo longo de passar por baixo do botao.
    (Sem crases nestes comentarios: template literal.) */
 .mkb-hospedeiro { display: block; width: 100%; }
-.ds-nav .mkb-hospedeiro:hover .ds-item,
-.ds-nav .mkb-hospedeiro:focus-within .ds-item,
+/* ── E SO COM A BARRA ABERTA ────────────────────────────────────────────────
+   Recolhida, o "⋮" nao e desenhado (.mkb-caixa esta em display none), mas o
+   padding continuava entrando — e num item que centraliza o conteudo em coluna,
+   34px de folga a direita empurram o icone para a ESQUERDA. O sintoma era um
+   pulo lateral no hover, e so em "Gerenciar Imoveis": e o unico item da barra
+   que tem menu de canto.
+
+   Abrir espaco para um botao que nao existe e o defeito; o conserto e a
+   condicao, nao um valor menor.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-side.is-aberta .ds-nav .mkb-hospedeiro:hover .ds-item,
+.ds-side.is-aberta .ds-nav .mkb-hospedeiro:focus-within .ds-item,
 /* Com o balao aberto o ponteiro esta FORA do item (ele sai por portal), entao
    nenhuma das duas condicoes acima vale — e o rotulo voltava ao lugar largo
    por baixo do "⋮", que continua aceso. O :has cobre o intervalo em que o menu
    esta no ar. (Sem crases aqui: template literal.) */
-.ds-nav .mkb-hospedeiro:has(.mkb.is-aberto) .ds-item { padding-right: 34px; }
+.ds-side.is-aberta .ds-nav .mkb-hospedeiro:has(.mkb.is-aberto) .ds-item { padding-right: 34px; }
 
 .ds-shell .ds-item {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; padding: 8px 10px; border-radius: 10px;
-  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left;
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 10px 12px; border-radius: 10px;
+  font-family: inherit; font-size: 13.5px; font-weight: 500; text-align: left;
   color: var(--s-text); background: transparent;
   border: 1px solid transparent; box-shadow: none; transform: none;
   cursor: pointer; text-decoration: none; white-space: nowrap; overflow: hidden;
@@ -1855,19 +2410,34 @@ const CSS = `
   background: var(--s-hover); color: var(--s-strong);
   box-shadow: none; transform: none; border-color: transparent;
 }
-/* O item ativo pinta com o acento do MODULO, e nao com um indigo cravado.
-   Era o indigo fixo, e no Flow o realce continuaria dizendo Hub — a unica pista
-   de que a pessoa trocou de modulo seria a lista de itens. Com o acento, o
-   realce muda junto e a troca se ve sem ler nada.
-   color-mix em vez de duas variaveis por tom: o acento e uma cor so, e derivar
-   as opacidades dele evita que alguem acrescente um modulo e esqueca metade.
+/* ── A PILULA DO ITEM ATIVO E NEUTRA, E UMA POR TEMA ───────────────────────
+   Ela ja foi indigo cravado, depois o acento do MODULO com uma borda derivada
+   dele. O acento saiu daqui: ele continua dizendo em que modulo a pessoa esta
+   no icone do cabecalho, no fio do submenu e no proprio seletor — e dentro da
+   pilula ele competia com o icone preenchido, que e o que de fato marca o item.
+
+   Sobra o degrau de tom, e ele nao pode ser o MESMO nos dois temas: cinza a 50%
+   sobre o quase-preto da barra e um degrau para cima; sobre #f6f7f9 seria um
+   degrau para BAIXO, mais claro que o fundo. Por isso --s-ativo, redefinido no
+   bloco do tema claro junto com o resto da familia --s-*.
+
+   Sem borda: no escuro ela virava um contorno cinza claro em volta de um fundo
+   cinza, e no claro nao tinha o que separar.
    (Sem crases nestes comentarios: eles vivem dentro de um template literal.) */
 .ds-shell .ds-item.is-active {
-  background: color-mix(in srgb, var(--modulo-acento, #818cf8) 12%, transparent);
+  background: var(--s-ativo);
   color: var(--s-strong);
-  border-color: color-mix(in srgb, var(--modulo-acento, #818cf8) 30%, transparent);
 }
-.ds-shell .ds-item.is-active .ds-item__icon { color: var(--modulo-acento, #818cf8); }
+/* ── O ICONE SELECIONADO SEGUE O TEMA, E NAO O ACENTO ───────────────────────
+   Ele era pintado com o acento do modulo, e no tema claro isso deixava o item
+   ativo com um indigo claro sobre um fundo indigo claro — a peca de menor
+   contraste da barra era justamente a que diz onde a pessoa esta.
+
+   Quem carrega o modulo e o FUNDO da pilula, que continua tingido pelo acento.
+   O icone leva a tinta forte do tema: escuro no claro, claro no escuro. E a
+   troca de peso (regular para fill, la no JSX) que faz o resto do trabalho.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-shell .ds-item.is-active .ds-item__icon { color: var(--s-strong); }
 
 /* Item que o PLANO nao libera. Continua clicavel de proposito: a tela do outro
    lado e o convite ao upgrade, e um item morto na barra so ensina que aquele
@@ -1889,7 +2459,6 @@ const CSS = `
 .ds-shell .ds-item--ajuda:hover .ds-item__icon { color: #d4af37; }
 
 .ds-item__icon { display: flex; flex-shrink: 0; position: relative; color: currentColor; }
-.ds-item.is-active .ds-item__icon { color: #fff; }
 .ds-item__label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
 /* Com selo ao lado, o rótulo ocupa só o que precisa — senão o selo é empurrado
    para a borda direita e vira mais um contador aos olhos de quem lê rápido. */
@@ -1944,15 +2513,17 @@ const CSS = `
 .ds-sub__inner .ds-subitem:last-of-type { margin-bottom: 2px; }
 
 /* O fio que liga o item pai aos filhos. Alinhado com o CENTRO do ícone do pai:
-   ele tem 16px e começa nos 10px de padding do item, então o meio cai em 18px.
+   ele tem 22px e começa nos 12px de padding do item, então o meio cai em 23px.
+   Os dois números cresceram nesta refatoração — mexer num sem o outro
+   desalinha o fio do ícone, que é a única coisa que ele faz.
    Desce ao abrir e recolhe ao fechar. */
 .ds-sub__rail {
   position: absolute;
-  left: 18px;
+  left: 23px;
   top: 4px;
   bottom: 6px;
   width: 1px;
-  background: linear-gradient(180deg, rgba(129,140,248,0.45), var(--s-sep));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--modulo-acento, #818cf8) 45%, transparent), var(--s-sep));
   transform: scaleY(0);
   transform-origin: top;
   transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1) 0.04s;
@@ -1972,7 +2543,7 @@ const CSS = `
      (Sem crases neste comentário: ele vive dentro de um template literal, e uma
      crase aqui encerra a string e derruba o build.) */
   justify-content: flex-start;
-  width: 100%; padding: 6px 10px 6px 26px; border-radius: 8px;
+  width: 100%; padding: 7px 10px 7px 32px; border-radius: 8px;
   font-family: inherit; font-size: 12.5px; font-weight: 500; text-align: left;
   color: var(--s-text); background: transparent;
   border: 1px solid transparent; box-shadow: none;
@@ -2000,16 +2571,13 @@ const CSS = `
 }
 .ds-shell .ds-subitem.is-active {
   color: var(--s-strong);
-  background: rgba(129,140,248,0.08);
 }
 .ds-subitem__icon { display: flex; flex-shrink: 0; color: currentColor; }
-.ds-subitem.is-active .ds-subitem__icon { color: #fff; }
 .ds-subitem__label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Rodapé ── */
 .ds-foot {
   padding: 8px; flex-shrink: 0;
-  border-top: 1px solid var(--s-border);
   display: flex; flex-direction: column; gap: 2px;
 }
 .ds-profile {
@@ -2017,10 +2585,14 @@ const CSS = `
   padding: 10px; margin-top: 4px;
   border-top: 1px solid var(--s-sep);
 }
+/* 28px e nao 24: o avatar e o unico desenho do rodape, e ele precisa ficar do
+   tamanho dos icones da navegacao — senao a barra recolhida termina com uma
+   peca visivelmente menor que todas as outras.
+   (Sem crases neste comentario: template literal.) */
 .ds-avatar {
-  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  background: var(--s-avatar); color: var(--s-avatar-ink); font-size: 11px; font-weight: 700;
+  background: var(--s-avatar); color: var(--s-avatar-ink); font-size: 12px; font-weight: 700;
 }
 /* Com foto, o disco colorido vira moldura e some por baixo da imagem. */
 .ds-avatar.tem-foto { background: transparent; }

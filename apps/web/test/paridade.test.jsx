@@ -28,6 +28,19 @@ import { normalizeShowcaseConfig } from "../src/utils/showcaseConfig.js";
 /** Tira do HTML tudo que é afordância de edição — e só isso. */
 function semAfordanciasDeEdicao(html) {
   return html
+    /* ── APARATO QUE SÓ EXISTE NO EDITOR ──────────────────────────────────
+       `widget-editor-apenas` marca os controles que a peça desenha para quem
+       está EDITANDO: o "+ Escolher quem aparece" da equipe, o × que tira uma
+       pessoa. Eles são da mesma família do `contenteditable` e da alça de
+       arrasto — aparato EM VOLTA do conteúdo, nunca no lugar dele —, e por
+       isso saem daqui antes da comparação.
+
+       A regra que isso impõe ao JSX: um bloco marcado assim NÃO pode conter
+       outro elemento da mesma TAG. A expressão abaixo casa até o primeiro
+       fechamento correspondente, e um `<div>` dentro de um `<div>` marcado a
+       faria parar no lugar errado — deixando meio bloco no HTML comparado e
+       um diff incompreensível. Se precisar aninhar, use tags diferentes. */
+    .replace(/<(\w+)[^>]*class="[^"]*widget-editor-apenas[^"]*"[^>]*>.*?<\/\1>/g, "")
     .replace(/ contenteditable="true"/g, "")
     .replace(/ spellcheck="false"/g, "")
     .replace(/ data-rich-sync="[^"]*"/g, "")
@@ -150,7 +163,11 @@ test("todo tipo da biblioteca tem renderizador compartilhado", () => {
   // Se um tipo entrar na biblioteca sem renderizador, ele cairia no desenho
   // genérico sem ninguém notar — que é como `faq` e `hours` ficaram anos
   // parecendo um bloco de texto solto.
-  const esperados = ["text", "cta", "divider", "faq", "note", "stats", "testimonial", "hours", "map", "social"];
+  /* `divider` saiu da lista junto com o widget: era um traço com "✦ Seção ✦" no
+     meio, desenhado com gradientes de branco fixo que só funcionavam sobre
+     vitrine escura. Foi aposentado da biblioteca, do despachante e do que já
+     estava gravado — ver o comentário em `normalizeShowcaseConfig`. */
+  const esperados = ["text", "cta", "faq", "note", "stats", "testimonial", "hours", "map", "social"];
   for (const tipo of esperados) {
     assert.ok(TIPOS_DE_WIDGET.includes(tipo), `tipo "${tipo}" sem renderizador próprio`);
   }
@@ -193,10 +210,29 @@ test("com dados reais, os widgets mostram o que veio do banco", () => {
 /* A sobrescrita manual: quem desliga a fonte real no inspetor recupera o
    conteúdo que digitou, e o dado do banco para de mandar. */
 test("com `usarDadosReais: false`, a peça volta ao conteúdo digitado", () => {
-  const widget = { ...widgetDeTeste("team"), usarDadosReais: false };
+  /* A equipe DIGITADA vai explícita no teste. Antes ela vinha do padrão da
+     biblioteca, que trazia três corretores inventados — e o padrão agora nasce
+     vazio, de propósito: peça nova não publica gente que não existe. Depender
+     daquele exemplo aqui era o teste apoiado justamente no defeito. */
+  const digitada = JSON.stringify({
+    subtitulo: "Nossa equipe",
+    pessoas: [{ nome: "Equipe Digitada", cargo: "Corretor", creci: "", whatsapp: "", foto: "" }],
+  });
+  const widget = { ...widgetDeTeste("team"), usarDadosReais: false, content: digitada };
   const html = desenhar(<ShowcaseWidget widget={widget} />, "public", DADOS_REAIS);
   assert.doesNotMatch(html, /Beatriz Nogueira/, "a fonte real continuou mandando mesmo desligada");
-  assert.match(html, /Ana Souza/, "o conteúdo digitado não voltou");
+  assert.match(html, /Equipe Digitada/, "o conteúdo digitado não voltou");
+});
+
+/* E o contrário: peça nova, sem ninguém escolhido, não pode inventar corretor.
+   É o defeito que este widget teve por mais tempo — três nomes fictícios
+   publicados em vitrines reais. */
+test("equipe sem ninguém escolhido não inventa corretor", () => {
+  const widget = { ...widgetDeTeste("team"), usarDadosReais: false, content: JSON.stringify({ pessoas: [], ids: [] }) };
+  const html = desenhar(<ShowcaseWidget widget={widget} />, "public", null);
+  for (const inventado of ["Ana Souza", "João Lima", "Marina Alves", "CRECI 12345"]) {
+    assert.doesNotMatch(html, new RegExp(inventado), `a peça publicou "${inventado}"`);
+  }
 });
 
 test("hero desenha igual nos dois modos", () => {
@@ -225,6 +261,52 @@ test("links navegam na vitrine e não navegam no editor", () => {
   const cartao = <ShowcasePropertyCard property={{ id: "p1", title: "T", price: 1, images: [] }} tenantSlug="x" />;
   assert.match(desenhar(cartao, "public"), /<a[^>]*href="\/vitrine\/x\/imovel\/p1"/, "o cartão precisa abrir o imóvel");
   assert.doesNotMatch(desenhar(cartao, "editor"), /href=/, "no editor o cartão não sai do construtor");
+});
+
+/* ── O TÍTULO VAZIO ──────────────────────────────────────────────────────────
+
+   A única divergência deliberada entre os dois modos, e por isso ela é
+   verificada aqui e não deixada ao acaso: no público o título vazio não existe
+   (o conteúdo sobe e ocupa o espaço), no editor ele fica como marca-lugar —
+   sem ele não haveria como escrever o título de volta.
+
+   Se alguém "consertar" a divergência fazendo o público desenhar o marca-lugar,
+   a vitrine publicada passa a exibir um `<h3>` vazio. Se fizer o editor sumir
+   com ele, o título vira campo sem volta. Os dois estragos aparecem aqui. */
+test("título vazio some no público e vira marca-lugar no editor", () => {
+  for (const titulo of ["", "   ", "<br>", "<p>&nbsp;</p>"]) {
+    const widget = { id: "w-vazio", type: "text", title: titulo, content: "Corpo" };
+
+    const publico = renderToStaticMarkup(
+      <MemoryRouter><VitrineProvider modo="publico"><ShowcaseWidget widget={widget} /></VitrineProvider></MemoryRouter>,
+    );
+    assert.equal(publico.includes("<h3"), false, `título ${JSON.stringify(titulo)} não deveria ocupar espaço no público`);
+
+    const editor = renderToStaticMarkup(
+      <MemoryRouter>
+        <VitrineProvider modo="editor" aoEditar={() => {}}><ShowcaseWidget widget={widget} /></VitrineProvider>
+      </MemoryRouter>,
+    );
+    assert.equal(editor.includes("widget-titulo--vazio"), true, "o editor precisa manter o marca-lugar");
+    /* Vazio de verdade no DOM: é o `:empty` que faz o marca-lugar do CSS
+       aparecer e sumir sozinho na primeira letra digitada. */
+    assert.match(editor, /widget-titulo--vazio[^>]*><\/h3>/);
+  }
+});
+
+/* Com título PREENCHIDO nada muda: a paridade continua valendo, e é isto que
+   impede a exceção acima de virar uma porta para divergências novas. */
+test("título preenchido continua idêntico nos dois modos", () => {
+  const widget = { id: "w-cheio", type: "text", title: "Um título", content: "Corpo" };
+  const publico = renderToStaticMarkup(
+    <MemoryRouter><VitrineProvider modo="publico"><ShowcaseWidget widget={widget} /></VitrineProvider></MemoryRouter>,
+  );
+  const editor = renderToStaticMarkup(
+    <MemoryRouter>
+      <VitrineProvider modo="editor" aoEditar={() => {}}><ShowcaseWidget widget={widget} /></VitrineProvider>
+    </MemoryRouter>,
+  );
+  assert.equal(semAfordanciasDeEdicao(editor), semAfordanciasDeEdicao(publico));
 });
 
 test("cartão de imóvel desenha igual; só a navegação muda", () => {

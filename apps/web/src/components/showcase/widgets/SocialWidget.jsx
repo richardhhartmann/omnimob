@@ -9,7 +9,10 @@ import {
 } from "@phosphor-icons/react";
 // O glifo OFICIAL do WhatsApp — ver `utils/marcasDeRede`.
 import { WhatsappMarca } from "../../../utils/marcasDeRede.jsx";
-import { ShowcaseLinkExterno, ShowcaseTexto, usaFonteReal, useDadosDaVitrine } from "../contexto.jsx";
+import { ShowcaseLinkExterno, ShowcaseTexto, usaFonteReal, useDadosDaVitrine,
+  useVitrine,
+} from "../contexto.jsx";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* Redes sociais.
 
@@ -83,13 +86,24 @@ function redesReais(redes) {
 export function SocialWidget({ widget }) {
   const cor = widget.color ? { color: widget.color } : undefined;
   const dados = useDadosDaVitrine();
+  const { modo, aoEditar } = useVitrine();
   const reais = redesReais(dados?.redes);
   const real = usaFonteReal(widget, reais);
+  /* Editar os endereços só faz sentido no caminho MANUAL: com a fonte real
+     ligada eles vêm de Configurações › Redes Sociais, e um campo aqui
+     prometeria uma mudança que a página ignoraria. */
+  const ehEditor = modo === "editor" && Boolean(aoEditar) && !real;
+  const enderecos = String(widget.content || "").split("|").map((u) => u.trim()).filter(Boolean);
   const redes = redesDoConteudo(real ? reais.join("|") : widget.content);
+
+  /* Uma gravação por mudança, no formato que o widget já lê. O separador `|`
+     continua existindo no armazenamento — o que muda é que ninguém mais precisa
+     digitá-lo. */
+  const gravar = (lista) => aoEditar(`widget|${widget.id}|content`, lista.filter((u) => u.trim()).join("|"));
 
   return (
     <div style={{ textAlign: "center", padding: "8px" }}>
-      <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} umaLinha html={widget.title} style={cor} />
+      <TituloDoWidget widget={widget} umaLinha style={cor} />
       <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "16px", marginTop: "24px" }}>
         {redes.map((rede, i) => (
           <ShowcaseLinkExterno
@@ -108,6 +122,57 @@ export function SocialWidget({ widget }) {
           </ShowcaseLinkExterno>
         ))}
       </div>
+
+      {/* ── O ENDEREÇO DE CADA REDE, NO PRÓPRIO BOTÃO ─────────────────────────
+          Isto morava no inspetor como UMA caixa de texto com os três endereços
+          separados por `|`. Quem nunca viu aquele formato não tinha como
+          adivinhá-lo, e um `|` esquecido colava dois endereços num só.
+
+          Aqui cada endereço é um campo, na ordem dos botões acima — o primeiro
+          campo é o primeiro botão. O ícone à esquerda do campo é o mesmo que o
+          botão vai ganhar, então dá para ver a rede sendo reconhecida enquanto
+          se digita.
+
+          Só no editor, e a fileira inteira é descartada pelo teste de paridade
+          (`widget-editor-apenas`). */}
+      {ehEditor ? (
+        <div className="widget-editor-apenas social-editor">
+          {enderecos.map((url, i) => {
+            const reconhecida = redesDoConteudo(url)[0];
+            return (
+              // Índice na chave: o texto muda a cada tecla, e usá-lo como
+              // identidade tiraria o cursor do campo.
+              <span className="social-editor__linha" key={i}>
+                <span className="social-editor__marca" style={{ background: reconhecida?.fundo }}>
+                  {reconhecida ? <reconhecida.Icone size={13} weight="fill" aria-hidden /> : null}
+                </span>
+                <input
+                  value={url}
+                  placeholder="https://instagram.com/suaimobiliaria"
+                  aria-label={`Endereço ${i + 1}`}
+                  onChange={(e) => gravar(enderecos.map((u, j) => (j === i ? e.target.value : u)))}
+                />
+                <button
+                  type="button"
+                  title="Remover esta rede"
+                  onClick={() => gravar(enderecos.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+          <button
+            type="button"
+            className="social-editor__mais"
+            /* Um espaço, e não string vazia: o `filter` de `gravar` descartaria
+               o vazio na hora e o campo novo sumiria antes de ser digitado. */
+            onClick={() => aoEditar(`widget|${widget.id}|content`, [...enderecos, " "].join("|"))}
+          >
+            + Rede social
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

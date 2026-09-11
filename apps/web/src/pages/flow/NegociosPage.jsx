@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useBotaoDeNovo } from "../../utils/registroDeNovo";
+import { TeclaDeAtalho } from "../../components/ContextoDeAtalhos.jsx";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { Plus, WarningCircle, Handshake } from "@phosphor-icons/react";
 import { api } from "../../api";
@@ -20,6 +22,9 @@ import { ESTAGIOS_FLOW, ESTAGIO_PERDIDO, estagioInfo, reais, desdeQuando, canalR
    ──────────────────────────────────────────────────────────────────────────── */
 
 export function NegociosPage({ session }) {
+  /* O "N" desta tela clica ESTE botao — as telas do Flow nao usam o `BtnNovo`,
+     que e quem registra o atalho no resto do painel. Ver `useBotaoDeNovo`. */
+  const novoRef = useBotaoDeNovo();
   const tenantSlug = session?.tenant?.slug;
   const navigate = useNavigate();
   const showToast = useOutletContext()?.showToast;
@@ -87,8 +92,9 @@ export function NegociosPage({ session }) {
            dele, e dois "Novo negócio" na mesma tela é ruído. */
         action={
           semNenhum ? null : (
-            <button type="button" className="btn-primary" onClick={() => navigate("/flow/negocios/novo")}>
+            <button type="button" ref={novoRef} className="btn-primary" onClick={() => navigate("/flow/negocios/novo")}>
               <Plus size={15} weight="bold" style={{ marginRight: 6 }} /> Novo negócio
+              <TeclaDeAtalho acao="global.novo" className="tecla-atalho--no-botao" />
             </button>
           )
         }

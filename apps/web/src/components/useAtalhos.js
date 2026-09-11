@@ -3,6 +3,7 @@ import { criarNovo } from "../utils/registroDeNovo";
 import { useLocation, useNavigate } from "react-router-dom";
 import { mapaDeAtalhos, paiDaRota, telaDosAtalhos } from "../utils/atalhos";
 import { filtrarNoTour, tourAtivo } from "../utils/tourAtivo";
+import { temCaixaPorCima } from "../utils/caixaPorCima";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O ouvido do teclado.
@@ -74,6 +75,19 @@ export function useAtalhos({ cargo, doTenant, doUsuario, aoNovo, inicial = "/", 
       const { cargo: c, doTenant: t, doUsuario: u, aoNovo: novo, inicial: casa, pathname, ativos: ligados } = contexto.current;
 
       if (e.key === "Escape") {
+        /* ── QUEM ESTÁ POR CIMA TEM A TECLA ────────────────────────────────
+           Estas duas guardas faltavam, e o sintoma era exatamente o que se
+           espera de um Esc sem dono: com a paleta de busca aberta, a tecla
+           fechava o modal E subia um nível na rota — a pessoa via a página de
+           trás trocar por baixo da caixa. Bastava o foco não estar no campo
+           para o `escrevendo` abaixo não segurar nada.
+
+           `defaultPrevented` cobre quem já tratou a tecla no caminho; a caixa
+           por cima cobre quem ainda vai tratar, mas não tem o foco. São as
+           mesmas duas de `useSaidaDaTela` — o Esc do painel e o das sub-telas
+           precisam concordar sobre de quem é a tecla. */
+        if (e.defaultPrevented) return;
+        if (temCaixaPorCima()) return;
         /* Escrevendo, Esc é "abandonar o que estou digitando" — deixa o campo
            tratar. Sair da tela no meio de um formulário perderia o trabalho. */
         if (escrevendo(e.target)) return;

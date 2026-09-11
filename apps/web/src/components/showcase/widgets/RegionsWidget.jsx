@@ -4,8 +4,10 @@ import {
   usaFonteReal,
   useDadosDaVitrine,
   useFiltroDaVitrine,
+  useVitrine,
 } from "../contexto.jsx";
 import { DADOS_REGIOES_PADRAO, lerDadosWidget, montarWhatsappUrl } from "./widgetData.js";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Regiões — os bairros onde a imobiliária realmente tem imóvel.
@@ -38,6 +40,11 @@ export function RegionsWidget({ widget }) {
   const reais = dados?.regioes || [];
   const real = usaFonteReal(widget, reais);
 
+  const { modo, aoEditar } = useVitrine();
+  /* Só faz sentido editar a lista MANUAL: com a fonte real ligada, as regiões
+     vêm do acervo e mexer nelas aqui não teria efeito nenhum na página. */
+  const ehEditor = modo === "editor" && Boolean(aoEditar) && !real;
+
   const manual = lerDadosWidget(widget.content, DADOS_REGIOES_PADRAO);
   const subtitulo = manual.subtitulo || DADOS_REGIOES_PADRAO.subtitulo;
   const manuais = Array.isArray(manual.regioes) && manual.regioes.length
@@ -46,8 +53,8 @@ export function RegionsWidget({ widget }) {
 
   return (
     <div className="widget-regions">
-      <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} html={widget.title} />
-      <p>{subtitulo}</p>
+      <TituloDoWidget widget={widget} />
+      <ShowcaseTexto as="p" campo={`widget|${widget.id}|dados|subtitulo`} html={subtitulo} />
       <div className="widget-regions__list">
         {real
           ? reais.slice(0, 16).map((regiao) => {
@@ -70,16 +77,59 @@ export function RegionsWidget({ widget }) {
                 </button>
               );
             })
-          : manuais.slice(0, 16).map((regiao) => (
+          : manuais.slice(0, 16).map((regiao, i) => (
+              /* ── EDITAR É NO PRÓPRIO CHIP ──────────────────────────────────
+                 Havia uma lista de campos embaixo da peça repetindo estes
+                 mesmos itens: escrevia-se num lugar e conferia-se noutro, com
+                 os dois na mesma tela ao mesmo tempo. O nome do chip agora é o
+                 campo, e o × dele apaga.
+
+                 A chave é o ÍNDICE e não o texto: com o texto, cada tecla
+                 digitada trocaria a identidade do elemento, o React o
+                 remontaria e o cursor sairia do campo. */
               <ShowcaseLinkExterno
-                key={regiao}
+                key={i}
                 href={montarWhatsappUrl(widget.ctaUrl, `Olá! Gostaria de conhecer os imóveis disponíveis em ${regiao}.`)}
                 className="widget-regions__chip"
               >
-                <span>{regiao}</span>
+                <ShowcaseTexto
+                  as="span"
+                  umaLinha
+                  campo={`widget|${widget.id}|dados|regioes|${i}`}
+                  html={regiao}
+                />
                 <span aria-hidden>↗</span>
+                {ehEditor ? (
+                  <button
+                    type="button"
+                    className="widget-editor-apenas widget-regions__tirar"
+                    title={`Remover ${regiao}`}
+                    onClick={(e) => {
+                      /* O chip é um link. Sem parar o evento, o clique no × ia
+                         junto para o `<a>` e o navegador tentava abrir o
+                         WhatsApp no meio da edição. */
+                      e.preventDefault();
+                      e.stopPropagation();
+                      aoEditar(`widget|${widget.id}|dados|regioes`, manuais.filter((_, j) => j !== i));
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
               </ShowcaseLinkExterno>
             ))}
+
+        {/* Acrescentar é MAIS UM chip, no fim da fila: o botão ocupa o lugar do
+            item que vai nascer, e a linha não muda de forma quando ele nasce. */}
+        {ehEditor && manuais.length < 16 ? (
+          <button
+            type="button"
+            className="widget-editor-apenas widget-regions__mais"
+            onClick={() => aoEditar(`widget|${widget.id}|dados|regioes`, [...manuais, "Nova região"])}
+          >
+            +
+          </button>
+        ) : null}
       </div>
     </div>
   );

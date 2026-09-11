@@ -14,6 +14,7 @@ import { UserPlus, PlusCircle, PencilSimple } from "@phosphor-icons/react";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
+import { mesmoId } from "../utils/mesmoId";
 
 const FORM_EMPTY = {
   nome: "", login: "", email: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false,
@@ -98,7 +99,11 @@ function normalizarBaseLogin(valor) {
    vira só dígitos lá) — aqui é só o recorte. */
 function camposDeVitrine(form) {
   return {
-    exibirNaVitrine: Boolean(form.exibirNaVitrine),
+    /* `exibirNaVitrine` NÃO viaja mais daqui. Quem aparece na vitrine passou a
+       ser escolhido dentro do widget de Equipe, no editor — ver
+       `SeletorDeEquipe`. Mandar `false` a cada salvamento apagaria a marcação
+       antiga, e ela ainda é a reserva das vitrines que nunca usaram o seletor
+       (ver `equipeDaVitrine`). O que não se envia, o Prisma não toca. */
     foto: form.foto.trim(),
     creci: form.creci.trim(),
     whatsapp: form.whatsapp.trim(),
@@ -271,7 +276,7 @@ export function UsuariosPage({ session }) {
     if (!usuarioId) { preenchidoPara.current = null; return; }
     if (preenchidoPara.current === usuarioId) return;
 
-    const achado = usuarios.find((u) => u.id === usuarioId);
+    const achado = usuarios.find((u) => mesmoId(u.id, usuarioId));
     if (achado) { preenchidoPara.current = usuarioId; preencherCom(achado); return; }
     if (initialLoading) return;   // a lista ainda não chegou
 
@@ -504,33 +509,35 @@ export function UsuariosPage({ session }) {
             </p>
           )}
 
-          {/* ── Presença na vitrine ────────────────────────────────────────
+          {/* ── Dados para a vitrine ───────────────────────────────────────
               O widget "Equipe" da vitrine lê exatamente estes campos. Ele
               nasceu com três corretores INVENTADOS no código ("Ana Souza",
               "João Lima", "Marina Alves") porque não havia de onde tirar os
               reais — o cadastro guardava quem ENTRA no painel, não quem ATENDE
               o cliente.
 
-              A seção fica recolhida atrás de uma marcação, e não sempre aberta:
-              a maioria dos usuários de uma imobiliária não aparece na vitrine, e
-              quatro campos vazios em todo cadastro ensinariam a ignorá-los. */}
-          <div className="usuario-vitrine">
-            <label className="usuario-vitrine__chave">
-              <input
-                type="checkbox"
-                className="sw"
-                checked={form.exibirNaVitrine}
-                onChange={(e) => setForm((p) => ({ ...p, exibirNaVitrine: e.target.checked }))}
-                disabled={loading}
-              />
-              <span>
-                <strong>Aparecer no site</strong>
-                <small>Mostra esta pessoa no bloco de equipe da página pública, com contato direto.</small>
-              </span>
-            </label>
+              ── O INTERRUPTOR "APARECER NO SITE" SAIU DAQUI ──
 
-            {form.exibirNaVitrine ? (
-              <div className="usuario-vitrine__campos">
+              Ele decidia quem entrava na seção de equipe, e decidia no lugar
+              errado: para montar a vitrine era preciso vir a esta tela, abrir
+              pessoa por pessoa e marcar uma caixa, sem nunca ver o resultado.
+              Quem aparece agora se escolhe DENTRO do widget, olhando para a
+              peça.
+
+              Os CAMPOS ficaram — eles são o que a vitrine mostra quando a
+              pessoa for escolhida —, e agora sempre visíveis: sem o
+              interruptor, escondê-los atrás de outra coisa só criaria uma
+              segunda porta para o mesmo dado. */}
+          <div className="usuario-vitrine">
+            <div className="usuario-vitrine__aviso">
+              <strong>Dados para a vitrine</strong>
+              <small>
+                Preencher aqui não publica ninguém. Quem aparece no site é escolhido no widget
+                de Equipe, dentro do editor de vitrine.
+              </small>
+            </div>
+
+            <div className="usuario-vitrine__campos">
                 <div className="usuario-vitrine__foto">
                   <div className="usuario-vitrine__avatar">
                     {form.foto
@@ -593,8 +600,7 @@ export function UsuariosPage({ session }) {
                     <small>Sem número, o botão cai no WhatsApp geral da imobiliária.</small>
                   </label>
                 </div>
-              </div>
-            ) : null}
+            </div>
           </div>
 
           <div className="actions" data-tour="usuario-salvar" style={{ marginTop: "24px" }}>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ShowcaseTexto, usaFonteReal, useDadosDaVitrine, useFiltroDaVitrine, useVitrine } from "../contexto.jsx";
 import { DADOS_BUSCA_PADRAO, lerDadosWidget, montarWhatsappUrl, somenteTexto } from "./widgetData.js";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
+import { ListaEditavel } from "./ListaEditavel.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Busca de imóveis — que agora busca.
@@ -46,7 +48,7 @@ function opcoesValidas(valor, fallback) {
 }
 
 export function PropertySearchWidget({ widget }) {
-  const { modo } = useVitrine();
+  const { modo, aoEditar } = useVitrine();
   const dados = useDadosDaVitrine();
   const { aplicarFiltro } = useFiltroDaVitrine();
 
@@ -58,6 +60,10 @@ export function PropertySearchWidget({ widget }) {
     filtrosReais && (filtrosReais.tipos?.length || filtrosReais.cidades?.length || filtrosReais.bairros?.length),
   );
   const real = usaFonteReal(widget, temReal);
+
+  /* Com a fonte real ligada as opções vêm do acervo; editá-las aqui não teria
+     efeito nenhum na página, então o editor de listas não aparece. */
+  const ehEditor = modo === "editor" && Boolean(aoEditar) && !real;
 
   const manual = lerDadosWidget(widget.content, DADOS_BUSCA_PADRAO);
   const subtitulo = manual.subtitulo || DADOS_BUSCA_PADRAO.subtitulo;
@@ -111,16 +117,31 @@ export function PropertySearchWidget({ widget }) {
   }
 
   const campos = [
-    { rotulo: "Objetivo", vazio: "Qualquer", opcoes: negocios, valor: negocio, aoTrocar: setNegocio },
-    { rotulo: "Tipo", vazio: "Qualquer tipo", opcoes: tipos, valor: tipo, aoTrocar: setTipo },
-    { rotulo: "Região", vazio: "Qualquer região", opcoes: regioes, valor: regiao, aoTrocar: setRegiao },
+    /* `lista` e `editar` só existem no caminho MANUAL: com a fonte real ligada
+       as opções vêm do acervo, e uma ficha editável ali prometeria uma mudança
+       que a página ignoraria. Sem eles, o editor de fichas não aparece. */
+    {
+      rotulo: "Objetivo", vazio: "Qualquer", opcoes: negocios, valor: negocio, aoTrocar: setNegocio,
+      lista: manual.negocios || DADOS_BUSCA_PADRAO.negocios,
+      editar: (lista) => aoEditar(`widget|${widget.id}|dados|negocios`, lista),
+    },
+    {
+      rotulo: "Tipo", vazio: "Qualquer tipo", opcoes: tipos, valor: tipo, aoTrocar: setTipo,
+      lista: manual.tipos || DADOS_BUSCA_PADRAO.tipos,
+      editar: (lista) => aoEditar(`widget|${widget.id}|dados|tipos`, lista),
+    },
+    {
+      rotulo: "Região", vazio: "Qualquer região", opcoes: regioes, valor: regiao, aoTrocar: setRegiao,
+      lista: manual.localizacoes || DADOS_BUSCA_PADRAO.localizacoes,
+      editar: (lista) => aoEditar(`widget|${widget.id}|dados|localizacoes`, lista),
+    },
   ];
 
   return (
     <form className="widget-property-search" onSubmit={enviar}>
       <div className="widget-property-search__head">
-        <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} html={widget.title} />
-        <p>{subtitulo}</p>
+        <TituloDoWidget widget={widget} />
+        <ShowcaseTexto as="p" campo={`widget|${widget.id}|dados|subtitulo`} html={subtitulo} />
       </div>
 
       <div className="widget-property-search__fields">
@@ -138,6 +159,14 @@ export function PropertySearchWidget({ widget }) {
                   <option key={opcao.valor} value={opcao.valor}>{opcao.rotulo}</option>
                 ))}
               </select>
+              {/* As fichas ficam sob o SELETOR que elas alimentam, e não numa
+                  seção no fim da peça: assim acrescentar uma opção acontece do
+                  lado de onde ela vai aparecer. Ver `ListaEditavel` para por
+                  que este é o único caso que ainda precisa de um editor
+                  separado do item. */}
+              {ehEditor && campo.editar ? (
+                <ListaEditavel rotulo={campo.rotulo} itens={campo.lista} aoMudar={campo.editar} />
+              ) : null}
             </label>
           ))}
       </div>
@@ -145,6 +174,7 @@ export function PropertySearchWidget({ widget }) {
       <button type="submit" className="widget-property-search__button">
         <ShowcaseTexto as="span" campo={`widget|${widget.id}|ctaLabel`} umaLinha html={widget.ctaLabel || "Encontrar imóveis"} />
       </button>
+
     </form>
   );
 }

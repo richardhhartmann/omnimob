@@ -111,6 +111,17 @@ export const api = {
   slugPorDominio: (host) =>
     request(`/public/dominio?host=${encodeURIComponent(host)}`),
 
+  /* Público: nome e logo da imobiliária, sem o acervo junto. A tela de acesso
+     usa isto para se vestir com a marca de quem está entrando. */
+  marcaDoTenant: (slug) =>
+    request(`/public/${encodeURIComponent(slug)}/marca`),
+
+  /* Quem PODE entrar na equipe da vitrine — a lista que o seletor do widget
+     abre. Rota própria por causa da permissão: ver o comentário dela em
+     `tenantRoutes`. */
+  equipePossivel: (tenantSlug) =>
+    request("/api/tenants/me/equipe-possivel", { headers: { "x-tenant-slug": tenantSlug } }),
+
   // ── Domínio próprio da vitrine ──────────────────────────────────────────
   getDominio: (tenantSlug) =>
     request("/api/tenants/me/dominio", { headers: { "x-tenant-slug": tenantSlug } }),

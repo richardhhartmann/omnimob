@@ -1,4 +1,5 @@
 import { ShowcaseLinkExterno, ShowcaseTexto, usaFonteReal, useDadosDaVitrine } from "../contexto.jsx";
+import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Localização — agora um mapa de verdade.
@@ -50,7 +51,7 @@ export function MapWidget({ widget }) {
   if (!real) {
     return (
       <div className="widget-map">
-        <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} umaLinha html={widget.title} style={cor} />
+        <TituloDoWidget widget={widget} umaLinha style={cor} />
         <div className="widget-map__cartao">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
@@ -65,7 +66,7 @@ export function MapWidget({ widget }) {
 
   return (
     <div className="widget-map">
-      <ShowcaseTexto as="h3" campo={`widget|${widget.id}|title`} umaLinha html={widget.title} style={cor} />
+      <TituloDoWidget widget={widget} umaLinha style={cor} />
 
       <div className="widget-map__moldura">
         <iframe

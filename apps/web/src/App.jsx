@@ -51,6 +51,14 @@ const OmnimobLandingPage = telaTardia(() =>
   import("./pages/OmnimobLandingPage").then((m) => ({ default: m.OmnimobLandingPage })));
 const ShowcaseEditorPage = telaTardia(() =>
   import("./pages/ShowcaseEditorPage").then((m) => ({ default: m.ShowcaseEditorPage })));
+/* O editor de vitrine. Sob demanda pela mesma razão do de cima: é uma tela
+   inteira, aberta de propósito, e o Puck é uma dependência grande.
+
+   O `ShowcaseEditorPage` acima virou o CLÁSSICO — segue carregado sob demanda
+   e segue com rota própria, porque é para onde "Voltar ao editor antigo" leva
+   enquanto houver imobiliária no formato de coordenadas. */
+const VitrinePuckPage = telaTardia(() =>
+  import("./pages/VitrinePuckPage").then((m) => ({ default: m.VitrinePuckPage })));
 const SuperAdminPage = telaTardia(() =>
   import("./pages/SuperAdminPage").then((m) => ({ default: m.SuperAdminPage })));
 
@@ -725,10 +733,31 @@ export default function App() {
             ? <ConfiguracaoPage session={session} onSessionUpdate={handleSessionUpdate} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        {/* ── EDITAR PÁGINA É O PUCK, PARA TODO MUNDO ─────────────────────────
+            Não há mais dois editores a escolher. Quem nunca migrou entra e vê a
+            própria vitrine já traduzida, pronta para editar; quem já migrou vê
+            o documento gravado. A tradução acontece na abertura e não grava
+            nada sozinha — ver `VitrinePuckPage`.
+
+            O editor antigo não sumiu: ele ficou em `/editar/classico`, e é para
+            lá que "Voltar ao editor antigo" leva depois de apagar o documento
+            do Puck. Enquanto houver imobiliária no formato de coordenadas essa
+            volta precisa existir de verdade — uma migração sem porta de saída,
+            no meio de um beta, é uma aposta e não um lançamento. */}
         <Route path="/vitrine/:tenantSlug/editar" element={
+          cargo?.editarPagina
+            ? <VitrinePuckPage />
+            : <Navigate to={defaultPublicPath} replace />
+        } />
+        <Route path="/vitrine/:tenantSlug/editar/classico" element={
           cargo?.editarPagina
             ? <ShowcaseEditorPage session={session} onSessionUpdate={setSession} />
             : <Navigate to={defaultPublicPath} replace />
+        } />
+        {/* O endereço da avaliação continua valendo: links já circularam, e um
+            404 numa URL que alguém guardou é pior que um apelido. */}
+        <Route path="/vitrine/:tenantSlug/puck" element={
+          <Navigate to={`/vitrine/${session?.tenant?.slug || ""}/editar`} replace />
         } />
         <Route path="/imoveis/:propertyId" element={
           cargo?.gerenciarImoveis && cargo?.verRelatorios
@@ -741,7 +770,8 @@ export default function App() {
             ══════════════════════════════════════════════════════════════════
 
             Dentro do MESMO layout do Hub, e é a decisão central desta divisão:
-            a moldura não troca. `ds-head`, `ds-head--link`, `ds-foot`, a barra
+            a moldura não troca. `ds-mod` (o seletor de módulo, que é também a
+            porta do Painel do Gestor), `ds-foot`, a barra
             que abre no hover, o menu do perfil, os toasts — tudo continua sendo
             o mesmo componente, na mesma posição. O que muda é o conteúdo da
             navegação e o acento.

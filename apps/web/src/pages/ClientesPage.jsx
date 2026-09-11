@@ -12,6 +12,7 @@ import { UserCirclePlus, PlusCircle, PencilSimple } from "@phosphor-icons/react"
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
+import { mesmoId } from "../utils/mesmoId";
 
 const FORM_EMPTY = {
   nome: "", cpf: "", rg: "", nascimento: "", email: "", telefone: "", whatsapp: "",
@@ -176,7 +177,7 @@ export function ClientesPage({ session }) {
     if (!clienteId) { preenchidoPara.current = null; return; }
     if (preenchidoPara.current === clienteId) return;
 
-    const daLista = clientes.find((c) => c.id === clienteId);
+    const daLista = clientes.find((c) => mesmoId(c.id, clienteId));
     if (daLista) { preenchidoPara.current = clienteId; preencherCom(daLista); return; }
     if (!tenantSlug) return;
 

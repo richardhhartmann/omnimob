@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { degrausAte } from "./trilhaDoPainel";
 
 /* ────────────────────────────────────────────────────────────────────────────
    QUEM DIZ O NOME DA TELA.
@@ -74,13 +76,32 @@ export function useCabecalho() {
  * Nas outras telas, não passe nada: a rota responde melhor e nunca discorda do
  * título, porque as duas saem da mesma tabela.
  */
-export function useTituloDaTela({ titulo, subtitulo, acao, trilha } = {}) {
+/* Os degraus da tela atual.
+
+   Existe porque a trilha e o titulo saem da MESMA lista e passaram a ser
+   desenhados em lugares diferentes: a trilha dentro do conteudo, o titulo no
+   cabecalho. Recalcular a lista nos dois seria a mesma regra escrita duas
+   vezes — e ela ja tem duas fontes (a tabela da rota e a sobrescrita da tela).
+   Duas fontes vezes dois lugares e como as telas comecam a discordar sobre o
+   proprio nome.
+
+   `degrausAte` devolve lista vazia para rota que nao esta em `TELAS_DO_PAINEL`
+   (uma tela de detalhe, por exemplo); quem sabe o rotulo ali e a propria tela,
+   por `useTituloDaTela({ trilha })`. */
+export function useDegrausDoPainel() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const daTela = useCabecalho();
+  return daTela?.trilha ?? degrausAte(pathname, navigate);
+}
+
+export function useTituloDaTela({ titulo, subtitulo, acao, trilha, icone } = {}) {
   const ctx = useContext(Contexto);
   const definir = ctx?.definir;
 
   useEffect(() => {
     if (!definir) return undefined;
-    definir({ titulo, subtitulo, acao, trilha });
+    definir({ titulo, subtitulo, acao, trilha, icone });
     /* Limpa ao sair. Sem isto, navegar de "Negócio #412" para uma tela que não
        declara nada deixaria o título antigo no ar — e ele estaria mentindo. */
     return () => definir(null);

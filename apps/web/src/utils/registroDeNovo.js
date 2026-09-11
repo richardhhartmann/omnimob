@@ -1,3 +1,5 @@
+import React from "react";
+
 /* ── Quem responde ao "N" ────────────────────────────────────────────────────
 
    `global.novo` é o único atalho que vale em TODA tela e não tem destino fixo:
@@ -46,4 +48,34 @@ export function criarNovo() {
 /** Há um "novo" nesta tela? É o que decide se o selo da tecla aparece. */
 export function temNovo() {
   return pilha.length > 0;
+}
+
+/* ── O MESMO ATALHO PARA QUEM NÃO USA O `BtnNovo` ────────────────────────────
+
+   `BtnNovo` (em `components/ActionIcons.jsx`) já registra a ação e já mostra o
+   selo da tecla. As telas do Omniflow não o usam: elas montam o próprio
+   `<button className="btn-primary">` porque o botão delas vive no `action=` do
+   cabeçalho da página, com ícone e texto próprios. O resultado é que o "N"
+   funcionava em todo o Omnimob e em nenhuma tela do Flow.
+
+   Este hook é a metade do `BtnNovo` que interessa a elas: devolve um `ref` para
+   pendurar no botão que já existe. Não é um segundo botão — seria a armadilha
+   das duas versões da mesma coisa, e o desenho continua o da tela.
+
+   **Clica o botão, não chama a função**, pela mesma razão documentada no
+   `BtnNovo`: o tour espera um evento de `click` real no alvo, e chamar o
+   `onClick` direto abriria o formulário deixando o tour parado, cobrando um
+   clique que nunca houve.
+
+   Botão que sai da tela (a lista vazia troca o botão pelo convite) desmonta o
+   `ref`, e o `useEffect` desfaz o registro junto — o "N" volta a não fazer nada
+   ali, que é o certo: quem responde passa a ser o `ConviteDeCriacao`, que já se
+   registra sozinho. */
+export function useBotaoDeNovo() {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!ref.current) return undefined;
+    return registrarNovo(() => ref.current?.click());
+  });
+  return ref;
 }

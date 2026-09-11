@@ -11,6 +11,7 @@ import { ConviteDeCriacao } from "../components/ConviteDeCriacao.jsx";
 import { Tag, PlusCircle, PencilSimple, ListChecks } from "@phosphor-icons/react";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
+import { mesmoId } from "../utils/mesmoId";
 
 const AREA_OPTIONS = [
   { key: "areaTerreno",    label: "Área do terreno" },
@@ -373,7 +374,7 @@ export function TiposImovelPage({ session }) {
      digitando quando a lista recarregar. */
   const preenchidoPara = useRef(null);
   useEffect(() => {
-    const tipo = tipoId ? tipos.find((t) => t.id === tipoId) : null;
+    const tipo = tipoId ? tipos.find((t) => mesmoId(t.id, tipoId)) : null;
     if (tipo && tipo !== tipoAtivo) setTipoAtivo(tipo);
 
     if (criandoTipo) {
@@ -405,7 +406,7 @@ export function TiposImovelPage({ session }) {
     }
     if (view === "atributoForm") {
       if (preenchidoPara.current === `atributo:${atributoId}`) return;
-      const a = (tipo.atributos || []).find((x) => x.id === atributoId);
+      const a = (tipo.atributos || []).find((x) => mesmoId(x.id, atributoId));
       if (!a) {
         showToast?.("Não encontrei este atributo.", "error");
         navigate(`/tipos-imovel/${tipoId}/atributos`, { replace: true });
