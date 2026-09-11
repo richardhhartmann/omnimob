@@ -1736,9 +1736,7 @@ const CSS = `
 .ds-topbar__grupo {
   width: var(--s-aberta); flex: none; box-sizing: border-box;
   display: flex; align-items: center; gap: 8px;
-  /* O recuo alinha o hamburguer com o EIXO dos icones da tira recolhida: 92px
-     de tira menos os 40 do botao, dividido por dois. Sem isso ele senta uns
-     pixels a esquerda do que a coluna de icones abaixo dele. */
+  padding: 0 0 0 10px;
 }
 
 /* ── A PILULA DA CONTA, NO CENTRO DA FAIXA ────────────────────────────────
