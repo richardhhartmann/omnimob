@@ -1,5 +1,6 @@
-import { ShowcaseLinkExterno, ShowcaseTexto } from "../contexto.jsx";
+import { ShowcaseLinkExterno, ShowcaseTexto, useDadosDaVitrine } from "../contexto.jsx";
 import { TituloDoWidget } from "../TituloDoWidget.jsx";
+import { montarWhatsappUrl, numeroWhatsAppDaVitrine, somenteTexto } from "./widgetData.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Chamada para ação.
@@ -26,7 +27,15 @@ export function ehWhatsApp(url) {
 
 export function CtaWidget({ widget }) {
   const cor = widget.color ? { color: widget.color } : undefined;
-  const whats = ehWhatsApp(widget.ctaUrl);
+  const dados = useDadosDaVitrine();
+  /* Vazio ou "https://wa.me/" sem número = o WhatsApp da imobiliária, lido do
+     cadastro (ver `numeroWhatsAppDaVitrine`). Endereço próprio passa intacto. */
+  const href = montarWhatsappUrl(
+    widget.ctaUrl,
+    `Olá! Vi "${somenteTexto(widget.title) || "a vitrine"}" e quero mais informações.`,
+    numeroWhatsAppDaVitrine(dados),
+  );
+  const whats = ehWhatsApp(href);
 
   return (
     <div className="widget-cta-box">
@@ -39,7 +48,7 @@ export function CtaWidget({ widget }) {
       />
       {widget.ctaLabel ? (
         <ShowcaseLinkExterno
-          href={widget.ctaUrl || "#"}
+          href={href || "#"}
           className="widget-cta-button"
           style={whats ? { background: "#25D366", display: "inline-flex", alignItems: "center", gap: "10px", boxShadow: "0 8px 22px rgba(37,211,102,0.4)" } : undefined}
         >

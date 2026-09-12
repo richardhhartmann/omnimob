@@ -76,6 +76,14 @@ const Grainient = lazy(() => import("./Grainient.jsx"));
 
    O tom do super-admin puxa para o violeta pelo mesmo motivo de sempre: é a
    única pista, antes de digitar, de que esta não é a porta do cliente. */
+/* A máscara por cima do fluido, uma por tom. São vetores gerados de
+   `design/mascara_login*.png` por `npm run mascara` — editar o PNG e rodar o
+   script é o caminho; o SVG não se edita à mão. */
+const MASCARAS = {
+  cliente: "/mascara_login.svg",
+  admin: "/mascara_login_admin.svg",
+};
+
 const TONS = {
   cliente: { c1: "#ebab97", c2: "#6d48ff", c3: "#B497CF" },
   admin: { c1: "#ffb69f", c2: "#4c1d95", c3: "#a78bfa" },
@@ -182,6 +190,14 @@ export function CascaDeAcesso({
             />
           </Suspense>
         ) : null}
+        {/* A máscara por cima do fluido. É o fundo da tela (#0b0d14) em quatro
+            níveis de transparência, recortado em formas orgânicas: onde é opaca,
+            o fluido some e a arte se funde à coluna do acesso; onde é
+            transparente, ele aparece inteiro. Os degraus intermediários são o
+            que dá a leitura de camadas — e é por isso que ela fica POR CIMA, e
+            não no lugar dele. Vale também para quem não monta o shader: ali
+            ela cobre o degradê parado, com o mesmo desenho. */}
+        <img src={MASCARAS[tom] || MASCARAS.cliente} alt="" className="ax-mascara" draggable="false" />
       </section>
     </div>
   );
@@ -234,7 +250,9 @@ const CSS = `
   --line-soft: rgba(255,255,255,0.07);
   position: relative;
   display: grid;
-  grid-template-columns: 40% 100%;
+  /* So o acesso e coluna. O fluido e absoluto e comeca DEBAIXO dela — ver
+     .ax-fluido — por isso a segunda coluna fica vazia. */
+  grid-template-columns: 40% 1fr;
   /* dvh, com vh de reserva para quem nao conhece a unidade: no celular, 100vh
      conta a barra de endereco que ainda esta na tela, e a tela de acesso
      nascia um naco mais alta que a janela so por causa disso. */
@@ -291,11 +309,12 @@ const CSS = `
 
 /* ── Seção 1: o acesso ── */
 .ax-acesso {
-  position: relative; min-width: 0;
+  position: relative; min-width: 0; z-index: 1;
   display: flex; align-items: center; justify-content: center;
   padding: 104px 48px 56px;
   min-height: 100vh; min-height: 100dvh;
-  background: var(--bg);
+  /* Sem fundo proprio: o fundo e o da raiz, e e sobre ele que a faixa escura
+     da mascara se funde. Um fundo aqui cortaria o fluido numa reta de novo. */
 }
 /* Um brilho de canto só para o preto não ficar morto. Discreto de propósito: o
    efeito de verdade é do outro lado. */
@@ -426,8 +445,29 @@ const CSS = `
 }
 .ax-root .ax-codigo::placeholder { letter-spacing: 0.24em; }
 
-/* ── Seção 2: o fluido ── */
-.ax-fluido { position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden; }
+/* ── Seção 2: o fluido ──
+   Absoluto, comecando a 30% — DENTRO da coluna do acesso, atras dela. A borda
+   esquerda dele fica assim debaixo da faixa opaca da mascara, e nao na mesma
+   linha que a borda da mascara: coincidindo, qualquer arredondamento de
+   subpixel deixava uma fresta de um pixel do fundo roxo, uma linha vertical
+   visivel na emenda. Mede 100vw de largura, como a coluna antiga media, para o
+   shader continuar com o mesmo enquadramento; o que passa da janela e cortado
+   pelo overflow da raiz (.dl-root). */
+.ax-fluido {
+  position: absolute; top: 0; bottom: 0; left: 30%; width: 100vw;
+  overflow: hidden; z-index: 0;
+}
+/* A mascara e dimensionada pelo VISIVEL (70vw), senao o canto claro dela — o
+   que mais importa — cairia fora da janela. Esticada, e nao cortada: as
+   formas sao organicas e aguentam, e cortar tiraria o canto ou a faixa escura
+   que a funde a coluna do acesso. Um pixel a mais de cada lado por causa do
+   mesmo arredondamento. */
+.ax-mascara {
+  position: absolute; top: -1px; left: -1px;
+  width: calc(70vw + 2px); height: calc(100% + 2px);
+  object-fit: fill; pointer-events: none; user-select: none;
+  z-index: 1;
+}
 
 /* ── Abaixo de 900px ──
    A metade do fluido some e o acesso ocupa a tela. Nada muda de lugar: e a

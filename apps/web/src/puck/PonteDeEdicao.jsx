@@ -298,6 +298,22 @@ function useSelecionarAoClicar(raiz, pegarPuck) {
       const seletor = getSelectorForId(peca.getAttribute("data-puck-component"));
       if (!seletor) return;
 
+      /* ── BOTÃO DENTRO DA PEÇA PRECISA CONTINUAR SENDO BOTÃO ──────────────
+         Este ouvinte está na CAPTURA, acima do nó raiz do React dentro do
+         iframe; um `stopPropagation` aqui mata o evento antes de ele chegar ao
+         `onClick` do React. Era isso que deixava "+ Etapa", "+ Região",
+         "+ Destaque" e os "×" inertes: o clique selecionava a peça e morria.
+
+         Para alvo interativo o clique segue vivo, e a seleção é adiada para
+         depois de o canvas do Puck reagir — ele limpa a seleção no mesmo
+         gesto, e selecionar antes seria selecionar para nada. Para texto e
+         fundo, o comportamento de sempre: seleciona e interrompe. */
+      const interativo = evento.target?.closest?.("button, a, input, textarea, select, label, [role='button']");
+      if (interativo) {
+        setTimeout(() => dispatch({ type: "setUi", ui: { itemSelector: seletor } }), 0);
+        return;
+      }
+
       dispatch({ type: "setUi", ui: { itemSelector: seletor } });
       evento.stopPropagation();
     };
@@ -481,6 +497,7 @@ function useArrastarAoLado(raiz, pegarPuck) {
             deFora: true,
             x: evento.clientX,
             y: evento.clientY,
+            altura: 0,
           };
           return;
         }
@@ -530,7 +547,8 @@ function useArrastarAoLado(raiz, pegarPuck) {
         ? peca.getAttribute("data-puck-component")
         : pegarPuck().selectedItem?.props?.id || null;
       gesto = id
-        ? { origem: "canvas", id, copia: copiaLimpa(id), deFora: false, x: evento.clientX, y: evento.clientY }
+        ? { origem: "canvas", id, copia: copiaLimpa(id), deFora: false, x: evento.clientX, y: evento.clientY,
+            altura: doc.querySelector(`[data-puck-component="${id}"]`)?.getBoundingClientRect().height || 0 }
         : null;
     };
 
@@ -567,18 +585,35 @@ function useArrastarAoLado(raiz, pegarPuck) {
         const dentro = ponto.x >= r.left && ponto.x <= r.right && ponto.y >= r.top && ponto.y <= r.bottom;
         if (dentro) {
           const ladoAgora = ladoDoPonteiro(r, ponto.x);
-          /* Foi para o MEIO da peça: a pessoa desistiu de pôr ao lado. */
-          if (!ladoAgora) { desistir(); return; }
-          if (ladoAgora !== mira.lado) {
-            mira.lado = ladoAgora;
-            anotarIntencao(mira.alvoId, ladoAgora);
-            previa.colunas(mira.el, ladoAgora, mira.arrastadaEl, mira.nome, mira.rect, mira.copia);
+          if (mira.modo === "empilhar") {
+            /* Foi para a faixa lateral: vira colunas — solta a trava e deixa
+               o teste de acerto abaixo montar a outra prévia. */
+            if (ladoAgora) { desistir(); }
+            else {
+              const posicaoAgora = ponto.y < r.top + r.height / 2 ? "antes" : "depois";
+              if (posicaoAgora !== mira.posicao) {
+                mira.posicao = posicaoAgora;
+                previa.empilhar(mira.el, posicaoAgora, mira.arrastadaEl, mira.nome, mira.rect, mira.copia, mira.altura);
+              }
+              return;
+            }
+          } else {
+            /* Foi para o MEIO da peça: a pessoa desistiu de pôr ao lado. */
+            if (!ladoAgora) { desistir(); }
+            else {
+              if (ladoAgora !== mira.lado) {
+                mira.lado = ladoAgora;
+                anotarIntencao(mira.alvoId, ladoAgora);
+                previa.colunas(mira.el, ladoAgora, mira.arrastadaEl, mira.nome, mira.rect, mira.copia);
+              }
+              return;
+            }
           }
-          return;
+        } else {
+          /* Saiu da caixa: solta a trava e deixa o teste de acerto decidir de
+             novo, já com o layout de volta ao normal. */
+          desistir();
         }
-        /* Saiu da caixa: solta a trava e deixa o teste de acerto decidir de
-           novo, já com o layout de volta ao normal. */
-        desistir();
       }
 
       /* ── QUEM ESTÁ SOB O PONTEIRO, POR GEOMETRIA E NÃO POR TESTE DE ACERTO ──
@@ -612,13 +647,26 @@ function useArrastarAoLado(raiz, pegarPuck) {
       const rect = peca.getBoundingClientRect();
       const lado = ladoDoPonteiro(rect, ponto.x);
 
-      /* Fora da faixa lateral, quem manda é o Puck.
+      /* Fora da faixa lateral: vai EMPILHAR. A prévia abre a vaga acima ou
+         abaixo do alvo e põe a cópia da arrastada nela — a ordem nova, antes
+         de soltar. Quem grava a ordem continua sendo o Puck: aqui só se
+         mostra. (A versão antiga contornava o alvo e cobria a linha dele; esta
+         não cobre nada, abre espaço.)
 
-         Houve aqui uma prévia de "vai empilhar", com contorno e etiqueta. Ela
-         cobria a peça e DISPUTAVA com o indicador de linha que a biblioteca já
-         desenha — reordenar ficou difícil, porque a marca certa ficava
-         escondida atrás da nossa. */
-      if (!lado) { desistir(); return; }
+         A arrastada de dentro da mesma pilha, mirando o vizinho imediato do
+         lado de onde ela já está, seria uma vaga que não muda nada — pula. */
+      if (!lado) {
+        limparIntencao();
+        const posicao = ponto.y < rect.top + rect.height / 2 ? "antes" : "depois";
+        const arrastadaEl = gesto.origem === "gaveta" ? null : doc.querySelector(`[data-puck-component="${gesto.id}"]`);
+        const vizinho = arrastadaEl && (posicao === "antes" ? peca.previousElementSibling : peca.nextElementSibling);
+        if (vizinho === arrastadaEl) { desistir(); return; }
+        const nome = gesto.origem === "gaveta" ? gesto.rotulo : nomeDaPeca(gesto.id);
+        const altura = gesto.altura || 120;
+        mira = { modo: "empilhar", alvoId, posicao, rect, el: peca, arrastadaEl, nome, copia: gesto.copia, altura };
+        previa.empilhar(peca, posicao, arrastadaEl, nome, rect, gesto.copia, altura);
+        return;
+      }
 
       /* Peça vinda da gaveta ainda não existe no documento: não há par para
          conferir, e a única recusa possível é a seção cheia — que a própria
@@ -645,7 +693,7 @@ function useArrastarAoLado(raiz, pegarPuck) {
 
       /* A caixa é guardada AGORA, antes de encolher: é ela que vai responder
          "o ponteiro ainda está sobre o alvo?" pelo resto do gesto. */
-      mira = { alvoId, lado, rect, el: peca, arrastadaEl, nome, copia: gesto.copia };
+      mira = { modo: "colunas", alvoId, lado, rect, el: peca, arrastadaEl, nome, copia: gesto.copia };
       previa.colunas(peca, lado, arrastadaEl, nome, rect, gesto.copia);
     };
 

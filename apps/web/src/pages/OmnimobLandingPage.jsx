@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { WhatsappMarca } from "../utils/marcasDeRede.jsx";
 import { Link } from "react-router-dom";
 import { useSeo } from "../utils/seo";
+import { useEsquemaDaOmnimob } from "../utils/esquemaDaOmnimob";
 import { EfeitosProvider, SeletorDeEfeitos, useEfeitos } from "../components/Efeitos.jsx";
 import { Iridescencia } from "../components/Iridescencia.jsx";
 import { StaggeredMenu } from "../components/StaggeredMenu.jsx";
@@ -3351,6 +3352,9 @@ function ConteudoDaLanding() {
      React Router não recarrega a página) precisa que elas voltem ao valor da
      home. Sem isto, sair de uma vitrine e voltar deixaria o título da
      imobiliária na aba. */
+  // A Omnimob como empresa e produto (Organization/WebSite/SoftwareApplication).
+  useEsquemaDaOmnimob();
+
   useSeo({
     titulo: "Omnimob — Sua imobiliária, em movimento.",
     descricao:
@@ -3699,9 +3703,13 @@ function ConteudoDaLanding() {
       {/* A única seção CLARA da página. Não leva `dl-wrap` nem `SectionHead`: o
           manifesto traz o próprio invólucro e o próprio cabeçalho, porque a
           escala da frase e o alinhamento à esquerda não são os da página. */}
+      {/* O rasgo de papel que sobe sobre a seção escura anterior — ver .dl-rasgo. */}
+      <div className="dl-rasgo" aria-hidden="true" />
       <section className="dl-section dl-section--claro" id="modulos">
         <ManifestoDoFlow />
       </section>
+      {/* E o rasgo de baixo, que desce sobre a seção escura seguinte. */}
+      <div className="dl-rasgo dl-rasgo--baixo" aria-hidden="true" />
 
       {/* ── Destaques: parede à deriva no fundo da seção inteira ──
           O conteúdo fica por cima da parede, não ao lado dela — por isso a
@@ -5934,7 +5942,62 @@ ${editorCSS()}
   color: var(--default);
   position: relative;
   overflow: hidden;
+  /* A borda fina de cima sai: quem faz a fronteira agora e o rasgo. */
+  border-top: 0;
 }
+
+/* ── O rasgo de papel ────────────────────────────────────────────────────────
+   A secao clara entra na pagina escura como uma folha rasgada por cima dela,
+   e nao como um retangulo branco. A imagem (public/ripped_paper.png, 4956x738)
+   e transparente acima da borda rasgada e branca abaixo. So os 420 primeiros
+   pixels dela se desenham: e onde a folha fecha de vez (as fibras do rasgo
+   descem ate ~390, e cortar antes disso deixava o rasgo terminar numa reta).
+   Dali para baixo a imagem e branco liso, e a propria secao ja e branca — o
+   encontro dos dois nao tem emenda.
+
+   Fica FORA da secao, e nao num ::before dela, porque a secao esconde o
+   overflow para recortar as formas que giram, e recortaria o rasgo junto. E
+   um irmao que sobe um pouco sobre a secao anterior com margem negativa —
+   pouco: 3% da largura cabe dentro do respiro de baixo dela, e subir a faixa
+   inteira cobria a ultima fila de cartoes das integracoes. A margem em
+   porcentagem e relativa a LARGURA do pai, a mesma conta da altura
+   (420/4956 e a proporcao da parte que se desenha).
+
+   (Sem crases neste comentario — este CSS mora dentro de um template literal.) */
+.dl-rasgo {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  width: 100%;
+  aspect-ratio: 4956 / 430;
+  margin-top: -3%;
+  /* A altura e fracionaria (largura x 420/4956), e a ultima linha de pixels
+     saia meio coberta: branco pela metade sobre o escuro e uma linha cinza na
+     emenda. Com a faixa entrando 4px na secao, a borda fracionaria cai em
+     branco sobre branco, onde nao existe. */
+  margin-bottom: -4px;
+  /* 102%, e nao 100%: as tres primeiras e as seis ultimas colunas da imagem
+     sao transparentes, e na largura exata elas viravam uma fresta escura nas
+     bordas da tela. Esticada 1% para cada lado, essas colunas caem fora. A
+     altura desenhada sobe de 420 para 430 na mesma proporcao. */
+  background: url(/ripped_paper.png) top center / 102% auto no-repeat;
+}
+
+/* O rasgo de BAIXO da mesma folha (public/ripped_paper_bottom.png, 4921x623):
+   opaco em cima, rasgado da linha ~270 para baixo. Mesma mecanica espelhada —
+   desenha os 370px de baixo, ancorados no fundo, entra 4px na secao clara
+   (branco sobre branco, pela borda fracionaria) e desce 3% sobre a secao
+   escura seguinte. As bordas laterais desta imagem sao opacas, entao 100% de
+   largura basta. */
+.dl-rasgo--baixo {
+  aspect-ratio: 4921 / 370;
+  margin-top: -4px;
+  margin-bottom: -3%;
+  background: url(/ripped_paper_bottom.png) bottom center / 100% auto no-repeat;
+}
+/* A secao logo depois herda a linha fina de cima de .dl-section; atraves da
+   parte transparente do rasgo ela apareceria como uma reta. */
+.dl-rasgo--baixo + .dl-section { border-top: 0; }
 
 .dl-manifesto {
   position: relative;
@@ -7989,6 +8052,13 @@ ${editorCSS()}
   --pad-sec: clamp(66px, 7.6vw, 106px);
 }
 
+/* Integracoes e a secao que o rasgo de papel (.dl-rasgo) invade por baixo. O
+   respiro inferior dobra para a ultima fila de cartoes nao ficar encostada
+   no rasgo — so embaixo; em cima a cadencia continua a do miolo. */
+#integracoes {
+  padding-bottom: calc(var(--pad-sec) * 3);
+}
+
 /* Os cabecalhos do miolo ficam um pouco mais contidos. O Hero, o Manifesto e
    o CTA final continuam fora desta regra e preservam a escala de campanha. */
 #recursos .dl-head,
@@ -8104,7 +8174,10 @@ ${editorCSS()}
 /* ── INTEGRACOES: DE NOVE MINI-HEROS PARA UMA GRADE DE CONSULTA ─────────── */
 @media (min-width: 861px) {
   #integracoes .cn-grade {
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    /* Seis por fila, fixo: sao doze cartoes, e com auto-fit a grade fechava em
+       sete e cinco — a segunda fila curta parecia sobra. Abaixo de 861px volta
+       o auto-fit da regra geral. */
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 9px;
     margin-top: clamp(16px, 2.3vw, 26px);
   }

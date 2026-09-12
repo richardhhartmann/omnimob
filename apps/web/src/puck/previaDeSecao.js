@@ -12,10 +12,12 @@
                largura deslizando para um lado, e a peça arrastada pula do
                ponteiro para o espaço que abriu, translúcida. É a seção
                acontecendo antes de existir, e não um desenho dela.
-     (empilhar) não tem prévia nossa: o Puck já desenha a linha de onde a peça
-               vai cair. Houve uma aqui, e ela cobria a peça e disputava com a
-               linha dele — reordenar ficou difícil justamente porque a marca
-               certa ficava escondida atrás da nossa.
+     empilhar  a página ABRE ESPAÇO: o alvo desliza (margem animada) e a peça
+               arrastada pula para a vaga, translúcida, em cima ou embaixo dele
+               conforme a metade em que o ponteiro está. É o mesmo desenho das
+               colunas, na vertical — a pessoa vê a ordem nova antes de soltar.
+               (Houve uma versão que só contornava o alvo; cobria a peça e
+               disputava com a linha do Puck. Esta não cobre nada: abre.)
      recusa    uma moldura em tom de aviso, com o MOTIVO. Soltar e nada mudar é
                indistinguível de defeito: a pessoa repete o gesto e nunca
                descobre que o limite era de quatro colunas.
@@ -125,7 +127,8 @@ export function criarPreviaDeSecao(raiz) {
     }
     if (clone) { clone.remove(); clone = null; }
     if (alvoVestido) {
-      alvoVestido.classList.remove("puck-encolhe", "is-esquerda", "is-direita");
+      alvoVestido.classList.remove("puck-encolhe", "is-esquerda", "is-direita", "puck-abre", "is-antes", "is-depois");
+      alvoVestido.style.removeProperty("--abre");
       alvoVestido = null;
     }
     if (arrastadaApagada) {
@@ -260,6 +263,73 @@ export function criarPreviaDeSecao(raiz) {
         clone.style.left = `${caixaDoAlvo.left - base.left + (lado === "esquerda" ? 0 : metade)}px`;
         clone.style.width = `${metade}px`;
         clone.style.height = "auto";
+        clone.classList.add("is-posto");
+      };
+      requestAnimationFrame(desenhar);
+    },
+
+    /**
+     * A pilha acontecendo: o alvo desliza para abrir a vaga, e a arrastada pula
+     * para ela.
+     *
+     * @param {HTMLElement} alvo             a peça acima/abaixo da qual a arrastada entra
+     * @param {"antes"|"depois"} posicao     onde a vaga abre
+     * @param {HTMLElement|null} arrastada   a peça na mão, quando já existe
+     * @param {string} nome                  como chamá-la quando não existe
+     * @param {DOMRect} caixaDoAlvo          a caixa do alvo ANTES de deslizar
+     * @param {number} altura                a altura da vaga (a da arrastada)
+     */
+    empilhar(alvo, posicao, arrastada, nome, caixaDoAlvo, copiaPronta, altura) {
+      caixa.hidden = true;
+      if (alvoVestido && alvoVestido !== alvo) desvestir();
+      const vaga = Math.max(48, Math.round(altura || 0));
+      if (alvoVestido !== alvo) {
+        alvo.classList.add("puck-abre");
+        alvoVestido = alvo;
+      }
+      alvo.style.setProperty("--abre", `${vaga}px`);
+      alvo.classList.toggle("is-antes", posicao === "antes");
+      alvo.classList.toggle("is-depois", posicao !== "antes");
+
+      esconderFantasmaDoPonteiro();
+
+      if (arrastada && arrastadaApagada !== arrastada) {
+        if (arrastadaApagada) {
+          arrastadaApagada.classList.remove("puck-fantasma");
+          arrastadaApagada.style.removeProperty("opacity");
+        }
+        arrastada.classList.add("puck-fantasma");
+        arrastada.style.setProperty("opacity", "0", "important");
+        arrastadaApagada = arrastada;
+      }
+
+      if (!clone) {
+        clone = doc.createElement("div");
+        clone.className = "puck-clone";
+        raiz.appendChild(clone);
+      }
+      const assinatura = arrastada ? arrastada.getAttribute("data-puck-component") : `nome:${nome}`;
+      if (clone.dataset.de !== assinatura) {
+        clone.dataset.de = assinatura;
+        clone.innerHTML = "";
+        if (copiaPronta) clone.appendChild(copiaPronta.cloneNode(true));
+        else {
+          const etiqueta = doc.createElement("span");
+          etiqueta.className = "puck-clone__nome";
+          etiqueta.textContent = nome || "a peça nova";
+          clone.appendChild(etiqueta);
+        }
+      }
+
+      /* A vaga: em cima, ela fica onde o alvo ESTAVA (ele desce); embaixo,
+         logo depois dele. Largura do alvo, altura da arrastada. */
+      const desenhar = () => {
+        if (!clone || alvoVestido !== alvo) return;
+        const base = raiz.getBoundingClientRect();
+        clone.style.left = `${caixaDoAlvo.left - base.left}px`;
+        clone.style.width = `${caixaDoAlvo.width}px`;
+        clone.style.top = `${(posicao === "antes" ? caixaDoAlvo.top : caixaDoAlvo.bottom) - base.top}px`;
+        clone.style.height = `${vaga}px`;
         clone.classList.add("is-posto");
       };
       requestAnimationFrame(desenhar);

@@ -255,7 +255,9 @@ test("rodapé desenha igual nos dois modos", () => {
 
 test("links navegam na vitrine e não navegam no editor", () => {
   const cta = <ShowcaseWidget widget={widgetDeTeste("cta")} />;
-  assert.match(desenhar(cta, "public"), /href="https:\/\/wa\.me\/5511999999999"/, "a vitrine precisa levar ao destino");
+  /* O destino leva a mensagem de abertura junto (`montarWhatsappUrl`); o que
+     importa é o NÚMERO do widget estar lá. */
+  assert.match(desenhar(cta, "public"), /href="https:\/\/wa\.me\/5511999999999[?"]/, "a vitrine precisa levar ao destino");
   assert.doesNotMatch(desenhar(cta, "editor"), /href=/, "no editor nenhum link pode navegar");
 
   const cartao = <ShowcasePropertyCard property={{ id: "p1", title: "T", price: 1, images: [] }} tenantSlug="x" />;

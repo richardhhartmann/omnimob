@@ -252,6 +252,14 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
     }
   };
 
+  /* O mesmo selo que a vitrine mostra, para a lista dizer o que a vitrine vai
+     fazer — quem marcou "destaque" no cadastro precisa enxergar isso daqui. */
+  const SeloDestaque = () => (
+    <span title="Aparece antes dos outros na vitrine" style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "#1a1a1a", background: "var(--tenant-secondary, #d4af37)", padding: "2px 8px", borderRadius: "999px" }}>
+      Destaque
+    </span>
+  );
+
   const getStatusLabel = (status) => {
     switch (status) {
       case "ACTIVE": return "Ativo";
@@ -411,6 +419,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                           {property.propertyType || "Não definido"}
                         </span>
                         <ContratoBadge tipoContrato={property.tipoContrato} size="sm" />
+                        {property.destaque ? <SeloDestaque /> : null}
                       </div>
                       <h3 style={{ fontSize: "20px", margin: 0, fontWeight: "600", lineHeight: "1.3", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {property.title}
@@ -421,7 +430,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     </span>
                   </div>
 
-                  <p style={{ fontSize: "24px", fontWeight: "700", color: "#fff", marginBottom: "20px" }}>
+                  <p className="lista-preco">
                     R$ {Number(property.price).toLocaleString("pt-BR")}
                   </p>
 
@@ -435,20 +444,20 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                     </span>
                   </div>
 
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 16px", padding: "16px 0", borderTop: "1px solid var(--linha-10, rgba(255,255,255,0.1))", borderBottom: "1px solid var(--linha-10, rgba(255,255,255,0.1))", marginBottom: "20px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#e2e8f0" }} title="Quartos">
+                  <div className="lista-fichas">
+                    <div className="lista-ficha" title="Quartos">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22v-8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" /><path d="M7 22v-2" /><path d="M17 22v-2" /><path d="M5 12V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5" /></svg>
                       <strong>{property.bedrooms ?? 0}</strong>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#e2e8f0" }} title="Suítes">
+                    <div className="lista-ficha" title="Suítes">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                       <strong>{property.suites ?? 0}</strong>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#e2e8f0" }} title="Vagas">
+                    <div className="lista-ficha" title="Vagas">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg>
                       <strong>{property.parkingSpots ?? 0}</strong>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#e2e8f0" }} title="Metragem">
+                    <div className="lista-ficha" title="Metragem">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><path d="M9 9h6v6H9z"/></svg>
                       <strong>{property.squareFootage || "-"}</strong>
                     </div>
@@ -458,7 +467,7 @@ export function PropertyList({ properties = [], onDelete, onToggleStatus, onEdit
                 {/* Footer com badges sociais + ações.
                     Sem os selos sobra um filho só, e `space-between` jogaria as
                     ações para a esquerda — daí o alinhamento mudar junto. */}
-                <div style={{ padding: "12px 24px", background: "rgba(0,0,0,0.2)", display: "flex", justifyContent: mostraRedes ? "space-between" : "flex-end", alignItems: "center", flexWrap: "wrap", gap: "10px 8px", borderTop: "1px solid var(--linha-05, rgba(255,255,255,0.05))" }}>
+                <div className="lista-rodape" style={{ justifyContent: mostraRedes ? "space-between" : "flex-end" }}>
                   {mostraRedes && <SocialBadges publications={property.publications} />}
                   <div style={{ display: "flex", gap: "8px" }}>
                     {canPublish && (

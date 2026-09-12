@@ -105,6 +105,10 @@ const EMPTY = {
      de quem ainda mora lá — e o que permite fechar negócio por fora da
      imobiliária que anunciou. Bairro e cidade continuam aparecendo sempre. */
   exibirEnderecoCompleto: false,
+  /* Ordem na vitrine. Posição em string, como os outros numéricos do
+     formulário: vazio é "automático" e vira `null` ao salvar. */
+  destaque: false,
+  ordemVitrine: "",
   status: "ACTIVE",
   comodidades: { ...EMPTY_COMODIDADES },
 };
@@ -1746,6 +1750,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
       // ausência do campo (imóvel salvo antes desta opção existir) conta como
       // desmarcado, e não como marcado.
       exibirEnderecoCompleto: initialData.exibirEnderecoCompleto === true,
+      destaque: initialData.destaque === true,
+      ordemVitrine: initialData.ordemVitrine != null ? String(initialData.ordemVitrine) : "",
       status: initialData.status || "DRAFT",
       comodidades: { ...EMPTY_COMODIDADES, ...(initialData.comodidades || {}) },
     });
@@ -2381,6 +2387,8 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
         publicarPortais: portaisEscolhidos.length > 0,
         portais: portaisEscolhidos,
         exibirEnderecoCompleto: Boolean(form.exibirEnderecoCompleto),
+        destaque: Boolean(form.destaque),
+        ordemVitrine: form.ordemVitrine === "" ? null : Number(form.ordemVitrine),
         status: form.status,
         comodidades: form.comodidades,
         imageFiles: images.map((img) => img.file),
@@ -3395,6 +3403,47 @@ export function PropertyForm({ onSubmit, disabled, initialData, onCancelEdit, lo
                   </span>
                 </div>
               </label>
+
+              {/* ── Ordem na vitrine ───────────────────────────────────────
+                  A grade saía na ordem do banco, e a imobiliária não tinha
+                  como pôr o lançamento ou a exclusividade na frente. Destaque
+                  vai para o topo e ganha selo; a posição ordena o resto. Vazio
+                  é automático (mais novo primeiro), que é o que sempre foi. */}
+              <div style={{
+                display: "flex", alignItems: "flex-start", gap: "14px", padding: "16px 18px", borderRadius: "14px", flexWrap: "wrap",
+                border: form.destaque ? "1px solid rgba(212,175,55,0.5)" : "1px solid var(--linha-08, rgba(255,255,255,0.08))",
+                background: form.destaque ? "rgba(212,175,55,0.08)" : "var(--sup-02, rgba(255,255,255,0.02))",
+                transition: "all 0.2s ease", opacity: disabled ? 0.55 : 1,
+              }}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "14px", flex: "1 1 260px", cursor: disabled ? "not-allowed" : "pointer", userSelect: "none" }}>
+                  <input
+                    type="checkbox"
+                    checked={form.destaque}
+                    onChange={(e) => set("destaque", e.target.checked)}
+                    disabled={disabled}
+                    style={{ accentColor: "#d4af37", width: "16px", height: "16px", flexShrink: 0, marginTop: "2px" }}
+                  />
+                  <div>
+                    <span style={{ fontSize: "14px", fontWeight: "500" }}>Destacar na vitrine</span>
+                    <span style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.5 }}>
+                      Aparece antes de todos os outros, com o selo "Destaque" na foto.
+                    </span>
+                  </div>
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: "4px", flex: "0 0 150px" }}>
+                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Posição na grade</span>
+                  <input
+                    value={form.ordemVitrine}
+                    onChange={(e) => set("ordemVitrine", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    disabled={disabled}
+                    placeholder="Automática"
+                    inputMode="numeric"
+                    maxLength={4}
+                    style={{ padding: "8px 10px", borderRadius: "8px", fontSize: "13px", background: "var(--sup-04, rgba(255,255,255,0.04))", border: "1px solid var(--linha-10, rgba(255,255,255,0.1))", color: "inherit" }}
+                  />
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>1 = primeiro. Vazio segue a ordem de cadastro.</span>
+                </label>
+              </div>
             </>
           )}
 

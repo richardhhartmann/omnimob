@@ -66,10 +66,14 @@ export function ShowcasePropertyCard({ property: p, tenantSlug, carouselIndex = 
               da obra) e o de tipo de contrato eram os dois posicionados no alto
               à direita — e todo imóvel novo COM tipo de contrato, que é o caso
               comum, publicava os dois empilhados, um tapando o outro. */}
-          {lancamento ? (
+          {/* Destaque é escolha da imobiliária e vence os selos automáticos
+              na mesma quina: ela pediu para chamar atenção para ESTE. */}
+          {p.destaque ? (
+            <span className="featured-badge is-status is-destaque">Destaque</span>
+          ) : lancamento ? (
             <span className="featured-badge is-status is-lancamento">Lançamento</span>
           ) : null}
-          {!lancamento && andamento ? <span className="featured-badge is-status">{andamento}</span> : null}
+          {!p.destaque && !lancamento && andamento ? <span className="featured-badge is-status">{andamento}</span> : null}
           {contrato ? (
             <span
               className="featured-badge is-contrato"

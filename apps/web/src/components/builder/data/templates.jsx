@@ -1,4 +1,5 @@
 import { DEFAULT_LAYOUT, DEFAULT_MOBILE_LAYOUT } from "../../../utils/showcaseConfig";
+import { PreviaDoModelo } from "./PreviaDoModelo.jsx";
 import {
   DADOS_BUSCA_PADRAO,
   DADOS_EQUIPE_PADRAO,
@@ -54,12 +55,21 @@ const tplLayout = (titleH, footerY) => ({
   footer: { ...DEFAULT_LAYOUT.footer, y: footerY },
 });
 
+/* Cada modelo traz também a IDENTIDADE DE LAYOUT — zebra, largura da página,
+   largura das peças e espaçamentos —, e não só as peças e as cores. Dois
+   modelos com as mesmas peças em ordens diferentes ainda pareciam o mesmo
+   site; o respiro e a largura são o que faz o "Luxo" ler como luxo (largo,
+   arejado) e o "Compacta" como compacta (justo, sem zebra). São os mesmos
+   campos do inspetor da página, então quem escolhe o modelo pode ajustar
+   depois, peça a peça. */
 export const BUILDER_TEMPLATES = [
   {
     id: "classico", name: "Clássico", desc: "Busca 1/1, dupla 1/2 e trio 1/3",
     primaryColor: "#6366f1", secondaryColor: "#d4af37",
     config: {
-      appearanceMode: "dark", globalFont: "Inter",
+      appearanceMode: "dark",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: true,  larguraLivre: false, larguraDasPecas: 100, espacamento: { interno: 0,  externo: 8 }, globalFont: "Inter",
       layout: tplLayout(260, 3190), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: {}, highlightStyles: EMPTY_HL,
       widgets: [
@@ -75,7 +85,9 @@ export const BUILDER_TEMPLATES = [
     id: "editorial", name: "Editorial", desc: "Narrativa 1/1 com dupla de decisão 1/2",
     primaryColor: "#2563eb", secondaryColor: "#0ea5e9",
     config: {
-      appearanceMode: "light", globalFont: "Playfair Display",
+      appearanceMode: "light",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: false, larguraLivre: false, larguraDasPecas: 100, espacamento: { interno: 12, externo: 16 }, globalFont: "Playfair Display",
       layout: tplLayout(300, 3020), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: {}, highlightStyles: EMPTY_HL,
       widgets: [
@@ -90,7 +102,9 @@ export const BUILDER_TEMPLATES = [
     id: "luxo", name: "Luxo", desc: "Busca ampla e faixa premium em 1/3",
     primaryColor: "#7c3aed", secondaryColor: "#d4af37",
     config: {
-      appearanceMode: "dark", globalFont: "Playfair Display",
+      appearanceMode: "dark",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: true,  larguraLivre: true,  larguraDasPecas: 90,  espacamento: { interno: 16, externo: 24 }, globalFont: "Playfair Display",
       layout: tplLayout(280, 3020), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: { title: tplBlock("rgba(124,58,237,0.08)") },
       highlightStyles: [
@@ -110,7 +124,9 @@ export const BUILDER_TEMPLATES = [
     id: "minimal", name: "Minimalista", desc: "Poucas linhas, com trio funcional em 1/3",
     primaryColor: "#334155", secondaryColor: "#64748b",
     config: {
-      appearanceMode: "light", globalFont: "Montserrat",
+      appearanceMode: "light",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: false, larguraLivre: false, larguraDasPecas: 100, espacamento: { interno: 0,  externo: 32 }, globalFont: "Montserrat",
       layout: tplLayout(300, 2940), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: {}, highlightStyles: EMPTY_HL,
       widgets: [
@@ -125,7 +141,9 @@ export const BUILDER_TEMPLATES = [
     id: "natureza", name: "Natureza", desc: "Região 1/2 e serviços organizados em 1/3",
     primaryColor: "#16a34a", secondaryColor: "#ca8a04",
     config: {
-      appearanceMode: "dark", globalFont: "Merriweather",
+      appearanceMode: "dark",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: true,  larguraLivre: false, larguraDasPecas: 100, espacamento: { interno: 8,  externo: 12 }, globalFont: "Merriweather",
       layout: tplLayout(260, 2960), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: { highlights: tplBlock("rgba(22,163,74,0.08)") }, highlightStyles: EMPTY_HL,
       widgets: [
@@ -140,7 +158,9 @@ export const BUILDER_TEMPLATES = [
     id: "vibrante", name: "Vibrante", desc: "Faixa compacta em 1/4 para mostrar densidade",
     primaryColor: "#0d9488", secondaryColor: "#06b6d4",
     config: {
-      appearanceMode: "dark", globalFont: "Raleway",
+      appearanceMode: "dark",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: true,  larguraLivre: true,  larguraDasPecas: 100, espacamento: { interno: 8,  externo: 8 }, globalFont: "Raleway",
       layout: tplLayout(280, 2930), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: {},
       highlightStyles: [
@@ -160,7 +180,9 @@ export const BUILDER_TEMPLATES = [
     id: "conversao", name: "Conversão", desc: "Busca forte, 1/2 de contexto e 1/3 de prova",
     primaryColor: "#4f46e5", secondaryColor: "#22c55e",
     config: {
-      appearanceMode: "light", globalFont: "Inter",
+      appearanceMode: "light",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: false, larguraLivre: false, larguraDasPecas: 100, espacamento: { interno: 12, externo: 20 }, globalFont: "Inter",
       layout: tplLayout(270, 3010), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: { title: tplBlock("rgba(79,70,229,0.06)") }, highlightStyles: EMPTY_HL,
       widgets: [
@@ -175,7 +197,9 @@ export const BUILDER_TEMPLATES = [
     id: "completa", name: "Completa", desc: "Mostra a biblioteca inteira e uma linha 1/4",
     primaryColor: "#1d4ed8", secondaryColor: "#f59e0b",
     config: {
-      appearanceMode: "dark", globalFont: "Montserrat",
+      appearanceMode: "dark",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: true,  larguraLivre: false, larguraDasPecas: 100, espacamento: { interno: 4,  externo: 8 }, globalFont: "Montserrat",
       layout: tplLayout(280, 3770), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: {}, highlightStyles: EMPTY_HL,
       widgets: [
@@ -192,7 +216,9 @@ export const BUILDER_TEMPLATES = [
     id: "compacta", name: "Compacta", desc: "Pouco scroll: 1/1 + 1/3 + CTA",
     primaryColor: "#be123c", secondaryColor: "#f97316",
     config: {
-      appearanceMode: "light", globalFont: "Raleway",
+      appearanceMode: "light",
+      // A identidade de layout do modelo (zebra, largura, espaçamento) — ver `campoZebrado` & cia.
+      zebrado: false, larguraLivre: false, larguraDasPecas: 100, espacamento: { interno: 0,  externo: 4 }, globalFont: "Raleway",
       layout: tplLayout(260, 2610), mobileLayout: { ...DEFAULT_MOBILE_LAYOUT },
       blockStyles: {}, highlightStyles: EMPTY_HL,
       widgets: [
@@ -204,63 +230,10 @@ export const BUILDER_TEMPLATES = [
   },
 ];
 
-function linhasDaMiniatura(widgets) {
-  const grupos = new Map();
-  for (const widget of widgets || []) {
-    const y = Number(widget.y) || 0;
-    const chave = String(y);
-    if (!grupos.has(chave)) grupos.set(chave, []);
-    grupos.get(chave).push(widget);
-  }
-  return Array.from(grupos.entries())
-    .sort((a, b) => Number(a[0]) - Number(b[0]))
-    .map(([, linha]) => linha.slice().sort((a, b) => (a.x || 0) - (b.x || 0)))
-    .slice(0, 5);
-}
 
-/** Miniatura esquemática do template, incluindo as proporções reais das linhas. */
+/* A miniatura de um modelo. Delegada a `PreviaDoModelo`, que desenha a página
+   a partir do config (e alterna desktop/celular com o mouse em cima) — é a
+   mesma prévia do assistente de boas-vindas e da gaveta do editor novo. */
 export function TemplateThumb({ tpl }) {
-  const dark = tpl.config.appearanceMode !== "light";
-  const bg = dark ? "#0f172a" : "#eef2f7";
-  const surface = dark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.06)";
-  const line = dark ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.18)";
-  const linhas = linhasDaMiniatura(tpl.config.widgets);
-  const bar = (w, h, c, o = 1) => <div style={{ width: w, height: h, borderRadius: 2, background: c, opacity: o }} />;
-
-  return (
-    <div style={{ borderRadius: 8, overflow: "hidden", background: bg, border: `1px solid ${line}`, padding: 7, display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: 3, alignItems: "center" }}>{bar(7, 7, tpl.secondaryColor)}{bar(20, 3, line)}</div>
-        {bar(15, 5, tpl.primaryColor)}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "center", margin: "3px 0" }}>
-        {bar("62%", 4, line)}{bar("44%", 3, line, 0.6)}
-      </div>
-      <div style={{ display: "flex", gap: 3 }}>
-        {[0, 1, 2].map((i) => <div key={i} style={{ flex: 1, height: 7, borderRadius: 3, background: surface }} />)}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3 }}>
-        {[0, 1, 2].map((i) => <div key={i} style={{ height: 13, borderRadius: 3, background: `linear-gradient(135deg, ${tpl.primaryColor}66, ${surface})` }} />)}
-      </div>
-      {linhas.map((widgets, i) => (
-        <div key={i} style={{ position: "relative", height: 7 }}>
-          {widgets.map((widget) => (
-            <div
-              key={widget.id}
-              style={{
-                position: "absolute",
-                left: `${widget.x || 0}%`,
-                width: `${widget.w || 100}%`,
-                height: 7,
-                paddingInline: 1,
-                boxSizing: "border-box",
-              }}
-            >
-              <div style={{ width: "100%", height: "100%", borderRadius: 2, background: i % 2 ? surface : tpl.primaryColor, opacity: i % 2 ? 1 : 0.45 }} />
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
+  return <PreviaDoModelo tpl={tpl} altura={120} />;
 }

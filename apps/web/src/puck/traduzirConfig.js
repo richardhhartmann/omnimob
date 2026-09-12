@@ -226,6 +226,12 @@ export function traduzirParaPuck(showcaseConfig) {
   const root = {
     props: {
       appearanceMode: config.appearanceMode,
+      // Ausente no config = ligado. É o padrão do produto, e vale para toda página antiga.
+      zebrado: config.zebrado === false ? "nao" : "sim",
+      larguraDaPagina: config.larguraLivre === true ? "livre" : "travada",
+      larguraDasPecas: Number(config.larguraDasPecas) || 100,
+      espacoInterno: Number(config.espacamento?.interno) || 0,
+      espacoExterno: Number(config.espacamento?.externo) || 0,
       globalFont: config.globalFont,
       corPrimaria: config.corPrimaria || "",
       corSecundaria: config.corSecundaria || "",

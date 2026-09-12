@@ -1,3 +1,4 @@
+import { HorarioAtendimento, HORARIO_ATENDIMENTO_CSS } from "../components/HorarioAtendimento.jsx";
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams, useNavigate } from "react-router-dom";
 import { GradeDeMenu } from "../components/GradeDeMenu.jsx";
@@ -326,12 +327,13 @@ const EMPTY = {
      digitado dentro da peça — "15 anos de experiência" saía igual para toda
      imobiliária que arrastasse o bloco. */
   fundadaEm: "", horarioAtendimento: [],
+  // Horas até um lead aberto virar "parado". String pelo mesmo motivo de `fundadaEm`.
+  leadParadoHoras: "48",
 };
 
 /* Uma faixa de atendimento em branco. Texto livre no `dias` porque a realidade
    é "Segunda a sexta", "Sábado", "Plantão de domingo" — e sete pares de
    colunas, um por dia da semana, não descrevem nenhuma imobiliária de verdade. */
-const FAIXA_VAZIA = { dias: "", abre: "09:00", fecha: "18:00", fechado: false };
 
 /* ─── Rever o tour ────────────────────────────────────────────────────────────
    Apaga o progresso deste usuário e recarrega. O recarregar não é preguiça: o
@@ -1338,6 +1340,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
           // Número vira string: o input é controlado e `null` o tornaria
           // não-controlado na primeira digitação.
           fundadaEm: t.fundadaEm == null ? "" : String(t.fundadaEm),
+          leadParadoHoras: t.leadParadoHoras == null ? "48" : String(t.leadParadoHoras),
           horarioAtendimento: Array.isArray(t.horarioAtendimento) ? t.horarioAtendimento : [],
         });
         setPlano(t.plano || "BASICO");
@@ -1361,6 +1364,9 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
              "não informado", e `Number("")` é zero — que passaria a valer como
              ano 0 e seria recusado pelo mínimo de 1900. */
           fundadaEm: form.fundadaEm === "" ? null : Number(form.fundadaEm),
+          /* Vazio não vai: o servidor manteria o que tem, e o campo volta ao
+             valor gravado na próxima leitura. */
+          leadParadoHoras: form.leadParadoHoras === "" ? undefined : Number(form.leadParadoHoras),
           /* Faixa sem dia descrito não vai para o servidor. Ela existe no
              formulário porque a pessoa acabou de clicar em "adicionar" e ainda
              não digitou — mandar assim só encheria o banco de linhas mudas. */
@@ -1645,6 +1651,7 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               texto apresentável e um dado que nenhuma outra parte do sistema
               conseguia ler — nem o rodapé, nem uma futura resposta automática
               fora do expediente. Aqui ele vira estrutura. */}
+          <style>{HORARIO_ATENDIMENTO_CSS}</style>
           <Secao cor="#38bdf8" titulo="Horário de atendimento" icone={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -1654,62 +1661,10 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               A vitrine mostra estas faixas e calcula sozinha se você está aberto agora.
             </p>
 
-            {form.horarioAtendimento.length === 0 ? (
-              <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
-                Nenhuma faixa cadastrada — o widget de horários usa o texto escrito no editor de vitrine.
-              </p>
-            ) : null}
-
-            {form.horarioAtendimento.map((faixa, i) => {
-              const trocar = (campo, valor) =>
-                set("horarioAtendimento", form.horarioAtendimento.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)));
-              return (
-                <div key={i} className="cfg-faixa">
-                  <input
-                    style={inputStyle}
-                    value={faixa.dias}
-                    onChange={(e) => trocar("dias", e.target.value)}
-                    placeholder="Ex: Segunda a sexta"
-                  />
-                  {/* Faixa marcada como fechada não tem hora para mostrar, e os
-                      dois campos saem de cena em vez de ficarem desabilitados:
-                      um "09:00 às 18:00" apagado ao lado de "Fechado" é a
-                      contradição que a pessoa lê primeiro. */}
-                  {faixa.fechado ? (
-                    <span className="cfg-faixa__fechado">Sem atendimento</span>
-                  ) : (
-                    <div className="cfg-faixa__horas">
-                      <input style={inputStyle} type="time" value={faixa.abre} onChange={(e) => trocar("abre", e.target.value)} />
-                      <span>às</span>
-                      <input style={inputStyle} type="time" value={faixa.fecha} onChange={(e) => trocar("fecha", e.target.value)} />
-                    </div>
-                  )}
-                  <label className="cfg-faixa__chave">
-                    <input type="checkbox" checked={Boolean(faixa.fechado)} onChange={(e) => trocar("fechado", e.target.checked)} />
-                    Fechado
-                  </label>
-                  <button
-                    type="button"
-                    className="cfg-faixa__remover"
-                    title="Remover faixa"
-                    onClick={() => set("horarioAtendimento", form.horarioAtendimento.filter((_, j) => j !== i))}
-                  >
-                    <IconeX size={13} />
-                  </button>
-                </div>
-              );
-            })}
-
-            {form.horarioAtendimento.length < 8 ? (
-              <button
-                type="button"
-                className="button-secondary"
-                style={{ width: "auto", marginTop: "4px" }}
-                onClick={() => set("horarioAtendimento", [...form.horarioAtendimento, { ...FAIXA_VAZIA }])}
-              >
-                + Adicionar faixa
-              </button>
-            ) : null}
+            <HorarioAtendimento
+              valor={form.horarioAtendimento}
+              aoMudar={(faixas) => set("horarioAtendimento", faixas)}
+            />
           </Secao>
 
           {/* Endereço da vitrine. Fica no Perfil, junto de "Dados da Empresa",
@@ -1765,6 +1720,33 @@ export function ConfiguracaoPage({ session, onSessionUpdate }) {
               </label>
             </Secao>
           ) : null}
+
+          {/* ── Lead parado ──────────────────────────────────────────────────
+              O prazo a partir do qual um lead aberto sem nenhum registro vira
+              alerta — na lista, no contador e no e-mail. É da imobiliária, e
+              não do produto: quem atende em duas horas e quem trabalha
+              lançamento com retorno semanal não cabem no mesmo número. */}
+          <Secao cor="#f87171" titulo="Alerta de lead parado" icone={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+          }>
+            <Campo label="Horas sem atendimento" hint="Um lead aberto sem contato, nota ou mudança de estágio por este tempo aparece como parado e gera um aviso por e-mail para a imobiliária e para o responsável. Padrão: 48 horas.">
+              <input
+                style={{ ...inputStyle, maxWidth: "150px" }}
+                value={form.leadParadoHoras}
+                onChange={(e) => set("leadParadoHoras", e.target.value.replace(/\D/g, "").slice(0, 3))}
+                onBlur={() => {
+                  const n = Number(form.leadParadoHoras);
+                  if (!n || n < 1) set("leadParadoHoras", "1");
+                  else if (n > 720) set("leadParadoHoras", "720");
+                }}
+                placeholder="48"
+                inputMode="numeric"
+                maxLength={3}
+              />
+            </Campo>
+          </Secao>
 
           {/* Fica no Perfil porque é uma preferência de QUEM está logado, não
               da imobiliária: o reinício vale só para o próprio usuário. */}

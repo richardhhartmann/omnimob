@@ -195,6 +195,7 @@ export async function subirApi(routers) {
       get: (c) => pedir("GET", c),
       post: (c, b) => pedir("POST", c, b),
       put: (c, b) => pedir("PUT", c, b),
+      patch: (c, b) => pedir("PATCH", c, b),
       del: (c) => pedir("DELETE", c),
     };
   }

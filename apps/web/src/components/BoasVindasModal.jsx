@@ -6,6 +6,7 @@ import { PLANOS } from "../utils/planos";
 import { IconeCheck, IconeEstrela } from "./Icones.jsx";
 import { PerfilInicialPasso, PERFIL_INICIAL_CSS } from "./PerfilInicialPasso.jsx";
 import { CatalogosPasso, CATALOGOS_CSS } from "./CatalogosPasso.jsx";
+import { ModeloDaVitrinePasso, MODELO_CSS } from "./ModeloDaVitrinePasso.jsx";
 import { DominioVitrine } from "./DominioVitrine.jsx";
 import { lerDoTenant, gravarNoTenant, CHAVES } from "../utils/chaveDoTenant";
 
@@ -145,13 +146,17 @@ function listar(itens) {
   return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
 }
 
-export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarTenant }) {
+export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarTenant, showcaseConfig }) {
   const navigate = useNavigate();
   const [dados, setDados] = useState(null);
   const [modo, setModo] = useState(null); // "assinante" | "teste"
   const [aberto, setAberto] = useState(false);
   const [saindo, setSaindo] = useState(false);
-  /* "boas-vindas" → "perfil" → "dominio" → "dados".
+  /* "boas-vindas" → "perfil" → "catalogos" → "modelo" → "dominio" → "dados".
+
+     O passo do MODELO é o único obrigatório: a pessoa escolhe a montagem da
+     vitrine (um dos modelos do editor ou "em branco") antes de seguir — ver
+     `ModeloDaVitrinePasso`.
 
      O segundo passo é a ficha da imobiliária, que alimenta a vitrine (ver
      PerfilInicialPasso); o terceiro é o endereço em que ela vai viver (ver
@@ -182,6 +187,12 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
      Sai de `/me/trial`, que a modal já buscou: uma segunda consulta só para
      decidir se mostra um passo faria a caixa piscar depois de aberta. */
   const fichaPreenchida = Boolean(dados?.endereco?.linha && dados?.endereco?.cidade);
+
+  /* O modelo da vitrine já foi escolhido? A marca fica no próprio
+     `showcaseConfig` (ver `configDoModelo`). Quem tem ficha mas não tem modelo
+     — conta antiga, ou assinante criado pela equipe — vai direto ao passo do
+     modelo em vez de fechar: é o único passo obrigatório do assistente. */
+  const modeloEscolhido = Boolean(showcaseConfig?.modeloEscolhido);
 
   /* Enquanto a resposta não chega, a tela fica travada por um véu.
 
@@ -317,7 +328,7 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
   /* Os catálogos viraram um passo próprio — ver o cabeçalho de
      `CatalogosPasso.jsx`. Com ele: boas-vindas, ficha, catálogos, domínio, e a
      importação só para quem disse ter base para trazer. */
-  const totalPassos = temMigracao ? 5 : 4;
+  const totalPassos = temMigracao ? 6 : 5;
   const dias = dados.diasRestantes;
   const prazo =
     dias == null
@@ -338,7 +349,8 @@ export function BoasVindasModal({ tenantSlug, tenantId, aoResolver, aoAtualizarT
     <div className={`bv-veu${saindo ? " is-saindo" : ""}`}>
       <style>{`${CSS}
 ${PERFIL_INICIAL_CSS}
-${CATALOGOS_CSS}`}</style>
+${CATALOGOS_CSS}
+${MODELO_CSS}`}</style>
       <div className={`bv-caixa${saindo ? " is-saindo" : ""}`} role="dialog" aria-modal="true" aria-labelledby="bv-titulo">
         {passo === "perfil" ? (
           <>
@@ -363,11 +375,26 @@ ${CATALOGOS_CSS}`}</style>
               imobiliárias usa. Desmarque o que você prefere montar do seu jeito — e o que
               vier continua editável.
             </p>
-            <CatalogosPasso tenantSlug={tenantSlug} aoConcluir={() => setPasso("dominio")} />
+            <CatalogosPasso tenantSlug={tenantSlug} aoConcluir={() => setPasso("modelo")} />
+          </>
+        ) : passo === "modelo" ? (
+          <>
+            <CabecalhoDoPasso numero={4} total={totalPassos} aoVoltar={() => setPasso("catalogos")} />
+            <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">Escolha o modelo da sua vitrine</h2>
+            <p className="bv-texto bv-texto--fraco bv-texto--perfil">
+              É a montagem inicial da sua página pública. Escolha uma pronta ou comece em
+              branco — tudo pode ser mudado depois, peça por peça.
+            </p>
+            <ModeloDaVitrinePasso
+              tenantSlug={tenantSlug}
+              configAtual={showcaseConfig}
+              aoAtualizarTenant={aoAtualizarTenant}
+              aoConcluir={() => setPasso("dominio")}
+            />
           </>
         ) : passo === "dominio" ? (
           <>
-            <CabecalhoDoPasso numero={4} total={totalPassos} aoVoltar={() => setPasso("catalogos")} />
+            <CabecalhoDoPasso numero={5} total={totalPassos} aoVoltar={() => setPasso("modelo")} />
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">O endereço da sua vitrine</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               Sua vitrine já está no ar no endereço da Omnimob. Se a sua imobiliária tem
@@ -407,7 +434,7 @@ ${CATALOGOS_CSS}`}</style>
           </>
         ) : passo === "dados" ? (
           <>
-            <CabecalhoDoPasso numero={5} total={totalPassos} aoVoltar={() => setPasso("dominio")} />
+            <CabecalhoDoPasso numero={6} total={totalPassos} aoVoltar={() => setPasso("dominio")} />
             <h2 id="bv-titulo" className="bv-titulo bv-titulo--perfil">Falta trazer a sua base</h2>
             <p className="bv-texto bv-texto--fraco bv-texto--perfil">
               Quando você pediu o teste, disse que tem{" "}
@@ -544,9 +571,9 @@ ${CATALOGOS_CSS}`}</style>
         <button
           type="button"
           className="bv-botao"
-          onClick={() => (fichaPreenchida ? fechar() : setPasso("perfil"))}
+          onClick={() => (fichaPreenchida ? (modeloEscolhido ? fechar() : setPasso("modelo")) : setPasso("perfil"))}
         >
-          {fichaPreenchida ? "Começar" : "Continuar"}
+          {fichaPreenchida && modeloEscolhido ? "Começar" : "Continuar"}
         </button>
         </>
         )}

@@ -71,6 +71,7 @@ export const ACOES = [
   { id: "relatorios.mensal",    tela: "relatorios", rotulo: "Relatório mensal", padrao: "2", exige: "verRelatorios", destino: "/relatorios?ver=mensal" },
   { id: "relatorios.funil",     tela: "relatorios", rotulo: "Funil de vendas",  padrao: "3", exige: "verRelatorios", destino: "/relatorios?ver=funil" },
   { id: "relatorios.comissoes", tela: "relatorios", rotulo: "Comissões",        padrao: "4", exige: "verRelatorios", destino: "/relatorios?ver=comissoes" },
+  { id: "relatorios.atendimento", tela: "relatorios", rotulo: "Funil de atendimento", padrao: "5", exige: "verRelatorios", destino: "/relatorios?ver=atendimento" },
 
   /* ── Configurações ───────────────────────────────────────────────────────
      Uma por seção, na ordem em que os cartões aparecem. A tela existia sem

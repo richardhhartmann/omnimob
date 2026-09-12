@@ -2,6 +2,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { LeadsPage } from "./LeadsPage";
 import { RelatorioMensal } from "../components/RelatorioMensal";
 import { FunilDeVendas, Comissoes } from "../components/FunilVendas";
+import { FunilAtendimento } from "../components/FunilAtendimento.jsx";
 import { ICONES_RELATORIOS, IconeRelatorios } from "../utils/iconesRelatorios";
 import { GradeDeMenu } from "../components/GradeDeMenu.jsx";
 import { Trilha } from "../components/Trilha.jsx";
@@ -52,6 +53,7 @@ export function RelatoriosPage({ session }) {
 
   const conteudo =
     view === "LEADS" ? <LeadsPage session={session} />
+    : view === "ATENDIMENTO" ? <FunilAtendimento session={session} />
     : view === "MENSAL" ? <RelatorioMensal session={session} />
     : view === "FUNIL" ? <FunilDeVendas session={session} />
     : view === "COMISSOES" ? <Comissoes session={session} />

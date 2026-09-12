@@ -4,6 +4,7 @@ import { api } from "../api";
 import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader.jsx";
 import { ShowcaseFooter } from "../components/showcase/ShowcaseFooter.jsx";
+import { CreditoOmnimob } from "../components/showcase/CreditoOmnimob.jsx";
 import { classeDeAparencia, estiloDoTema, linkWhatsApp } from "../components/showcase/tema.js";
 import { Panorama360 } from "../components/Panorama360";
 import { comodidadesAtivas } from "../utils/comodidades";
@@ -11,7 +12,9 @@ import { tipoContratoInfo } from "../utils/tiposContrato";
 import { loadShowcaseFonts, getCachedTenant, setCachedTenant } from "../utils/showcaseFonts";
 import { IconeFaisca } from "../components/Icones.jsx";
 import { IconeCheck } from "../components/Icones.jsx";
-import { useSeo } from "../utils/seo";
+import { SITE, useSeo } from "../utils/seo";
+import { esquemaDaTrilha, esquemaDoImovel, useDadosEstruturados } from "../utils/dadosEstruturados";
+import { caminhoDaRegiao, regiaoDoImovel } from "../utils/regioes";
 
 const IcPin  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
 const IcArea = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6"/><path d="M3 3l6 6"/><path d="M21 15v6h-6"/><path d="M21 21l-6-6"/></svg>;
@@ -26,12 +29,94 @@ function isLancamento(createdAt) {
   return (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24) <= 30;
 }
 
-export function ShowcasePropertyPage({ slugFixo }) {
+/* ── A ficha, no formato dos portais ────────────────────────────────────────
+   A página seguia o desenho de "cartão": título do corretor, preço, quatro
+   números e a descrição. Os portais grandes contam o imóvel de outro jeito, e
+   é o jeito que o comprador já aprendeu a ler: um título COMPOSTO que diz tudo
+   numa linha ("Apartamento para comprar com 68 m², 2 quartos e 1 vaga por
+   R$ 450.000"), depois os cômodos com uma frase de apoio cada, as metragens
+   explicadas, a descrição sob o título que o corretor escreveu, a
+   infraestrutura, o bairro no mapa e um cartão de contato que acompanha a
+   rolagem. Cada bloco só existe se há o que mostrar — número que não existe
+   não vira "0 quartos". */
+const APOIO_COMODO = {
+  quartos: "Espaço para a família e para receber",
+  suites: "Quarto com banheiro só seu",
+  banheiros: "Mais comodidade e higiene para todos",
+  vagas: "Facilita o dia a dia de quem chega de carro",
+  salas: "Ambientes para receber e trabalhar",
+};
+const APOIO_AREA = {
+  privativa: "Área exclusiva do imóvel, sem contar as paredes",
+  construida: "Tudo o que está coberto e construído",
+  terreno: "O terreno onde o imóvel está",
+  total: "Área total, incluindo as partes comuns",
+  util: "Área que você realmente usa",
+};
+
+const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+
+/** "Apartamento para comprar com 68 m², 2 quartos e 1 vaga por R$ 450.000". */
+function tituloComposto(p) {
+  if (!p) return "";
+  const tipo = p.propertyType || "Imóvel";
+  const acao = p.tipoContrato === "LOCACAO" || p.tipoContrato === "BUILT_TO_SUIT" ? "alugar" : "comprar";
+  const area = Number(p.areaPrivativa || p.squareFootage || p.areaConstruida || p.areaTotal || 0);
+  const partes = [
+    area ? `${area.toLocaleString("pt-BR")} m²` : "",
+    p.bedrooms ? plural(p.bedrooms, "quarto", "quartos") : "",
+    p.finalidade === "COMERCIAL" && p.salas ? plural(p.salas, "sala", "salas") : "",
+    p.banheiros && !p.bedrooms ? plural(p.banheiros, "banheiro", "banheiros") : "",
+    p.parkingSpots ? plural(p.parkingSpots, "vaga", "vagas") : "",
+  ].filter(Boolean);
+  const com = partes.length ? ` com ${partes.length > 1 ? `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}` : partes[0]}` : "";
+  const preco = Number(p.price) > 0 ? ` por R$ ${Number(p.price).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "";
+  return `${tipo} para ${acao}${com}${preco}`;
+}
+
+function comodosDoImovel(p) {
+  const lista = [
+    p.bedrooms ? { chave: "quartos", n: p.bedrooms, rotulo: plural(p.bedrooms, "Quarto", "Quartos"), apoio: APOIO_COMODO.quartos, Icone: IcBed } : null,
+    p.suites ? { chave: "suites", n: p.suites, rotulo: plural(p.suites, "Suíte", "Suítes"), apoio: APOIO_COMODO.suites, Icone: IcSuite } : null,
+    p.banheiros ? { chave: "banheiros", n: p.banheiros, rotulo: plural(p.banheiros, "Banheiro", "Banheiros"), apoio: APOIO_COMODO.banheiros, Icone: IcSuite } : null,
+    p.salas ? { chave: "salas", n: p.salas, rotulo: plural(p.salas, "Sala", "Salas"), apoio: APOIO_COMODO.salas, Icone: IcHome } : null,
+    p.parkingSpots ? { chave: "vagas", n: p.parkingSpots, rotulo: plural(p.parkingSpots, "Vaga de garagem", "Vagas de garagem"), apoio: APOIO_COMODO.vagas, Icone: IcCar } : null,
+  ];
+  return lista.filter(Boolean);
+}
+
+function metragensDoImovel(p) {
+  const m2 = (v) => `${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²`;
+  const lista = [
+    p.areaPrivativa ? { chave: "privativa", valor: m2(p.areaPrivativa), rotulo: "área privativa", apoio: APOIO_AREA.privativa } : null,
+    p.areaConstruida ? { chave: "construida", valor: m2(p.areaConstruida), rotulo: "área construída", apoio: APOIO_AREA.construida } : null,
+    p.areaTerreno ? { chave: "terreno", valor: m2(p.areaTerreno), rotulo: "de terreno", apoio: APOIO_AREA.terreno } : null,
+    p.areaTotal ? { chave: "total", valor: m2(p.areaTotal), rotulo: "área total", apoio: APOIO_AREA.total } : null,
+  ].filter(Boolean);
+  // Sem nenhuma das quatro, a metragem simples do cadastro é a "área útil".
+  if (!lista.length && p.squareFootage) lista.push({ chave: "util", valor: m2(p.squareFootage), rotulo: "área útil", apoio: APOIO_AREA.util });
+  return lista;
+}
+
+/* ── O modo ISOLADO (`isolada`) ──────────────────────────────────────────────
+   A landing page do imóvel: a mesma página, sem o que distrai — cabeçalho com
+   menu, trilha, sugestões de outros imóveis e rodapé completo. Sobram a
+   galeria, a ficha, o preço e o formulário; no celular, uma barra fixa de
+   WhatsApp. É o endereço que a imobiliária põe num anúncio pago ou manda para
+   o cliente de um lançamento: quem chega dali não deve ter para onde ir a não
+   ser "tenho interesse".
+
+   É um interruptor na página, e não uma segunda página: as duas telas
+   mostrariam o mesmo imóvel, e duas cópias divergiriam na primeira mudança
+   da ficha. A URL canônica continua sendo a página normal (`noindex` aqui):
+   o Google não precisa indexar duas vezes o mesmo anúncio. */
+export function ShowcasePropertyPage({ slugFixo, isolada = false }) {
   /* Mesma história do ShowcasePage: em domínio próprio o slug vem do host. */
   const { tenantSlug: slugDaRota, propertyId } = useParams();
   const tenantSlug = slugFixo || slugDaRota;
   const [property, setProperty] = useState(null);
   const [tenant, setTenant] = useState(() => getCachedTenant(tenantSlug));
+  const [contatoDaCasa, setContatoDaCasa] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sendingInterest, setSendingInterest] = useState(false);
@@ -39,6 +124,15 @@ export function ShowcasePropertyPage({ slugFixo }) {
   const [error, setError] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [interestForm, setInterestForm] = useState({ name: "", email: "", phone: "", message: "" });
+  /* O pedido de visita: aberto pelo botão, some depois de enviado. Não é
+     agenda — é o mesmo lead com "quando" (ver `pedidoDeVisita.js` na API). */
+  const [visitaAberta, setVisitaAberta] = useState(false);
+  const [visita, setVisita] = useState({ data: "", periodo: "tarde" });
+  /* "Ligamos para você": o mesmo formulário, só nome e telefone, com o pedido
+     na mensagem. É um lead como outro qualquer, marcado para ser retornado. */
+  const [ligacao, setLigacao] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const formRef = useRef(null);
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
   const thumbsRef = useRef(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -74,6 +168,8 @@ export function ShowcasePropertyPage({ slugFixo }) {
     api.getPublicShowcase(tenantSlug)
       .then((data) => {
         setSuggestions((data.properties || []).filter((p) => p.id !== propertyId).slice(0, 4));
+        // O CRECI e o telefone da casa, para o rodapé mínimo da landing isolada.
+        setContatoDaCasa(data.vitrine?.contato || null);
       })
       .catch(() => {});
   }, [tenantSlug, propertyId]);
@@ -84,14 +180,28 @@ export function ShowcasePropertyPage({ slugFixo }) {
 
   async function handleInterest() {
     if (!tenantSlug || !propertyId) return;
+    if (visitaAberta && !visita.data) {
+      setError("Escolha a data da visita.");
+      return;
+    }
     setSendingInterest(true);
     setSuccessMessage("");
     setError("");
     try {
-      const response = await api.registerPublicInterest(tenantSlug, propertyId, interestForm);
+      const payload = visitaAberta
+        ? { ...interestForm, visita }
+        : ligacao
+          ? { ...interestForm, message: ["Pedido de ligação: prefiro que a imobiliária me ligue.", interestForm.message].filter(Boolean).join("\n") }
+          : interestForm;
+      const response = await api.registerPublicInterest(tenantSlug, propertyId, payload);
       setProperty((prev) => prev ? { ...prev, leadCount: response.property.leadCount } : prev);
-      setSuccessMessage("Interesse enviado! A imobiliária entrará em contato em breve.");
+      setSuccessMessage(visitaAberta
+        ? "Pedido de visita enviado! A imobiliária vai confirmar o horário com você."
+        : "Interesse enviado! A imobiliária entrará em contato em breve.");
       setInterestForm({ name: "", email: "", phone: "", message: "" });
+      setVisitaAberta(false);
+      setLigacao(false);
+      setVisita({ data: "", periodo: "tarde" });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -210,21 +320,45 @@ export function ShowcasePropertyPage({ slugFixo }) {
     caminho: slugFixo ? `/imovel/${propertyId}` : `/vitrine/${tenantSlug}/imovel/${propertyId}`,
     imagem: property?.images?.[0]?.url,
     tipo: "article",
+    // A landing isolada aponta o canonical para a página normal e fica fora do índice.
+    indexavel: !isolada,
   });
 
-  const stat = (icon, label, value) => value ? (
-    <div className="prop-stat">
-      <div className="prop-stat__rotulo">{icon} {label}</div>
-      <div className="prop-stat__valor">{value}</div>
-    </div>
-  ) : null;
+  /* Dados estruturados: o anúncio (preço, quartos, metragem, endereço público)
+     e a trilha "Vitrine › Imóvel". É o que faz esta página concorrer como
+     ANÚNCIO na busca, e não como texto — ver `utils/dadosEstruturados.js`. */
+  const urlVitrine = `${SITE}${slugFixo ? "/" : `/vitrine/${tenantSlug}`}`;
+  const urlImovel = `${SITE}${slugFixo ? `/imovel/${propertyId}` : `/vitrine/${tenantSlug}/imovel/${propertyId}`}`;
+  useDadosEstruturados("imovel", property ? [
+    esquemaDoImovel({ property, tenant, url: urlImovel }),
+    esquemaDaTrilha([
+      { nome: tenant?.name || "Vitrine", url: urlVitrine },
+      { nome: property.title, url: urlImovel },
+    ]),
+  ] : null);
+
+  function irAoFormulario(modo) {
+    setLigacao(modo === "ligacao");
+    if (modo === "ligacao") setVisitaAberta(false);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => formRef.current?.querySelector("input")?.focus(), 450);
+  }
+
+  async function copiarLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href.replace(/\/lp$/, ""));
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1600);
+    } catch { /* sem clipboard */ }
+  }
+
 
   /* Classe, e não objeto inline: os campos usavam fundo branco a 5% cravado no
      JSX, o que no modo CLARO vira branco sobre branco — e estilo inline não tem
      como ser corrigido por folha de estilo. */
 
   return (
-    <div className={`showcase-body ${classeDeAparencia(showcaseConfig)}`} style={themeStyle}>
+    <div className={`showcase-body ${classeDeAparencia(showcaseConfig)}${showcaseConfig.zebrado ? " is-zebrada" : ""}`} style={themeStyle}>
       <style>{`
         .showcase-body span[style*="color"], .showcase-body font[color] { -webkit-text-fill-color: currentcolor !important; -webkit-background-clip: initial !important; background: none !important; }
         .prop-thumb { transition: opacity 0.2s, border-color 0.2s; }
@@ -379,6 +513,17 @@ export function ShowcasePropertyPage({ slugFixo }) {
       `}</style>
 
       {/* ── Header ── */}
+      {isolada ? (
+        /* Só a marca, sem menu: na landing não existe "para onde ir". */
+        <div className="prop-lp__marca">
+          {tenant?.logoUrl
+            ? <img src={tenant.logoUrl} alt={tenant?.name || ""} className="prop-lp__logo" />
+            : <span className="prop-lp__nome">{tenant?.name || tenantSlug}</span>}
+          {headerWhatsappHref ? (
+            <a href={headerWhatsappHref} target="_blank" rel="noreferrer" className="prop-lp__whats">Falar no WhatsApp</a>
+          ) : null}
+        </div>
+      ) : (
       <div className="showcase-detail-header" style={{ position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(20px)" }}>
         <ShowcaseHeader
           tenant={tenant}
@@ -389,9 +534,13 @@ export function ShowcasePropertyPage({ slugFixo }) {
           isLightMode={isLightMode}
         />
       </div>
+      )}
 
-      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 24px 80px" }}>
+      {/* `prop-secoes`: com a zebra ligada, cada `.prop-secao` alterna o fundo
+          — ver `.is-zebrada` em styles.css. É o mesmo interruptor do editor. */}
+      <div className="prop-secoes" style={{ maxWidth: "1200px", margin: "0 auto", padding: isolada ? "16px 24px 110px" : "32px 24px 80px" }}>
         {/* Breadcrumb */}
+        {isolada ? null : (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px", flexWrap: "wrap" }}>
           <Link to={`/vitrine/${tenantSlug}`} style={{ display: "flex", alignItems: "center", gap: "5px", textDecoration: "none", fontSize: "13px", fontWeight: "600", color: "var(--text-muted)", opacity: 0.8 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -404,6 +553,7 @@ export function ShowcasePropertyPage({ slugFixo }) {
             </>
           ) : null}
         </div>
+        )}
 
         {error ? <div className="error" style={{ marginBottom: "24px" }}>{error}</div> : null}
         {successMessage ? <div className="success-banner" style={{ marginBottom: "24px" }}>{successMessage}</div> : null}
@@ -412,7 +562,7 @@ export function ShowcasePropertyPage({ slugFixo }) {
         {!loading && property ? (
           <>
             {/* ── CAROUSEL ── */}
-            <div style={{ marginBottom: "32px" }}>
+            <div className="prop-secao" style={{ marginBottom: "32px" }}>
               {/* Main image */}
               <div
                 className="prop-palco"
@@ -484,78 +634,139 @@ export function ShowcasePropertyPage({ slugFixo }) {
             </div>
 
             {/* ── CONTENT GRID ── */}
-            <div className="prop-grid">
-              {/* Left: property info */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-                {/* Title + price */}
-                <div>
+            <div className="prop-grid prop-secao">
+              {/* Left: a ficha, no formato dos portais — ver `tituloComposto`. */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "30px", minWidth: 0 }}>
+                {/* ── Título composto, endereço e compartilhar ── */}
+                <header>
                   {property.propertyType && (
                     <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.08em", color: primaryColor, marginBottom: "8px", display: "block" }}>
                       <IcHome style={{ display: "inline" }} /> {property.propertyType}
                     </span>
                   )}
-                  <h1 style={{ fontSize: "32px", fontWeight: "800", letterSpacing: "-0.5px", margin: "0 0 12px", color: isLightMode ? "#0f172a" : "#fff", lineHeight: 1.2 }}>
-                    {property.title}
+                  <h1 style={{ fontSize: "clamp(22px, 2.4vw, 30px)", fontWeight: "800", letterSpacing: "-0.4px", margin: "0 0 8px", color: isLightMode ? "#0f172a" : "#fff", lineHeight: 1.25 }}>
+                    {tituloComposto(property)}
                   </h1>
-                  <p style={{ fontSize: "36px", fontWeight: "800", color: primaryColor, margin: 0, letterSpacing: "-1px" }}>
-                    R$ {Number(property.price).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                  </p>
-                </div>
-
-                {/* Stats grid */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px" }}>
-                  {stat(<IcArea />, "Área", property.squareFootage ? `${property.squareFootage} m²` : null)}
-                  {stat(<IcBed />, "Quartos", property.bedrooms || null)}
-                  {stat(<IcSuite />, "Suítes", property.suites || null)}
-                  {stat(<IcCar />, "Vagas", property.parkingSpots || null)}
-                </div>
-
-                {/* Description */}
-                {property.description && (
-                  <div>
-                    <p style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)", marginBottom: "10px" }}>Descrição</p>
-                    <p style={{ fontSize: "15px", color: isLightMode ? "#334155" : "#cbd5e1", lineHeight: "1.7", margin: 0 }}>{property.description}</p>
-                  </div>
-                )}
-
-                {/* Location */}
-                <div className="prop-bloco">
-                  <p style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)", marginBottom: "12px" }}>Localização</p>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", color: isLightMode ? "#334155" : "#cbd5e1" }}>
+                  {/* A rua só aparece quando a imobiliária marcou. O corte de
+                      verdade é no servidor — com a opção desligada, `address` e
+                      `cep` nem chegam aqui (ver `semEnderecoOculto`). */}
+                  <p style={{ margin: 0, fontSize: "14px", lineHeight: 1.6, color: isLightMode ? "#334155" : "#cbd5e1", display: "flex", gap: "8px", alignItems: "flex-start" }}>
                     <span style={{ color: primaryColor, marginTop: "2px", flexShrink: 0 }}><IcPin /></span>
-                    {/* A rua só aparece quando a imobiliária marcou. O corte de
-                        verdade é no servidor — com a opção desligada, `address` e
-                        `cep` nem chegam aqui (ver `semEnderecoOculto`). Este
-                        `&&` é consequência disso, não a trava: se fosse só ele,
-                        o endereço continuaria no JSON da página. */}
-                    <p style={{ margin: 0, fontSize: "14px", lineHeight: "1.6" }}>
-                      {property.address && <><strong>{property.address}</strong><br /></>}
+                    <span>
+                      {property.address && <>{property.address}<br /></>}
                       {[property.neighborhood, property.city, property.state].filter(Boolean).join(", ")}
                       {property.cep && <> · CEP {property.cep}</>}
-                    </p>
+                    </span>
+                  </p>
+                  <div className="prop-compartilhe">
+                    <span>Compartilhe</span>
+                    <button type="button" onClick={copiarLink}>{copiado ? "Link copiado" : "Copiar link"}</button>
+                    <a href={`https://wa.me/?text=${encodeURIComponent(`${tituloComposto(property)} — ${window.location.href.replace(/\/lp$/, "")}`)}`} target="_blank" rel="noreferrer">WhatsApp</a>
                   </div>
+                </header>
+
+                {/* ── Cômodos e espaços ── */}
+                {comodosDoImovel(property).length ? (
+                  <section className="prop-secaoFicha">
+                    <h2 className="prop-h2">Cômodos e espaços</h2>
+                    <div className="prop-itens">
+                      {comodosDoImovel(property).map((c) => (
+                        <div key={c.chave} className="prop-item">
+                          <span className="prop-item__icone"><c.Icone /></span>
+                          <div>
+                            <strong>{c.rotulo}</strong>
+                            <span>{c.apoio}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                {/* ── Dimensões e metragens ── */}
+                {metragensDoImovel(property).length ? (
+                  <section className="prop-secaoFicha">
+                    <h2 className="prop-h2">Dimensões e metragens</h2>
+                    <div className="prop-itens">
+                      {metragensDoImovel(property).map((m) => (
+                        <div key={m.chave} className="prop-item">
+                          <span className="prop-item__icone"><IcArea /></span>
+                          <div>
+                            <strong>{m.valor} {m.rotulo}</strong>
+                            <span>{m.apoio}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                {/* ── Descrição: o título que o corretor escreveu vira o h2 ── */}
+                <section className="prop-secaoFicha">
+                  <h2 className="prop-h2 prop-h2--titulo">{property.title}</h2>
+                  {property.description ? (
+                    <p style={{ fontSize: "15px", color: isLightMode ? "#334155" : "#cbd5e1", lineHeight: "1.75", margin: 0, whiteSpace: "pre-line" }}>{property.description}</p>
+                  ) : null}
+                </section>
+
+                {/* ── Quer mais informações? ── */}
+                <div className="prop-chamada">
+                  <div>
+                    <strong>Quer mais informações?</strong>
+                    <span>Fale com quem conhece o imóvel. Sem compromisso.</span>
+                  </div>
+                  <button type="button" onClick={() => irAoFormulario()} style={{ background: primaryColor }}>Quero falar com a imobiliária</button>
                 </div>
 
-                {/* Comodidades da região */}
+                {/* ── Infraestrutura: atributos do imóvel + o que tem por perto ── */}
                 {(() => {
+                  const atributos = (property.atributos || []).map((a) => a?.atributo || a).filter((a) => a?.descricao);
                   const ativas = comodidadesAtivas(property.comodidades);
-                  if (ativas.length === 0) return null;
+                  if (!atributos.length && !ativas.length) return null;
                   return (
-                    <div>
-                      <p style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)", marginBottom: "12px" }}>
-                        O que tem por perto
-                      </p>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px" }}>
-                        {ativas.map((c) => (
-                          <div key={c.key} className="prop-comodidade">
-                            <c.Icone size={21} style={{ flexShrink: 0, color: "var(--accent, #818cf8)" }} />
-                            <span style={{ fontSize: "14px", fontWeight: "600", color: isLightMode ? "#0f172a" : "#fff" }}>{c.label}</span>
+                    <section className="prop-secaoFicha">
+                      <h2 className="prop-h2">Infraestrutura</h2>
+                      {atributos.length ? (
+                        <div className="prop-tags">
+                          {atributos.map((a) => <span key={a.descricao} className="prop-tag"><IconeCheck size={12} /> {a.descricao}</span>)}
+                        </div>
+                      ) : null}
+                      {ativas.length ? (
+                        <>
+                          <p className="prop-sub">O que tem por perto</p>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px" }}>
+                            {ativas.map((c) => (
+                              <div key={c.key} className="prop-comodidade">
+                                <c.Icone size={21} style={{ flexShrink: 0, color: "var(--accent, #818cf8)" }} />
+                                <span style={{ fontSize: "14px", fontWeight: "600", color: isLightMode ? "#0f172a" : "#fff" }}>{c.label}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                        </>
+                      ) : null}
+                    </section>
                   );
                 })()}
+
+                {/* ── Conheça a região ── O mapa é do BAIRRO, nunca da rua: com
+                    o endereço oculto, a busca leva só bairro e cidade. */}
+                {(property.neighborhood || property.city) ? (() => {
+                  const r = regiaoDoImovel(property);
+                  const busca = encodeURIComponent([property.exibirEnderecoCompleto ? property.address : "", property.neighborhood, property.city, property.state].filter(Boolean).join(", "));
+                  return (
+                    <section className="prop-secaoFicha">
+                      <h2 className="prop-h2">Conheça a região{property.neighborhood ? ` do bairro ${property.neighborhood}` : ""}</h2>
+                      <div className="prop-mapa">
+                        <iframe title={`Mapa de ${property.neighborhood || property.city}`} src={`https://maps.google.com/maps?q=${busca}&z=15&output=embed`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+                      </div>
+                      {r && !isolada ? (
+                        <Link to={caminhoDaRegiao({ tenantSlug, slugFixo, regiao: r.slug })} className="prop-explorar">
+                          Explore o bairro: mais imóveis em {r.nome} →
+                        </Link>
+                      ) : null}
+                    </section>
+                  );
+                })() : null}
               </div>
 
               {/* Right: lead form */}
@@ -567,26 +778,66 @@ export function ShowcasePropertyPage({ slugFixo }) {
                   <span className="prop-aside__preco-rotulo">Valor</span>
                   <strong className="prop-aside__preco-valor">
                     R$ {Number(property.price).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    {property.tipoContrato === "LOCACAO" || property.tipoContrato === "BUILT_TO_SUIT" ? <small> /mês</small> : null}
                   </strong>
                   {contratoInfo ? <span className="prop-aside__contrato" style={{ color: contratoInfo.cor }}>{contratoInfo.label}</span> : null}
                 </div>
-                <div>
-                  <p className="prop-aside__titulo">Tenho interesse</p>
-                  <p className="prop-aside__sub">Preencha e nossa equipe entrará em contato.</p>
-                </div>
-                <input className="prop-campo" placeholder="Seu nome" value={interestForm.name} onChange={(e) => setInterestForm((p) => ({ ...p, name: e.target.value }))} />
-                <input className="prop-campo" type="email" placeholder="E-mail" value={interestForm.email} onChange={(e) => setInterestForm((p) => ({ ...p, email: e.target.value }))} />
-                <input className="prop-campo" placeholder="WhatsApp / Telefone" value={interestForm.phone} onChange={(e) => setInterestForm((p) => ({ ...p, phone: e.target.value }))} />
-                <textarea className="prop-campo prop-campo--area" placeholder="Mensagem (opcional)" value={interestForm.message} onChange={(e) => setInterestForm((p) => ({ ...p, message: e.target.value }))} rows={3} />
-                <button type="button" onClick={handleInterest} disabled={sendingInterest} style={{ padding: "13px", borderRadius: "12px", background: primaryColor, color: "#fff", fontWeight: "700", fontSize: "14px", border: "none", cursor: "pointer", boxShadow: `0 4px 18px ${primaryColor}44`, transition: "opacity 0.2s", opacity: sendingInterest ? 0.7 : 1 }}>
-                  {sendingInterest ? "Enviando..." : "Enviar interesse"}
-                </button>
+                {/* Os três caminhos do modelo dos portais: WhatsApp, "ligamos
+                    para você" e o formulário. Todos levam ao mesmo lead. */}
                 {whatsappHref && (
-                  <a href={whatsappHref} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "12px", borderRadius: "12px", background: "#25D366", color: "#fff", fontWeight: "700", fontSize: "14px", textDecoration: "none" }}>
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>
-                    Chamar no WhatsApp
+                  <a href={whatsappHref} target="_blank" rel="noreferrer" className="prop-aside__whats">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654z"/></svg>
+                    Converse por WhatsApp
                   </a>
                 )}
+                <button type="button" className="prop-aside__ligar" onClick={() => irAoFormulario("ligacao")}>Ligamos para você</button>
+                <div ref={formRef}>
+                  <p className="prop-aside__titulo">{ligacao ? "Ligamos para você" : "Gostou deste imóvel?"}</p>
+                  <p className="prop-aside__sub">{ligacao ? "Deixe seu telefone e a imobiliária liga no melhor horário." : "Preencha e nossa equipe entrará em contato."}</p>
+                </div>
+                <input className="prop-campo" placeholder="Seu nome" value={interestForm.name} onChange={(e) => setInterestForm((p) => ({ ...p, name: e.target.value }))} />
+                {ligacao ? null : <input className="prop-campo" type="email" placeholder="E-mail" value={interestForm.email} onChange={(e) => setInterestForm((p) => ({ ...p, email: e.target.value }))} />}
+                <input className="prop-campo" placeholder="WhatsApp / Telefone" value={interestForm.phone} onChange={(e) => setInterestForm((p) => ({ ...p, phone: e.target.value }))} />
+                {ligacao ? null : <textarea className="prop-campo prop-campo--area" placeholder="Mensagem (opcional)" value={interestForm.message} onChange={(e) => setInterestForm((p) => ({ ...p, message: e.target.value }))} rows={3} />}
+
+                {/* Agendar visita: abre data + período dentro do mesmo formulário.
+                    Um clique a mais e o lead chega com "quando" — sem tela nova,
+                    sem calendário. */}
+                {visitaAberta ? (
+                  <div className="prop-visita">
+                    <div className="prop-visita__topo">
+                      <span>Quando você quer visitar?</span>
+                      <button type="button" onClick={() => setVisitaAberta(false)} aria-label="Cancelar visita">×</button>
+                    </div>
+                    <div className="prop-visita__campos">
+                      <input
+                        className="prop-campo"
+                        type="date"
+                        value={visita.data}
+                        min={new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => setVisita((v) => ({ ...v, data: e.target.value }))}
+                        aria-label="Data da visita"
+                      />
+                      <select className="prop-campo" value={visita.periodo} onChange={(e) => setVisita((v) => ({ ...v, periodo: e.target.value }))} aria-label="Período">
+                        <option value="manha">De manhã</option>
+                        <option value="tarde">À tarde</option>
+                        <option value="noite">À noite</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="prop-visita__abrir" onClick={() => setVisitaAberta(true)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                    Quero agendar uma visita
+                  </button>
+                )}
+
+                <button type="button" onClick={handleInterest} disabled={sendingInterest} style={{ padding: "13px", borderRadius: "12px", background: primaryColor, color: "#fff", fontWeight: "700", fontSize: "14px", border: "none", cursor: "pointer", boxShadow: `0 4px 18px ${primaryColor}44`, transition: "opacity 0.2s", opacity: sendingInterest ? 0.7 : 1 }}>
+                  {sendingInterest ? "Enviando..." : visitaAberta ? "Pedir visita" : ligacao ? "Pedir ligação" : "Quero mais informações"}
+                </button>
+                <p className="prop-aside__quem">
+                  {[tenant?.name, contatoDaCasa?.creci && `CRECI ${contatoDaCasa.creci}`].filter(Boolean).join(" · ")}
+                </p>
                 {property.leadCount > 0 && (
                   <p className="prop-aside__prova">
                     {property.leadCount} pessoa{property.leadCount !== 1 ? "s" : ""} já demonstrou interesse
@@ -596,8 +847,8 @@ export function ShowcasePropertyPage({ slugFixo }) {
             </div>
 
             {/* ── SUGGESTIONS ── */}
-            {suggestions.length > 0 && (
-              <section style={{ marginTop: "64px" }}>
+            {!isolada && suggestions.length > 0 && (
+              <section className="prop-secao" style={{ marginTop: "64px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
                   <h2 style={{ fontSize: "22px", fontWeight: "800", color: isLightMode ? "#0f172a" : "#fff", margin: 0, letterSpacing: "-0.4px" }}>Mais imóveis disponíveis</h2>
                   <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
@@ -658,6 +909,18 @@ export function ShowcasePropertyPage({ slugFixo }) {
           cima do contêiner não o alcança). Sem ele, o rodapé caía direto no
           corpo da página e as três colunas se espalhavam pela largura inteira
           do monitor — mesmo componente, caixa diferente. */}
+      {isolada ? (
+        <>
+          {/* Rodapé mínimo: quem é a imobiliária. Sem links de navegação. */}
+          <p className="prop-lp__rodape">
+            {[tenant?.name, contatoDaCasa?.creci && `CRECI ${contatoDaCasa.creci}`, contatoDaCasa?.telefone || tenant?.whatsapp].filter(Boolean).join(" · ")}
+          </p>
+          {/* Barra fixa no celular: o WhatsApp a um toque, sempre à vista. */}
+          {whatsappHref ? (
+            <a href={whatsappHref} target="_blank" rel="noreferrer" className="prop-lp__barra">Chamar no WhatsApp sobre este imóvel</a>
+          ) : null}
+        </>
+      ) : (
       <div className="showcase-container" style={{ paddingBlock: 0 }}>
         <ShowcaseFooter
           tenant={tenant}
@@ -666,6 +929,11 @@ export function ShowcasePropertyPage({ slugFixo }) {
           whatsappHref={headerWhatsappHref}
         />
       </div>
+      )}
+
+      {/* A assinatura do produto, sempre — inclusive no modo isolado, que
+          tira o rodapé da imobiliária mas não o crédito de quem fez a página. */}
+      <CreditoOmnimob tenantSlug={tenantSlug} isLightMode={isLightMode} />
 
       {/* ── Lightbox (galeria em tela cheia) ── */}
       {lightboxOpen && (

@@ -13,6 +13,28 @@
       "destination": "https://api.omnimob.app/previa/imovel/:tenantSlug/:propertyId"
     },
     {
+      "source": "/vitrine/:tenantSlug/imoveis/:regiao/:tipo",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|SkypeUriPreview|redditbot|vkShare|W3C_Validator|Iframely|Embedly).*"
+        }
+      ],
+      "destination": "https://api.omnimob.app/previa/regiao/:tenantSlug/:regiao/:tipo"
+    },
+    {
+      "source": "/vitrine/:tenantSlug/imoveis/:regiao",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|SkypeUriPreview|redditbot|vkShare|W3C_Validator|Iframely|Embedly).*"
+        }
+      ],
+      "destination": "https://api.omnimob.app/previa/regiao/:tenantSlug/:regiao"
+    },
+    {
       "source": "/vitrine/:tenantSlug",
       "has": [
         {

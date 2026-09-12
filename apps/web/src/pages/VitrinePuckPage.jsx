@@ -20,6 +20,7 @@ import { CartaoDaGaveta } from "../puck/PreviaDaPeca.jsx";
 import { BarraDaSelecao } from "../puck/BarraDaSelecao.jsx";
 import { documentoDaVersao, guardarVersao, lerHistorico, quandoFoi } from "../puck/historicoDeVersoes.js";
 import { BUILDER_TEMPLATES } from "../components/builder/data/templates";
+import { PreviaDoModelo } from "../components/builder/data/PreviaDoModelo.jsx";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { EditorEsqueleto } from "../components/builder/EditorEsqueleto.jsx";
 
@@ -82,6 +83,11 @@ function opcoesDaPagina(root) {
   const saida = {};
   if (p.appearanceMode === "dark" || p.appearanceMode === "light") saida.appearanceMode = p.appearanceMode;
   if (typeof p.globalFont === "string" && p.globalFont) saida.globalFont = p.globalFont;
+  /* Seções zebradas: booleano no config, e a página do imóvel lê de lá também. */
+  if (p.zebrado === "sim" || p.zebrado === "nao") saida.zebrado = p.zebrado === "sim";
+  if (p.larguraDaPagina === "livre" || p.larguraDaPagina === "travada") saida.larguraLivre = p.larguraDaPagina === "livre";
+  saida.espacamento = { interno: Number(p.espacoInterno) || 0, externo: Number(p.espacoExterno) || 0 };
+  saida.larguraDasPecas = Number(p.larguraDasPecas) || 100;
   /* Cor própria implica NÃO herdar a do painel — senão a pessoa escolhe uma cor,
      nada muda, e o motivo (uma caixa marcada noutra tela) fica invisível. */
   if (typeof p.corPrimaria === "string" && p.corPrimaria) {
@@ -548,7 +554,9 @@ export function VitrinePuckPage() {
             <div className="puck-gaveta__corpo">
               <p>Trocam a montagem inteira. O que você já escreveu nos textos se perde — publique antes se quiser guardar.</p>
               {BUILDER_TEMPLATES.map((modelo) => (
-                <button key={modelo.id} type="button" className="puck-gaveta__item" onClick={() => aplicarModelo(modelo)}>
+                <button key={modelo.id} type="button" className="puck-gaveta__item puck-gaveta__item--modelo" onClick={() => aplicarModelo(modelo)}>
+                  {/* A página em miniatura; passe o mouse para ver no celular. */}
+                  <PreviaDoModelo tpl={modelo} altura={200} />
                   <strong>{modelo.name}</strong>
                   <em>{modelo.desc}</em>
                 </button>

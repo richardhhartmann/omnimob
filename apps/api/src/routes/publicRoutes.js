@@ -2,6 +2,8 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import prismaPkg from "@prisma/client";
 import { prisma } from "../db.js";
+import { paginasDeRegiao } from "../services/paginasDeRegiao.js";
+import { lerPedidoDeVisita } from "../services/pedidoDeVisita.js";
 import { planoPermiteTour360 } from "../middlewares/planoMiddleware.js";
 import { sendEmail } from "../services/notificationService.js";
 import {
@@ -79,6 +81,19 @@ function publicTenantShape(tenant) {
 
 export const publicRouter = Router();
 
+/* ── A ordem da grade ────────────────────────────────────────────────────────
+   Destacados primeiro; dentro de cada grupo, quem tem posição manual vem na
+   posição (1 = primeiro) e quem não tem vem depois, do mais novo ao mais
+   antigo — que era a ordem única de antes, e continua sendo o padrão de quem
+   não mexe em nada. `nulls: "last"` é o que faz "sem posição" não virar
+   "posição zero". Mora aqui porque a vitrine e a página do imóvel leem a mesma
+   lista; uma segunda ordem na tela desencontraria a primeira. */
+const ORDEM_DA_VITRINE = [
+  { destaque: "desc" },
+  { ordemVitrine: { sort: "asc", nulls: "last" } },
+  { createdAt: "desc" },
+];
+
 publicRouter.get("/:tenantSlug/properties", async (req, res) => {
   try {
     const tenant = await prisma.tenant.findUnique({
@@ -91,7 +106,7 @@ publicRouter.get("/:tenantSlug/properties", async (req, res) => {
 
     const properties = await prisma.property.findMany({
       where: { tenantId: tenant.id, status: PropertyStatus.ACTIVE },
-      orderBy: { createdAt: "desc" },
+      orderBy: ORDEM_DA_VITRINE,
       include: { images: { orderBy: { position: "asc" } } },
     });
 
@@ -183,7 +198,12 @@ publicRouter.get("/:tenantSlug/properties/:propertyId", async (req, res) => {
         tenantId: tenant.id,
         status: PropertyStatus.ACTIVE,
       },
-      include: { images: { orderBy: { position: "asc" } } },
+      include: {
+        images: { orderBy: { position: "asc" } },
+        /* Os atributos do imóvel (piscina, portaria 24h…) alimentam o bloco
+           "Infraestrutura" da página. Só o nome e o grupo: o resto é catálogo. */
+        atributos: { include: { atributo: { select: { descricao: true, grupo: true } } } },
+      },
     });
 
     if (!property) {
@@ -221,6 +241,12 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
 
     const { name, email, phone, message } = req.body || {};
 
+    /* O pedido de visita é opcional e vem no mesmo formulário — ver
+       `services/pedidoDeVisita.js`. Inválido é 400 ANTES de contar o lead:
+       um pedido para ontem não pode virar um contato sem data. */
+    const visita = lerPedidoDeVisita(req.body?.visita);
+    if (visita && !visita.ok) return res.status(400).json({ error: visita.erro });
+
     const property = await prisma.property.findFirst({
       where: { id: req.params.propertyId, tenantId: tenant.id, status: PropertyStatus.ACTIVE },
     });
@@ -253,15 +279,19 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
         name: typeof name === "string" ? name : null,
         email: typeof email === "string" ? email : null,
         phone: typeof phone === "string" ? phone : null,
-        message: typeof message === "string" ? message : null,
-        source: "showcase",
+        /* Com visita, o pedido vai na frente da mensagem: é o que a lista de
+           leads mostra sem abrir nada, e o que o e-mail de aviso carrega. */
+        message: [visita?.texto, typeof message === "string" ? message.trim() : ""].filter(Boolean).join("\n") || null,
+        source: visita ? "visita" : "showcase",
         responsavelId,
         eventos: {
           create: [
             {
               tenantId: tenant.id,
               tipo: "CRIADO",
-              texto: `Contato recebido pela vitrine, no imóvel "${property.title}".`,
+              texto: visita
+                ? `Pedido de visita pela vitrine, no imóvel "${property.title}" — ${visita.texto.replace(/^Visita: /, "")}.`
+                : `Contato recebido pela vitrine, no imóvel "${property.title}".`,
             },
             ...(responsavel
               ? [{ tenantId: tenant.id, tipo: "RESPONSAVEL", para: responsavel.nome, texto: "Distribuído automaticamente." }]
@@ -283,9 +313,13 @@ publicRouter.post("/:tenantSlug/properties/:propertyId/interest", async (req, re
       mensagem: lead.message,
       origem: lead.source,
       imovel: { id: property.id, title: property.title },
+      ...(visita ? { visita: { data: visita.data, periodo: visita.periodo } } : {}),
     });
 
-    return res.json({ message: "Interesse registrado com sucesso.", property: updated });
+    return res.json({
+      message: visita ? "Pedido de visita enviado. A imobiliária vai confirmar com você." : "Interesse registrado com sucesso.",
+      property: updated,
+    });
   } catch {
     return res.status(500).json({ error: "Erro ao registrar interesse." });
   }
@@ -906,7 +940,17 @@ publicRouter.get("/sitemap.xml", async (req, res) => {
        pior para a imobiliária do que o próprio atraso. */
     const tenants = await prisma.tenant.findMany({
       where: { ativo: true, statusPagamento: { not: "CANCELADO" } },
-      select: { slug: true, updatedAt: true, dominioProprio: true, dominioStatus: true },
+      select: {
+        id: true, slug: true, updatedAt: true, dominioProprio: true, dominioStatus: true,
+        /* Só o que a regra de região precisa (`paginasDeRegiao`): bairro,
+           cidade e tipo. O sitemap lista uma página por região com imóvel
+           ATIVO — região que esvaziou some daqui no mesmo minuto em que a
+           página passa a responder noindex. */
+        properties: {
+          where: { status: "ACTIVE" },
+          select: { neighborhood: true, city: true, propertyType: true },
+        },
+      },
       orderBy: { createdAt: "asc" },
     });
 
@@ -941,6 +985,17 @@ publicRouter.get("/sitemap.xml", async (req, res) => {
           (lastmod ? `    <lastmod>${lastmod}</lastmod>\n` : "") +
           `    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>`
       );
+
+      /* As páginas de região da vitrine: "imóveis em <bairro>" e "<tipo> em
+         <bairro>". São elas que concorrem na busca por bairro; a home da
+         vitrine sozinha não tem como ranquear por "apartamento no Jardins". */
+      for (const regiao of paginasDeRegiao(t.properties)) {
+        const base = `${loc}/imoveis/${regiao.slug}`;
+        urls.push(`  <url>\n    <loc>${xml(base)}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.7</priority>\n  </url>`);
+        for (const tipo of regiao.tipos) {
+          urls.push(`  <url>\n    <loc>${xml(`${base}/${tipo.slug}`)}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.6</priority>\n  </url>`);
+        }
+      }
     }
 
     const corpo = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;

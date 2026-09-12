@@ -148,8 +148,36 @@ export function linhasParaItens(texto, campos) {
     });
 }
 
-export function montarWhatsappUrl(base, mensagem) {
-  const bruto = String(base || "").trim() || "https://wa.me/";
+/* ── O WHATSAPP DA CASA ───────────────────────────────────────────────────────
+   Os modelos e a biblioteca nascem com `ctaUrl: "https://wa.me/"` — o endereço
+   SEM número, um marcador de "é WhatsApp". O número é o da imobiliária, que
+   mora no cadastro (`dadosDaVitrine.contato.whatsapp`) e não na peça: ele foi
+   digitado uma vez, nas configurações, e é dali que todo botão o lê. Antes, o
+   botão abria o wa.me vazio e a pessoa concluía que o cadastro não valeu. */
+export function numeroWhatsAppDaVitrine(dados) {
+  const digitos = String(dados?.contato?.whatsapp || "").replace(/\D/g, "");
+  if (!digitos) return "";
+  // Número nacional (DDD + 8/9 dígitos) ganha o DDI; quem já digitou o 55, não.
+  return digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
+}
+
+/** O endereço é WhatsApp sem número? ("https://wa.me/", "wa.me", vazio…) */
+export function ehWhatsAppSemNumero(url) {
+  const u = String(url || "").trim();
+  if (!u) return true;
+  if (!/wa\.me|whatsapp/i.test(u)) return false;
+  return !/\d{8,}/.test(u.split("?")[0]);
+}
+
+/**
+ * Monta o link do botão. `numeroDaCasa` preenche o WhatsApp sem número; um
+ * endereço que não é WhatsApp passa intacto (só ganha a mensagem se for wa.me).
+ */
+export function montarWhatsappUrl(base, mensagem, numeroDaCasa = "") {
+  let bruto = String(base || "").trim() || "https://wa.me/";
+  if (ehWhatsAppSemNumero(bruto) && numeroDaCasa) bruto = `https://wa.me/${numeroDaCasa}`;
+  if (!/wa\.me|whatsapp/i.test(bruto)) return bruto;
+  if (!mensagem) return bruto;
   const separador = bruto.includes("?") ? "&" : "?";
   return `${bruto}${separador}text=${encodeURIComponent(mensagem)}`;
 }

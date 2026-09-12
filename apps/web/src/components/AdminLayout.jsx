@@ -865,6 +865,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         tenantSlug={tenantSlug}
         tenantId={tenantId}
         aoResolver={marcarContaResolvida}
+        showcaseConfig={session?.tenant?.showcaseConfig}
         /* A ficha preenchida ali dentro traz cores e logo. Sem repassar a
            sessão adiante, o painel só mostraria a identidade nova no próximo
            login — logo depois de a pessoa acabar de escolhê-la. */

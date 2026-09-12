@@ -46,6 +46,16 @@ export const RELATORIOS = [
     // Sem `liberado`: Leads faz parte do Básico.
   },
   {
+    chave: "ATENDIMENTO",
+    acao: "relatorios.atendimento",
+    param: "atendimento",
+    title: "Funil de atendimento",
+    desc: "Em que estágio os leads empacam, por que se perdem e como cada corretor está indo.",
+    /* Vermelho suave: é o relatório que aponta o que está PARADO. */
+    accent: "#f87171",
+    /* Sem `liberado`: é a leitura da lista de leads, e ela é do Básico. */
+  },
+  {
     chave: "MENSAL",
     acao: "relatorios.mensal",
     param: "mensal",

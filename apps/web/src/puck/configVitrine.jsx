@@ -13,8 +13,8 @@ import { classeDeAparencia, estiloDoTema } from "../components/showcase/tema.js"
 import { ProvedorDaPagina, usarPagina } from "./contextoDaPagina.jsx";
 import { PonteDeEdicao } from "./PonteDeEdicao.jsx";
 import { campoDeCor } from "./CampoDeCor.jsx";
-import { campoFonteDoConteudo, campoOculto, campoTema, campoTravado } from "./CampoDeAlternar.jsx";
-import { campoBrilho, campoEscurecer } from "./CampoDeslizante.jsx";
+import { campoFonteDoConteudo, campoLarguraDaPagina, campoLarguraDaPeca, campoOculto, campoTema, campoTravado, campoZebrado } from "./CampoDeAlternar.jsx";
+import { campoBrilho, campoEscurecer, campoEspacoExterno, campoEspacoInterno, campoLargura, campoLarguraGlobal } from "./CampoDeslizante.jsx";
 import { ComBanner, useSobBanner } from "./ComBanner.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -209,7 +209,22 @@ const CAMPOS_DE_BANNER = {
 const CAMPOS_DA_PECA = {
   oculto: campoOculto,
   travado: campoTravado,
+  larguraDaPeca: campoLarguraDaPeca,
+  /* Só aparece com a página OU a peça em largura livre — ver `semLarguraSePaginaTravada`. */
+  largura: campoLargura,
+  espacoInterno: campoEspacoInterno,
+  espacoExterno: campoEspacoExterno,
 };
+
+/* Com a página travada em 1400px, "Largura da peça" seria um controle que a
+   pessoa mexe e que não faz nada de útil — a folha já é o teto. O campo some;
+   o valor fica no documento e volta a valer quando a página for liberada. */
+function semLarguraSePaginaTravada(campos, params, dados) {
+  const raiz = params?.appState?.data?.root?.props || {};
+  if (raiz.larguraDaPagina === "livre" || dados?.props?.larguraDaPeca === "livre") return campos;
+  const { largura, ...resto } = campos;
+  return resto;
+}
 
 /* Peça oculta: nada na página publicada, e uma tarja discreta no editor.
 
@@ -292,10 +307,44 @@ function PecaDaVitrine({ desenhar, rotulo, props }) {
   /* O banner mora AQUI, e não em cada peça, porque é a mesma resposta para as
      vinte e uma: quem tem imagem de fundo ganha o invólucro que a desenha. Ver
      `ComBanner` para por que ele é preciso. */
-  return (
+  const miolo = (
     <ComBanner estilo={bannerDe(finais)}>
       <MioloDaPeca render={desenhar} props={finais} />
     </ComBanner>
+  );
+
+  /* Largura (página em largura livre) e espaçamentos por peça. Só existe
+     invólucro quando algum deles saiu do padrão: a 100% e zero a árvore é a de
+     sempre. Peça mais estreita fica centrada — encostada à esquerda leria como
+     quebrada. */
+  const largura = Number(props.largura);
+  const interno = Number(props.espacoInterno) || 0;
+  const externo = Number(props.espacoExterno) || 0;
+  const estreita = Number.isFinite(largura) && largura > 0 && largura < 100;
+  /* O invólucro existe sempre: é ele que lê o espaçamento GLOBAL da página
+     (`--peca-interno` / `--peca-externo`, na raiz) quando a peça não tem o
+     seu. Sem valor nenhum, padding e margem resolvem para zero e a caixa não
+     muda nada. */
+  /* Peça LIVRE: sangra até as bordas do monitor mesmo com a página travada.
+     A conta é a do cabeçalho (meia janela para cada lado); a largura em %
+     passa a ser da JANELA, e a peça fica centrada nela. */
+  const livre = props.larguraDaPeca === "livre";
+  const pct = estreita ? largura : 100;
+  const sangria = livre
+    ? { width: `${pct}vw`, marginLeft: `calc(50% - ${pct / 2}vw)`, marginRight: 0 }
+    : { width: estreita ? `${largura}%` : "var(--peca-largura, 100%)", marginInline: "auto" };
+  return (
+    <div
+      className={`puck-envolucro${livre ? " puck-envolucro--livre" : ""}`}
+      style={{
+        /* Largura própria vence; sem ela, a global da página (variável). */
+        ...sangria,
+        padding: interno > 0 ? `${interno}px` : "var(--peca-interno, 0px)",
+        marginBlock: externo > 0 ? `${externo}px` : "var(--peca-externo, 0px)",
+      }}
+    >
+      {miolo}
+    </div>
   );
 }
 
@@ -331,9 +380,9 @@ function comAfordancias(config, { rotulo, naoApagar = false } = {}) {
       const base = config.resolveFields
         ? await config.resolveFields(dados, params)
         : params.fields;
-      return semAjustesDeBannerVazio(base, dados);
+      return semLarguraSePaginaTravada(semAjustesDeBannerVazio(base, dados), params, dados);
     },
-    defaultProps: { oculto: false, travado: false, ...(config.defaultProps || {}) },
+    defaultProps: { oculto: false, travado: false, larguraDaPeca: "travada", largura: 100, espacoInterno: 0, espacoExterno: 0, ...(config.defaultProps || {}) },
     resolvePermissions: (data) => {
       const travado = Boolean(data?.props?.travado);
       return {
@@ -368,6 +417,8 @@ function widgetsDaBiblioteca() {
   const saida = {};
   for (const modelo of WIDGET_LIBRARY) {
     const fonte = FONTES_REAIS[modelo.type];
+    // Tem botão de chamada (CTA, busca, regiões, equipe): ganha o campo do endereço.
+    const temCta = modelo.ctaUrl !== undefined || Boolean(modelo.ctaLabel);
 
     saida[`Widget_${modelo.type}`] = comAfordancias({
       label: modelo.nome,
@@ -384,11 +435,18 @@ function widgetsDaBiblioteca() {
            invólucro do `ComBanner`, e ele serve a qualquer peça. */
         ...CAMPOS_DE_BANNER,
         ...(fonte ? { usarDadosReais: campoFonteDoConteudo(fonte) } : {}),
+        /* O endereço do botão, para as peças que têm um. Vazio = o WhatsApp
+           da imobiliária, lido do cadastro — é o que os modelos trazem e o que
+           a maioria quer. Um link próprio (formulário, página, outro número)
+           entra aqui; ele não aparece na prancheta porque não é texto da
+           página, é configuração. */
+        ...(temCta ? { ctaUrl: { type: "text", label: "Endereço do botão (vazio = WhatsApp da imobiliária)" } } : {}),
       },
       defaultProps: {
         backgroundColor: "",
         color: "",
         ...(fonte ? { usarDadosReais: true } : {}),
+        ...(temCta ? { ctaUrl: "" } : {}),
         widget: {
           id: "",
           type: modelo.type,
@@ -398,7 +456,7 @@ function widgetsDaBiblioteca() {
           ctaUrl: modelo.ctaUrl || "",
         },
       },
-      render: ({ widget, backgroundColor, color, usarDadosReais }) => {
+      render: ({ widget, backgroundColor, color, usarDadosReais, ctaUrl }) => {
         /* As cores e a fonte do inspetor entram no objeto do widget na hora de
            desenhar, e não são gravadas dentro dele. Duas fontes para o mesmo
            dado é como uma delas envelhece: quem manda é o campo, sempre.
@@ -410,8 +468,10 @@ function widgetsDaBiblioteca() {
           if (!widget) return null;
           const p = { ...widget, backgroundColor, color };
           if (usarDadosReais === false) p.usarDadosReais = false;
+          // O campo do inspetor vence o que veio dentro do widget.
+          if (typeof ctaUrl === "string" && ctaUrl.trim()) p.ctaUrl = ctaUrl.trim();
           return p;
-        }, [widget, backgroundColor, color, usarDadosReais]);
+        }, [widget, backgroundColor, color, usarDadosReais, ctaUrl]);
         return peca ? <ShowcaseWidget widget={peca} /> : null;
       },
     }, { rotulo: modelo.nome });
@@ -445,6 +505,15 @@ export const configVitrine = {
        publicada parar de responder ao tema, que é lido de fora dele. */
     fields: {
       appearanceMode: campoTema,
+      zebrado: campoZebrado,
+      larguraDaPagina: campoLarguraDaPagina,
+      /* Largura de TODAS as peças — só aparece com a página livre (ver o
+         `resolveFields` da raiz). A peça com largura própria vence. */
+      larguraDasPecas: campoLarguraGlobal,
+      /* Espaçamento de TODAS as peças, de uma vez. O valor da peça (inspetor
+         dela) vence quando é maior que zero — ver `PecaDaVitrine`. */
+      espacoInterno: campoEspacoInterno,
+      espacoExterno: campoEspacoExterno,
       globalFont: {
         type: "select",
         label: "Fonte",
@@ -467,7 +536,12 @@ export const configVitrine = {
       whatsapp: { type: "text", label: "WhatsApp" },
       email: { type: "text", label: "E-mail" },
     },
-    render: ({ children, puck, appearanceMode, globalFont, corPrimaria, corSecundaria,
+    resolveFields: (dados, { fields }) => {
+      if (dados?.props?.larguraDaPagina === "livre") return fields;
+      const { larguraDasPecas, ...resto } = fields;
+      return resto;
+    },
+    render: ({ children, puck, appearanceMode, zebrado, larguraDaPagina, larguraDasPecas, espacoInterno, espacoExterno, globalFont, corPrimaria, corSecundaria,
                logoUrl, slogan, description, whatsapp, email }) => {
       const meta = puck?.metadata || {};
       /* O provedor da fase 3: a imobiliária, o acervo e o link do WhatsApp. Ele
@@ -520,10 +594,21 @@ export const configVitrine = {
         corSecundaria,
         herdarCoresDoPainel: !(corPrimaria || corSecundaria),
       };
+      /* Zebra ligada por omissão: documento antigo não tem a chave, e a
+         ausência conta como "sim" — a mesma regra do inspetor e de
+         `opcoesDaPagina`, na página. */
       const miolo = (
         <div
-          className={`vitrine-puck showcase-body ${classeDeAparencia(pagina)}`}
-          style={estiloDoTema(tenantVivo, pagina)}
+          className={`vitrine-puck showcase-body ${classeDeAparencia(pagina)}${zebrado === "nao" ? "" : " is-zebrada"}${larguraDaPagina === "livre" ? " is-larga" : ""}`}
+          style={{
+            ...estiloDoTema(tenantVivo, pagina),
+            /* O espaçamento global viaja em variável: cada peça o lê quando
+               não tem valor próprio. Zero some da declaração para não
+               sobrescrever nada por engano. */
+            ...(larguraDaPagina === "livre" && Number(larguraDasPecas) > 0 && Number(larguraDasPecas) < 100 ? { "--peca-largura": `${Number(larguraDasPecas)}%` } : {}),
+            ...(Number(espacoInterno) > 0 ? { "--peca-interno": `${Number(espacoInterno)}px` } : {}),
+            ...(Number(espacoExterno) > 0 ? { "--peca-externo": `${Number(espacoExterno)}px` } : {}),
+          }}
         >
           <ProvedorDaPagina valor={paginaViva}>{children}</ProvedorDaPagina>
         </div>
@@ -548,6 +633,20 @@ export const configVitrine = {
         </VitrineProvider>
       );
     },
+  },
+
+  /* ── A GAVETA ────────────────────────────────────────────────────────────
+     Dois grupos: os blocos fixos e as peças. O que não está em nenhum cai em
+     `other`, que fica INVISÍVEL — é assim que a "Seção (colunas)" e a peça
+     genérica saem da lista sem sair da config. A seção não pode ser oferecida
+     porque não pode existir vazia (`PodarSecoesVazias` a apaga no mesmo
+     instante); ela nasce só do gesto de arrastar uma peça ao lado da outra
+     (`agrupar.js`). O componente continua existindo para os documentos que já
+     a têm. */
+  categories: {
+    blocos: { title: "Blocos da página", components: ["BlocoCabecalho", "BlocoTitulo", "BlocoDestaques", "BlocoImoveis", "BlocoRodape"] },
+    pecas: { title: "Peças", components: WIDGET_LIBRARY.map((m) => `Widget_${m.type}`), defaultExpanded: true },
+    other: { visible: false },
   },
 
   components: {

@@ -198,8 +198,8 @@ export function DivulgarModal({ property, tenantSlug, onClose, onSuccess }) {
         onClick={onClose}
       >
         <div
-          className="input-scroll"
-          style={{ background: "rgba(18,18,30,0.99)", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", borderRadius: "20px", padding: "24px 28px", width: "100%", maxWidth: "1120px", maxHeight: "92vh", overflowY: "auto", overscrollBehavior: "contain" }}
+          className="input-scroll divulgar-caixa"
+          style={{ border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", borderRadius: "20px", padding: "24px 28px", width: "100%", maxWidth: "1120px", maxHeight: "92vh", overflowY: "auto", overscrollBehavior: "contain" }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}

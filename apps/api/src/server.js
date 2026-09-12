@@ -19,6 +19,7 @@ import { canaisRouter } from "./routes/canaisRoutes.js";
 import { flowRouter } from "./routes/flowRoutes.js";
 import { captacaoPublicaRouter, captacaoCorpoInvalido } from "./routes/captacaoPublicaRoutes.js";
 import { agendarSincronizacoes } from "./services/sincronizacao.js";
+import { iniciarAvisosDeLeadsParados } from "./services/leadsParados.js";
 import { clienteRouter } from "./routes/clienteRoutes.js";
 import { leadRouter } from "./routes/leadRoutes.js";
 import { perfilBuscaRouter } from "./routes/perfilBuscaRoutes.js";
@@ -312,6 +313,9 @@ app.listen(port, () => {
   /* Avisa antes de a conta vencer. Nasceu com o Pix, que não renova sozinho —
      ver o cabeçalho de `avisoVencimento.js`. Mesma trava de instância única. */
   iniciarAvisosDeVencimento();
+  /* Lead aberto em que ninguém encosta há X horas. Mesma trava de instância
+     única (`LEADS_PARADOS_AUTOMATICO=true`); ver `leadsParados.js`. */
+  iniciarAvisosDeLeadsParados();
   /* Releitura das fontes de importação guardadas. Mesma trava dos dois acima:
      só com `SINCRONIZACAO_AUTOMATICA=true`, porque com mais de uma instância no
      ar todas leriam as mesmas fontes ao mesmo tempo. */

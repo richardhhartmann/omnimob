@@ -5,10 +5,18 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { requirePlanoIA } from "../middlewares/planoMiddleware.js";
 import { analisarLead, isAiEnabled } from "../services/aiService.js";
+import { filtroDeParados, marcarParados, HORAS_PADRAO } from "../services/leadsParados.js";
 
 /* Ordem do funil. A lista é a fonte para validar o que chega e para o
    relatório empilhar os estágios — uma só, para os dois não desencontrarem. */
 const ESTAGIOS = ["NOVO", "EM_ATENDIMENTO", "VISITA", "PROPOSTA", "GANHO", "PERDIDO"];
+
+/* Os degraus do funil, sem a saída por baixo. É por esta ordem que o relatório
+   diz "chegou até": quem está em PROPOSTA passou por VISITA mesmo que tenha
+   pulado o clique. */
+const DEGRAUS = ["NOVO", "EM_ATENDIMENTO", "VISITA", "PROPOSTA", "GANHO"];
+
+const MOTIVO_PERDA_MAX = 120;
 
 /* Quem escreveu o evento. `usuarioNome` vai gravado junto de propósito: o
    histórico precisa continuar legível depois que a pessoa sai da empresa. */
@@ -26,7 +34,9 @@ leadRouter.get("/", async (req, res) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
     const skip = (page - 1) * limit;
-    const { propertyId, estagio, responsavelId } = req.query;
+    const { propertyId, estagio, responsavelId, parados } = req.query;
+    const horas = req.tenant.leadParadoHoras || HORAS_PADRAO;
+    const soParados = parados === "1";
 
     const where = {
       tenantId: req.tenant.id,
@@ -36,9 +46,12 @@ leadRouter.get("/", async (req, res) => {
          leads que a distribuição não conseguiu atribuir — é justamente a lista
          que alguém precisa abrir todo dia. */
       ...(responsavelId === "sem" ? { responsavelId: null } : responsavelId ? { responsavelId: String(responsavelId) } : {}),
+      /* "Parado" é regra do servidor (`leadsParados.js`), e o filtro vem de lá
+         também — a tela não sabe contar horas, só pedir. */
+      ...(soParados ? filtroDeParados({ horas }) : {}),
     };
 
-    const [leads, total, equipe] = await Promise.all([
+    const [leadsCrus, total, equipe, totalParados] = await Promise.all([
       prisma.propertyLead.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -46,6 +59,9 @@ leadRouter.get("/", async (req, res) => {
           property: { select: { id: true, title: true } },
           responsavel: { select: { id: true, nome: true } },
           _count: { select: { eventos: true } },
+          /* Só o evento mais recente, para carimbar "parado desde". O array é
+             removido antes de sair — ver `marcarParados`. */
+          eventos: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
         },
         skip,
         take: limit,
@@ -59,11 +75,145 @@ leadRouter.get("/", async (req, res) => {
         select: { id: true, nome: true },
         orderBy: { nome: "asc" },
       }),
+      /* O contador de parados ignora os filtros da tela de propósito: ele é o
+         alerta da casa ("há 7 esquecidos"), não "há 7 esquecidos do Pedro em
+         proposta". */
+      prisma.propertyLead.count({ where: { tenantId: req.tenant.id, ...filtroDeParados({ horas }) } }),
     ]);
 
-    return res.json({ leads, total, page, limit, equipe, estagios: ESTAGIOS });
+    const leads = marcarParados(leadsCrus, { horas });
+    return res.json({ leads, total, page, limit, equipe, estagios: ESTAGIOS, parados: totalParados, horasParaParado: horas });
   } catch {
     return res.status(500).json({ error: "Erro ao buscar leads." });
+  }
+});
+
+/* ── Funil de atendimento ────────────────────────────────────────────────────
+   Onde os leads estão sendo perdidos, e por quê. É o relatório que o dono da
+   imobiliária lê; a lista de leads é o que o corretor trabalha.
+
+   "Chegou até X" conta quem está em X ou adiante, OU já passou por X (evento
+   ESTAGIO com `para` = X) mesmo que tenha voltado. Lead perdido conta até o
+   estágio mais alto que alcançou — é assim que se vê "perdemos 12 na proposta"
+   em vez de "perdemos 12".
+
+   Período pela data de CHEGADA do lead: a pergunta é "dos que entraram neste
+   mês, quantos viraram visita?". Contar por data do evento misturaria safras.
+   ────────────────────────────────────────────────────────────────────────── */
+const TETO_FUNIL = 5000;
+
+leadRouter.get("/funil", async (req, res) => {
+  try {
+    const ate = req.query.ate ? new Date(`${req.query.ate}T23:59:59.999`) : new Date();
+    const de = req.query.de ? new Date(`${req.query.de}T00:00:00`) : new Date(ate.getTime() - 30 * 86400000);
+    if (Number.isNaN(de.getTime()) || Number.isNaN(ate.getTime())) {
+      return res.status(400).json({ error: "Período inválido." });
+    }
+    const horas = req.tenant.leadParadoHoras || HORAS_PADRAO;
+    const corteParado = new Date(Date.now() - horas * 3_600_000);
+
+    const leads = await prisma.propertyLead.findMany({
+      where: { tenantId: req.tenant.id, createdAt: { gte: de, lte: ate } },
+      select: {
+        estagio: true, motivoPerda: true, createdAt: true, primeiroContatoEm: true,
+        responsavel: { select: { id: true, nome: true } },
+        eventos: { select: { tipo: true, para: true, createdAt: true }, orderBy: { createdAt: "desc" } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: TETO_FUNIL,
+    });
+
+    const grau = (e) => DEGRAUS.indexOf(e);
+    const maisAlto = (l) => {
+      let g = l.estagio === "PERDIDO" ? 0 : grau(l.estagio);
+      for (const ev of l.eventos) {
+        if (ev.tipo === "ESTAGIO" && ev.para && ev.para !== "PERDIDO") g = Math.max(g, grau(ev.para));
+      }
+      return Math.max(g, 0);
+    };
+
+    const alcancaram = Object.fromEntries(DEGRAUS.map((d) => [d, 0]));
+    const atuais = Object.fromEntries(ESTAGIOS.map((e) => [e, 0]));
+    const perdidosPorDegrau = Object.fromEntries(DEGRAUS.map((d) => [d, 0]));
+    const motivos = new Map();
+    const porPessoa = new Map();
+    let somaContatoMin = 0;
+    let comContato = 0;
+    let semContato = 0;
+    let parados = 0;
+
+    for (const l of leads) {
+      atuais[l.estagio] += 1;
+      const topo = maisAlto(l);
+      for (let i = 0; i <= topo; i += 1) alcancaram[DEGRAUS[i]] += 1;
+
+      const aberto = l.estagio !== "GANHO" && l.estagio !== "PERDIDO";
+      const ultimo = l.eventos[0]?.createdAt || l.createdAt;
+      const parado = aberto && new Date(ultimo) < corteParado;
+      if (parado) parados += 1;
+
+      if (l.primeiroContatoEm) {
+        comContato += 1;
+        somaContatoMin += (new Date(l.primeiroContatoEm) - new Date(l.createdAt)) / 60000;
+      } else if (aberto) {
+        semContato += 1;
+      }
+
+      if (l.estagio === "PERDIDO") {
+        perdidosPorDegrau[DEGRAUS[topo]] += 1;
+        const m = l.motivoPerda || "Sem motivo informado";
+        motivos.set(m, (motivos.get(m) || 0) + 1);
+      }
+
+      const chave = l.responsavel?.id || "";
+      if (!porPessoa.has(chave)) {
+        porPessoa.set(chave, { id: chave || null, nome: l.responsavel?.nome || "Sem responsável", total: 0, ganhos: 0, perdidos: 0, abertos: 0, parados: 0, somaContatoMin: 0, comContato: 0 });
+      }
+      const p = porPessoa.get(chave);
+      p.total += 1;
+      if (l.estagio === "GANHO") p.ganhos += 1;
+      else if (l.estagio === "PERDIDO") p.perdidos += 1;
+      else p.abertos += 1;
+      if (parado) p.parados += 1;
+      if (l.primeiroContatoEm) {
+        p.comContato += 1;
+        p.somaContatoMin += (new Date(l.primeiroContatoEm) - new Date(l.createdAt)) / 60000;
+      }
+    }
+
+    /* Taxa entre degraus vizinhos: de quem chegou em A, quantos chegaram em B.
+       Nulo quando não há base — "0 de 0" não é 0%, é nada. */
+    const taxas = {};
+    for (let i = 1; i < DEGRAUS.length; i += 1) {
+      const base = alcancaram[DEGRAUS[i - 1]];
+      taxas[DEGRAUS[i]] = base ? Math.round((alcancaram[DEGRAUS[i]] / base) * 100) : null;
+    }
+
+    const encerrados = atuais.GANHO + atuais.PERDIDO;
+    return res.json({
+      periodo: { de: de.toISOString(), ate: ate.toISOString() },
+      total: leads.length,
+      truncado: leads.length >= TETO_FUNIL,
+      degraus: DEGRAUS,
+      alcancaram,
+      atuais,
+      taxas,
+      /* Conversão de ponta a ponta só com base: com três leads encerrados,
+         "33%" é ruído com cara de indicador. Mesma régua do painel do Flow. */
+      conversao: encerrados >= 5 ? Math.round((atuais.GANHO / encerrados) * 100) : null,
+      perdidosPorDegrau,
+      motivosPerda: [...motivos.entries()].map(([motivo, quantidade]) => ({ motivo, quantidade })).sort((a, b) => b.quantidade - a.quantidade),
+      tempoMedioPrimeiroContatoMin: comContato ? Math.round(somaContatoMin / comContato) : null,
+      semContato,
+      parados,
+      horasParaParado: horas,
+      porResponsavel: [...porPessoa.values()]
+        .map(({ somaContatoMin: soma, comContato: n, ...p }) => ({ ...p, tempoMedioPrimeiroContatoMin: n ? Math.round(soma / n) : null }))
+        .sort((a, b) => b.total - a.total),
+    });
+  } catch (erro) {
+    console.error("[GET /leads/funil]", erro);
+    return res.status(500).json({ error: "Erro ao montar o funil." });
   }
 });
 
@@ -165,6 +315,7 @@ leadRouter.patch("/:id", async (req, res) => {
     if (!lead) return res.status(404).json({ error: "Lead nao encontrado." });
 
     const { estagio, responsavelId } = req.body || {};
+    const motivoPerda = String(req.body?.motivoPerda || "").trim().slice(0, MOTIVO_PERDA_MAX);
     const data = {};
     const eventos = [];
 
@@ -172,8 +323,20 @@ leadRouter.patch("/:id", async (req, res) => {
       if (!ESTAGIOS.includes(estagio)) {
         return res.status(400).json({ error: "Estágio inválido." });
       }
+      /* Perder exige o motivo. Sem ele o relatório diz QUANTOS se perderam e
+         nunca POR QUÊ — e "por quê" é a única parte que muda o que a
+         imobiliária faz amanhã. O motivo vai no evento também, para o
+         histórico contar a história inteira mesmo depois de o lead voltar. */
+      if (estagio === "PERDIDO" && !motivoPerda) {
+        return res.status(400).json({ error: "Informe o motivo da perda." });
+      }
       data.estagio = estagio;
-      eventos.push({ tenantId: req.tenant.id, tipo: "ESTAGIO", de: lead.estagio, para: estagio, ...autor(req) });
+      data.motivoPerda = estagio === "PERDIDO" ? motivoPerda : null;
+      eventos.push({
+        tenantId: req.tenant.id, tipo: "ESTAGIO", de: lead.estagio, para: estagio,
+        ...(estagio === "PERDIDO" ? { texto: motivoPerda } : {}),
+        ...autor(req),
+      });
 
       /* Sair de NOVO é o primeiro contato, e o carimbo é o que permite medir
          tempo de resposta depois. Só a primeira vez: voltar para NOVO e sair de

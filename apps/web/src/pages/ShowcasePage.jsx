@@ -2,13 +2,15 @@ import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { api } from "../api";
 import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
-import { useSeo } from "../utils/seo";
+import { SITE, useSeo } from "../utils/seo";
+import { esquemaDaImobiliaria, useDadosEstruturados } from "../utils/dadosEstruturados";
 import { loadShowcaseFonts, setCachedTenant } from "../utils/showcaseFonts";
 import { VitrineProvider } from "../components/showcase/contexto.jsx";
 import { ShowcaseRenderer } from "../components/showcase/ShowcaseRenderer.jsx";
 import { useLayoutResolvido } from "../components/showcase/useLayoutResolvido.js";
 import { alturaDoConteudo } from "../components/showcase/engine/layoutEngine.js";
 import { classeDeAparencia, estiloDoTema, linkWhatsApp, modoDoViewport } from "../components/showcase/tema.js";
+import { CreditoOmnimob } from "../components/showcase/CreditoOmnimob.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    A vitrine pública.
@@ -140,6 +142,14 @@ export function ShowcasePage({ slugFixo }) {
     imagem: properties?.[0]?.images?.[0]?.url,
   });
 
+  /* A imobiliária como empresa local (telefone, endereço, horários) — ver
+     `utils/dadosEstruturados.js`. Mesma regra do hook acima: antes do retorno. */
+  useDadosEstruturados("imobiliaria", tenant ? esquemaDaImobiliaria({
+    tenant,
+    vitrine: payload?.vitrine,
+    url: `${SITE}${slugFixo ? "/" : `/vitrine/${tenantSlug}`}`,
+  }) : null);
+
   if (!payload && !erro) {
     return <div style={{ minHeight: "100vh", background: "#0f172a" }} />;
   }
@@ -225,6 +235,9 @@ export function ShowcasePage({ slugFixo }) {
           />
         </div>
         )}
+        {/* Fora do editor de propósito: as PÁGINAS desenham a assinatura do
+            produto, depois de tudo o que o editor controla. Ver o componente. */}
+        <CreditoOmnimob tenantSlug={tenantSlug} isLightMode={classeDeAparencia(layout) === "showcase-theme-light"} />
       </div>
     </VitrineProvider>
   );

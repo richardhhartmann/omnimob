@@ -10,7 +10,8 @@
     "tokenizar-cores": "node scripts/tokenizar-cores.mjs src",
     "conferir-imports": "node scripts/conferir-imports.mjs src",
     "test": "node --import ./test/registrar.mjs --test \"test/*.test.js\" \"test/*.test.jsx\"",
-    "conferir-nomes": "node scripts/conferir-imports.mjs src"
+    "conferir-nomes": "node scripts/conferir-imports.mjs src",
+    "mascara": "node scripts/vetorizar-mascara.cjs"
   },
   "dependencies": {
     "@dnd-kit/helpers": "^0.5.0",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "potrace": "^2.1.8",
     "vite": "^6.2.1"
   }
 }

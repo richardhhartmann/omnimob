@@ -96,7 +96,12 @@ omnimob/
 - `POST /api/auth/login`
 - `/api/tenants/*` — perfil, configuração do tenant
 - `/api/properties/*` — CRUD de imóveis, imagens, métricas (inclui `POST /:id/ai/gerar`)
-- `/api/leads/*` — leads do tenant (dono, estágio do funil, histórico e notas)
+- `/api/leads/*` — leads do tenant (dono, estágio do funil, histórico e notas).
+  `GET /api/leads?parados=1` filtra os **esquecidos** (regra em
+  `services/leadsParados.js`); mover para `PERDIDO` exige `motivoPerda`;
+  `GET /api/leads/funil` é o funil de ATENDIMENTO — até onde cada lead chegou,
+  motivos de perda, tempo de 1º retorno, por corretor. É outro funil que o de
+  `/api/vendas/resumo` (marketing: visita → lead → venda)
 - `/api/auditoria/*` — trilha de quem fez o quê (só leitura; permissão `verAuditoria`)
 - `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
 - `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP
@@ -142,7 +147,7 @@ omnimob/
 - `GET /api/tenants/me/exportar` — tudo da imobiliária num JSON, para
   portabilidade e LGPD
 - `/public/*` — showcase público (sem auth); inclui `GET /public/vitrines` (galeria da landing) e `GET /public/sitemap.xml`, servido em `omnimob.app/sitemap.xml` por reescrita da Vercel, e `GET /public/:slug/feed.xml` — o feed **VRSync** que ZAP/VivaReal/OLX Imóveis vêm buscar (carga agendada; nós não empurramos nada)
-- `/previa/*` — HTML com Open Graph para robôs de prévia (WhatsApp, Facebook, LinkedIn). A Vercel reescreve `/vitrine/*` para cá **só** quando o user-agent é de robô; pessoa continua recebendo o SPA. Ver `previaRoutes.js`
+- `/previa/*` — HTML com Open Graph para robôs de prévia (WhatsApp, Facebook, LinkedIn). A Vercel reescreve `/vitrine/*` para cá **só** quando o user-agent é de robô; pessoa continua recebendo o SPA. Ver `previaRoutes.js`. **O Googlebot não passa por aqui** — ele executa JS e recebe o SPA; por isso o JSON-LD (Schema.org) mora no front (`utils/dadosEstruturados.js`), injetado no `<head>` por rota como o `useSeo`
 - `/health` — health check real (DB + latência + versão do schema)
 
 **Testes:** `npm test` em `apps/api` (runner nativo do Node, sem dependência
@@ -162,6 +167,8 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/documentacaoApi.test.js` | a especificação descreve a API que existe — rota nova sem documentação, ou documentação apontando para rota morta, falha aqui |
 | `test/enderecoPublico.test.js` | o endereço oculto some do PAYLOAD, não só da tela. Verifica o texto cru da resposta, o CEP junto, e o feed seguindo a mesma marcação |
 | `test/pagamentos.test.js` | o histórico de A não aparece para B, e o mesmo pagamento chegando três vezes é UMA linha. Os dois defeitos são silenciosos: um vaza, o outro faz o cliente achar que foi cobrado três vezes |
+| `test/leadsParados.test.js` | a régua de "lead parado" — recém-chegado não é parado, ganho nunca é, e o evento usado para medir não vaza na resposta. **Não toca no banco** |
+| `test/funilLeads.test.js` | lead parado, motivo de perda e funil de atendimento na junção rota + query: A não conta os esquecidos da B; perder sem motivo é 400; a ordem da vitrine (destaque → posição → mais novo) |
 | `test/avisoVencimento.test.js` | quem recebe aviso de vencimento e quando — os dois lados do silêncio: avisar de menos deixa a conta cair calada, avisar demais parece defeito de cobrança. **Não toca no banco** |
 | `test/mercadoPago.test.js` | a tradução plano → cobrança e a **assinatura do webhook** — um defeito ali vale um ano de plano de graça para quem achar a URL. Não toca no banco |
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
@@ -239,6 +246,14 @@ invisíveis porque com um cliente só o sintoma não aparece.
   paga. Conta em fuso de São Paulo, e não no do servidor — em UTC, às 21h de
   Brasília o dia já virou. Texto diferente para cartão (renova sozinho) e Pix
   (precisa agir)
+- `leadsParados.js` — **lead aberto em que ninguém encosta há X horas**
+  (`Tenant.leadParadoHoras`, padrão 48). "Encostar" é EVENTO no histórico —
+  nota, estágio, responsável —, e não `updatedAt`: o próprio aviso grava no
+  lead, e zeraria o cronômetro que mede. Encerrado (GANHO/PERDIDO) nunca conta,
+  como o "negócio parado" do Flow. Uma regra só para lista, contador, filtro e
+  e-mail. O e-mail sai **uma vez por silêncio** (`PropertyLead.avisoParadoEm`)
+  para a imobiliária e para os responsáveis; agendador com
+  `LEADS_PARADOS_AUTOMATICO=true`, ou `npm run leads-parados -- --aplicar`
 - `pagamentoMercadoPago.js` — a cobrança ÚNICA, paga por Pix (mensal ou anual).
   **Nada disso renova sozinho** — Pix Automático não existe para nós —, então a
   tela é obrigada a dizer que não é cobrança automática; no mensal isso se
@@ -368,7 +383,8 @@ Com padrão no código, defina só para sobrescrever: `EMAIL_REMETENTE`,
 
 Opcionais: `FAXINA_AUTOMATICA=true` (agendador de limpeza — só com uma
 instância), `AVISO_VENCIMENTO_AUTOMATICO=true` (lembretes de vencimento, mesma
-trava de instância única), `SINCRONIZACAO_AUTOMATICA=true` (relê as fontes de importação de
+trava de instância única), `LEADS_PARADOS_AUTOMATICO=true` (aviso de lead
+esquecido, de hora em hora, mesma trava), `SINCRONIZACAO_AUTOMATICA=true` (relê as fontes de importação de
 hora em hora; mesma trava de instância única), `SEED_DEV=true`, `SUPER_ADMIN_EMAIL` / `_NOME` / `_PASSWORD` (só o
 seed lê; **sem `SUPER_ADMIN_PASSWORD` a senha vira `superadmin`**).
 
@@ -402,9 +418,9 @@ Modelos principais:
 |--------|-----------|
 | `Tenant` | Imobiliária (slug único, branding, `showcaseConfig` JSON) |
 | `User` | Admin/Agent/ShowcaseEditor por tenant |
-| `Property` | Imóvel (título, preço, endereço, tipo, fotos, status) |
+| `Property` | Imóvel (título, preço, endereço, tipo, fotos, status). `destaque` e `ordemVitrine` decidem a ordem da grade pública: destacado → posição manual → mais novo. Posição nula é "automática" — zero seria uma posição |
 | `PropertyImage` | Fotos no Cloudinary, ordenadas por `position` |
-| `PropertyLead` | Leads da vitrine — com `responsavelId`, `estagio` e `primeiroContatoEm` |
+| `PropertyLead` | Leads da vitrine — com `responsavelId`, `estagio`, `primeiroContatoEm`, `motivoPerda` (obrigatório ao perder, limpo ao voltar) e `avisoParadoEm` |
 | `LeadEvento` | Histórico do lead (mudou de estágio, trocou de dono, nota) |
 | `Auditoria` | Quem criou/alterou/excluiu o quê. Sem FK para `Usuario` — o registro sobrevive à remoção de quem o gerou |
 | `PerfilBusca` | O que um cliente procura; base do cruzamento com o acervo |
@@ -467,7 +483,24 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
 /termos /privacidade /sobre     → páginas institucionais (público)
 /contato /vitrines              → contato e galeria de vitrines reais (público)
 /vitrine/:tenantSlug            → ShowcasePage (público)
-/vitrine/:tenantSlug/imovel/:id → ShowcasePropertyPage (público)
+/vitrine/:tenantSlug/imovel/:id → ShowcasePropertyPage (público). A ficha segue o
+                                  formato dos portais: título COMPOSTO ("Apartamento para
+                                  comprar com 68 m², 2 quartos e 1 vaga por R$ 450.000"),
+                                  cômodos e metragens com frase de apoio, descrição sob o
+                                  título do corretor, infraestrutura (atributos + o que tem
+                                  por perto), mapa do BAIRRO (nunca da rua oculta) e cartão
+                                  de contato com WhatsApp / "Ligamos para você" / formulário
+                                  + pedido de visita
+/vitrine/:tenantSlug/imovel/:id/lp        → a MESMA página em modo `isolada`: sem menu,
+                                            sugestões nem rodapé — landing de anúncio pago.
+                                            noindex, canonical na página normal
+/vitrine/:tenantSlug/imoveis/:regiao[/:tipo] → RegiaoPage: "imóveis em <bairro>" e
+                                            "<tipo> em <bairro>". São as páginas que concorrem
+                                            na busca por bairro; entram no sitemap e recebem
+                                            link do widget de Regiões e de toda página de imóvel.
+                                            Regra em `utils/regioes.js` (espelho em
+                                            `api/services/paginasDeRegiao.js`; teste cobra que
+                                            os dois são o mesmo código)
 /vitrine/:tenantSlug/editar     → ShowcaseEditorPage (editor)
 /                               → DashboardPage (admin)
 /leads                          → LeadsPage
@@ -676,6 +709,56 @@ levava a grade de imóveis de 770px para 2694px.
 `test/vitrineIA.test.js` cobre o que acontece quando o modelo erra — é a única
 suíte da API que não toca no banco.
 
+**As opções de PÁGINA da raiz do Puck** (todas gravadas no `showcaseConfig`
+por `opcoesDaPagina` e semeadas de volta por `traduzirConfig`):
+- `zebrado` (só `false` desliga) → classe `is-zebrada`; o CSS alterna o fundo
+  por tema (`--zebra`). Na página publicada a faixa vai até a borda do monitor
+  (`.showcase-puck > .vitrine-puck` deixa de recortar em X; quem segura o
+  estouro é o `.showcase-body` de fora); no editor fica na moldura de 20px.
+- `larguraLivre` → classe `is-larga` (a folha deixa de parar em 1400px), e
+  `larguraDasPecas` (%, via `--peca-largura`), que só aparece com a página
+  livre.
+- `espacamento.{interno,externo}` (px) → `--peca-interno` / `--peca-externo`.
+Cada PEÇA tem os seus: `larguraDaPeca` (livre = sangra até a borda do
+monitor mesmo com a página travada), `largura` (%), `espacoInterno`,
+`espacoExterno` — o `.puck-envolucro` de `PecaDaVitrine` aplica; o da peça
+vence o da página. Os modelos (`BUILDER_TEMPLATES`) trazem esses valores como
+identidade própria (o "Luxo" é largo e arejado; o "Compacta", justo e sem
+zebra).
+
+**A gaveta do editor** tem categorias (`categories` em `configVitrine`) e a
+`other` é invisível: a `Secao` (colunas) e a peça genérica `Widget` seguem na
+config — documentos antigos e o agrupar-ao-lado precisam delas — mas não são
+oferecidas; seção nasce só de arrastar uma peça ao lado da outra.
+
+**Cliques dentro da peça:** `useSelecionarAoClicar` (na ponte) roda na
+captura; para alvo interativo (botão, link, campo) ele NÃO interrompe o
+evento e adia a seleção — era o `stopPropagation` ali que deixava "+ Etapa",
+"+ Região", "+ Destaque" e os "×" mortos.
+
+**Prévia de reordenar:** além das colunas, `previaDeSecao.empilhar` abre a
+vaga acima/abaixo do alvo (margem animada, `--abre`) e põe a cópia da
+arrastada nela. Quem grava a ordem continua sendo o Puck.
+
+**Prévia dos modelos:** `builder/data/PreviaDoModelo.jsx` desenha a página em
+miniatura a partir do `config` (widgets com glifo por tipo, zebra e respiro do
+modelo), desktop por padrão e alternando com o celular com o mouse em cima. É
+a mesma nas três telas (assistente, gaveta do Puck, painel do clássico).
+
+**WhatsApp dos widgets:** `ctaUrl: "https://wa.me/"` sem número é marcador;
+o número vem de `dadosDaVitrine.contato.whatsapp` (`numeroWhatsAppDaVitrine`).
+As peças com botão ganharam o campo "Endereço do botão" no inspetor.
+
+**Horário de atendimento:** `components/HorarioAtendimento.jsx` — dias da
+semana marcáveis, horário único ou por dia; grava o MESMO
+`[{dias, abre, fecha, fechado}]` de sempre, com `dias` gerado ("Segunda a
+sexta"). Usado no assistente e nas Configurações.
+
+**Modelo obrigatório no assistente de boas-vindas:** `ModeloDaVitrinePasso`
+lista os MESMOS `BUILDER_TEMPLATES` do editor mais "Em branco", grava por
+`PUT /me` e marca `showcaseConfig.modeloEscolhido`; conta com ficha mas sem
+modelo vai direto a esse passo em vez de fechar.
+
 ### `showcaseConfig` (formato gravado)
 
 ```js
@@ -827,6 +910,10 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 - Notification Service com provedores reais (interface pronta, envio é stub)
 - Backup Service e Scheduler
 - Isolamento por schema/banco-por-tenant (seam pronto em `tenantRegistry.js`)
+- **Agenda de visitas.** O que existe é o PEDIDO de visita (data + período no
+  formulário do imóvel → lead com `source: "visita"`, validado em
+  `services/pedidoDeVisita.js` no fuso de SP). Não há calendário, conflito de
+  horário nem lembrete; quando a Agenda existir, o pedido é o que a alimenta
 - Coordenadas (lat/lng) e busca por raio — hoje endereço é texto
 - Exclusão lógica (`deletedAt`) e retenção/anonimização (LGPD)
 - Módulos ERP: Agenda, Financeiro, Vistorias, Proprietários (Contratos saiu
@@ -853,6 +940,7 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 | `npm run subdominios` | **Confere** `<slug>.omnimob.app` de cada imobiliária na Vercel e diz o que está faltando ou pendente de verificação. Ensaio por padrão; `-- --aplicar` cadastra os que faltam |
 | `npm run faxina` | Trials vencidos: desativa e remove. Ensaio por padrão; `--aplicar` executa |
 | `npm run avisos` | Avisa por e-mail quem vence em 7 dias e em 1 dia. Ensaio por padrão; `--aplicar` envia. Rodar demais não custa nada — a marca no banco impede o reenvio |
+| `npm run leads-parados` | Avisa a imobiliária e os responsáveis dos leads esquecidos há mais de `leadParadoHoras`. Ensaio por padrão; `--aplicar` envia. Um aviso por silêncio — a marca é no lead |
 | `npm run relatorio` | Relatório mensal por e-mail aos clientes Profissional/Premium. Ensaio por padrão; `--aplicar` envia. `--mes=7 --ano=2026` escolhe o período |
 | `npm run stripe:limpar -- --slug=…` | Cancela assinaturas do slug no Stripe |
 | `npm run prisma:seed:dev` | Imobiliárias de exemplo + catálogos |

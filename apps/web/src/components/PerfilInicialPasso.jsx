@@ -1,8 +1,8 @@
+import { HorarioAtendimento, HORARIO_ATENDIMENTO_CSS } from "./HorarioAtendimento.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { formatCep, formatCnpj, formatCreci, formatPhone, onlyDigits } from "../utils/masks";
 import { uploadLogoWithBackgroundRemoval } from "../utils/uploadToCloudinary";
-import { TEMAS } from "../utils/temaDoPainel";
 import { SelectCustom } from "./SelectCustom.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -311,83 +311,18 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
           obrigatorio
           faltando={faltando.has("horarioAtendimento")}
         >
-          <div className="pi-horarios">
-            {(form.horarioAtendimento || []).map((faixa, i) => {
-              const trocar = (campo, valor) =>
-                set("horarioAtendimento", form.horarioAtendimento.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)));
-              return (
-                <div className="pi-horario" key={i}>
-                  <input
-                    className="pi-entrada"
-                    value={faixa.dias}
-                    onChange={(e) => trocar("dias", e.target.value)}
-                    placeholder="Ex: Segunda a sexta"
-                    disabled={ocupado}
-                  />
-                  {faixa.fechado ? (
-                    <span className="pi-horario__fechado">Sem atendimento</span>
-                  ) : (
-                    <span className="pi-horario__horas">
-                      <input className="pi-entrada" type="time" value={faixa.abre} onChange={(e) => trocar("abre", e.target.value)} disabled={ocupado} />
-                      <em>às</em>
-                      <input className="pi-entrada" type="time" value={faixa.fecha} onChange={(e) => trocar("fecha", e.target.value)} disabled={ocupado} />
-                    </span>
-                  )}
-                  <label className="pi-horario__chave">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(faixa.fechado)}
-                      onChange={(e) => trocar("fechado", e.target.checked)}
-                      disabled={ocupado}
-                    />
-                    Fechado
-                  </label>
-                  {form.horarioAtendimento.length > 1 ? (
-                    <button
-                      type="button"
-                      className="pi-horario__remover"
-                      onClick={() => set("horarioAtendimento", form.horarioAtendimento.filter((_, j) => j !== i))}
-                      disabled={ocupado}
-                      aria-label="Remover faixa"
-                    >
-                      ×
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-            {(form.horarioAtendimento || []).length < 6 ? (
-              <button
-                type="button"
-                className="pi-horario__mais"
-                onClick={() => set("horarioAtendimento", [
-                  ...(form.horarioAtendimento || []),
-                  { dias: "", abre: "09:00", fecha: "13:00", fechado: false },
-                ])}
-                disabled={ocupado}
-              >
-                + Adicionar faixa
-              </button>
-            ) : null}
-          </div>
+          <HorarioAtendimento
+            valor={form.horarioAtendimento}
+            aoMudar={(faixas) => set("horarioAtendimento", faixas)}
+            desabilitado={ocupado}
+            classeEntrada="pi-entrada"
+          />
         </Campo>
 
-        <Campo rotulo="Tema do painel" dica="Vale para toda a equipe. Cada pessoa pode trocar o seu depois." largo>
-          <div className="pi-temas">
-            {TEMAS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`pi-tema${form.temaImobiliaria === t.id ? " is-ativo" : ""}`}
-                onClick={() => set("temaImobiliaria", t.id)}
-                disabled={ocupado}
-              >
-                <span className={`pi-tema__amostra is-${t.id}`} aria-hidden />
-                {t.rotulo}
-              </button>
-            ))}
-          </div>
-        </Campo>
+        {/* O tema do PAINEL saiu daqui. A pergunta vinha logo antes da escolha
+            do modelo da vitrine, e lia como "tema da vitrine" — e o modelo
+            escolhido no passo seguinte é quem define esse. O do painel
+            continua escuro por padrão e se troca nas Configurações. */}
       </div>
 
       <p className="pi-nota">
@@ -455,6 +390,8 @@ function Cor({ valor, aoMudar, desabilitado }) {
 }
 
 export const PERFIL_INICIAL_CSS = `
+${HORARIO_ATENDIMENTO_CSS}
+
 .pi-carregando { font-size: 13px; color: var(--bv-fraco, #94a3b8); padding: 26px 0; text-align: center; }
 .pi-corpo { display: flex; flex-direction: column; gap: 16px; text-align: left; }
 

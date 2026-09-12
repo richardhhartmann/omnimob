@@ -42,6 +42,12 @@ export const createPropertySchema = z.object({
      banco: um cadastro feito pela API sem o campo não deve publicar o endereço
      por omissão — a escolha tem de ser dita. */
   exibirEnderecoCompleto: z.boolean().optional().default(false),
+  /* Ordem na vitrine. `destaque` põe o imóvel à frente de todos; `ordemVitrine`
+     é a posição manual (1 = primeiro), nula quando a imobiliária não escolheu.
+     Zero não é aceito de propósito: seria uma posição, e todo imóvel salvo
+     pela API sem pensar nisso nasceria em primeiro. */
+  destaque: z.boolean().optional().default(false),
+  ordemVitrine: z.number().int().min(1).max(9999).nullable().optional(),
   comodidades: z.record(z.boolean()).nullable().optional(),
   status: z.nativeEnum(PropertyStatus).optional().default(PropertyStatus.DRAFT),
 });
@@ -93,6 +99,10 @@ export const updateTenantConfiguracaoSchema = z.object({
      vira um adesivo por cima do imóvel. O controle da tela já se move dentro
      desses limites — isto é a trava de quem chama a API direto. */
   marcaDaguaOpacidade: z.number().int().min(20).max(80).optional(),
+  /* Horas até um lead aberto virar "parado" (ver `leadsParados.js`). De 1h a
+     30 dias: abaixo disso todo lead nasce parado; acima, o alerta nunca dispara
+     e a imobiliária acha que o recurso não existe. */
+  leadParadoHoras: z.number().int().min(1).max(720).optional(),
   /* ── Omnimob Flow ─────────────────────────────────────────────────────────
      O token vem em CLARO do navegador e é cifrado antes de gravar (a rota
      chama `cofre.cifrar`). Ele é opcional em toda gravação e nunca é limpo por

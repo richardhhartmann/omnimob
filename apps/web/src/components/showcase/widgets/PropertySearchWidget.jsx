@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ShowcaseTexto, usaFonteReal, useDadosDaVitrine, useFiltroDaVitrine, useVitrine } from "../contexto.jsx";
-import { DADOS_BUSCA_PADRAO, lerDadosWidget, montarWhatsappUrl, somenteTexto } from "./widgetData.js";
+import { DADOS_BUSCA_PADRAO, lerDadosWidget, montarWhatsappUrl, numeroWhatsAppDaVitrine, somenteTexto } from "./widgetData.js";
 import { TituloDoWidget } from "../TituloDoWidget.jsx";
 import { ListaEditavel } from "./ListaEditavel.jsx";
 
@@ -113,7 +113,7 @@ export function PropertySearchWidget({ widget }) {
     const titulo = somenteTexto(widget.title) || "Busca de imóvel";
     const escolhido = [negocio, tipo, regiao].filter(Boolean).join(" · ") || "sem filtros";
     const mensagem = `Olá! Vim pela vitrine e quero ajuda com esta busca: ${escolhido}. (${titulo})`;
-    window.open(montarWhatsappUrl(widget.ctaUrl, mensagem), "_blank", "noopener,noreferrer");
+    window.open(montarWhatsappUrl(widget.ctaUrl, mensagem, numeroWhatsAppDaVitrine(dados)), "_blank", "noopener,noreferrer");
   }
 
   const campos = [

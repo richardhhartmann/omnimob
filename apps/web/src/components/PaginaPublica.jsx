@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { OmnimobStyles, LogoLockup } from "../styles/omnimobKit";
 import { useSeo } from "../utils/seo";
+import { useEsquemaDaOmnimob } from "../utils/esquemaDaOmnimob";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Casca das páginas públicas que não são a landing.
@@ -40,6 +41,8 @@ export function PaginaPublica({ titulo, subtitulo, olho, descricao, largura = "t
   const { pathname } = useLocation();
 
   // A assinatura é em português, como o resto do utilitário (`utils/seo.js`).
+  // Páginas institucionais são da Omnimob: levam o JSON-LD da empresa.
+  useEsquemaDaOmnimob();
   useSeo({
     titulo: `${titulo} · Omnimob`,
     descricao: descricao || subtitulo,

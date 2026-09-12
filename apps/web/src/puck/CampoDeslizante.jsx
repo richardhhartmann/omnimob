@@ -65,3 +65,28 @@ export const campoBrilho = campo("Brilho do banner", {
   paraDoc: (v) => v / 100,
   formatar: (v) => `${(v / 100).toFixed(1)}×`,
 });
+
+/** A largura da peça, de 40% a 100% da folha — só com a página em largura livre. */
+export const campoLargura = campo("Largura da peça", {
+  min: 40,
+  max: 100,
+  paraTela: (v) => (typeof v === "number" ? v : 100),
+  paraDoc: (v) => v,
+  formatar: (v) => `${v}%`,
+});
+
+/* Os espaçamentos da peça, em pixels. Interno = padding (o ar entre a borda da
+   peça e o que ela desenha); externo = margem em cima e embaixo (o ar entre
+   ela e as vizinhas). Zero é o padrão de sempre, e a peça só ganha invólucro
+   quando um dos dois é maior que zero. */
+export const campoEspacoInterno = campo("Espaçamento interno", {
+  min: 0, max: 120, paraTela: (v) => (typeof v === "number" ? v : 0), paraDoc: (v) => v, formatar: (v) => `${v}px`,
+});
+export const campoEspacoExterno = campo("Espaçamento externo", {
+  min: 0, max: 120, paraTela: (v) => (typeof v === "number" ? v : 0), paraDoc: (v) => v, formatar: (v) => `${v}px`,
+});
+
+/** Largura de TODAS as peças, na página em largura livre. A peça com valor próprio vence. */
+export const campoLarguraGlobal = campo("Largura das peças", {
+  min: 40, max: 100, paraTela: (v) => (typeof v === "number" ? v : 100), paraDoc: (v) => v, formatar: (v) => `${v}%`,
+});

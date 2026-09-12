@@ -1,13 +1,14 @@
+import { Link } from "react-router-dom";
 import {
   ShowcaseLinkExterno,
   ShowcaseTexto,
   usaFonteReal,
   useDadosDaVitrine,
-  useFiltroDaVitrine,
   useVitrine,
 } from "../contexto.jsx";
-import { DADOS_REGIOES_PADRAO, lerDadosWidget, montarWhatsappUrl } from "./widgetData.js";
+import { DADOS_REGIOES_PADRAO, lerDadosWidget, montarWhatsappUrl, numeroWhatsAppDaVitrine } from "./widgetData.js";
 import { TituloDoWidget } from "../TituloDoWidget.jsx";
+import { caminhoDaRegiao, regiaoDoImovel } from "../../../utils/regioes.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Regiões — os bairros onde a imobiliária realmente tem imóvel.
@@ -22,12 +23,15 @@ import { TituloDoWidget } from "../TituloDoWidget.jsx";
    volume: a lista existe para dizer onde há o que ver, e o bairro com um imóvel
    só não deve abrir a fila.
 
-   ── O CLIQUE MUDOU DE DESTINO ──
+   ── O CLIQUE MUDOU DE DESTINO (DUAS VEZES) ──
 
    Ia para o WhatsApp — ou seja, pedia a um corretor que fizesse à mão uma busca
-   que a página tinha como fazer sozinha. Com regiões reais ele filtra a própria
-   grade de imóveis, ali mesmo, sem recarregar nada: o acervo inteiro já está
-   na memória do navegador.
+   que a página tinha como fazer sozinha. Passou a filtrar a própria grade, ali
+   mesmo. Hoje leva à PÁGINA DA REGIÃO (`pages/RegiaoPage.jsx`): "imóveis em
+   <bairro>", com endereço próprio, título próprio e os tipos disponíveis. O
+   filtro em memória não tinha URL, não ia para o sitemap e o Google não via —
+   e é este link, repetido em toda vitrine, que faz o robô encontrar essas
+   páginas. Para quem clica a diferença é que agora dá para compartilhar.
 
    No caminho manual o WhatsApp continua sendo o destino, e isso não é
    inconsistência: o bairro digitado à mão pode não existir no acervo, e um
@@ -36,11 +40,10 @@ import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 export function RegionsWidget({ widget }) {
   const dados = useDadosDaVitrine();
-  const { filtro, aplicarFiltro } = useFiltroDaVitrine();
   const reais = dados?.regioes || [];
   const real = usaFonteReal(widget, reais);
 
-  const { modo, aoEditar } = useVitrine();
+  const { modo, aoEditar, tenantSlug } = useVitrine();
   /* Só faz sentido editar a lista MANUAL: com a fonte real ligada, as regiões
      vêm do acervo e mexer nelas aqui não teria efeito nenhum na página. */
   const ehEditor = modo === "editor" && Boolean(aoEditar) && !real;
@@ -58,23 +61,32 @@ export function RegionsWidget({ widget }) {
       <div className="widget-regions__list">
         {real
           ? reais.slice(0, 16).map((regiao) => {
-              const ativo = filtro?.regiao === regiao.nome;
-              return (
-                /* `<button>` e não `<a>`: isto não navega para lugar nenhum,
-                   muda o que a página já está mostrando. Um link que não leva a
-                   um endereço mente para o teclado e para o leitor de tela. */
-                <button
-                  key={`${regiao.nome}-${regiao.cidade}`}
-                  type="button"
-                  className={`widget-regions__chip${ativo ? " is-ativo" : ""}`}
-                  aria-pressed={ativo}
-                  /* Clicar de novo no bairro aceso limpa o filtro. É o gesto
-                     que as pessoas tentam antes de procurar um "×". */
-                  onClick={() => aplicarFiltro(ativo ? null : { regiao: regiao.nome })}
-                >
+              /* O mesmo slug que a página resolve — `regiaoDoImovel` recebe a
+                 região como se fosse um imóvel: bairro quando o nome não é a
+                 própria cidade. No editor o ShowcaseLink vira um <span>. */
+              const r = regiaoDoImovel({
+                neighborhood: regiao.nome !== regiao.cidade ? regiao.nome : "",
+                city: regiao.cidade,
+              });
+              const filhos = (
+                <>
                   <span>{regiao.nome}</span>
                   <span className="widget-regions__conta">{regiao.total}</span>
-                </button>
+                </>
+              );
+              /* `<a>` nos dois modos, como o ShowcaseLinkExterno: no editor
+                 sem destino (nada navega no construtor), e a mesma tag para a
+                 peça desenhar igual dos dois lados. */
+              return modo === "editor" ? (
+                <a key={`${regiao.nome}-${regiao.cidade}`} className="widget-regions__chip">{filhos}</a>
+              ) : (
+                <Link
+                  key={`${regiao.nome}-${regiao.cidade}`}
+                  to={caminhoDaRegiao({ tenantSlug, regiao: r?.slug || "" })}
+                  className="widget-regions__chip"
+                >
+                  {filhos}
+                </Link>
               );
             })
           : manuais.slice(0, 16).map((regiao, i) => (
@@ -89,7 +101,7 @@ export function RegionsWidget({ widget }) {
                  remontaria e o cursor sairia do campo. */
               <ShowcaseLinkExterno
                 key={i}
-                href={montarWhatsappUrl(widget.ctaUrl, `Olá! Gostaria de conhecer os imóveis disponíveis em ${regiao}.`)}
+                href={montarWhatsappUrl(widget.ctaUrl, `Olá! Gostaria de conhecer os imóveis disponíveis em ${regiao}.`, numeroWhatsAppDaVitrine(dados))}
                 className="widget-regions__chip"
               >
                 <ShowcaseTexto

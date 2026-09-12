@@ -764,3 +764,69 @@ export function emailVencimentoProximo({ imobiliaria, dias, vence, plano, renova
 
   return { subject, body, html };
 }
+
+/* ── Leads parados ────────────────────────────────────────────────────────────
+   Um e-mail por imobiliária, com a lista de quem está esquecido. Vai para o
+   e-mail da casa e para os corretores responsáveis — ver `leadsParados.js`.
+   O link leva à lista já FILTRADA por parados: quem abre o e-mail quer agir,
+   não procurar. */
+const CAMINHO_LEADS_PARADOS = "/relatorios?ver=leads&parados=1";
+
+export function emailLeadsParados({ imobiliaria, horas, leads, base = "" }) {
+  const raiz = String(base || "").replace(/\/+$/, "");
+  const n = leads.length;
+  const plural = n === 1 ? "lead está parado" : "leads estão parados";
+  const prazo = horas >= 48 && horas % 24 === 0 ? `${horas / 24} dias` : `${horas} horas`;
+
+  const subject = n === 1
+    ? `1 lead sem atendimento há mais de ${prazo} — ${imobiliaria}`
+    : `${n} leads sem atendimento há mais de ${prazo} — ${imobiliaria}`;
+
+  const descreve = (l) => {
+    const desde = l.horas >= 48 ? `há ${Math.floor(l.horas / 24)} dias` : `há ${l.horas}h`;
+    return [
+      l.nome,
+      l.contato ? `(${l.contato})` : "",
+      l.imovel ? `— ${l.imovel}` : "",
+      l.responsavel ? `· ${l.responsavel}` : "· sem responsável",
+      `· parado ${desde}`,
+    ].filter(Boolean).join(" ");
+  };
+
+  const body = [
+    `${n} ${plural} na ${imobiliaria}: ninguém registrou contato, nota nem mudança de estágio há mais de ${prazo}.`,
+    "",
+    ...leads.map((l) => `• ${descreve(l)}`),
+    "",
+    raiz ? `Ver os leads parados: ${raiz}${CAMINHO_LEADS_PARADOS}` : "",
+    "",
+    "Este aviso sai uma vez por lead. Se alguém mexer nele e ele parar de novo, você recebe outro.",
+    `O prazo de ${prazo} é ajustável em Configurações.`,
+  ]
+    .filter((l) => l !== undefined)
+    .join("\n");
+
+  const html = layoutEmail({
+    preheader: `${n} ${plural} há mais de ${prazo}.`,
+    conteudo: [
+      eyebrow("● LEADS PARADOS", COR.dourado),
+      titulo(n === 1 ? "Um lead está esperando" : `${n} leads estão esperando`),
+      paragrafo(
+        `Na ${forte(imobiliaria)}, ninguém registrou contato, nota nem mudança de estágio ` +
+          `nestes leads há mais de ${forte(prazo)}.`,
+      ),
+      dados(leads.map((l) => ({
+        rotulo: l.horas >= 48 ? `${Math.floor(l.horas / 24)} dias` : `${l.horas}h`,
+        valor: descreve(l).replace(/· parado .*$/, "").trim(),
+      }))),
+      raiz ? botao("Ver os leads parados", `${raiz}${CAMINHO_LEADS_PARADOS}`) : "",
+      paragrafo(
+        "Este aviso sai uma vez por lead: se alguém mexer nele e ele parar de novo, você recebe outro. " +
+          `O prazo de ${esc(prazo)} é ajustável em Configurações.`,
+      ),
+      raiz ? linkDeReserva(`${raiz}${CAMINHO_LEADS_PARADOS}`) : "",
+    ],
+  });
+
+  return { subject, body, html };
+}

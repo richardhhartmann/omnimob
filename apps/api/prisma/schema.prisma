@@ -412,6 +412,11 @@ model Tenant {
    * mudou de plano) entra sem migração.
    */
   boasVindasVistas String[] @default([]) @map("tnt_boas_vindas_vistas")
+  /* Depois de quantas horas sem ninguém encostar um lead aberto vira "parado".
+     A regra mora em `services/leadsParados.js`; aqui só o número, por
+     imobiliária: uma que atende em 2h e outra que trabalha lançamento com
+     retorno semanal não cabem no mesmo prazo. */
+  leadParadoHoras Int @default(48) @map("tnt_lead_parado_horas")
 
   /**
    * ─── OS MÓDULOS QUE ESTA IMOBILIÁRIA CONTRATOU ─────────────────────────────
@@ -1298,6 +1303,12 @@ model Property {
    */
   matricula              String?               @map("prp_matricula")
   exibirEnderecoCompleto Boolean     @default(false) @map("prp_exibir_endereco_completo")
+  /* Ordem na vitrine. `destaque` põe o imóvel na frente de todos; entre os
+     destacados (e entre os demais) manda `ordemVitrine`, e quem não tem
+     posição fica depois, do mais novo ao mais antigo. Nulo é "automático" de
+     propósito: zero seria uma posição, e todo imóvel nasceria em primeiro. */
+  destaque        Boolean          @default(false) @map("prp_destaque")
+  ordemVitrine    Int?             @map("prp_ordem_vitrine")
   viewCount       Int              @default(0)
   leadCount       Int              @default(0)
   saleCount       Int              @default(0)
@@ -1417,6 +1428,14 @@ model PropertyLead {
    * converte de imobiliária que não converte.
    */
   primeiroContatoEm DateTime?
+  /* Por que o lead foi perdido. Preenchido ao mover para PERDIDO e limpo se o
+     lead voltar ao funil — sem isto o relatório de motivos somaria perdas que
+     não são mais perdas. Texto livre curto, escolhido de uma lista na tela. */
+  motivoPerda       String?     @map("lea_motivo_perda")
+  /* Quando o último aviso de "lead parado" saiu por e-mail. Um aviso por
+     silêncio: só sai outro se alguém encostar no lead e ele parar de novo.
+     Ver `leadsParados.js`. */
+  avisoParadoEm     DateTime?   @map("lea_aviso_parado_em")
 
   property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)

@@ -75,6 +75,12 @@ export function linkDoImovel(propertyId, tenant) {
   return base ? `${base}/imovel/${propertyId}` : "";
 }
 
+/** A landing isolada do imóvel (sem menu) — para anúncio pago e lançamento. */
+export function linkDaLandingDoImovel(propertyId, tenant) {
+  const base = linkDoImovel(propertyId, tenant);
+  return base ? `${base}/lp` : "";
+}
+
 /** True quando a vitrine já vive no domínio da imobiliária. */
 export function usaDominioProprio(tenant) {
   const t = tenantAtual(tenant);

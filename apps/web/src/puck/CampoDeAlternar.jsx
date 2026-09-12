@@ -7,6 +7,10 @@ import {
   Database,
   Moon,
   Sun,
+  Rows,
+  Square,
+  ArrowsInLineHorizontal,
+  ArrowsOutLineHorizontal,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -36,7 +40,7 @@ import {
    "Escondida da página" informa; "clique para esconder" só repete o botão.
    ──────────────────────────────────────────────────────────────────────────── */
 
-function Alternador({ valor, onChange, readOnly, opcoes, apoio, padrao }) {
+function Alternador({ rotulo, valor, onChange, readOnly, opcoes, apoio, padrao }) {
   /* Ausência conta como o PADRÃO. Peça vinda da tradução não traz `oculto` nem
      `travado` — `defaultProps` só vale para peça inserida pela gaveta —, e sem
      isto os dois lados ficavam apagados. Alternador com nenhum lado aceso lê
@@ -44,7 +48,11 @@ function Alternador({ valor, onChange, readOnly, opcoes, apoio, padrao }) {
   const atual = valor === undefined || valor === null ? padrao : valor;
   return (
     <div className="editor-field puck-alternador">
-      <div className="editor-segmented is-compact" role="group">
+      {/* O título do campo. O Puck não o desenha para campo `custom`, e três
+          alternadores empilhados sem nome viravam uma adivinhação: "Ligadas"
+          de quê? */}
+      {rotulo ? <span className="puck-alternador__rotulo">{rotulo}</span> : null}
+      <div className="editor-segmented is-compact" role="group" aria-label={rotulo}>
         {opcoes.map((o) => {
           const ativo = atual === o.valor;
           return (
@@ -72,7 +80,7 @@ function campo(rotulo, opcoes, apoio, padrao) {
     type: "custom",
     label: rotulo,
     render: ({ value, onChange, readOnly }) => (
-      <Alternador valor={value} onChange={onChange} readOnly={readOnly} opcoes={opcoes} apoio={apoio} padrao={padrao} />
+      <Alternador rotulo={rotulo} valor={value} onChange={onChange} readOnly={readOnly} opcoes={opcoes} apoio={apoio} padrao={padrao} />
     ),
   };
 }
@@ -130,4 +138,53 @@ export const campoTema = campo(
     ? "Fundo claro, tinta escura."
     : "Fundo escuro, tinta clara — é o padrão da vitrine."),
   "dark",
+);
+
+/* As seções zebradas: fundo alternado entre uma seção e a seguinte, para a
+   página não virar um bloco só. "Seção" aqui é cada divisão da página —
+   cabeçalho, título, uma seção em colunas, um widget solto —, e não só o
+   agrupamento em colunas. Ligado por padrão; a cor é a do tema (ver
+   `.is-zebrada` em styles.css), então claro e escuro ganham a alternância
+   certa sem uma segunda opção. */
+export const campoZebrado = campo(
+  "Seções zebradas",
+  [
+    { valor: "sim", rotulo: "Ligadas", Icone: Rows },
+    { valor: "nao", rotulo: "Desligadas", Icone: Square },
+  ],
+  (v) => (v === "nao"
+    ? "Todas as seções no mesmo fundo."
+    : "Uma seção sim, outra não, com fundo levemente diferente — vale também na página do imóvel."),
+  "sim",
+);
+
+/* A largura da página: travada em 1400px (o padrão de sempre — a folha que o
+   editor e a vitrine compartilham) ou livre, ocupando a tela inteira. Livre,
+   cada peça ganha um controle "Largura" no inspetor para usar as laterais que
+   num monitor largo ficavam vazias. */
+export const campoLarguraDaPagina = campo(
+  "Largura da página",
+  [
+    { valor: "travada", rotulo: "Travada", Icone: ArrowsInLineHorizontal },
+    { valor: "livre", rotulo: "Livre", Icone: ArrowsOutLineHorizontal },
+  ],
+  (v) => (v === "livre"
+    ? "A página usa a tela inteira, e cada peça ganha um controle de largura."
+    : "Conteúdo centrado em até 1400px — o padrão."),
+  "travada",
+);
+
+/* O mesmo par, por PEÇA: uma peça livre sangra até as bordas do monitor mesmo
+   com a página travada em 1400px — é como se faz um banner de ponta a ponta
+   no meio de uma página centrada. */
+export const campoLarguraDaPeca = campo(
+  "Largura da peça",
+  [
+    { valor: "travada", rotulo: "Travada", Icone: ArrowsInLineHorizontal },
+    { valor: "livre", rotulo: "Livre", Icone: ArrowsOutLineHorizontal },
+  ],
+  (v) => (v === "livre"
+    ? "A peça usa a tela inteira, de borda a borda, e ganha o controle de largura."
+    : "A peça acompanha a largura da página."),
+  "travada",
 );

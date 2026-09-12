@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prismaPkg from "@prisma/client";
 import { prisma } from "../db.js";
+import { filtrarPorRegiao, paginasDeRegiao, textosDaRegiao } from "../services/paginasDeRegiao.js";
 
 const { PropertyStatus } = prismaPkg;
 
@@ -198,5 +199,46 @@ previaRouter.get("/imovel/:tenantSlug/:propertyId", async (req, res) => {
     return enviar(res, paginaDePrevia({
       titulo: "Imóvel — Omnimob", descricao: "Confira este imóvel.", url, siteName: "Omnimob",
     }));
+  }
+});
+
+// ─── Região: "imóveis em <bairro>" ──────────────────────────────────────────
+previaRouter.get("/regiao/:tenantSlug/:regiao/:tipo?", async (req, res) => {
+  const { tenantSlug, regiao: regiaoSlug, tipo: tipoSlug } = req.params;
+  const url = `${BASE}/vitrine/${encodeURIComponent(tenantSlug)}/imoveis/${encodeURIComponent(regiaoSlug)}${tipoSlug ? `/${encodeURIComponent(tipoSlug)}` : ""}`;
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
+      select: { id: true, name: true, logoUrl: true },
+    });
+    const imoveis = tenant
+      ? await prisma.property.findMany({
+          where: { tenantId: tenant.id, status: PropertyStatus.ACTIVE },
+          select: { neighborhood: true, city: true, propertyType: true, images: { orderBy: { position: "asc" }, take: 1, select: { url: true } } },
+        })
+      : [];
+    const regiao = paginasDeRegiao(imoveis).find((r) => r.slug === regiaoSlug);
+    const tipo = tipoSlug ? regiao?.tipos.find((t) => t.slug === tipoSlug) : null;
+    const lista = regiao ? filtrarPorRegiao(imoveis, regiaoSlug, tipoSlug) : [];
+
+    if (!tenant || !regiao || (tipoSlug && !tipo)) {
+      return enviar(res, paginaDePrevia({
+        titulo: tenant ? `${tenant.name} — Região não encontrada` : "Região não encontrada",
+        descricao: "Não há imóveis nesta região no momento.",
+        url, siteName: tenant?.name || "Omnimob",
+      }));
+    }
+
+    const textos = textosDaRegiao({ regiao, tipo, total: lista.length, imobiliaria: tenant.name });
+    return enviar(res, paginaDePrevia({
+      titulo: textos.titulo,
+      descricao: resumir(textos.descricao),
+      imagem: lista.find((p) => p.images?.[0]?.url)?.images[0].url || tenant.logoUrl || `${BASE}/og-image.png`,
+      url,
+      siteName: tenant.name,
+    }));
+  } catch (erro) {
+    console.error("[previa:regiao]", erro.message);
+    return enviar(res, paginaDePrevia({ titulo: "Imóveis — Omnimob", descricao: "Confira os imóveis desta região.", url, siteName: "Omnimob" }));
   }
 });

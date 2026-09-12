@@ -415,6 +415,18 @@ export function normalizeShowcaseConfig(raw) {
     widgets,
     topHeader,
     hiddenBlocks,
+    /* Seções zebradas (ver `campoZebrado`). Só `false` desliga; ausência e
+       qualquer outra coisa é ligado — o padrão do produto. */
+    zebrado: cfg.zebrado !== false,
+    /* Largura livre (a página usa a tela inteira). Só `true` liga. */
+    larguraLivre: cfg.larguraLivre === true,
+    /* Largura global das peças (%), só com a página livre. 100 = como sempre. */
+    larguraDasPecas: Number(cfg.larguraDasPecas) || 100,
+    /* Espaçamento global das peças, em px (o do inspetor da página). */
+    espacamento: {
+      interno: Number(cfg.espacamento?.interno) || 0,
+      externo: Number(cfg.espacamento?.externo) || 0,
+    },
     lockedBlocks,
     globalFont: typeof cfg.globalFont === "string" && cfg.globalFont ? cfg.globalFont : "Inter",
   };

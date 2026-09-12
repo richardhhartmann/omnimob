@@ -9,6 +9,7 @@ import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PropertyInsightsPage } from "./pages/PropertyInsightsPage";
 import { ShowcasePropertyPage } from "./pages/ShowcasePropertyPage";
+import { RegiaoPage } from "./pages/RegiaoPage";
 import { ShowcasePage } from "./pages/ShowcasePage";
 import { TrialConfirmarPage } from "./pages/TrialConfirmarPage";
 import { RecuperarSenhaPage } from "./pages/RecuperarSenhaPage";
@@ -432,6 +433,10 @@ export default function App() {
       <Routes location={location}>
         <Route path="/" element={<ShowcasePage slugFixo={slugDoDominio} />} />
         <Route path="/imovel/:propertyId" element={<ShowcasePropertyPage slugFixo={slugDoDominio} />} />
+        <Route path="/imovel/:propertyId/lp" element={<ShowcasePropertyPage slugFixo={slugDoDominio} isolada />} />
+        {/* Páginas de região ("imóveis em <bairro>"), com ou sem o tipo. */}
+        <Route path="/imoveis/:regiao" element={<RegiaoPage slugFixo={slugDoDominio} />} />
+        <Route path="/imoveis/:regiao/:tipo" element={<RegiaoPage slugFixo={slugDoDominio} />} />
         {/* Os links internos da vitrine ainda montam `/vitrine/:slug/imovel/:id`
             — é o caminho que existe nos endereços da Omnimob. Aceitá-los aqui
             evita que navegar para um imóvel caia no catch-all e volte para a
@@ -441,6 +446,9 @@ export default function App() {
           path="/vitrine/:tenantSlug/imovel/:propertyId"
           element={<ShowcasePropertyPage slugFixo={slugDoDominio} />}
         />
+        <Route path="/vitrine/:tenantSlug/imovel/:propertyId/lp" element={<ShowcasePropertyPage slugFixo={slugDoDominio} isolada />} />
+        <Route path="/vitrine/:tenantSlug/imoveis/:regiao" element={<RegiaoPage slugFixo={slugDoDominio} />} />
+        <Route path="/vitrine/:tenantSlug/imoveis/:regiao/:tipo" element={<RegiaoPage slugFixo={slugDoDominio} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </>
@@ -512,6 +520,13 @@ export default function App() {
 
       <Route path="/vitrine/:tenantSlug" element={<ShowcasePage />} />
       <Route path="/vitrine/:tenantSlug/imovel/:propertyId" element={<ShowcasePropertyPage />} />
+      {/* A landing isolada do imóvel: a mesma página, sem menu, sugestões nem
+          rodapé — para anúncio pago e lançamento. Ver o modo `isolada`. */}
+      <Route path="/vitrine/:tenantSlug/imovel/:propertyId/lp" element={<ShowcasePropertyPage isolada />} />
+      {/* Páginas de região: "imóveis em <bairro>" e "<tipo> em <bairro>". São
+          as páginas que concorrem na busca por bairro — ver `utils/regioes.js`. */}
+      <Route path="/vitrine/:tenantSlug/imoveis/:regiao" element={<RegiaoPage />} />
+      <Route path="/vitrine/:tenantSlug/imoveis/:regiao/:tipo" element={<RegiaoPage />} />
 
       {/* Painel super-admin da Omnimob (sessão independente do tenant) */}
       <Route

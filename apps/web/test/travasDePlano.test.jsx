@@ -59,7 +59,7 @@ test("as duas telas usam a MESMA função — não um filtro cada", () => {
   }
 });
 
-test("os quatro relatórios são do Básico — o que é pago é o E-MAIL", () => {
+test("os cinco relatórios são do Básico — o que é pago é o E-MAIL", () => {
   /* A tabela de recursos vende "Relatórios e métricas de desempenho" no Básico,
      e no Profissional a linha é "Relatório mensal de desempenho POR E-MAIL".
      São coisas diferentes: a tela é do Básico, mandar por e-mail não é.
@@ -67,7 +67,9 @@ test("os quatro relatórios são do Básico — o que é pago é o E-MAIL", () =
      A tabela de planos discordava disso duas vezes — `relatorioMensal` escondia
      o painel inteiro e `funilVendas: false` tirava funil e comissões. Quem
      manda é a lista que o cliente lê antes de pagar. */
-  const esperado = ["LEADS", "MENSAL", "FUNIL", "COMISSOES"];
+  /* O funil de ATENDIMENTO entrou junto de Leads: é a leitura da lista de
+     leads, e a lista é do Básico. */
+  const esperado = ["LEADS", "ATENDIMENTO", "MENSAL", "FUNIL", "COMISSOES"];
   assert.deepEqual(relatoriosVisiveis("BASICO").map((r) => r.chave), esperado);
   assert.deepEqual(relatoriosVisiveis("PROFISSIONAL").map((r) => r.chave), esperado);
 });

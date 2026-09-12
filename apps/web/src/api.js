@@ -330,11 +330,12 @@ export const api = {
       body: JSON.stringify({ order }),
     }),
 
-  listLeads: (tenantSlug, { page = 1, limit = 20, propertyId, estagio, responsavelId } = {}) => {
+  listLeads: (tenantSlug, { page = 1, limit = 20, propertyId, estagio, responsavelId, parados } = {}) => {
     const params = new URLSearchParams({ page, limit });
     if (propertyId) params.set("propertyId", propertyId);
     if (estagio) params.set("estagio", estagio);
     if (responsavelId) params.set("responsavelId", responsavelId);
+    if (parados) params.set("parados", "1");
     return request(`/api/leads?${params}`, {
       headers: { "x-tenant-slug": tenantSlug },
     });
@@ -358,6 +359,15 @@ export const api = {
 
   obterLead: (tenantSlug, leadId) =>
     request(`/api/leads/${leadId}`, { headers: { "x-tenant-slug": tenantSlug } }),
+
+  // Funil de atendimento: onde os leads param, e por que se perdem.
+  funilDeLeads: (tenantSlug, { de, ate } = {}) => {
+    const params = new URLSearchParams();
+    if (de) params.set("de", de);
+    if (ate) params.set("ate", ate);
+    const qs = params.toString();
+    return request(`/api/leads/funil${qs ? `?${qs}` : ""}`, { headers: { "x-tenant-slug": tenantSlug } });
+  },
 
   /* ── Trilha de auditoria ── */
   listarAuditoria: (tenantSlug, filtros = {}) => {

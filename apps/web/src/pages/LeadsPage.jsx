@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useOutletContext } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { LeadAtendimento, ESTAGIOS, corDoEstagio, rotuloDoEstagio } from "../components/LeadAtendimento.jsx";
 import { Avatar, EmptyState } from "../components/adminUi";
@@ -48,6 +48,9 @@ const IconHome = () => (
 const IconCopy = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
 );
+const IconRelogio = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+);
 const IconTrash = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
 );
@@ -63,8 +66,15 @@ export function LeadsPage({ session }) {
   /* Filtros de atendimento. Vão para o SERVIDOR, ao contrário dos outros desta
      tela: "os leads do Pedro que estão em proposta" precisa varrer a base
      inteira, e não só os 100 já carregados — senão o filtro mente. */
-  const [estagioFiltro, setEstagioFiltro] = useState("");
-  const [responsavelFiltro, setResponsavelFiltro] = useState("");
+  /* Os três nascem da URL quando ela os traz: o funil de atendimento linka
+     "os leads do Pedro" e "os em proposta", e o e-mail de aviso linka
+     `?parados=1`. Quem clica quer a lista já filtrada. */
+  const [parametros, setParametros] = useSearchParams();
+  const [estagioFiltro, setEstagioFiltro] = useState(parametros.get("estagio") || "");
+  const [responsavelFiltro, setResponsavelFiltro] = useState(parametros.get("responsavel") || "");
+  /* "Só os parados" também vai ao servidor — é ele quem sabe contar horas
+     (`leadsParados.js`). */
+  const [paradosFiltro, setParadosFiltro] = useState(parametros.get("parados") === "1");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
@@ -110,6 +120,7 @@ export function LeadsPage({ session }) {
         page: 1, limit: 100,
         estagio: estagioFiltro || undefined,
         responsavelId: responsavelFiltro || undefined,
+        parados: paradosFiltro || undefined,
       });
       setData(result);
       /* Atualiza o "último total visto" para sumir o badge na sidebar. Chaveado
@@ -127,7 +138,18 @@ export function LeadsPage({ session }) {
     }
   }
 
-  useEffect(() => { loadLeads(); }, [tenantSlug, estagioFiltro, responsavelFiltro]);
+  useEffect(() => { loadLeads(); }, [tenantSlug, estagioFiltro, responsavelFiltro, paradosFiltro]);
+
+  function alternarParados() {
+    const proximo = !paradosFiltro;
+    setParadosFiltro(proximo);
+    /* Mantém a URL contando a verdade, para o link ser compartilhável e o
+       Voltar do navegador fazer sentido. `ver=leads` fica: é ele que diz à
+       página de Relatórios qual relatório está aberto. */
+    const p = new URLSearchParams(parametros);
+    if (proximo) p.set("parados", "1"); else p.delete("parados");
+    setParametros(p, { replace: true });
+  }
 
   function exportCSV() {
     const rows = [
@@ -210,10 +232,13 @@ export function LeadsPage({ session }) {
     return {
       total: data.total,
       whats: allLeads.filter((l) => l.phone).length,
-      email: allLeads.filter((l) => l.email).length,
+      /* Vem do servidor e ignora os filtros da tela: é o alerta da casa. */
+      parados: data.parados ?? 0,
       recent: allLeads.filter((l) => new Date(l.createdAt).getTime() >= sevenDays).length,
     };
-  }, [allLeads, data.total]);
+  }, [allLeads, data.total, data.parados]);
+  const horasParado = data.horasParaParado || 48;
+  const rotuloPrazo = horasParado >= 48 && horasParado % 24 === 0 ? `${horasParado / 24} dias` : `${horasParado}h`;
 
   // Filtro + ordenação
   const filtered = useMemo(() => {
@@ -241,7 +266,7 @@ export function LeadsPage({ session }) {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const hasFilters = search || propertyFilter || contactFilter !== "all";
+  const hasFilters = search || propertyFilter || contactFilter !== "all" || paradosFiltro;
 
   const inputStyle = {
     width: "100%", boxSizing: "border-box", background: "var(--sup-04, rgba(255,255,255,0.04))",
@@ -257,7 +282,9 @@ export function LeadsPage({ session }) {
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
     ) },
     { label: "Com WhatsApp", value: stats.whats, accent: "#25d366", icon: <IconWhats /> },
-    { label: "Com e-mail", value: stats.email, accent: "#0ea5e9", icon: <IconMail /> },
+    /* No lugar de "Com e-mail": contar quem tem e-mail não muda o que alguém
+       faz hoje; contar quem está ESQUECIDO muda. */
+    { label: `Parados há +${rotuloPrazo}`, value: stats.parados, accent: "#f87171", icon: <IconRelogio /> },
     { label: "Últimos 7 dias", value: stats.recent, accent: "#f59e0b", icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
     ) },
@@ -342,6 +369,24 @@ export function LeadsPage({ session }) {
           ]}
           onChange={setSortOrder}
         />
+        {/* Só os parados. Vermelho quando ligado: é um alerta, não um filtro
+            como os outros — e a contagem no botão diz se vale clicar. */}
+        <button
+          type="button"
+          onClick={alternarParados}
+          aria-pressed={paradosFiltro}
+          title={`Leads abertos sem nenhum registro há mais de ${rotuloPrazo}`}
+          style={{
+            width: "auto", padding: "8px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+            display: "inline-flex", alignItems: "center", gap: "7px", flexShrink: 0,
+            background: paradosFiltro ? "rgba(248,113,113,0.22)" : "var(--sup-05, rgba(255,255,255,0.05))",
+            border: `1px solid ${paradosFiltro ? "rgba(248,113,113,0.6)" : "var(--linha-12, rgba(255,255,255,0.12))"}`,
+            color: paradosFiltro ? "#fca5a5" : (stats.parados > 0 ? "#f87171" : "var(--text-muted)"),
+            transition: "all 0.2s",
+          }}
+        >
+          <IconRelogio /> Parados{stats.parados > 0 ? ` (${stats.parados})` : ""}
+        </button>
         {/* Filtro de contato */}
         <div style={{ display: "flex", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "3px", border: "1px solid var(--linha-08, rgba(255,255,255,0.08))" }}>
           {[
@@ -386,7 +431,7 @@ export function LeadsPage({ session }) {
         <div className="glass-panel" style={{ textAlign: "center", padding: "48px 24px" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "15px", marginBottom: "16px" }}>Nenhum lead encontrado com estes filtros.</p>
           <button type="button" className="button-secondary" style={{ width: "auto", padding: "8px 16px" }}
-            onClick={() => { setSearch(""); setPropertyFilter(""); setContactFilter("all"); setSortOrder("recent"); setEstagioFiltro(""); setResponsavelFiltro(""); }}>
+            onClick={() => { setSearch(""); setPropertyFilter(""); setContactFilter("all"); setSortOrder("recent"); setEstagioFiltro(""); setResponsavelFiltro(""); if (paradosFiltro) alternarParados(); }}>
             Limpar filtros
           </button>
         </div>
@@ -415,7 +460,7 @@ export function LeadsPage({ session }) {
                       {lead.name || <span style={{ color: "var(--text-muted)", fontWeight: "400" }}>Sem nome</span>}
                     </span>
                     <span style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#a5b4fc", background: "rgba(99,102,241,0.15)", padding: "2px 8px", borderRadius: "999px" }}>
-                      {lead.source === "showcase" ? "Vitrine" : (lead.source || "Lead")}
+                      {lead.source === "showcase" ? "Vitrine" : lead.source === "visita" ? "Pedido de visita" : (lead.source || "Lead")}
                     </span>
                     <span style={{ fontSize: "12px", color: "var(--text-muted)" }} title={formatDate(lead.createdAt)}>
                       {timeAgo(lead.createdAt)}
@@ -439,6 +484,24 @@ export function LeadsPage({ session }) {
                     ) : (
                       <span style={{ fontSize: "12px", color: "#fbbf24" }}>· sem responsável</span>
                     )}
+                    {/* O selo de parado é decidido pelo servidor; aqui só se
+                        desenha. "Desde" é o último registro, não a chegada. */}
+                    {lead.parado ? (
+                      <span
+                        title={`Nenhum registro desde ${formatDate(lead.ultimoToqueEm)}`}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: "5px",
+                          fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
+                          padding: "2px 8px", borderRadius: "999px",
+                          color: "#fca5a5", background: "rgba(248,113,113,0.16)", border: "1px solid rgba(248,113,113,0.45)",
+                        }}
+                      >
+                        <IconRelogio /> Parado {timeAgo(lead.ultimoToqueEm)}
+                      </span>
+                    ) : null}
+                    {lead.estagio === "PERDIDO" && lead.motivoPerda ? (
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }} title="Motivo da perda">· {lead.motivoPerda}</span>
+                    ) : null}
                   </div>
 
                   {/* Chips de contato + imóvel */}

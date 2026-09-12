@@ -62,13 +62,23 @@ export function ShowcaseHighlights({ config, blockStyles }) {
      segundos. Some ao sair da tela, e é o certo. */
   const [copiado, setCopiado] = useState(null);
 
+  /* ── A COR DE FUNDO DO BLOCO É A DOS CARTÕES ───────────────────────────────
+     "Cor de fundo" no inspetor dos Destaques pintava a faixa inteira por trás
+     dos cartões — um retângulo chapado com os cartões flutuando dentro, que
+     não é o que ninguém quer ao pintar "os destaques". Aqui ela vira o fundo
+     PADRÃO de cada cartão; o cartão que tem cor própria continua com a sua. A
+     faixa fica transparente (o banner, quando há, é desenhado por fora). */
+  const doBloco = mergeBlockWrapperStyle(blockStyles?.highlights);
+  const { backgroundColor: fundoDoBloco, ...restoDoBloco } = doBloco;
+
   return (
-    <section className="showcase-highlights" style={mergeBlockWrapperStyle(blockStyles?.highlights)}>
+    <section className="showcase-highlights" style={restoDoBloco}>
       {config.highlights.map((item, index) => {
         const hs = config.highlightStyles[index] || { backgroundColor: "", color: "" };
         const cor = hs.color ? { color: hs.color } : undefined;
+        const estiloDoCartao = { ...(fundoDoBloco ? { backgroundColor: fundoDoBloco } : {}), ...mergeBlockWrapperStyle(hs) };
         return (
-          <div className="highlight-box" key={`highlight-${index}`} style={mergeBlockWrapperStyle(hs)}>
+          <div className="highlight-box" key={`highlight-${index}`} style={estiloDoCartao}>
             <ShowcaseTexto as="h3" campo={`highlight|${index}|title`} umaLinha html={item.title} style={cor} />
             <ShowcaseTexto as="p" campo={`highlight|${index}|description`} html={item.description} style={cor} />
             {/* Com um só, o × some: a faixa sem nenhum cartão vira uma fatia de

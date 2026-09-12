@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ShowcaseLinkExterno, ShowcaseTexto, usaFonteReal, useDadosDaVitrine, useVitrine } from "../contexto.jsx";
 import { SeletorDeEquipe } from "./SeletorDeEquipe.jsx";
-import { DADOS_EQUIPE_PADRAO, lerDadosWidget, montarWhatsappUrl } from "./widgetData.js";
+import { DADOS_EQUIPE_PADRAO, lerDadosWidget, montarWhatsappUrl, numeroWhatsAppDaVitrine } from "./widgetData.js";
 import { TituloDoWidget } from "../TituloDoWidget.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -89,6 +89,7 @@ export function TeamWidget({ widget, faixa = "m" }) {
               ? `https://wa.me/${String(pessoa.whatsapp).replace(/\D/g, "")}`
               : widget.ctaUrl,
             `Olá, ${pessoa.nome || "tudo bem"}? Vim pelo site e gostaria de falar sobre um imóvel.`,
+            numeroWhatsAppDaVitrine(dadosReais),
           );
           return (
             <article className="widget-team__person" key={pessoa.id || `${pessoa.nome}-${i}`}>

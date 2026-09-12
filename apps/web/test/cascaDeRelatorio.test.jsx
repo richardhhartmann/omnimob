@@ -21,6 +21,7 @@ const RELATORIOS = [
   "src/pages/LeadsPage.jsx",
   "src/components/RelatorioMensal.jsx",
   "src/components/FunilVendas.jsx",
+  "src/components/FunilAtendimento.jsx",
 ];
 
 for (const arquivo of RELATORIOS) {

@@ -1,4 +1,4 @@
-import { ChartLineUp, Users, ChartBar, Funnel, CurrencyCircleDollar } from "@phosphor-icons/react";
+import { ChartLineUp, Users, ChartBar, Funnel, CurrencyCircleDollar, FunnelSimple } from "@phosphor-icons/react";
 
 /* Ícones de Relatórios, num lugar só.
 
@@ -13,6 +13,7 @@ export const IconeRelatorios = ChartLineUp;
 
 export const ICONES_RELATORIOS = {
   LEADS: Users,
+  ATENDIMENTO: FunnelSimple,
   MENSAL: ChartBar,
   FUNIL: Funnel,
   COMISSOES: CurrencyCircleDollar,

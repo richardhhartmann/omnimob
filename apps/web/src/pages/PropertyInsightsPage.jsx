@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ChartLineUp } from "@phosphor-icons/react";
 import { degrausAte } from "../utils/trilhaDoPainel";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
+import { linkDoImovel, linkDaLandingDoImovel } from "../utils/enderecoVitrine";
 import { api } from "../api";
 import { InteressadosNoImovel } from "../components/InteressadosNoImovel.jsx";
 import { comodidadesAtivas } from "../utils/comodidades";
@@ -243,6 +244,28 @@ function Section({ title, children }) {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
+function BotaoCopiarLink({ rotulo, valor }) {
+  const [copiado, setCopiado] = useState(false);
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(valor);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1600);
+    } catch { /* sem clipboard, nada a fazer */ }
+  }
+  if (!valor) return null;
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      title={valor}
+      style={{ width: "auto", padding: "6px 12px", borderRadius: "999px", fontSize: "12px", fontWeight: 600, cursor: "pointer", background: copiado ? "rgba(16,185,129,0.16)" : "var(--sup-05, rgba(255,255,255,0.05))", border: "1px solid var(--linha-12, rgba(255,255,255,0.12))", color: copiado ? "#6ee7b7" : "var(--text-muted)" }}
+    >
+      {copiado ? "Copiado" : rotulo}
+    </button>
+  );
+}
+
 export function PropertyInsightsPage({ session }) {
   const { propertyId } = useParams();
   const navigate = useNavigate();
@@ -389,6 +412,17 @@ export function PropertyInsightsPage({ session }) {
             <p style={{ margin: 0, fontSize: "22px", fontWeight: "700", letterSpacing: "-0.5px", color: "#fff" }}>
               {formatPrice(property?.price)}
             </p>
+
+            {/* Os dois endereços públicos do imóvel: a página na vitrine e a
+                LANDING isolada (sem menu), que é a que vai no anúncio pago e
+                no link de lançamento. Copiar em vez de abrir: quem está aqui
+                quer colar em algum lugar. */}
+            {property?.id ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+                <BotaoCopiarLink rotulo="Copiar link da vitrine" valor={linkDoImovel(property.id)} />
+                <BotaoCopiarLink rotulo="Copiar link da landing (sem menu)" valor={linkDaLandingDoImovel(property.id)} />
+              </div>
+            ) : null}
 
             {property?.description && (
               <p style={{ margin: "14px 0 0", fontSize: "13px", lineHeight: 1.6, color: "var(--text-muted)", whiteSpace: "pre-wrap" }}>

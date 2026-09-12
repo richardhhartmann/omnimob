@@ -31,6 +31,20 @@ export const ESTAGIOS = [
   { valor: "PERDIDO",        rotulo: "Perdido",        cor: "#f87171" },
 ];
 
+/* Os motivos de perda mais comuns numa imobiliária. Lista fechada na tela e
+   texto livre no banco: o relatório agrupa pelo texto, e uma lista fechada é o
+   que impede "preço" e "Preço alto" virarem duas barras. "Outro" abre um campo
+   — e é o texto digitado que vai, não a palavra "Outro". */
+export const MOTIVOS_PERDA = [
+  "Preço acima do orçamento",
+  "Fechou com outra imobiliária",
+  "Desistiu da busca",
+  "Não respondeu mais",
+  "Imóvel já foi negociado",
+  "Não aprovou financiamento",
+  "Outro",
+];
+
 export const corDoEstagio = (v) => ESTAGIOS.find((e) => e.valor === v)?.cor || "#94a3b8";
 export const rotuloDoEstagio = (v) => ESTAGIOS.find((e) => e.valor === v)?.rotulo || v;
 
@@ -52,7 +66,12 @@ function quando(iso) {
 }
 
 function textoDoEvento(ev) {
-  if (ev.tipo === "ESTAGIO") return `${rotuloDoEstagio(ev.de)} → ${rotuloDoEstagio(ev.para)}`;
+  if (ev.tipo === "ESTAGIO") {
+    const passo = `${rotuloDoEstagio(ev.de)} → ${rotuloDoEstagio(ev.para)}`;
+    /* O motivo da perda viaja no texto do evento: é o que faz o histórico
+       continuar contando por que se perdeu mesmo depois de o lead voltar. */
+    return ev.para === "PERDIDO" && ev.texto ? `${passo} · ${ev.texto}` : passo;
+  }
   if (ev.tipo === "RESPONSAVEL") {
     if (!ev.para) return "Devolvido à caixa comum";
     return ev.de ? `${ev.de} → ${ev.para}` : `Atribuído a ${ev.para}`;
@@ -65,6 +84,11 @@ export function LeadAtendimento({ lead, equipe, tenantSlug, aoAtualizar, showToa
   const [aberto, setAberto] = useState(false);
   const [nota, setNota] = useState("");
   const [enviandoNota, setEnviandoNota] = useState(false);
+  /* Perder pede o motivo antes de gravar. O formulário abre no lugar, sob o
+     funil, e só existe enquanto a decisão está sendo tomada. */
+  const [perdendo, setPerdendo] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [motivoOutro, setMotivoOutro] = useState("");
 
   const eventos = lead.eventos || [];
   const totalEventos = lead._count?.eventos ?? eventos.length;
@@ -74,11 +98,30 @@ export function LeadAtendimento({ lead, equipe, tenantSlug, aoAtualizar, showToa
     try {
       const atualizado = await api.atualizarLead(tenantSlug, lead.id, campos);
       aoAtualizar(atualizado);
+      setPerdendo(false);
+      setMotivo("");
+      setMotivoOutro("");
     } catch (erro) {
       showToast?.(erro.message, "error");
     } finally {
       setSalvando(false);
     }
+  }
+
+  function escolherEstagio(valor) {
+    if (valor === "PERDIDO") {
+      setPerdendo(true);
+      return;
+    }
+    setPerdendo(false);
+    mudar({ estagio: valor });
+  }
+
+  function confirmarPerda(e) {
+    e.preventDefault();
+    const texto = motivo === "Outro" ? motivoOutro.trim() : motivo;
+    if (!texto) return;
+    mudar({ estagio: "PERDIDO", motivoPerda: texto });
   }
 
   async function abrirHistorico() {
@@ -126,13 +169,53 @@ export function LeadAtendimento({ lead, equipe, tenantSlug, aoAtualizar, showToa
               style={ativo ? { "--cor": e.cor } : undefined}
               disabled={salvando}
               aria-pressed={ativo}
-              onClick={() => !ativo && mudar({ estagio: e.valor })}
+              onClick={() => !ativo && escolherEstagio(e.valor)}
             >
               {e.rotulo}
             </button>
           );
         })}
       </div>
+
+      {perdendo ? (
+        <form className="lead-perda" onSubmit={confirmarPerda}>
+          <span className="lead-perda__titulo">Por que este lead foi perdido?</span>
+          <div className="lead-perda__opcoes" role="radiogroup" aria-label="Motivo da perda">
+            {MOTIVOS_PERDA.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`lead-perda__opcao${motivo === m ? " is-ativo" : ""}`}
+                aria-pressed={motivo === m}
+                onClick={() => setMotivo(m)}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          {motivo === "Outro" ? (
+            <input
+              autoFocus
+              value={motivoOutro}
+              onChange={(e) => setMotivoOutro(e.target.value)}
+              placeholder="Descreva em poucas palavras"
+              maxLength={120}
+            />
+          ) : null}
+          <div className="lead-perda__acoes">
+            <button type="button" className="lead-perda__cancelar" onClick={() => { setPerdendo(false); setMotivo(""); setMotivoOutro(""); }}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="lead-perda__confirmar"
+              disabled={salvando || !motivo || (motivo === "Outro" && !motivoOutro.trim())}
+            >
+              {salvando ? "Salvando…" : "Marcar como perdido"}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       <div className="lead-atend__linha">
         {/* ── Responsável ── */}
