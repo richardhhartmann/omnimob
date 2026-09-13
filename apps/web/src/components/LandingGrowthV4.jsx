@@ -195,7 +195,8 @@ function Cena({ etapa }) {
   return <CenaCadastro />;
 }
 
-export function ProductStorySection({ onTeste }) {
+/* `divisor`: o DivisorDeOndas da landing, como em TrustStrip. */
+export function ProductStorySection({ onTeste, divisor = null }) {
   const [ativo, setAtivo] = useState(0);
   const secaoRef = useRef(null);
   const contouView = useRef(false);
@@ -235,6 +236,7 @@ export function ProductStorySection({ onTeste }) {
   return (
     <section className="gv4-section" id="veja-acontecer" ref={secaoRef}>
       <style>{CSS}</style>
+      {divisor}
 
       <div className="gv4-wrap">
         <header className="gv4-head">
@@ -339,9 +341,13 @@ const CONFIANCA = [
   },
 ];
 
-export function TrustStrip() {
+/* `divisor` é o DivisorDeOndas da landing (onda pintada) e `className` é o
+   caminho da onda vazada (`dl-ondas-vazadas`) — os dois entram por prop para
+   esta faixa não depender do arquivo da página. */
+export function TrustStrip({ divisor = null, className = "" }) {
   return (
-    <section className="gv4-trust" aria-label="Confiança operacional">
+    <section className={["gv4-trust", className].filter(Boolean).join(" ")} aria-label="Confiança operacional">
+      {divisor}
       <div className="gv4-wrap gv4-trust__wrap">
         <div className="gv4-trust__intro">
           <span className="gv4-eyebrow"><i /> PARA OPERAR DE VERDADE</span>

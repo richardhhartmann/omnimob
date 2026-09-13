@@ -12,7 +12,6 @@ import {
   HouseLine,
   MapPin,
   Signature,
-  Crown,
   PaintBrushBroad,
   ChartLineUp,
   Megaphone,
@@ -34,7 +33,6 @@ import {
 import { api } from "../api";
 import { OmnimobSplash } from "../components/OmnimobSplash";
 import DriftWall from "../components/DriftWall";
-import ElectricBorder from "../components/ElectricBorder";
 import LineSidebar from "../components/LineSidebar";
 import Counter from "../components/Counter";
 import SpecularButton from "../components/SpecularButton";
@@ -93,56 +91,6 @@ import {
    e a intensidade da luz. Quem é o caminho principal acende mais forte e de
    mais longe; o secundário responde de perto e de leve. Mesma pergunta que o
    preenchimento respondia ("qual destes é o daqui?"), com o vocabulário novo. */
-/* ────────────────────────────────────────────────────────────────────────────
-   O three.js e o Vanta entram por `import()`, e não pelo topo do arquivo.
-
-   Estáticos, eles somavam 253 kB ao pacote principal — baixados por TODA
-   visita, inclusive a de quem abre o painel e nunca vê a landing, e inclusive a
-   de quem vai rodar sem shader nenhum. Sob demanda, quem está no nível leve ou
-   mínimo simplesmente não os baixa.
-
-   A promessa é guardada porque as duas seções pedem o mesmo pacote: sem o
-   cache, entrar na página com as duas visíveis dispararia dois downloads da
-   mesma coisa. */
-
-let promessaDoVanta = null;
-
-function carregarVanta() {
-  if (!promessaDoVanta) {
-    promessaDoVanta = Promise.all([
-      import("three"),
-      import("vanta/dist/vanta.fog.min"),
-      import("vanta/dist/vanta.waves.min"),
-    ])
-      .then(([three, fog, waves]) => ({
-        THREE: three,
-        FOG: fog.default || fog,
-        WAVES: waves.default || waves,
-      }))
-      /* Falha de rede não pode derrubar a seção: o fundo estático já está
-         desenhado por baixo, e sem shader a página continua inteira. Zerar a
-         promessa deixa a próxima tentativa acontecer. */
-      .catch(() => { promessaDoVanta = null; return null; });
-  }
-  return promessaDoVanta;
-}
-
-/* Interpolação de cor em hexadecimal.
- *
- * Era `THREE.Color.lerp`, e usá-lo obrigava o three a existir no escopo do
- * módulo — justamente o que este arquivo deixou de fazer. São doze linhas de
- * aritmética contra 253 kB de dependência carregada à toa. */
-function misturarHex(de, para, fator) {
-  const canal = (c, deslocamento) => (c >> deslocamento) & 0xff;
-  let saida = 0;
-  for (const deslocamento of [16, 8, 0]) {
-    const a = canal(de, deslocamento);
-    const b = canal(para, deslocamento);
-    saida |= Math.round(a + (b - a) * fator) << deslocamento;
-  }
-  return saida;
-}
-
 const ESPECULAR = {
   primary: { tint: "#ffffff", tintOpacity: 0.16, textColor: "#f6f6f8", lineColor: "#ffffff", baseColor: "#8a8a95", intensity: 1.35, proximity: 320 },
   accent:  { tint: ACCENT,    tintOpacity: 0.30, textColor: "#ffffff", lineColor: "#c7c9ff", baseColor: "#6366f1", intensity: 1.30, proximity: 300 },
@@ -949,8 +897,15 @@ function planosBase(pacotes) {
       nota: "",
       carregando: true,
       comFlow,
+      /* `novo` marca as linhas do Flow: e o modulo novo, e o cartao mostra a
+         etiqueta ao lado do recurso. So elas — inventar "novo" no resto da
+         tabela seria enfeite. */
       linhas: ordenarPorInclusao(
-        linhas.map((r) => ({ label: r.label, incluso: incluiRecurso(p.key, r) })),
+        linhas.map((r) => ({
+          label: r.label,
+          incluso: incluiRecurso(p.key, r),
+          novo: RECURSOS_FLOW_PLANOS.includes(r),
+        })),
       ),
       /* No resumo do celular, o Flow entra ANTES dos recursos próprios do plano:
          quem ligou o interruptor ligou por causa dele, e é a primeira coisa que
@@ -1079,35 +1034,36 @@ function selosDaEconomia(economia) {
    Um grupo de rádio de verdade (não dois botões): são opções mutuamente
    exclusivas de um mesmo campo, e é o que faz as setas do teclado andarem entre
    elas sem nenhum código nosso. */
+/* Mensal · [chave] · Anual (selo). Uma chave entre dois rótulos, como na
+   referência — e não mais a pílula que desliza. Os rótulos também clicam, para
+   quem mira no texto e não na chave; a chave é o `switch` de verdade para
+   leitor de tela e teclado. */
 function PeriodoToggle({ valor, aoTrocar, selo }) {
+  const anual = valor === "anual";
   return (
-    <div className="dl-periodo" role="radiogroup" aria-label="Forma de cobrança">
-      <span className="dl-periodo__pilula" data-em={valor} aria-hidden="true" />
-      {[
-        { chave: "mensal", rotulo: "Mensal" },
-        { chave: "anual", rotulo: "Anual" },
-      ].map((op) => (
-        <button
-          key={op.chave}
-          type="button"
-          role="radio"
-          aria-checked={valor === op.chave}
-          tabIndex={valor === op.chave ? 0 : -1}
-          className={`dl-periodo__opt${valor === op.chave ? " is-on" : ""}`}
-          onClick={() => aoTrocar(op.chave)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-              e.preventDefault();
-              aoTrocar(valor === "mensal" ? "anual" : "mensal");
-            }
-          }}
-        >
-          {op.rotulo}
-          {op.chave === "anual" && selo ? (
-            <span className="dl-periodo__selo dl-mono">{selo}</span>
-          ) : null}
-        </button>
-      ))}
+    <div className="pl-periodo">
+      <button
+        type="button"
+        className={`pl-periodo__rotulo${!anual ? " is-on" : ""}`}
+        onClick={() => aoTrocar("mensal")}
+      >
+        Mensal
+      </button>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={anual}
+        aria-label="Cobrança anual"
+        className="pl-periodo__chave"
+        onClick={() => aoTrocar(anual ? "mensal" : "anual")}
+      />
+      <button
+        type="button"
+        className={`pl-periodo__rotulo${anual ? " is-on" : ""}`}
+        onClick={() => aoTrocar("anual")}
+      >
+        Anual{selo ? <span className="pl-periodo__selo"> ({selo})</span> : null}
+      </button>
     </div>
   );
 }
@@ -1425,6 +1381,32 @@ function TelasDoFlow() {
           ficam gravados no negócio: mudar a política depois não reescreve o que já fechou.
         </p>
       </article>
+    </div>
+  );
+}
+
+/* ── Divisor de ondas ──────────────────────────────────────────────────────
+   Três ondas sobrepostas (25%, 50% e 100% de opacidade) coladas no TOPO da
+   seção que o recebe. Mora dentro da seção seguinte, e não no fim da
+   anterior: quem esconde overflow é a seção, e ela recortaria um filho que
+   sangrasse para fora.
+
+   Três tons. `escuro` é a seção de cima (--bg) escorrendo sobre o CTA claro,
+   e `claro` é o CTA escorrendo sobre o rodapé — as fronteiras escuro ↔ claro
+   sem tratamento próprio (o `#modulos` tem o rasgo de papel, e por isso nem
+   ele nem o `#porque`, que o rasgo de baixo invade, recebem onda). `grafite`
+   é o do miolo: ali as seções alternam --bg e --bg-alt,
+   cinco pontos de diferença, e uma onda "na cor da anterior" seria uma faixa
+   invisível de 130px. Então ela não finge ser a seção de cima; é um relevo no
+   tom --line, que a página já usa nas bordas e lê sobre os dois fundos. */
+function DivisorDeOndas({ tom }) {
+  return (
+    <div className={`dl-ondas dl-ondas--${tom}`} aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+        <path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z" opacity=".25" />
+        <path d="M0,0V15.81C13,36.92,27.64,56.86,47.69,72.05,99.41,111.27,165,111,224.58,91.58c31.15-10.15,60.09-26.07,89.67-39.8,40.92-19,84.73-46,130.83-49.67,36.26-2.85,70.9,9.42,98.6,31.56,31.77,25.39,62.32,62,103.63,73,40.44,10.79,81.35-6.69,119.13-24.28s75.16-39,116.92-43.05c59.73-5.85,113.28,22.88,168.9,38.84,30.2,8.66,59,6.17,87.09-7.5,22.43-10.89,48-26.93,60.65-49.24V0Z" opacity=".5" />
+        <path d="M0,0V5.63C149.93,59,314.09,71.32,475.83,42.57c43-7.64,84.23-20.12,127.61-26.46,59-8.63,112.48,12.24,165.56,35.4C827.93,77.22,886,95.24,951.2,90c86.53-7,172.46-45.71,248.8-84.81V0Z" />
+      </svg>
     </div>
   );
 }
@@ -2305,42 +2287,6 @@ const CARROSSEL = "(max-width: 640px)";
 const TELA_BAIXA = "(max-height: 820px)";
 const INTERVALO_PLANO = 5000;
 
-/* Cor de cada plano no carrossel. Uma escala que sobe junto com os planos: azul
-   é o tom de entrada, roxo é a cor da marca e dourado é o que a Omnimob já usa
-   para o que é topo de linha.
-
-     cor    contorno neon do cartão em foco
-     onda   cor das ondas do fundo (Vanta WAVES) — o Básico não tem, e é isso
-            que faz a escada existir: o fundo neutro dele é a referência de onde
-            a progressão começa
-     tinta  reserva estática para quem pede movimento reduzido, onde as ondas
-            não rodam
-     realce cor das peças de interface que acompanham o plano (etiqueta, ponto do
-            carrossel, botão "ver todos os recursos"). Nulo no Básico, e não por
-            falta: ele é o degrau neutro da escada, então fica com o lilás do
-            tema — a cor de destaque começa a existir a partir do Profissional.
-            É separada de `cor` porque aquela é a do NEON, que pode ser mais
-            saturada do que se lê bem em texto de 8 px */
-const FLARE = {
-  BASICO: { cor: "#3882f8b4", onda: null, tinta: null, realce: null },
-  PROFISSIONAL: { cor: "#a855f7", onda: 0x5331b6, tinta: "rgba(83,49,182,0.22)", realce: "#a855f7" },
-  PREMIUM: { cor: "#f0c24b", onda: 0xa0732e, tinta: "rgba(160,115,46,0.22)", realce: "#f0c24b" },
-};
-
-/* Cor do contorno elétrico de cada plano — e quem NÃO tem contorno.
-
-   O Básico fica de fora de propósito: o brilho é o destaque dos planos pagos, e
-   acender os três iguala justamente o que a seção precisa diferenciar. `null`
-   aqui não é "ainda não escolhi", é "este não acende".
-
-   O contorno substituiu o antigo flare de sombra interna no hover — ver o bloco
-   `.dl-plan:hover` no CSS, que só guarda o realce do botão agora. */
-const BORDA_ELETRICA = {
-  BASICO: null,
-  PROFISSIONAL: "#a855f7",
-  PREMIUM: "#ffb323",
-};
-
 /* ── Lista de recursos do cartão, que abre e fecha ───────────────────────────
    O botão "Ver todos os recursos" trocava as duas listas de um quadro para o
    outro: o cartão saltava de altura e o texto aparecia já no lugar novo, sem
@@ -2407,15 +2353,18 @@ function PlanoRecursos({ id, plano, resumido, compacto }) {
 
   return (
     <div
-      className={`dl-plan__recursos${resumido ? " is-resumido" : ""}`}
+      className={`pl-recursos${resumido ? " is-resumido" : ""}`}
       id={id}
       style={altura ? { height: `${altura}px` } : undefined}
     >
-      <ul className="dl-plan__list" ref={completaRef} aria-hidden={resumido || undefined}>
+      <ul className="pl-lista" ref={completaRef} aria-hidden={resumido || undefined}>
         {plano.linhas.map((l, i) => (
           <li key={l.label} className={l.incluso ? "" : "is-off"} style={{ "--i": i }}>
             <span aria-hidden="true">{l.incluso ? <IconeCheck size={12} /> : <IconeX size={11} />}</span>
-            {l.label}
+            <span className="pl-lista__texto">
+              {l.label}
+              {l.novo && l.incluso ? <em className="pl-novo">Novo</em> : null}
+            </span>
           </li>
         ))}
       </ul>
@@ -2424,11 +2373,11 @@ function PlanoRecursos({ id, plano, resumido, compacto }) {
           cabem inteiros lado a lado, e é a tabela completa que permite comparar
           de relance — resumir ali tiraria a única vantagem do desktop. */}
       {compacto ? (
-        <ul className="dl-plan__list dl-plan__list--resumo" ref={resumoRef} aria-hidden={!resumido || undefined}>
+        <ul className="pl-lista pl-lista--resumo" ref={resumoRef} aria-hidden={!resumido || undefined}>
           {plano.resumo.map((l) => (
             <li key={l.label} className={l.heranca ? "is-heranca" : ""}>
               <span aria-hidden="true"><IconeCheck size={12} /></span>
-              {l.label}
+              <span className="pl-lista__texto">{l.label}</span>
             </li>
           ))}
         </ul>
@@ -2437,16 +2386,20 @@ function PlanoRecursos({ id, plano, resumido, compacto }) {
   );
 }
 
-// A cor de realce de um plano, com o lilás do tema como piso (Básico).
-function realceDoPlano(chave) {
-  return FLARE[chave]?.realce || "var(--accent-soft)";
-}
+/* ── Os cartões de plano ──────────────────────────────────────────────────────
+   Três cartões escuros lado a lado, cada um com uma mancha de luz (branco →
+   índigo) desfocada no alto, em posição própria; o do meio se destaca pelo
+   botão mais claro. A referência (dribbble.com/shots/26870248) é seguida à
+   risca no DESENHO; o que este componente guarda é o COMPORTAMENTO que a
+   página já tinha e a referência não mostra:
 
-// Primeira cor de onda da escala: o efeito nasce nela, então a primeira
-// aparição já entra na cor certa em vez de atravessar meio espectro até ela.
-const ONDA_INICIAL = FLARE.PROFISSIONAL.onda;
+     · o preço só existe depois que /public/planos responde (esqueleto até lá);
+     · o interruptor do Flow, por cartão, entre o preço e a lista;
+     · no celular vira carrossel, com passo automático e pontos;
+     · em tela baixa a lista vem resumida, com "Ver todos os recursos".
 
-
+   As ondas WebGL do fundo, o contorno elétrico e a coroa do Premium saíram
+   junto com o desenho antigo — eram efeitos daquele cartão, não desta seção. */
 function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
   const [caixaRef, visivel] = useReveal();
   const trilhoRef = useRef(null);
@@ -2461,131 +2414,6 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
   const telaBaixa = useMedia(TELA_BAIXA);
   // Carrossel implica compacto; tela baixa também, mesmo em três colunas.
   const compacto = emCarrossel || telaBaixa;
-
-  /* Cartão sob o mouse. É o que rege o fundo no desktop, onde não existe
-     "cartão em foco": lá os três estão à vista ao mesmo tempo, e quem escolhe
-     um é o cursor. No celular ele fica sempre nulo — toque não tem hover. */
-  const [sobHover, setSobHover] = useState(null);
-  /* ── Fundo em ondas ────────────────────────────────────────────────────
-     O plano escolhido tinge o fundo da seção, e a troca é gradual porque a cor
-     das ondas é interpolada quadro a quadro — não trocada de uma vez. Quem é
-     "o escolhido" muda com o formato da tela: no celular é o cartão em foco no
-     carrossel; no desktop, o que está sob o mouse (e, sem mouse em cima, o
-     fundo volta ao neutro).
-
-     Dá para mexer na cor sem recriar nada: o onUpdate do WAVES lê
-     `options.color` a cada quadro, então basta escrever ali. Uma instância
-     nova por plano significaria destruir e criar um contexto WebGL a cada
-     cinco segundos.
-
-     A instância fica em variável local do efeito (não em estado nem em ref):
-     é a mesma armadilha do FOG lá embaixo — guardada fora, a limpeza fecha
-     sobre o valor anterior e sobra um canvas órfão no StrictMode. */
-  const ondaRef = useRef(null);
-  // Números hexadecimais crus, não objetos de cor: ver `misturarHex` lá em cima.
-  const corOnda = useRef(ONDA_INICIAL);
-  const alvoOnda = useRef(ONDA_INICIAL);
-  const { podeWebGL } = useEfeitos();
-
-  /* O plano que manda na cor do fundo, e a cor dele. No desktop o hover; no
-     carrossel, o foco. Nulo (Básico, ou nenhum cartão sob o mouse) apaga a
-     camada — é o estado neutro de onde a escala de cores parte. */
-  const planoDaOnda = emCarrossel ? planos[atual] : (sobHover != null ? planos[sobHover] : null);
-  const ondaAtual = FLARE[planoDaOnda?.key]?.onda || null;
-
-  /* O contexto WebGL só nasce quando alguém pede cor pela primeira vez. Criar
-     junto com a seção custaria uma tela 3D rodando atrás de um fundo neutro em
-     toda visita que nunca passa o mouse por um plano. */
-  const [ondaPedida, setOndaPedida] = useState(false);
-  useEffect(() => {
-    if (ondaAtual) setOndaPedida(true);
-  }, [ondaAtual]);
-
-  useEffect(() => {
-    const el = ondaRef.current;
-    if (!el || !ondaPedida || !visivel) return undefined;
-    /* Máquina que não aguenta shader fica com a tinta estática de baixo — que
-       já está desenhada e acompanha o mesmo plano. Não é degrau de qualidade:
-       é o clarão colorido sem a malha animada por cima. */
-    if (!podeWebGL) return undefined;
-
-    let efeito = null;
-    let quadro = null;
-    let observador = null;
-    let cancelado = false;
-
-    carregarVanta().then((vanta) => {
-      if (cancelado || !vanta) return;
-      efeito = vanta.WAVES({
-        el,
-        THREE: vanta.THREE,
-        mouseControls: true,
-        touchControls: true,
-        gyroControls: false,
-        minHeight: 200.0,
-        minWidth: 200.0,
-        scale: 1.0,
-        scaleMobile: 1.0,
-        color: corOnda.current,
-      });
-      montarLaco();
-    });
-
-    function montarLaco() {
-
-    /* O WAVES mede o elemento uma vez e só remede no resize da janela. Como a
-       camada acompanha a altura da seção — que muda quando alguém abre a
-       tabela de um plano —, sem isto o canvas ficaria com a altura antiga e as
-       ondas terminariam no meio do fundo.
-
-       Remedir sozinho, porém, faz o fundo piscar. O resize() do Vanta chama
-       setSize no renderer, que realoca o buffer do WebGL — e buffer realocado
-       nasce transparente. O retorno do ResizeObserver é entregue DEPOIS dos
-       requestAnimationFrame do quadro e ANTES da pintura, então quem vai para
-       a tela naquele quadro é o buffer vazio. Uma remedida = um quadro em
-       branco; e como a tabela dos planos abre em 0,42s mudando de altura a
-       cada quadro, viravam dezenas deles seguidos.
-
-       Redesenhar aqui mesmo, ainda dentro do retorno de chamada, devolve a
-       imagem ao buffer antes da pintura e o quadro em branco deixa de existir.
-       Tem de ser o render direto: animationLoop() agenda o próprio rAF, e o
-       laço passaria a rodar duas vezes por quadro. */
-    observador = new ResizeObserver(() => {
-      efeito.resize();
-      if (efeito.renderer && efeito.scene && efeito.camera) {
-        efeito.renderer.render(efeito.scene, efeito.camera);
-      }
-    });
-    observador.observe(el);
-
-    quadro = requestAnimationFrame(function passo() {
-      // Perto o bastante do alvo: para de escrever e só mantém o laço vivo
-      // para a próxima troca de plano.
-      if (corOnda.current !== alvoOnda.current) {
-        corOnda.current = misturarHex(corOnda.current, alvoOnda.current, 0.05);
-        // A mistura converge sem nunca chegar: a 1/255 do alvo, encosta.
-        if (Math.abs(corOnda.current - alvoOnda.current) <= 0x010101) corOnda.current = alvoOnda.current;
-        efeito.options.color = corOnda.current;
-      }
-      quadro = requestAnimationFrame(passo);
-    });
-    }
-
-    return () => {
-      cancelado = true;
-      if (quadro) cancelAnimationFrame(quadro);
-      observador?.disconnect();
-      efeito?.destroy();
-    };
-  }, [ondaPedida, visivel, podeWebGL]);
-
-  // O alvo muda com o plano escolhido; o laço acima leva a cor até ele. Quando
-  // não há plano (Básico, ou mouse fora), o alvo fica onde estava: o que some é
-  // a camada inteira, e guardar a última cor evita a volta atravessando o
-  // espectro na próxima vez que ela acender.
-  useEffect(() => {
-    if (ondaAtual) alvoOnda.current = ondaAtual;
-  }, [ondaAtual]);
 
   // Quais cartões estão com a tabela inteira aberta. Por plano, e não um só
   // aberto por vez: quem abre um está comparando, e fechar o anterior sozinho
@@ -2648,101 +2476,40 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
   }, [emCarrossel]);
 
   return (
-    <div
-      className="dl-plans-caixa"
-      ref={caixaRef}
-      /* Os pontos do carrossel vivem FORA dos cartões, então a cor do plano em
-         foco precisa descer por aqui — de dentro do cartão ela não alcançaria. */
-      style={{ "--realce": realceDoPlano(planos[atual]?.key) }}
-    >
-      {/* Camada do fundo: fica atrás do conteúdo da seção inteira (z-index -1
-          dentro do .dl-wrap, que é quem cria o contexto de empilhamento) e
-          extravasa o respiro lateral para o clarão não terminar numa quina.
-          A tinta estática só aparece quando as ondas não podem rodar. */}
+    <div className="pl-caixa" ref={caixaRef}>
       <div
-        className={`dl-plans-onda${ondaAtual ? " is-on" : ""}`}
-        ref={ondaRef}
-        aria-hidden="true"
-        // A reserva estática segue o MESMO plano que rege as ondas, e não o
-        // cartão em foco: no desktop quem manda é o mouse, e amarrada ao índice
-        // do carrossel ela ficava presa no primeiro plano — ou seja, em nada,
-        // já que o Básico é o degrau neutro da escala.
-        style={{ "--tinta": FLARE[planoDaOnda?.key]?.tinta || "transparent" }}
-      />
-
-      <div
-        className="dl-plans"
+        className="pl-cartoes"
         ref={trilhoRef}
         // Pointerdown e não scroll: rolagem também é disparada pelo passo
         // automático, e aí ele se desligaria sozinho no primeiro movimento.
         onPointerDown={() => setManual(true)}
       >
         {planos.map((p, i) => {
-          // Resumido só no carrossel: no desktop os três aparecem juntos e a
+                  // Resumido só no carrossel: no desktop os três aparecem juntos e a
           // tabela inteira é o que permite comparar de relance.
           const resumido = compacto && !abertos[p.key];
+          // O botão cheio marca "é este aqui". No desktop é o Profissional, o
+          // do meio; no carrossel só existe um plano por vez, então o cheio
+          // segue o cartão em foco.
+          const emDestaque = emCarrossel ? i === atual : p.highlight;
           return (
           <Reveal
             key={p.key}
-            className={`dl-plan${p.highlight ? " is-highlight" : ""}${i === atual ? " is-atual" : ""}`}
+            className={`pl-cartao${p.highlight ? " is-popular" : ""}${i === atual ? " is-atual" : ""}`}
             delay={i * 110}
-            style={{
-              "--flare": FLARE[p.key]?.cor || "var(--accent-soft)",
-              "--realce": realceDoPlano(p.key),
-            }}
-            // Só o desktop usa: é daqui que sai a cor do fundo da seção quando
-            // não há carrossel. A saída só limpa se o índice ainda for o dele,
-            // senão o mouse passando de um cartão para o vizinho apagaria o
-            // que o vizinho acabou de acender.
-            onMouseEnter={() => setSobHover(i)}
-            onMouseLeave={() => setSobHover((h) => (h === i ? null : h))}
           >
-            {/* Contorno elétrico — só no cartão sob o mouse, e só nos planos que
-                acendem. Montado sob demanda porque cada instância roda o próprio
-                laço de canvas: três ligados o tempo todo seriam três desenhos
-                por quadro para mostrar, no máximo, um. */}
-            {BORDA_ELETRICA[p.key] && (emCarrossel ? i === atual : sobHover === i) ? (
-              <ElectricBorder
-                className="electric-border--moldura electric-border--so-raios"
-                color={BORDA_ELETRICA[p.key]}
-                speed={1}
-                chaos={0.06}
-                /* Acompanha o canto do cartão. No desktop os três dividem UMA
-                   moldura e a célula não tem canto próprio — daí o zero. No
-                   carrossel cada cartão é fechado em si, com 18px de raio, e um
-                   traçado reto contornando canto arredondado sobra nas quatro
-                   quinas. */
-                borderRadius={emCarrossel ? 18 : 0}
-              />
-            ) : null}
-            {/* A coroa fica pendurada na borda de cima do topo de linha, metade
-                dentro e metade fora: é um selo pregado no cartão, não mais uma
-                linha dentro dele. Ela sai na cor do próprio plano (dourada, no
-                Premium), e o Profissional continua marcado pela etiqueta
-                "MAIS POPULAR" — cada um com um sinal, sem os dois disputarem o
-                mesmo. */}
-            {p.key === "PREMIUM" ? (
-              <span className="dl-plan__coroa" aria-hidden="true">
-                <Crown size={13} weight="fill" />
-              </span>
-            ) : null}
-            {p.highlight ? <span className="dl-plan__tag dl-mono">● MAIS POPULAR</span> : null}
-            <h3 className="dl-plan__name">{p.name}</h3>
-            <p className="dl-plan__desc">{p.desc}</p>
+            {/* A mancha de luz do cartão: a classe --n muda a posição dela, e é
+                isso que faz os três serem irmãos e não cópias (ver o CSS). */}
+            <div className={`pl-bolha-cards pl-bolha-cards--${i + 1}`} aria-hidden="true" />
+            <h3 className="pl-cartao__nome">{p.name}</h3>
+            <p className="pl-cartao__desc">{p.desc}</p>
+
             {/* Enquanto o preço não chega, um esqueleto no lugar dele. O bloco
                 mantém a altura nos dois estados, então a chegada do valor não
-                empurra a lista de recursos para baixo.
-
-                `aria-busy` + o texto para leitor de tela: visualmente o brilho
-                do esqueleto já diz "está vindo", mas quem ouve a página não vê
-                brilho nenhum — sem isso, o cartão simplesmente não teria preço. */}
-            <div className="dl-plan__price" aria-busy={p.carregando || undefined}>
+                empurra a lista de recursos para baixo. */}
+            <div className="pl-cartao__preco" aria-busy={p.carregando || undefined}>
               {p.carregando ? (
                 <>
-                  {/* Um <strong> de verdade, com um espaço dentro: ele herda o
-                      tamanho do preço e portanto ocupa EXATAMENTE a mesma linha
-                      que o valor vai ocupar. Casar altura na mão (34px? 41px?)
-                      erraria no primeiro ajuste de tipografia. */}
                   <strong className="dl-esqueleto dl-esqueleto--preco" aria-hidden="true">
                     &nbsp;
                   </strong>
@@ -2755,39 +2522,25 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
                 </>
               )}
             </div>
-            {/* A economia fica logo abaixo do preço — é aqui que o olho para
-                para comparar, e o valor em reais só existe por plano (no
-                alternador caberia, no máximo, a média).
-
-                Em LINHA PRÓPRIA, e não ao lado do valor: colada ao preço ela
-                cabia no Básico e quebrava no Premium, cujo número é maior. Com
-                um cartão quebrado e dois não, as listas de recursos dos três
-                deixavam de começar na mesma altura. */}
-            {!p.carregando && p.economia?.valor > 0 ? (
-              <span className="dl-plan__economia dl-mono">
-                economize {formatarBRL(p.economia.valor)}
-              </span>
-            ) : null}
-            {/* Mesma ideia na etiqueta de baixo: a própria classe da nota, para
-                a margem e a altura de linha serem as mesmas. */}
-            <span
-              className={`dl-mono dl-plan__nota${p.notaLonga && !p.carregando ? " dl-plan__nota--longa" : ""}${p.carregando ? " dl-esqueleto dl-esqueleto--nota" : ""}`}
+            {/* A nota do período fica logo abaixo do número, como o "billed
+                annually" da referência. A do anual é uma frase de quatro
+                linhas e reserva a altura, para as listas dos três cartões
+                começarem na mesma linha. */}
+            <p
+              className={`pl-cartao__nota${p.notaLonga && !p.carregando ? " pl-cartao__nota--longa" : ""}${p.carregando ? " dl-esqueleto dl-esqueleto--nota" : ""}`}
               aria-hidden={p.carregando || undefined}
             >
               {p.carregando ? " " : p.nota}
-            </span>
+            </p>
+            {!p.carregando && p.economia?.valor > 0 ? (
+              <span className="pl-cartao__economia">economize {formatarBRL(p.economia.valor)}</span>
+            ) : null}
 
-            {/* ── O interruptor do Flow, DENTRO do cartão ──────────────────
-                Entre o preço e a lista, que é o caminho que o olho faz: vê
-                quanto custa, decide se quer o módulo, e lê o que vem junto. Ele
-                muda as duas coisas em volta — o número acima e a lista abaixo —,
-                e ficar entre elas é o que torna esse efeito legível.
-
-                `stopPropagation` no clique: o cartão inteiro é uma área que
-                reage ao ponteiro (é ela que tinge o fundo em ondas), e sem isso
-                marcar o interruptor dispararia junto o comportamento do cartão. */}
+            {/* O interruptor do Flow, entre o preço e a lista: muda o número
+                acima e as linhas abaixo, e ficar entre os dois é o que torna
+                esse efeito legível. */}
             {temFlow ? (
-              <div className="dl-plan__flow" onClick={(e) => e.stopPropagation()}>
+              <div className="pl-flow" onClick={(e) => e.stopPropagation()}>
                 <ToggleDoFlow
                   id={`pkg-${p.key.toLowerCase()}`}
                   ligado={Boolean(p.comFlow)}
@@ -2795,6 +2548,9 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
                 />
               </div>
             ) : null}
+
+            {/* "Recursos" entre duas linhas, como na referência. */}
+            <p className="pl-cartao__rotulo"><span>Recursos</span></p>
 
             <PlanoRecursos
               id={`plano-lista-${p.key}`}
@@ -2808,7 +2564,7 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
             {compacto ? (
               <button
                 type="button"
-                className="dl-plan__mais"
+                className="pl-mais"
                 aria-expanded={!resumido}
                 aria-controls={`plano-lista-${p.key}`}
                 onClick={() => setAbertos((a) => ({ ...a, [p.key]: !a[p.key] }))}
@@ -2819,37 +2575,28 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
                 </svg>
               </button>
             ) : null}
-            {/* Todo caminho da página leva ao teste — não existe mais "assinar
-                sem testar". O plano escolhido aqui não muda o que o teste
-                libera (ele libera tudo); vai junto como intenção, para o time
-                saber com o que a pessoa se identificou. */}
-            {/* O botão cheio marca "é este aqui". No desktop isso é fixo, e é o
-                Profissional — ele está no meio de três, e o destaque diz qual
-                deles recomendamos. No carrossel só existe um plano por vez: o
-                destaque passa a seguir o cartão em foco, senão o botão cheio
-                apareceria num cartão recuado enquanto o que está no centro fica
-                com o contorno vazio. */}
-            <Button
-              as="button"
+            {/* Todo caminho da página leva ao teste. O plano escolhido vai
+                junto como intenção, para o time saber com o que a pessoa se
+                identificou. */}
+            <button
               type="button"
-              variant={emCarrossel && i === atual ? "primary" : "outline"}
-              className="dl-btn--block"
+              className={`pl-btn ${emDestaque ? "pl-btn--cheio" : "pl-btn--contorno"}`}
               onClick={() => aoTestar(p.key)}
             >
-              Testar com este plano
-            </Button>
+              {emDestaque ? "Começar agora" : "Testar com este plano"}
+            </button>
           </Reveal>
           );
         })}
       </div>
 
       {emCarrossel ? (
-        <div className="dl-plans__pontos">
+        <div className="pl-pontos">
           {planos.map((p, i) => (
             <button
               key={p.key}
               type="button"
-              className={`dl-plans__ponto${i === atual ? " is-on" : ""}`}
+              className={`pl-ponto${i === atual ? " is-on" : ""}`}
               aria-label={`Ver o plano ${p.name}`}
               aria-current={i === atual}
               onClick={() => { setManual(true); setAtual(i); irPara(i); }}
@@ -3576,18 +3323,11 @@ function ConteudoDaLanding() {
           fundos: no celular a seção do desafio sai de cena e o xadrez precisa
           ser refeito de lá para baixo (ver "Zebra do celular" no CSS). */}
       <section className="dl-section dl-section--alt dl-section--compacto dl-numeros" id="numeros">
+        <DivisorDeOndas tom="escuro" />
         {/* A terceira forma da familia. Entra PARADA, e nao girando como as duas
             irmas: ela veio em PNG, e PNG girando a 240px serrilha na diagonal.
             Vira textura de canto — o mesmo papel, sem o movimento. Se um dia
             chegar o SVG dela, ela passa a usar FormaDeFundo como as outras. */}
-        <img
-          className="dl-numeros__forma"
-          src="/ilustracoes/forma-arco.png"
-          alt=""
-          width={240}
-          height={240}
-          loading="lazy"
-        />
         <div className="dl-wrap">
           <SectionHead eyebrow="NÚMEROS DA OMNIMOB" strong="A plataforma completa" soft="para quem vive de vender imóveis.">
             Uma base só, pensada para imobiliárias brasileiras: imóveis, vitrine, leads, equipe e divulgação
@@ -3607,6 +3347,7 @@ function ConteudoDaLanding() {
           há um segundo componente montado por largura de tela, e girar o
           aparelho volta a mostrar a seção sem remontar nada. */}
       <section className="dl-section dl-section--amplo dl-section--ghost" id="desafio">
+        <DivisorDeOndas tom="grafite" />
         <GhostWord>+ visibilidade.</GhostWord>
         {/* Duas colunas: o texto explica o problema, a cena mostra ele
             acontecendo. Antes a ilustracao vinha depois do callout e lia como
@@ -3647,6 +3388,7 @@ function ConteudoDaLanding() {
 
       {/* ── Editor de vitrine ── */}
       <section className="dl-section dl-section--alt dl-section--amplo" id="editor">
+        <DivisorDeOndas tom="escuro" />
         <div className="dl-wrap dl-editor">
           <Reveal>
             <Eyebrow tone={ROSE}>EDITOR VISUAL</Eyebrow>
@@ -3668,10 +3410,11 @@ function ConteudoDaLanding() {
 
       {/* OMNIMOB_LANDING_ZEBRA_V41 */}
       {/* OMNIMOB_LANDING_GROWTH_V4_PRODUCT_START */}
-      <ProductStorySection onTeste={() => abrirTeste("", "product-story")} />
+      <ProductStorySection onTeste={() => abrirTeste("", "product-story")} divisor={<DivisorDeOndas tom="grafite" />} />
       {/* OMNIMOB_LANDING_GROWTH_V4_PRODUCT_END */}
       {/* ── Recursos + mock ── */}
       <section id="recursos" className="dl-section dl-section--alt">
+        <DivisorDeOndas tom="escuro" />
         <div className="dl-wrap">
           <SectionHead eyebrow="RECURSOS" strong="Tudo que sua imobiliária" soft="precisa. Em um só lugar.">
             Um sistema, do cadastro à conversão — sem juntar cinco ferramentas para dar conta da operação.
@@ -3685,6 +3428,7 @@ function ConteudoDaLanding() {
 
       {/* ── Integrações ── */}
       <section className="dl-section dl-section--compacto" id="integracoes">
+        <DivisorDeOndas tom="grafite" />
         <div className="dl-wrap">
           <SectionHead eyebrow="CANAIS E INTEGRAÇÕES" strong="Conectada aos canais" soft="onde seu cliente já está.">
             Do cadastro aos portais, redes e assinatura digital — sem espalhar a operação por várias ferramentas.
@@ -3709,13 +3453,14 @@ function ConteudoDaLanding() {
         <ManifestoDoFlow />
       </section>
       {/* E o rasgo de baixo, que desce sobre a seção escura seguinte. */}
-      <div className="dl-rasgo dl-rasgo--baixo" aria-hidden="true" />
 
       {/* ── Destaques: parede à deriva no fundo da seção inteira ──
           O conteúdo fica por cima da parede, não ao lado dela — por isso a
           seção é o palco (`position: relative`) e a parede é uma camada
           absoluta atrás. */}
       <section className="dl-section dl-section--tight dl-porque" id="porque">
+        <DivisorDeOndas tom="claro" />
+
         <ParedeDeDestaques />
 
         <div className="dl-wrap dl-porque__frente">
@@ -3726,34 +3471,70 @@ function ConteudoDaLanding() {
       </section>
 
       {/* OMNIMOB_LANDING_GROWTH_V4_TRUST_START */}
-      <TrustStrip />
+      {/* Vazada, e não pintada: a seção de cima é a parede em movimento, e a
+          onda deixa a parede escorrer para dentro da faixa. */}
+      <TrustStrip className="dl-ondas-vazadas" />
       {/* OMNIMOB_LANDING_GROWTH_V4_TRUST_END */}
       {/* ── Planos ── */}
       <section id="planos" className="dl-section">
+        <DivisorDeOndas tom="grafite" />
         <div className="dl-wrap">
-          <SectionHead eyebrow="PLANOS" eyebrowTone={GOLD} strong="Escolha o plano ideal" soft="para sua imobiliária.">
-            Sem fidelidade, cancele quando quiser.
-          </SectionHead>
+          {/* Cabeçalho à esquerda, como o resto da página — mas sem SectionHead:
+              aqui o título tem duas linhas curtas e o subtítulo vem colado, e a
+              mancha de luz da seção mora no canto direito, onde o SectionHead
+              poria a descrição. O alternador de período fica sob o subtítulo:
+              é uma escolha da página inteira (ninguém paga um plano no mensal e
+              outro no anual); o do Flow desceu para dentro de cada cartão. */}
+          <div className="pl-secao">
+            {/* ── Os filtros que AMASSAM as manchas ──
+                Um radial-gradient é sempre uma elipse perfeita; o que deixa a
+                forma "desfigurada", como na referência, é passar a mancha por
+                um ruído (feTurbulence) que desloca cada ponto da borda
+                (feDisplacementMap). Um filtro por mancha, para cada uma ter o
+                seu amassado. Os controles:
+                  baseFrequency  o tamanho das bossas — menor = bossas largas e
+                                 poucas; maior = borda serrilhada
+                  numOctaves     detalhe do ruído (1–3; mais que isso não se vê)
+                  seed           outra forma, mesmo tamanho de bossa
+                  scale          QUANTO deforma, em px — é o botão principal
+                A margem do filtro (x/y/width/height) é a folga para a forma
+                deslocada não ser cortada na caixa do elemento. */}
+            <svg className="pl-filtros" aria-hidden="true" focusable="false">
+              <filter id="pl-deforma-canto" x="-35%" y="-35%" width="170%" height="170%" colorInterpolationFilters="sRGB">
+                <feTurbulence type="fractalNoise" baseFrequency="0.005 0.008" numOctaves="2" seed="7" result="ruido" />
+                <feDisplacementMap in="SourceGraphic" in2="ruido" scale="160" xChannelSelector="R" yChannelSelector="G" />
+              </filter>
+              <filter id="pl-deforma-cards" x="-35%" y="-35%" width="170%" height="170%" colorInterpolationFilters="sRGB">
+                <feTurbulence type="fractalNoise" baseFrequency="0.004 0.011" numOctaves="2" seed="3" result="ruido" />
+                <feDisplacementMap in="SourceGraphic" in2="ruido" scale="110" xChannelSelector="R" yChannelSelector="G" />
+              </filter>
+            </svg>
+            <div className="pl-bolha-canto" aria-hidden="true" />
+            <div className="pl-cabeca">
+              <h2 className="pl-titulo">
+                Escolha o plano ideal
+                <br />
+                para sua imobiliária
+              </h2>
+              <p className="pl-sub">Sem fidelidade, cancele quando quiser.</p>
+              {temAnual ? (
+                <PeriodoToggle valor={periodo} aoTrocar={setPeriodo} selo={seloPeriodo} />
+              ) : null}
+            </div>
 
-          {/* O interruptor do Flow desceu para DENTRO de cada cartão — ver o
-              comentário em `pacotes`. Aqui em cima fica só o período, que é uma
-              escolha da página inteira: ninguém paga um plano no mensal e outro
-              no anual. */}
-          {temAnual ? (
-            <PeriodoToggle valor={periodo} aoTrocar={setPeriodo} selo={seloPeriodo} />
-          ) : null}
-
-          <Planos
-            planos={PLANS}
-            aoTestar={abrirTeste}
-            temFlow={temFlow}
-            aoAlternarPacote={alternarPacote}
-          />
+            <Planos
+              planos={PLANS}
+              aoTestar={abrirTeste}
+              temFlow={temFlow}
+              aoAlternarPacote={alternarPacote}
+            />
+          </div>
         </div>
       </section>
 
       {/* ── FAQ ── */}
       <section id="faq" className="dl-section dl-section--alt dl-section--compacto">
+        <DivisorDeOndas tom="escuro" />
         <div className="dl-wrap">
           <SectionHead eyebrow="PERGUNTAS FREQUENTES" strong="Tudo sobre a Omnimob," soft="direto ao ponto.">
             As dúvidas que mais aparecem antes de começar.
@@ -3798,6 +3579,7 @@ function ConteudoDaLanding() {
 
       {/* ── Aplicativo mobile ── */}
       <section className="dl-section dl-app-soon" id="aplicativo">
+        <DivisorDeOndas tom="grafite" />
         <div className="dl-wrap dl-app-soon__grid">
           <Reveal className="dl-app-soon__copy">
             <Eyebrow tone={GOLD}>OMNIMOB MOBILE</Eyebrow>
@@ -3840,6 +3622,8 @@ function ConteudoDaLanding() {
 
       {/* ── CTA final (seção clara) ── */}
       <section id="contato" className="dl-cta" ref={vantaRef}>
+        {/* A seção escura de cima escorre em ondas sobre esta, a clara. */}
+        <DivisorDeOndas tom="escuro" />
         {/* ── O fundo ────────────────────────────────────────────────────
             Sem escalopes aqui: o shader já é o movimento desta seção, e as
             flores disputavam com ele em cima do mesmo fundo claro.
@@ -3897,6 +3681,7 @@ function ConteudoDaLanding() {
 
       {/* ── Footer ── */}
       <footer className="dl-footer">
+        {/* O CTA claro escorre sobre o rodapé, como a seção escura escorreu sobre ele. */}
         {/* O par da marca fechando a página. Grande e quase invisível (4%): o
             rodapé é onde o olho já desacelerou, e uma forma discreta ali é a
             diferença entre a página TERMINAR e a página simplesmente parar.
@@ -5742,111 +5527,288 @@ ${editorCSS()}
 .dl-fcard--rose { background: #fbcfe8; border-color: #fbcfe8; color: #500724; }
 
 /* ── Planos ── */
-.dl-plans {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--line); border-radius: 20px;
-  /* O hidden vem primeiro como reserva: navegador que não conheça o clip ignora
-     as duas linhas seguintes e fica com o recorte antigo, em vez de perder o
-     arredondamento dos cantos.
+/* ── PLANOS ──────────────────────────────────────────────────────────────────
+   Referência: dribbble.com/shots/26870248 (SaaS Pricing Section). Cabeçalho à
+   esquerda, uma MANCHA DE LUZ — branco no miolo, índigo em volta, desfocada —
+   no canto da seção e outra no alto de cada cartão, em posição própria. O
+   índigo é o --accent da página, então a seção usa os tokens dela em vez de
+   uma paleta só sua.
 
-     O overflow-clip-margin é o que permite os raios do contorno elétrico saírem
-     do quadro: o recorte continua existindo (os cantos arredondados dependem
-     dele), mas a pintura pode passar 70px além da borda — que é o alcance do
-     traçado deslocado por ruído do ElectricBorder. */
+   Sao DUAS manchas, e duas classes independentes de proposito — cada uma
+   carrega todas as suas propriedades, e mexer numa nao muda a outra:
+
+     .pl-bolha-canto   a da secao, sangrando pelo canto de cima a direita
+     .pl-bolha-cards   a dos cartoes: o que parece uma mancha por cartao e UM
+                       clarao so, atravessando os tres (o Basico mostra a
+                       cauda esquerda, o Profissional o miolo, o Premium a
+                       cauda direita). Como um elemento nao pode ser recortado
+                       por tres irmaos, cada cartao desenha a MESMA elipse,
+                       deslocada para o centro cair sempre no meio do cartao
+                       do meio — --1 empurra um cartao e um vao para a
+                       direita, --3 o mesmo para a esquerda. O overflow de
+                       cada cartao faz o recorte.
+
+   (Sem crases neste comentario — este CSS mora dentro de um template literal.) */
+.pl-secao {
+  position: relative; isolation: isolate;
   overflow: hidden;
-  overflow: clip;
-  overflow-clip-margin: 70px;
+  border-radius: 20px;
+  padding: clamp(28px, 4vw, 56px) clamp(20px, 3.5vw, 48px) clamp(24px, 3.5vw, 44px);
+  background: #0e0e10;
+  border: 1px solid rgba(255,255,255,0.06);
 }
-.dl-plan {
-  position: relative; padding: 32px 26px; display: flex; flex-direction: column;
-  border-right: 1px solid var(--line);
+/* ── A mancha do CANTO da seção ──
+   Estourada de proposito: o miolo branco vai ate quase um terco do raio, o
+   azul em volta chega cheio ate 60% — so dai ele apaga, e rapido. O desfoque
+   e curto: blur longo e o que fazia a mancha parecer nevoa em vez de luz.
+   O deslocamento para cima e em translate, e nao em top negativo: top em
+   porcentagem mede a ALTURA do dono, e a mancha saia inteira pelo recorte;
+   translate mede a propria mancha. */
+/* O svg dos filtros nao desenha nada; so precisa existir no DOM. */
+.pl-filtros { position: absolute; width: 0; height: 0; overflow: hidden; }
+.pl-bolha-canto {
+  position: absolute; z-index: 0; pointer-events: none;
+  width: clamp(520px, 54vw, 780px);
+  aspect-ratio: 1; border-radius: 50%;
+  right: -35%; top: 0; transform: translateY(-70%);
+  /* Quatro camadas: o miolo branco, o corpo azul, e dois LOBOS azuis menores
+     — sao eles que dao as bossas que o filtro depois amassa. Cada
+     radial-gradient e "tamanho at posicao".
+     ATENCAO as posicoes: com right -30% e translateY(-60%), o que aparece
+     deste elemento e so o quadrante de BAIXO e a ESQUERDA (x de 0 a ~60%,
+     y de 60% a 100%). Miolo fora dessa janela e miolo invisivel. */
+  background:
+    radial-gradient(40% 36% at 44% 68%, #ffffff 0%, #ffffff 34%, #dcdcff 52%, transparent 76%),
+    radial-gradient(74% 70% at 46% 64%, #d9d6ff 0%, #4b3bff 38%, color-mix(in srgb, #3617a7 55%, transparent) 66%, transparent 84%),
+    radial-gradient(34% 28% at 14% 82%, #4b3bff 0%, color-mix(in srgb, #3617a7 55%, transparent) 50%, transparent 78%),
+    radial-gradient(30% 26% at 66% 94%, #4b3bff 0%, color-mix(in srgb, #3617a7 55%, transparent) 50%, transparent 78%);
+  /* Primeiro amassa (o filtro SVG la do JSX), depois desfoca. */
+  filter: url(#pl-deforma-canto) blur(14px);
 }
-.dl-plan:last-child { border-right: 0; }
-/* ── O BOTAO SENTA NO PE DO CARTAO ──────────────────────────────────────────
-   Os tres cartoes tem a mesma altura (a grade estica), mas as listas de
-   recursos nao tem o mesmo tamanho — e passaram a diferir MUITO quando o
-   interruptor do Flow virou por cartao: com o Flow ligado num so, um cartao
-   ganha nove linhas e os outros nao.
-
-   Sem isto o botao segue a lista e para onde ela acabar: dois flutuando no meio
-   do cartao e um la embaixo. Medido, era 897 / 1234 / 898 dentro de cartoes de
-   1310 — o rodape da secao lia como inacabado.
-
-   margin-top auto empurra o ultimo item para o fim do flex column. Vale em
-   qualquer combinacao de interruptores, que e o ponto: nao ha altura escrita
-   para acertar. */
-.dl-plan > .dl-btn--block:last-child { margin-top: auto; }
-.dl-plan.is-highlight { background: var(--surface); }
-/* ── Etiqueta "mais popular" ──
-   Virou uma pastilha na cor do plano (--realce, o mesmo roxo do neon do cartão),
-   com o fundo em movimento em vez de chapado.
-
-   O movimento é um degradê largo atravessando a pastilha, e NÃO as ondas do
-   Vanta, que era a ideia original. Elas não servem aqui, e a razão é do próprio
-   efeito: o WAVES monta a malha da onda em função do tamanho do elemento, então
-   numa caixa pequena a fase quase não varia de um vértice para o outro e a
-   superfície sai plana — um contexto WebGL a mais para entregar exatamente uma
-   cor sólida. Medido: liso a 104 × 17, liso a 320 × 190 e ainda liso a 900 × 520.
-   As ondas da seção só têm relevo porque a camada delas é a seção inteira. */
-.dl-plan__tag {
-  position: absolute; top: 12px; right: 14px; z-index: 3;
-  display: inline-flex; align-items: center;
-  padding: 4px 9px; border-radius: 999px;
-  font-size: 8.5px; letter-spacing: 0.13em; line-height: 1;
+.pl-cabeca {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
+  max-width: 560px;
+  margin-bottom: clamp(30px, 4vw, 44px);
+}
+.pl-titulo {
+  margin: 0;
+  font-size: clamp(32px, 4vw, 46px); line-height: 1.08;
+  font-weight: 600; letter-spacing: -0.03em;
   color: #fff;
-  background-image: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--realce) 74%, #000) 0%,
-    var(--realce) 24%,
-    color-mix(in srgb, var(--realce) 62%, #fff) 46%,
-    var(--realce) 68%,
-    color-mix(in srgb, var(--realce) 74%, #000) 100%
-  );
-  background-size: 320% 100%;
-  box-shadow: 0 5px 16px -7px color-mix(in srgb, var(--realce) 85%, transparent);
-  animation: dlTagOnda 7s linear infinite;
 }
-@keyframes dlTagOnda {
-  from { background-position: 0% 50%; }
-  to { background-position: -320% 50%; }
+.pl-sub { margin: 0; font-size: 14px; line-height: 1.6; color: var(--subtle); }
+
+/* ── Alternador mensal / anual: uma chave entre dois rótulos ── */
+.pl-periodo {
+  display: inline-flex; align-items: center; gap: 12px;
+  margin-top: 6px;
+  font-size: 13px; color: var(--subtle);
 }
-.dl-plan__name { font-size: 26px; font-weight: 700; letter-spacing: -0.035em; color: var(--strong); }
-.dl-plan__desc { font-size: 13px; line-height: 1.7; color: var(--subtle); margin-top: 8px; min-height: 66px; }
-.dl-plan__price { margin-top: 18px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.dl-plan__price strong { font-size: 34px; font-weight: 700; letter-spacing: -0.045em; color: var(--strong); }
-.dl-plan__price span { font-size: 13px; color: var(--subtle); }
-.dl-plan__nota { color: var(--placeholder); font-size: 9px; margin-top: 6px; display: block; }
-/* A nota do anual é uma frase, não uma etiqueta: precisa de entrelinha para ser
-   lida e de uma ALTURA MÍNIMA reservada. Sem ela, "Básico" e "Profissional com
-   Flow" quebram em números de linhas diferentes e as listas de recursos dos
-   três cartões deixam de começar na mesma altura — o mesmo motivo pelo qual a
-   economia já ficou em linha própria. */
-/* Duas classes no seletor de propósito: a .dl-mono (mono, caixa-alta, espaçada)
-   vem de outra folha, e depender da ordem de injeção para vencê-la seria uma
-   aposta. Frase longa não se lê em caixa-alta.
-   Sem CRASE nenhuma neste comentário: este CSS mora dentro de um template
-   literal, e uma crase aqui fecha a string e transforma o resto em código. */
-.dl-plan__nota.dl-plan__nota--longa {
-  font-family: inherit;
-  font-size: 10px;
-  line-height: 1.55;
-  letter-spacing: 0.01em;
-  text-transform: none;
-  min-height: calc(4 * 1.55em);
+.dl-root .pl-periodo__rotulo {
+  width: auto; padding: 0; border: 0; border-radius: 0;
+  background: none; box-shadow: none; transform: none;
+  font: inherit; color: inherit; cursor: pointer;
+  transition: color 0.25s ease;
 }
-/* Economia do anual, ao lado do preço. Em verde-menta, a mesma cor dos ✓ da
-   lista: nesta página o menta já quer dizer "isto está incluído". */
-.dl-plan__economia {
-  /* O align-self existe porque o cartão é uma coluna flex: sem ele a etiqueta
-     esticaria de ponta a ponta em vez de acompanhar o próprio texto. */
-  align-self: flex-start;
-  margin-top: 8px;
-  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--mint);
+.dl-root .pl-periodo__rotulo:hover { background: none; transform: none; color: var(--strong); }
+.pl-periodo__rotulo.is-on { color: var(--strong); }
+.pl-periodo__selo { color: inherit; }
+.dl-root .pl-periodo__chave {
+  position: relative; width: 36px; height: 20px; padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #1c1c22;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+  cursor: pointer; transform: none;
+}
+.dl-root .pl-periodo__chave:hover { transform: none; background: #24242c; }
+.pl-periodo__chave::after {
+  content: "";
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: linear-gradient(180deg, #c7c9ff, var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 75%, transparent);
+  transition: transform 0.3s var(--ease-out);
+}
+.pl-periodo__chave[aria-checked="true"]::after { transform: translateX(16px); }
+
+/* ── Os cartões ── */
+.pl-caixa { position: relative; z-index: 1; }
+.pl-cartoes {
+  /* O vão entra na conta do clarão (ver .pl-bolha-cards), por isso é
+     variável e não só o gap. */
+  --pl-vao: 14px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--pl-vao);
+  align-items: stretch;
+}
+.pl-cartao {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column;
+  padding: 26px 22px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #131316;
+  color: var(--default);
+}
+/* O conteúdo do cartão fica acima da mancha. */
+.pl-cartao > :not(.pl-bolha-cards) { position: relative; z-index: 1; }
+/* ── A mancha dos CARTÕES ──
+   Uma elipse de 2,4 cartões de largura, com o centro no meio do cartão do
+   meio. As três regras --1/--2/--3 são o mesmo ponto medido a partir de cada
+   cartão (os três têm a mesma largura, então a porcentagem bate). O translate
+   sobe a elipse até só a metade de baixo aparecer. Cor, forma e desfoque são
+   independentes da mancha do canto. */
+.pl-bolha-cards {
+  position: absolute; z-index: 0; pointer-events: none;
+  width: 300%; aspect-ratio: 2.1 / 1; border-radius: 50%;
+  top: 0; transform: translate(-50%, -70%);
+  /* TRES cores, e so tres, como na referencia: branco, um lilas bem claro e
+     um azul eletrico estourado — em FAIXAS, nao em degrade longo. Cada cor
+     entra e sai em poucos pontos percentuais (branco ate 20, lilas de 26 a
+     36, azul de 44 a 70) e o blur de 16px e o unico suavizador; e isso que
+     da o aspecto de luz posterizada. As cores estao nas variaveis para trocar
+     num lugar so. Com translateY(-60%), so os 40% de BAIXO do elemento
+     aparecem — o topo do cartao esta em y = 60%; por isso o corpo esta em
+     y = 54%: o branco fica so na borda de cima do cartao do meio e o nome
+     do plano cai sobre o lilas, onde ainda se le. Os dois lobos
+     das pontas sao so o azul, e caem nos cartoes das beiradas. */
+  --pl-branco: #ffffff;
+  --pl-lilas: #cfc8ff;
+  --pl-azul: #2a17ff;
+  background:
+    radial-gradient(
+      84% 62% at 50% 54%,
+      var(--pl-branco) 0%, var(--pl-branco) 20%,
+      var(--pl-lilas) 50%, var(--pl-lilas) 36%,
+      var(--pl-azul) 60%, var(--pl-azul) 70%,
+      color-mix(in srgb, var(--pl-azul) 55%, transparent) 80%,
+      transparent 92%
+    ),
+    radial-gradient(28% 34% at 14% 84%, var(--pl-azul) 0%, var(--pl-azul) 40%, transparent 82%),
+    radial-gradient(28% 34% at 86% 84%, var(--pl-azul) 0%, var(--pl-azul) 40%, transparent 82%);
+  filter: url(#pl-deforma-cards) blur(16px);
+}
+.pl-bolha-cards--1 { left: calc(150% + var(--pl-vao)); }
+.pl-bolha-cards--2 { left: 50%; }
+.pl-bolha-cards--3 { left: calc(-50% - var(--pl-vao)); }
+
+.pl-cartao__nome { margin: 0; font-size: 14px; font-weight: 500; color: var(--strong); }
+.pl-cartao__desc { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--subtle); }
+.pl-cartao__preco { margin-top: 14px; display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; }
+.pl-cartao__preco strong { font-size: 36px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; color: #fff; }
+.pl-cartao__preco span { font-size: 14px; color: var(--subtle); }
+.pl-cartao__nota { margin: 6px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--placeholder); display: block; }
+/* A nota do anual é uma frase; reserva as linhas para as listas dos três
+   cartões começarem na mesma altura. */
+.pl-cartao__nota--longa { min-height: calc(4 * 1.5em); }
+.pl-cartao__economia {
+  align-self: flex-start; margin-top: 8px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--accent-soft);
   padding: 3px 8px; border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--mint) 32%, transparent);
-  background: color-mix(in srgb, var(--mint) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   white-space: nowrap;
+}
+/* O interruptor do Flow, no cartão. */
+.pl-flow { margin: 16px 0 0; }
+.pl-flow .pkg-caixa {
+  padding: 11px 12px; border-radius: 10px;
+  border-color: transparent;
+  background: rgba(255,255,255,0.04);
+}
+.pl-flow .pkg-caixa.is-on { border-color: color-mix(in srgb, var(--pkg-cor) 30%, transparent); }
+.pl-flow .pkg-linha { gap: 10px; }
+.pl-flow input.sw { font-size: 12px; }
+.pl-flow .pkg-titulo { font-size: 12.5px; gap: 7px; }
+.pl-flow .pkg-desc { font-size: 11px; line-height: 1.45; }
+
+/* "Recursos" entre duas linhas. */
+.pl-cartao__rotulo {
+  display: flex; align-items: center; gap: 12px;
+  margin: 24px 0 14px;
+  font-size: 11px; color: var(--placeholder);
+}
+.pl-cartao__rotulo::before, .pl-cartao__rotulo::after {
+  content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.09);
+}
+/* O painel guarda o respiro e o esticão; a lista, só o desenho das linhas. */
+.pl-recursos { display: flex; flex-direction: column; flex: 1; margin: 0 0 26px; }
+.pl-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; flex: 1; align-content: start; }
+.pl-lista li { display: flex; align-items: flex-start; gap: 9px; font-size: 12px; line-height: 1.5; color: var(--subtle); }
+.pl-lista li > span:first-child {
+  flex: 0 0 auto; display: inline-grid; place-items: center;
+  width: 14px; height: calc(12px * 1.5);
+  color: var(--default);
+}
+.pl-lista__texto { display: inline; }
+.pl-lista li.is-off { color: var(--placeholder); }
+.pl-lista li.is-off > span:first-child { color: #4a4a52; }
+.pl-lista--resumo li.is-heranca { color: var(--strong); font-weight: 600; }
+/* A etiqueta "Novo" ao lado do recurso. Só as linhas do Flow a carregam. */
+.pl-novo {
+  display: inline-block; vertical-align: 1px; margin-left: 6px;
+  font-style: normal; font-size: 8.5px; font-weight: 600; letter-spacing: 0.04em; line-height: 1;
+  color: var(--accent-soft);
+  padding: 3px 5px; border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Os botões. Com .dl-root porque o styles.css global pinta todo <button> de
+   roxo e o levanta no hover. Os dois são escuros; o do cartão em destaque é o
+   mais claro — é só isso que o marca, como na referência. */
+.dl-root .pl-btn {
+  margin-top: auto; width: 100%;
+  padding: 12px 16px; border-radius: 10px;
+  font: inherit; font-size: 13.5px; font-weight: 600;
+  color: var(--strong);
+  cursor: pointer; transform: none;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+.dl-root .pl-btn--contorno {
+  background: #18181c;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.dl-root .pl-btn--contorno:hover {
+  transform: none;
+  background: #1f1f24;
+  border-color: rgba(255,255,255,0.18);
+}
+.dl-root .pl-btn--cheio {
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.dl-root .pl-btn--cheio:hover { transform: none; background: rgba(255,255,255,0.2); }
+.dl-root .pl-btn:active { scale: 0.985; }
+
+/* Os pontos do carrossel — só existem no DOM no celular. */
+.pl-pontos { display: flex; justify-content: center; gap: 6px; margin-top: 6px; }
+.dl-root .pl-ponto {
+  width: 24px; height: 26px; padding: 0; border: 0; border-radius: 0;
+  background: none; box-shadow: none; transform: none; cursor: pointer;
+  display: grid; place-items: center;
+}
+.dl-root .pl-ponto:hover { background: none; box-shadow: none; transform: none; }
+.pl-ponto::before {
+  content: ""; width: 7px; height: 7px; border-radius: 999px;
+  background: rgba(255,255,255,0.24);
+  transition: width 0.35s var(--ease-out), background 0.35s ease;
+}
+.pl-ponto.is-on::before { width: 20px; background: var(--accent-soft); }
+
+@media (max-width: 1024px) {
+  .pl-secao { padding-left: 18px; padding-right: 18px; }
+  .pl-bolha-canto { width: 380px; right: -20%; transform: translateY(-30%); }
+}
+@media (max-width: 640px) {
+  .pl-secao { border-radius: 16px; }
+  .pl-titulo { font-size: 30px; }
+  /* Menor e mais para fora: na largura do celular ela cobria o subtitulo. */
+  .pl-bolha-canto { width: 320px; right: -40%; transform: translateY(-58%); }
 }
 
 /* ── Esqueleto de carregamento ──────────────────────────────────────────────
@@ -6520,234 +6482,6 @@ ${editorCSS()}
    e nao a coluna inteira de 1200px, onde uma frase de duas linhas ficaria com
    quinze palavras por linha.
    (Sem crases nestes comentarios: template literal.) */
-/* O interruptor do Flow DENTRO do cartao de plano.
-
-   Ele reaproveita o componente compartilhado (ToggleDoFlow), e o que muda aqui
-   e so o aperto: num cartao de 300px a caixa solta da pagina ficaria com uma
-   palavra por linha. O texto encolhe, a descricao vira duas linhas curtas, e a
-   caixa perde a moldura — dentro de um cartao que ja tem borda, uma segunda
-   borda a dois centimetros da primeira lê como caixa presa em caixa.
-   (Sem crases nestes comentarios: template literal.) */
-.dl-plan__flow { margin: 0 0 16px; }
-.dl-plan__flow .pkg-caixa {
-  padding: 11px 12px; border-radius: 11px;
-  border-color: transparent;
-  background: color-mix(in srgb, var(--strong) 4%, transparent);
-}
-.dl-plan__flow .pkg-caixa.is-on {
-  border-color: color-mix(in srgb, var(--pkg-cor) 30%, transparent);
-}
-.dl-plan__flow .pkg-linha { gap: 10px; }
-.dl-plan__flow input.sw { font-size: 12px; }
-.dl-plan__flow .pkg-titulo { font-size: 12.5px; gap: 7px; }
-.dl-plan__flow .pkg-desc { font-size: 11px; line-height: 1.45; }
-
-/* ── Alternador mensal / anual ──────────────────────────────────────────────
-   A pílula que marca a opção é UM elemento que desliza, não um fundo aceso em
-   cada botão: assim a troca é um movimento (o olho segue a peça) em vez de um
-   pisca-apaga em dois lugares. Ela vive atrás do texto e não recebe clique. */
-.dl-periodo {
-  position: relative;
-  /* Grade de duas colunas IGUAIS, não flex: o botão "Anual" carrega o selo de
-     desconto e é bem mais largo que "Mensal". Em flex, cada um ficaria do
-     tamanho do próprio conteúdo e a pílula de 50% pararia no meio do texto.
-     O minmax de zero a 1fr força a metade exata: sem esse zero o piso da
-     coluna é o conteúdo, e a desigualdade volta.
-
-     fit-content + margin auto centraliza sem depender do pai: a seção não
-     define alinhamento para os filhos dela. */
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: stretch; width: fit-content;
-  margin: 26px auto 0;
-  padding: 4px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  isolation: isolate;
-  margin-bottom: 20px;
-}
-.dl-periodo__pilula {
-  position: absolute; z-index: -1;
-  top: 4px; bottom: 4px; left: 4px;
-  width: calc(50% - 4px);
-  border-radius: 999px;
-  background: var(--strong);
-  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.dl-periodo__pilula[data-em="anual"] { transform: translateX(100%); }
-.dl-periodo__opt {
-  position: relative;
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 9px 22px;
-  border: 0; background: transparent;
-  font: inherit; font-size: 13px; font-weight: 600;
-  color: var(--subtle);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color 0.28s ease;
-  justify-content: center; white-space: nowrap;
-}
-.dl-periodo__opt.is-on { color: var(--bg); }
-.dl-periodo__opt:not(.is-on):hover { color: var(--strong); }
-.dl-periodo__selo {
-  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 3px 7px; border-radius: 999px;
-  background: color-mix(in srgb, var(--mint) 18%, transparent);
-  color: var(--mint);
-  transition: background 0.28s ease, color 0.28s ease;
-}
-/* Selecionado, o botão fica claro e o menta some no fundo — o selo troca para
-   o negativo do próprio botão. */
-.dl-periodo__opt.is-on .dl-periodo__selo {
-  background: color-mix(in srgb, var(--bg) 16%, transparent);
-  color: var(--bg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .dl-periodo__pilula { transition: none; }
-}
-@media (max-width: 520px) {
-  .dl-periodo { width: 100%; }
-  .dl-periodo__opt { padding: 9px 12px; font-size: 12px; }
-  .dl-periodo__selo { font-size: 8px; padding: 2px 5px; }
-}
-/* Respiro maior antes do botão: separa a lista do CTA sem precisar de régua. */
-/* O painel guarda o respiro e o esticão; a lista, só o desenho das linhas.
-   Trocado de lugar porque no celular são DUAS listas dentro do mesmo painel, e
-   margem em cada uma delas entraria duas vezes na conta da altura. */
-.dl-plan__recursos { display: flex; flex-direction: column; flex: 1; margin: 22px 0 38px; }
-.dl-plan__list { display: grid; gap: 11px; flex: 1; }
-.dl-plan__list li { display: flex; gap: 10px; font-size: 13px; line-height: 1.55; color: var(--default); }
-.dl-plan__list li span { color: var(--mint); font-weight: 700; flex: 0 0 auto; }
-.dl-plan__list li.is-off { color: var(--placeholder); }
-.dl-plan__list li.is-off span { color: #4a4a52; }
-.dl-plans__note {
-  margin-top: 18px; padding: 14px 18px; border-radius: 12px;
-  background: var(--surface); border-left: 2px solid var(--accent);
-  font-size: 13px; line-height: 1.75; color: var(--subtle);
-}
-.dl-plans__note b { color: var(--default); }
-
-/* Pontos do carrossel. Só existem no DOM quando a tela é de celular, então não
-   há nada a esconder aqui — o alvo de toque é o botão inteiro (24 × 26), e o
-   ponto visível é o ::before, bem menor que ele. */
-/* ── Plano sob o mouse (desktop) ────────────────────────────────────────────
-   O mesmo par do carrossel — o flare do plano e o botão aceso —, agora regido
-   pelo mouse em vez do foco. Vale para o cartão inteiro: quem está lendo a
-   lista de recursos já está considerando aquele plano, e o botão acender antes
-   de o cursor chegar nele é o que transforma a leitura em clique.
-
-   O BRILHO DO CARTÃO saiu daqui. Era uma sombra interna em var(--flare), e foi
-   substituído pelo contorno elétrico (ElectricBorder), montado no JSX só para o
-   cartão sob o mouse e só nos planos que acendem — o Básico não acende mais, em
-   desktop nem em celular. O que restou nesta regra é o botão.
-
-   Só onde existe mouse de verdade: em tela de toque o :hover fica grudado
-   depois do primeiro toque, e o carrossel já tem o dono do destaque, que é o
-   cartão em foco. */
-@media (hover: hover) and (pointer: fine) and (min-width: 641px) {
-  /* Ler a lista de um plano já é considerá-lo, e o botão acender antes de o
-     cursor chegar nele é o que transforma a leitura em clique.
-
-     Antes isso era preenchimento: o botão de contorno virava branco sólido ao
-     passar o mouse pelo cartão. Com o vidro especular, o branco chapado ficava
-     POR CIMA do efeito — o botão do plano em destaque era o único dos três sem
-     brilho nenhum, justamente o que mais deveria ter.
-
-     Agora quem acende é a mesma coisa que o resto da página usa para acender:
-     o véu sobe e a beirada clareia. Os três continuam distinguíveis, e o do
-     cartão sob o mouse é o mais claro dos três.
-
-     Três classes porque é o peso de .dl-root .dl-btn--especular:hover, que esta
-     regra precisa vencer. */
-  .dl-root .dl-plan:hover .dl-btn--especular {
-    background: color-mix(in srgb, var(--sb-tint) 22%, transparent);
-    border-color: color-mix(in srgb, var(--sb-base-color) 95%, transparent);
-    color: #ffffff;
-  }
-  .dl-plan:hover .dl-btn--especular .dl-btn__arrow { background: rgba(255,255,255,0.18); }
-}
-
-/* ── Fundo em ondas da seção de planos ──
-   A camada vale nos dois formatos: no celular ela segue o cartão em foco, no
-   desktop segue o cartão sob o mouse. Vaza para os lados até a largura da
-   janela (o .dl-wrap tem no máximo 1120px e é centrado, então tirar metade da
-   diferença de cada lado chega na borda da tela) — tingir só a coluna de
-   conteúdo deixaria um retângulo colorido boiando no meio da seção.
-
-   Fica atrás de tudo pelo z-index negativo, que aqui não escapa da seção
-   porque o .dl-wrap tem z-index 1 e portanto cria o próprio contexto. */
-/* O deslocamento vertical é o respiro da seção, e não um número redondo: a
-   camada é filha do .dl-wrap, que começa no fim do respiro de cima e termina no
-   começo do de baixo. Com os -70px que estavam aqui, tudo que passasse disso
-   ficava de fora — e, num respiro de 112px, sobravam duas faixas de --bg-alt sem
-   cor nenhuma exatamente onde a seção encosta nas vizinhas, que é onde a emenda
-   se vê.
-
-   ── O RAIO É COMPRIMENTO, E NÃO PORCENTAGEM ────────────────────────────────
-
-   Esta é a correção que encolheu a mancha. A caixa tem a largura da JANELA
-   (left/right saem em 50vw), então um raio em porcentagem media a tela, não o
-   conteúdo: os 78% que estavam aqui davam 500px de raio num laptop de 1280 e
-   1340px num monitor de 3440 — a mesma regra produzindo um brilho discreto numa
-   máquina e uma lavagem de cor na tela inteira na outra. O sintoma só aparece
-   em tela larga, que é onde ninguém testa.
-
-   Em comprimento o brilho tem o tamanho que foi escolhido, e ele é escolhido em
-   relação ao que deve iluminar: a coluna de conteúdo tem no máximo 1120px, e um
-   raio de 470px cobre a largura dos três cartões sem passar muito deles. Cresce
-   um pouco com a janela pelo termo em vw, e para de crescer no teto.
-
-   A máscara saiu junto. Ela existia para apagar as quinas de uma mancha que
-   alcançava as bordas da caixa; uma que morre bem antes delas não tem quina
-   para apagar, e o que restava era uma composição de máscara sobre uma camada
-   da largura da janela, de graça.
-
-   Nada disso vale no carrossel: lá a seção é mais alta que larga, a mancha
-   precisa esticar na vertical e a porcentagem mede uma tela estreita, que é o
-   caso em que ela funciona. O bloco do celular declara os próprios raios e a
-   própria máscara, e continua como estava. */
-.dl-plans-onda {
-  position: absolute; z-index: -1; pointer-events: none;
-  top: calc(-1 * var(--pad-sec)); bottom: calc(-1 * var(--pad-sec));
-  left: calc(50% - 50vw); right: calc(50% - 50vw);
-  opacity: 0; transition: opacity 0.9s ease;
-  background: radial-gradient(
-    clamp(280px, 26vw, 470px) clamp(150px, 15vw, 260px) at 50% 48%,
-    var(--tinta, transparent), transparent 74%
-  );
-}
-.dl-plans-onda.is-on { opacity: 0.5; }
-
-/* Fundo opaco nos cartões, e é isto que impede as ondas de tingirem os planos
-   que não foram escolhidos: sem ele, Básico e Premium são transparentes e
-   deixariam a cor passar por dentro. Os valores repetem o que já se via antes
-   (a superfície da seção, e a mais clara no destaque), então nada muda de
-   aparência — muda só o que está por baixo. */
-.dl-plan { background: var(--bg-alt); }
-
-/* A coroa é peça do carrossel e só aparece lá (ver o bloco do celular). Fica
-   escondida aqui, e não removida do JSX, para virar a orientação do aparelho
-   não depender de um re-render. */
-.dl-plan__coroa { display: none; }
-
-.dl-plans__pontos { display: flex; justify-content: center; gap: 6px; margin-top: 2px; }
-.dl-root .dl-plans__ponto {
-  width: 24px; height: 26px; padding: 0; border: 0; border-radius: 0;
-  background: none; box-shadow: none; transform: none; cursor: pointer;
-  display: grid; place-items: center;
-}
-.dl-root .dl-plans__ponto:hover { background: none; box-shadow: none; transform: none; }
-.dl-plans__ponto::before {
-  content: ""; width: 7px; height: 7px; border-radius: 999px;
-  background: rgba(255,255,255,0.24);
-  transition: width 0.35s var(--ease-out), background 0.35s ease;
-}
-/* O ponto aceso sai na cor do plano em foco — o --realce desce do
-   .dl-plans-caixa, porque aqui já se está fora dos cartões. A transição de
-   background que o ::before já tinha faz a cor deslizar de um plano para o
-   outro em vez de trocar de estalo. */
-.dl-plans__ponto.is-on::before { width: 20px; background: var(--realce, var(--accent-soft)); }
-
 /* ── FAQ ── */
 /* ── FAQ: lista à esquerda, resposta à direita ──
    Substituiu o acordeão empilhado. As cores são as mesmas de antes: dourado no
@@ -6940,7 +6674,8 @@ ${editorCSS()}
   overflow: hidden;
   background: #f4f5f7;
   color: #0c121a;
-  padding: clamp(72px, 9vw, 128px) 0;
+  /* O respiro de cima soma a altura da onda (ver .dl-ondas). */
+  padding: calc(clamp(72px, 9vw, 128px) + var(--ondas-h)) 0 clamp(72px, 9vw, 128px);
 }
 /* ── O fundo de iridescencia ────────────────────────────────────────────────
 
@@ -7143,7 +6878,83 @@ ${editorCSS()}
 .dl-cta .dl-eyebrow__dot { background: #ffffff; }
 
 /* ── Footer ── */
-.dl-footer { position: relative; background: #050506; padding: 56px 0 26px; overflow: hidden; }
+/* Ver DivisorDeOndas. A altura vive numa variavel porque quem o recebe precisa
+   abrir esse espaco a mais no respiro de cima — senao a onda cobre a primeira
+   linha do conteudo. Largura de 130%: as ondas nao fecham no ponto de partida,
+   e em 100% a emenda aparecia como um degrau na borda direita.
+   (Sem crases neste comentario — este CSS mora dentro de um template literal.) */
+.dl-root { --ondas-h: clamp(56px, 9vw, 130px); }
+.dl-ondas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: var(--ondas-h);
+  overflow: hidden;
+  line-height: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.dl-ondas svg {
+  position: relative;
+  display: block;
+  width: calc(130% + 1.3px);
+  height: 100%;
+}
+.dl-ondas--grafite path { fill: #0f0f11; }
+.dl-ondas--escuro path { fill: #0a0a0b; }
+.dl-ondas--claro path { fill: #ffffff; }
+
+/* ── Ondas VAZADAS ───────────────────────────────────────────────────────────
+   A outra forma da mesma onda, para quando a secao de cima tem MOVIMENTO (a
+   parede do #porque). Pintar a onda com a cor dela congelaria a animacao numa
+   cor chapada; aqui a onda e um recorte: a secao sobe --ondas-h sobre a
+   anterior (margem negativa) e a propria pintura dela e recortada em onda por
+   uma mascara. O que aparece no recorte e o que a anterior estiver desenhando
+   naquele momento — inclusive o que se move.
+
+   A mascara e o MESMO desenho, invertido: retangulo branco (a secao aparece) e
+   as tres ondas em preto com a opacidade original (a secao some, ou some em
+   parte — as camadas a 25% e 50% deixam a anterior transparecer de leve, que
+   e o que faz parecer escorrer). Por isso a primeira camada e luminance. A
+   segunda e o resto da secao, opaco, e entra 1px na primeira para a emenda
+   fracionaria nao virar uma fresta.
+
+   E uma classe, e nao um filho, porque nao ha nada para desenhar — so
+   recortar. Vale em qualquer secao: .dl-section, .gv4-trust e .gv4-section
+   ja fazem a conta do respiro abaixo. Nao use as duas (pintada + vazada) na
+   mesma secao.
+   (Sem crases neste comentario — este CSS mora dentro de um template literal.) */
+.dl-ondas-vazadas {
+  position: relative;
+  z-index: 1;
+  margin-top: calc(-1 * var(--ondas-h));
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1200 120%22 preserveAspectRatio=%22none%22%3E%3Crect width=%221200%22 height=%22120%22 fill=%22%23fff%22/%3E%3Cpath fill=%22%23000%22 opacity=%22.25%22 d=%22M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z%22/%3E%3Cpath fill=%22%23000%22 opacity=%22.5%22 d=%22M0,0V15.81C13,36.92,27.64,56.86,47.69,72.05,99.41,111.27,165,111,224.58,91.58c31.15-10.15,60.09-26.07,89.67-39.8,40.92-19,84.73-46,130.83-49.67,36.26-2.85,70.9,9.42,98.6,31.56,31.77,25.39,62.32,62,103.63,73,40.44,10.79,81.35-6.69,119.13-24.28s75.16-39,116.92-43.05c59.73-5.85,113.28,22.88,168.9,38.84,30.2,8.66,59,6.17,87.09-7.5,22.43-10.89,48-26.93,60.65-49.24V0Z%22/%3E%3Cpath fill=%22%23000%22 d=%22M0,0V5.63C149.93,59,314.09,71.32,475.83,42.57c43-7.64,84.23-20.12,127.61-26.46,59-8.63,112.48,12.24,165.56,35.4C827.93,77.22,886,95.24,951.2,90c86.53-7,172.46-45.71,248.8-84.81V0Z%22/%3E%3C/svg%3E"), linear-gradient(#000, #000);
+  mask-mode: luminance, alpha;
+  mask-size: 100% var(--ondas-h), 100% calc(100% - var(--ondas-h) + 1px);
+  mask-position: top center, bottom center;
+  mask-repeat: no-repeat;
+}
+
+/* A secao que recebe a onda (pintada ou vazada) vira o palco dela, abre o
+   respiro de cima e perde a linha fina de .dl-section — a borda fica acima do
+   filho absoluto, e por cima da onda ela aparecia como uma reta. */
+.dl-section:is(:has(> .dl-ondas), .dl-ondas-vazadas) {
+  position: relative;
+  padding-top: calc(var(--pad-sec) + var(--ondas-h));
+  border-top: 0;
+}
+/* As duas secoes de LandingGrowthV4 tem respiro proprio; mesma conta, com o
+   padding que cada uma ja tinha. */
+.gv4-trust:is(:has(> .dl-ondas), .dl-ondas-vazadas) {
+  padding-top: calc(clamp(62px, 7vw, 88px) + var(--ondas-h));
+  border-top: 0;
+}
+.gv4-section:is(:has(> .dl-ondas), .dl-ondas-vazadas) {
+  padding-top: calc(clamp(78px, 9vw, 126px) + var(--ondas-h));
+  border-top: 0;
+}
+
+.dl-footer { position: relative; background: #050506; padding: calc(56px + var(--ondas-h)) 0 26px; overflow: hidden; }
 .dl-footer::before {
   content: ""; position: absolute; left: -80px; top: -60px; width: 420px; height: 260px;
   background: radial-gradient(closest-side, rgba(99,102,241,0.22), transparent);
@@ -7255,10 +7066,7 @@ ${editorCSS()}
   .dl-journey { grid-template-columns: repeat(2, 1fr); gap: 0 32px; }
   .dl-head { grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .dl-h2 { max-width: none; }
-  .dl-plans { grid-template-columns: 1fr; }
-  .dl-plan { border-right: 0; border-bottom: 1px solid var(--line); }
-  .dl-plan:last-child { border-bottom: 0; }
-  .dl-plan__desc { min-height: 0; }
+  .pl-cartoes { grid-template-columns: 1fr; }
   .dl-hud { display: none; }
   /* Mockup quase de frente quando não há espaço lateral para a isometria. */
   .dl-mockup { transform: perspective(1700px) rotateY(-5deg) rotateX(3deg); }
@@ -7351,20 +7159,20 @@ ${editorCSS()}
    O que continua no media query é o que é mesmo sobre tela estreita — tamanho
    de fonte, espaçamento, margens.
    ────────────────────────────────────────────────────────────────────────── */
-  .dl-plan__list--resumo li.is-heranca { color: var(--strong); font-weight: 600; }
-  .dl-plan__list--resumo li.is-heranca span { color: var(--accent-soft); }
+  .pl-lista--resumo li.is-heranca { color: var(--strong); font-weight: 600; }
+  .pl-lista--resumo li.is-heranca span { color: var(--accent-soft); }
 
   /* ── Abrir e fechar a lista ──
      Quem cresce é o painel, com a altura escrita pelo JS (PlanoRecursos) e
      transição na altura. As duas listas moram na MESMA célula da grade e se
      cruzam lá dentro: sem isso, a que sai empurraria a que entra para baixo
      antes de desaparecer, e o painel animaria a altura das duas somadas. */
-  .dl-plan__recursos {
+  .pl-recursos {
     display: grid; flex: none; margin: 16px 0 8px;
     overflow: hidden;
     transition: height 0.42s var(--ease-out);
   }
-  .dl-plan__recursos > .dl-plan__list {
+  .pl-recursos > .pl-lista {
     grid-area: 1 / 1;
     /* No topo da célula, e não esticadas: esticada, cada lista passaria a ter a
        altura do painel — que é exatamente a altura que se quer medir a partir
@@ -7373,17 +7181,17 @@ ${editorCSS()}
   }
   /* A lista escondida continua no DOM (é dela que sai a medida da outra ponta
      da animação), mas não pega toque nem seleção. */
-  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo),
-  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
+  .pl-recursos.is-resumido > .pl-lista:not(.pl-lista--resumo),
+  .pl-recursos:not(.is-resumido) > .pl-lista--resumo {
     pointer-events: none;
   }
 
   /* O resumo entra e sai inteiro: são quatro linhas, e escaloná-las seria mais
      enfeite do que leitura. */
-  .dl-plan__list--resumo {
+  .pl-lista--resumo {
     transition: opacity 0.24s ease 0.12s, transform 0.34s var(--ease-out) 0.12s;
   }
-  .dl-plan__recursos:not(.is-resumido) > .dl-plan__list--resumo {
+  .pl-recursos:not(.is-resumido) > .pl-lista--resumo {
     opacity: 0; transform: translateY(-5px);
     transition: opacity 0.12s ease, transform 0.12s ease;
   }
@@ -7402,33 +7210,30 @@ ${editorCSS()}
 
      Fechar não escalona: o painel sobe em 0,42s, e linhas saindo em cascata
      seriam recortadas pela borda dele no meio do próprio desaparecimento. */
-  .dl-plan__recursos > .dl-plan__list:not(.dl-plan__list--resumo) li {
+  .pl-recursos > .pl-lista:not(.pl-lista--resumo) li {
     transition:
       opacity 0.24s ease calc(0.07s + var(--i, 0) * 16ms),
       transform 0.32s var(--ease-out) calc(0.07s + var(--i, 0) * 16ms);
   }
-  .dl-plan__recursos.is-resumido > .dl-plan__list:not(.dl-plan__list--resumo) li {
+  .pl-recursos.is-resumido > .pl-lista:not(.pl-lista--resumo) li {
     opacity: 0; transform: translateY(-6px);
     transition: opacity 0.14s ease, transform 0.14s ease;
   }
-  .dl-root .dl-plan__mais {
+  .dl-root .pl-mais {
     width: 100%; margin: 0 0 18px; padding: 9px 0;
     display: inline-flex; align-items: center; justify-content: center; gap: 7px;
     background: none; border: 0; border-radius: 0; box-shadow: none; transform: none;
     font-family: inherit; font-size: 12.5px; font-weight: 600;
-    /* Cada cartão pinta o seu, então o botão acompanha o plano que está sendo
-       lido — e no Básico o --realce é o próprio lilás do tema, que é a cor que
-       ele já tinha. */
-    color: var(--realce, var(--accent-soft));
+    color: var(--accent-soft);
     cursor: pointer;
     transition: color 0.3s ease;
   }
-  .dl-root .dl-plan__mais:hover,
-  .dl-root .dl-plan__mais:active {
+  .dl-root .pl-mais:hover,
+  .dl-root .pl-mais:active {
     background: none; box-shadow: none; transform: none; scale: 1; color: var(--strong);
   }
-  .dl-plan__mais svg { transition: transform 0.3s var(--ease-out); }
-  .dl-plan__mais[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .pl-mais svg { transition: transform 0.3s var(--ease-out); }
+  .pl-mais[aria-expanded="true"] svg { transform: rotate(180deg); }
 
 @media (max-width: 640px) {
   .dl-checks { display: none; }
@@ -7602,144 +7407,38 @@ ${editorCSS()}
   .dl-ed__area { inset: 9px; }
 
   /* ── Carrossel de planos ──
-     A moldura única vira trilho: cada plano é um cartão inteiro, com borda e
-     canto próprios. A máscara apaga as pontas, e o que sobra do vizinho ali é
-     o convite para arrastar.
-
-     O respiro das pontas é metade do que sobra do trilho depois do cartão — é
-     ele que deixa o PRIMEIRO e o ÚLTIMO pararem no centro, e não encostados na
-     borda. Ele é margem dos cartões das pontas, e não padding do trilho, para
-     as duas medidas correrem sobre a MESMA base: com padding lateral, a
-     largura do cartão passaria a ser uma porcentagem do que sobrou depois dele
-     e a conta nunca fecharia (o cartão do meio centraliza, os das pontas
-     ficam alguns pixels fora). Margem de item flex também conta na área
-     rolável, então a última ponta tem para onde rolar. */
-  .dl-plans {
-    --dl-cartao: 70%;
-    --dl-ponta: 15%; /* (100 - 70) / 2 */
-    display: flex; gap: 12px;
-    /* Cada cartão com a própria altura: esticados todos na altura do maior,
-       abrir a tabela de um deles esticaria os três, e os dois fechados
-       ficariam com um vão morto entre a lista e o botão. */
+     Os três cartões viram trilho: um por vez, centrado, com o vizinho
+     aparecendo pela ponta como convite para arrastar. O respiro das pontas é
+     margem dos cartões das pontas, e não padding do trilho, para as duas
+     medidas correrem sobre a MESMA base (ver a versão anterior deste bloco no
+     histórico: com padding lateral a conta nunca fechava). */
+  .pl-cartoes {
+    --pl-cartao: 68%;
+    --pl-ponta: 16%; /* (100 - 68) / 2 — o que sobra e o vizinho espiando */
+    --pl-vao: 12px;
+    display: flex; gap: var(--pl-vao);
+    /* Cada cartão com a própria altura: esticados na altura do maior, abrir a
+       tabela de um esticaria os três. */
     align-items: flex-start;
-    border: 0; border-radius: 0;
     overflow-x: auto; overflow-y: hidden;
     scroll-snap-type: x mandatory;
-    /* O respiro de cima e de baixo é onde cabem a coroa pendurada e o estouro
-       do flare: rolagem horizontal obriga a recortar o eixo vertical, e o corte
-       acontece na borda da caixa de padding. Sem folga suficiente o neon
-       termina numa linha reta — e reta é justamente o que denuncia que ele é um
-       efeito, e não luz.
-
-       A conta: a camada mais larga do flare tem blur 58 e spread -12. O miolo
-       forte dela some por volta dos 17px, mas a cauda fraca vai até uns 46 —
-       era ela que estava sendo decepada com 38px de folga. Daí os 60. */
-    padding: 60px 0 46px;
+    padding: 12px 0 18px;
     scrollbar-width: none; -ms-overflow-style: none;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
   }
-  .dl-plans::-webkit-scrollbar { display: none; }
-
-  /* Os pontos sobem para cima do trilho. Um plano é mais alto que a tela, então
-     embaixo eles só apareceriam depois de rolar o cartão inteiro — tarde
-     demais para o que eles servem, que é avisar na chegada que existem três. */
-  .dl-plans-caixa { display: flex; flex-direction: column; }
-  /* Os pontos entram POR DENTRO da folga do trilho (margem negativa) e sobem
-     uma camada. As duas coisas juntas são o que faz o flare passar por trás
-     deles: a folga guarda a cauda do neon, e o z-index deixa os pontos por
-     cima dela em vez de o brilho ser cortado ao chegar perto. */
-  .dl-plans__pontos {
-    order: -1; margin: 0 0 -34px;
-    position: relative; z-index: 1;
+  .pl-cartoes::-webkit-scrollbar { display: none; }
+  .pl-cartao { flex: 0 0 var(--pl-cartao); scroll-snap-align: center; padding: 22px 18px; }
+  .pl-cartao:first-child { margin-left: var(--pl-ponta); }
+  .pl-cartao:last-child { margin-right: var(--pl-ponta); }
+  /* Fora de foco o cartão recua por brilho, não por opacidade — opacidade
+     deixaria o fundo da moldura atravessar o vidro. */
+  .pl-cartoes .pl-cartao {
+    filter: brightness(0.6); transform: scale(0.965);
+    transition: filter 0.45s var(--ease-out), transform 0.45s var(--ease-out);
   }
-
-  /* Na tela estreita a seção é bem mais alta que larga, então a mancha de cor
-     precisa esticar na vertical — a elipse do desktop morreria antes do título.
-     O alcance até as bordas da seção continua vindo do --pad-sec herdado. */
-  .dl-plans-onda {
-    background: radial-gradient(125% 62% at 50% 46%, var(--tinta, transparent), transparent 74%);
-    -webkit-mask-image: radial-gradient(150% 96% at 50% 48%, #000 46%, transparent 100%);
-    mask-image: radial-gradient(150% 96% at 50% 48%, #000 46%, transparent 100%);
-  }
-  .dl-plan {
-    flex: 0 0 var(--dl-cartao); scroll-snap-align: center;
-    padding: 22px 18px; border: 1px solid var(--line); border-radius: 18px;
-    transform-origin: 50% 40%;
-    /* O fundo não entra na transição porque não muda: só a luz em volta muda. */
-    transition:
-      filter 0.45s var(--ease-out), transform 0.45s var(--ease-out),
-      border-color 0.45s ease, box-shadow 0.45s ease;
-  }
-  /* Repetido com o mesmo peso da regra de ≤1024 (que zera a borda de baixo do
-     último) só para vencer no empate: aqui todo cartão é fechado dos quatro
-     lados. */
-  .dl-plan:last-child { border-bottom: 1px solid var(--line); }
-  .dl-plan:first-child { margin-left: var(--dl-ponta); }
-  .dl-plan:last-child { margin-right: var(--dl-ponta); }
-  /* ── Cartão fora de foco ──
-     Superfície SEMPRE a mesma, e sempre opaca; o recuo é feito por brilho, não
-     por opacidade. As duas decisões vêm do mesmo bug: o cartão piscava com a
-     cor do plano ao trocar de foco.
-
-     Opacidade menor que 1 faz duas coisas ao mesmo tempo. Deixa passar o que
-     está atrás — e atrás está o fundo em ondas, colorido. E cria contexto de
-     empilhamento: o halo do flare, que morava em z-index -1 (atrás de todos os
-     cartões), passava a valer DENTRO do cartão, e ali o negativo fica acima do
-     fundo, não atrás. Daí o miolo pegar a cor durante a animação e voltar ao
-     normal quando a opacidade fechava em 1.
-
-     brightness escurece sem tirar a opacidade: o cartão continua sólido do
-     começo ao fim. E o halo virou sombra externa, que não tem como pintar
-     miolo nenhum.
-
-     Sem .is-visible no seletor, de propósito: essa classe é da entrada por
-     rolagem, e o terceiro cartão vive fora da tela — ele chegava à ponta do
-     trilho sem escurecer, porque a regra ainda não valia para ele. */
-  .dl-plans .dl-plan {
-    background: var(--surface);
-    filter: brightness(0.55); transform: scale(0.965);
-  }
-  /* ── Cartão em foco ──
-     Sai do escurecimento e volta ao tamanho cheio. Só isso: o neon que morava
-     aqui — quatro camadas de box-shadow na cor do plano — foi substituído pelo
-     contorno elétrico, montado no JSX para o cartão em foco.
-
-     Manter os dois somava um brilho por baixo do outro no mesmo cartão, com
-     duas cores e dois formatos de borda disputando a mesma beirada. E não
-     bastava tirar do Básico: nos planos que acendem é justamente onde os dois
-     apareciam juntos. */
-  .dl-plans .dl-plan.is-atual {
-    filter: none; transform: none;
-  }
-  /* ── Coroa ──
-     Pendurada na borda de cima, metade para dentro e metade para fora. A cor
-     sai do --flare do próprio cartão em vez de um dourado fixo: assim a coroa
-     do Profissional é roxa e a do Premium é dourada, e cada uma pertence ao
-     seu plano em vez de as duas parecerem o mesmo selo repetido. */
-  .dl-plan__coroa {
-    position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 2;
-    width: 34px; height: 27px; border-radius: 10px;
-    display: grid; place-items: center; color: #17071f;
-    background: linear-gradient(165deg, color-mix(in srgb, var(--flare) 65%, #fff), var(--flare));
-    box-shadow:
-      0 6px 15px -6px color-mix(in srgb, var(--flare) 80%, transparent),
-      0 0 0 3px var(--bg);
-  }
-
-  .dl-plan__name { font-size: 23px; }
-  .dl-plan__price strong { font-size: 30px; }
-  .dl-plan__price { margin-top: 14px; }
-  .dl-plan__desc { font-size: 12.5px; line-height: 1.6; }
-  /* Cada linha economizada aqui aparece três vezes na altura do cartão. */
-  .dl-plan__list li { font-size: 12.5px; }
+  .pl-cartoes .pl-cartao.is-atual { filter: none; transform: none; }
+  .pl-cartao__preco strong { font-size: 30px; }
   .dl-head { margin-bottom: 28px; }
-
-  /* ── Resumo do cartão ──
-     A tabela de dez linhas era quase toda a altura do plano, e ela nem compara
-     nada aqui: um cartão por vez, com sete linhas iguais em todos. Fica o que
-     este plano acrescenta ao anterior; a tabela inteira continua a um toque. */
-  .dl-plan__list { gap: 9px; }
+  .pl-lista { gap: 9px; }
 
   .dl-callout { padding: 22px 20px; }
 
@@ -7776,10 +7475,7 @@ ${editorCSS()}
   /* As esteiras de imóveis param na primeira cópia, que já é uma grade cheia; o
      bloco selecionado do editor fica só com o contorno, sem o pulso; e a
      etiqueta do plano fica com o degradê parado, que já é a cor dela. */
-  .dl-esteira__linha, .dl-builder__bloco.is-sel, .dl-plan__tag { animation: none; }
-  /* As ondas do fundo nem chegam a ser criadas (ver o efeito em Planos); no
-     lugar delas fica a mancha de cor estática da própria camada. O flare do
-     cartão já é sombra parada, então não há o que desligar nele. */
+  .dl-esteira__linha, .dl-builder__bloco.is-sel { animation: none; }
   /* O editor congela no primeiro layout, que já é a posição base dos blocos.
      O aviso de salvo para de piscar e fica só posto. */
   .dl-ed__bloco { animation: none; }
@@ -7798,10 +7494,11 @@ ${editorCSS()}
      Com o prefixo .dl-root porque as regras da cascata escalonada são mais
      específicas que o nome da classe sozinho, e sem ele este bloco perderia
      para elas mesmo vindo por último. */
-  .dl-root .dl-plan__recursos,
-  .dl-root .dl-plan__recursos > .dl-plan__list,
-  .dl-root .dl-plan__recursos > .dl-plan__list li,
-  .dl-root .dl-plan__mais svg { transition: none; }
+  .dl-root .pl-recursos,
+  .dl-root .pl-recursos > .pl-lista,
+  .dl-root .pl-recursos > .pl-lista li,
+  .dl-root .pl-mais svg { transition: none; }
+  .pl-periodo__chave::after { transition: none; }
 }
 
 /* OMNIMOB_COMPOSICAO_ILUSTRACOES_V2_1_INICIO */
@@ -8240,8 +7937,11 @@ ${editorCSS()}
 }
 
 /* ── POR QUE OMNIMOB: PAREDE COMO ATMOSFERA, NAO COMO SEGUNDA PAGINA ────── */
+/* Quase a altura da tela: a parede e o assunto da secao, e com 620px ela
+   aparecia pela fresta. E este seletor que vence o min-height de .dl-porque
+   (id contra classe), entao a altura se ajusta AQUI. */
 #porque {
-  min-height: clamp(460px, 55vh, 620px);
+  min-height: clamp(680px, 92vh, 1040px);
 }
 
 #porque .dl-porque__fundo.is-na-vista {
@@ -8272,16 +7972,6 @@ ${editorCSS()}
   }
 }
 
-/* ── PLANOS: DECISAO CLARA, MENOS NEON PERMANENTE ───────────────────────── */
-#planos .dl-plans-onda.is-on {
-  opacity: 0.28;
-}
-
-#planos .dl-plan__tag {
-  animation-duration: 14s;
-  box-shadow: 0 4px 13px -8px color-mix(in srgb, var(--realce) 72%, transparent);
-}
-
 /* ── APP: UMA NOTA DE FUTURO, NAO MAIS UM PICO VISUAL ───────────────────── */
 #aplicativo::before {
   opacity: 0.52;
@@ -8298,7 +7988,7 @@ ${editorCSS()}
 
 /* ── CTA FINAL: SEGUNDO PICO ────────────────────────────────────────────── */
 .dl-cta {
-  padding: clamp(88px, 11vw, 152px) 0;
+  padding: calc(clamp(88px, 11vw, 152px) + var(--ondas-h)) 0 clamp(88px, 11vw, 152px);
 }
 
 .dl-cta__fundo {

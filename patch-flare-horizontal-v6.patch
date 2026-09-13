@@ -1,0 +1,68 @@
+diff --git a/apps/web/src/pages/OmnimobLandingPage.jsx b/apps/web/src/pages/OmnimobLandingPage.jsx
+index 58aeaff..929e346 100644
+--- a/apps/web/src/pages/OmnimobLandingPage.jsx
++++ b/apps/web/src/pages/OmnimobLandingPage.jsx
+@@ -5611,36 +5611,42 @@ ${editorCSS()}
+   display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--pl-vao);
+   align-items: stretch;
+ }
+-/* O clarão é ÚNICO e pertence ao trilho dos cartões, não a cada cartão.
+-   Como ele fica acima das superfícies dos cartões, atravessa também os vãos. */
++/* Um único flare HORIZONTAL atravessa os três cartões.
++   A base é um degradê contínuo da esquerda para a direita; o radial só cria
++   o "ponto quente" no meio, para a luz não virar três bolas independentes. */
+ .pl-cartoes::before {
+   content: "";
+   position: absolute;
+   z-index: 2;
+   pointer-events: none;
+ 
+-  left: 50%;
+-  top: -178px;
+-  width: 78%;
++  left: -20%;
++  top: -145px;
++  width: 140%;
+   height: 300px;
+ 
+-  transform: translateX(-50%);
+-  border-radius: 50%;
+-
+-  background: radial-gradient(
+-    ellipse 48% 100% at 50% 100%,
+-    #f4f4f5 0%,
+-    #eeeeef 11%,
+-    #d7d7ff 22%,
+-    #a6a0ff 34%,
+-    #6759ff 48%,
+-    #4b3bff 60%,
+-    rgba(21, 0, 255, 0.58) 70%,
+-    rgba(21, 0, 255, 0.18) 80%,
+-    transparent 91%
+-  );
++  background:
++    radial-gradient(
++      ellipse 24% 58% at 50% 100%,
++      rgba(255,255,255,0.96) 0%,
++      rgba(232,232,255,0.90) 9%,
++      rgba(184,181,255,0.76) 18%,
++      rgba(118,108,255,0.52) 31%,
++      transparent 58%
++    ),
++    linear-gradient(
++      102deg,
++      transparent 0%,
++      rgba(21,0,255,0.08) 13%,
++      rgba(54,23,167,0.30) 25%,
++      rgba(75,59,255,0.62) 40%,
++      rgba(75,59,255,0.78) 53%,
++      rgba(54,23,167,0.42) 68%,
++      rgba(21,0,255,0.16) 82%,
++      transparent 100%
++    );
+ 
+-  filter: blur(17px);
++  filter: blur(18px);
+ }
+ .pl-cartao {
+   position: relative; overflow: hidden;
