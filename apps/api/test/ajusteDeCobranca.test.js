@@ -132,7 +132,8 @@ test("contratar o Flow libera o módulo mesmo sem conseguir ajustar a fatura", a
 
   // E a resposta conta a verdade sobre a fatura, sem prometer o que não houve.
   assert.equal(typeof r.json.cobrancaAjustada, "boolean");
-  assert.ok(r.json.aviso.includes("Omnimob Flow"), r.json.aviso);
+  // O nome de tela é Omniflow (ver CLAUDE.md: Hub/Flow só no código).
+  assert.ok(r.json.aviso.includes("Omniflow"), r.json.aviso);
   if (!r.json.cobrancaAjustada) {
     assert.ok(r.json.aviso.length > 40, "o aviso precisa dizer o motivo");
   }
