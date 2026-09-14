@@ -2583,7 +2583,7 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
               className={`pl-btn ${emDestaque ? "pl-btn--cheio" : "pl-btn--contorno"}`}
               onClick={() => aoTestar(p.key)}
             >
-              {emDestaque ? "Começar agora" : "Testar com este plano"}
+              {emDestaque ? "Testar com este plano" : "Testar com este plano"}
             </button>
           </Reveal>
           );
@@ -5688,13 +5688,14 @@ ${editorCSS()}
     radial-gradient(28% 34% at 14% 84%, var(--pl-azul) 0%, var(--pl-azul) 40%, transparent 82%),
     radial-gradient(28% 34% at 86% 84%, var(--pl-azul) 0%, var(--pl-azul) 40%, transparent 82%);
   filter: url(#pl-deforma-cards) blur(16px);
+  opacity: 70%;
 }
 .pl-bolha-cards--1 { left: calc(150% + var(--pl-vao)); }
 .pl-bolha-cards--2 { left: 50%; }
 .pl-bolha-cards--3 { left: calc(-50% - var(--pl-vao)); }
 
 .pl-cartao__nome { margin: 0; font-size: 14px; font-weight: 500; color: var(--strong); }
-.pl-cartao__desc { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--subtle); }
+.pl-cartao__desc { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: #dadada; }
 .pl-cartao__preco { margin-top: 14px; display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; }
 .pl-cartao__preco strong { font-size: 36px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; color: #fff; }
 .pl-cartao__preco span { font-size: 14px; color: var(--subtle); }
@@ -7178,6 +7179,7 @@ ${editorCSS()}
        altura do painel — que é exatamente a altura que se quer medir a partir
        delas. A medida viraria a própria resposta. */
     align-self: start; flex: none;
+    padding-bottom: 40px;
   }
   /* A lista escondida continua no DOM (é dela que sai a medida da outra ponta
      da animação), mas não pega toque nem seleção. */
