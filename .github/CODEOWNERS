@@ -1,0 +1,25 @@
+# Quem é chamado para revisar automaticamente, por caminho.
+# A última regra que casa é a que vale.
+
+*                                   @richardhhartmann
+
+# O que protege a separação entre imobiliárias e o acesso aos módulos.
+apps/api/prisma/schema.prisma       @richardhhartmann
+apps/api/prisma/migrations/         @richardhhartmann
+apps/api/src/middlewares/           @richardhhartmann
+apps/api/src/services/modulos.js    @richardhhartmann
+apps/api/src/services/cofre.js      @richardhhartmann
+apps/api/src/services/auditoria.js  @richardhhartmann
+
+# Dinheiro.
+apps/api/src/services/pagamentos.js          @richardhhartmann
+apps/api/src/services/pagamentoMercadoPago.js @richardhhartmann
+apps/api/src/services/pagamentoService.js    @richardhhartmann
+apps/api/src/services/flow/comissoes.js      @richardhhartmann
+
+# A regra "o editor não desenha a vitrine".
+apps/web/src/components/showcase/   @richardhhartmann
+
+# Este próprio arranjo.
+.github/                            @richardhhartmann
+docs/CONTRIBUINDO.md                @richardhhartmann

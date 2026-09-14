@@ -1,0 +1,76 @@
+# Roda em todo PR e em todo push na main.
+#
+# Dois jobs, um por app, porque os testes têm naturezas diferentes (ver
+# CLAUDE.md): os do web são de função pura e renderização isolada; os da API
+# são de INTEGRAÇÃO e precisam de um Postgres — aqui, um descartável, que
+# nasce vazio e recebe as migrations. Nunca o banco de dev nem o de produção.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# PR que recebe push novo cancela a rodada anterior.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Testes (paridade, layout, normalização)
+        run: npm test -w apps/web
+      - name: Build
+        run: npm run build -w apps/web
+        env:
+          VITE_API_URL: https://api.omnimob.app
+          VITE_CLOUDINARY_CLOUD_NAME: dpwuxmbli
+          VITE_CLOUDINARY_UPLOAD_PRESET: domus-app
+
+  api:
+    name: api
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omnimob
+          POSTGRES_PASSWORD: omnimob
+          POSTGRES_DB: omnimob_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U omnimob"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://omnimob:omnimob@localhost:5432/omnimob_ci
+      DIRECT_URL: postgresql://omnimob:omnimob@localhost:5432/omnimob_ci
+      JWT_SECRET: ci-jwt-secret
+      CRYPTO_SECRET: ci-crypto-secret
+      APP_URL: http://localhost:5173
+      FRONTEND_URL: http://localhost:5173
+      ALLOWED_ORIGINS: http://localhost:5173
+      # test/helpers.js já desliga o e-mail; aqui é cinto e suspensório.
+      EMAIL_DESLIGADO: "1"
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Migrations no banco descartável
+        run: npm run prisma:migrate:deploy -w apps/api
+      - name: Testes de integração
+        run: npm test -w apps/api
