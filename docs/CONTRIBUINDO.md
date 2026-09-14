@@ -120,6 +120,25 @@ PR com migration do Prisma pede atenção dupla:
 
 ---
 
+## Tarefas no Notion e o `/tarefa`
+
+As tarefas vivem no banco **Tarefas** do Notion (página OmniMob → Como
+trabalhar tem as regras). O skill `.claude/skills/tarefa/SKILL.md` faz o
+caminho fila → branch → PR e vem junto com o repositório.
+
+Para usá-lo, abra o Claude Code **na raiz do repositório** e escreva
+`pega minha tarefa`. Na extensão do VS Code no Windows, digitar `/tarefa`
+mostra "No matching commands" — é um bug conhecido do autocomplete
+([anthropics/claude-code#58556](https://github.com/anthropics/claude-code/issues/58556));
+o skill está carregado e responde à frase. No CLI `claude` do terminal o
+`/tarefa` aparece normalmente.
+
+Cada um precisa, uma vez: `gh auth login` e o Notion conectado ao Claude Code
+com a própria conta (`claude mcp add --transport http notion https://mcp.notion.com/mcp`
+ou pelo conector do claude.ai).
+
+---
+
 ## Hotfix
 
 Produção quebrada não espera revisão longa, mas **não pula o PR**: abre
