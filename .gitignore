@@ -7,3 +7,5 @@ apps/web/.vite
 apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
 *.log
+.claude/worktrees
+~$*

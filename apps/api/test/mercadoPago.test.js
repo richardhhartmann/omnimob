@@ -118,7 +118,8 @@ test("a descrição diz o prazo e o pacote — é o que a pessoa lê no app do b
     valor: 100,
   });
   assert.match(comFlow.description, /12 meses/);
-  assert.match(comFlow.description, /Hub \+ Flow/);
+  // A pessoa lê o nome de tela no app do banco, nunca o do código.
+  assert.match(comFlow.description, /Omnimob \+ Omniflow/);
 });
 
 test("o mensal é uma cobrança legítima, e a descrição diz o prazo certo", () => {

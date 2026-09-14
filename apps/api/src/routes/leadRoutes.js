@@ -251,10 +251,6 @@ const TETO_ACERVO_IA = 40;
 
 leadRouter.post("/:id/ia", requirePlanoIA, async (req, res) => {
   try {
-    if (!isAiEnabled()) {
-      return res.status(503).json({ error: "IA indisponível: GEMINI_API_KEY não configurada." });
-    }
-
     // findFirst com tenantId no where, e não findUnique pelo id: é o que faz o
     // lead de outra imobiliária responder 404 em vez de vazar.
     const lead = await prisma.propertyLead.findFirst({
@@ -262,6 +258,13 @@ leadRouter.post("/:id/ia", requirePlanoIA, async (req, res) => {
       include: { property: { include: { images: { orderBy: { position: "asc" }, take: 1 } } } },
     });
     if (!lead) return res.status(404).json({ error: "Lead nao encontrado." });
+
+    // A chave só é conferida DEPOIS do isolamento: sem GEMINI_API_KEY a rota
+    // respondia 503 para qualquer id — inclusive o lead de outra imobiliária,
+    // que tem de ser 404 independentemente de a IA existir nesta instalação.
+    if (!isAiEnabled()) {
+      return res.status(503).json({ error: "IA indisponível: GEMINI_API_KEY não configurada." });
+    }
 
     const acervo = await prisma.property.findMany({
       where: {
