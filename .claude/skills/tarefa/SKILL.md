@@ -63,10 +63,16 @@ conflito antes de codar.
 2. `git status` precisa estar limpo; se não estiver, pergunte o que fazer com
    o que está pendente.
 3. **Sempre** comece trazendo a `main` do servidor — a pessoa pode ter
-   ficado dias sem abrir o projeto, e a `main` local dela é velha:
+   ficado dias sem abrir o projeto, e a `main` local dela é velha — e
+   apagando as branches locais cujo remoto o GitHub já apagou no merge:
    ```
-   git fetch origin
+   git fetch --prune origin
+   git branch -vv | grep ': gone\]'      # as órfãs; apague com git branch -D <nome>
    ```
+   O `-D` (maiúsculo) é necessário: a `main` recebe **squash**, então o git
+   não reconhece essas branches como mescladas e o `-d` recusa. Apague só
+   as marcadas `gone` — uma branch sem remoto que NÃO está `gone` nunca foi
+   enviada, e pode ser trabalho da pessoa.
    Depois, uma de duas:
    - Já existe uma branch própria para esta tarefa (a propriedade `Branch`
      está preenchida e a branch existe): `git switch <branch>` e
