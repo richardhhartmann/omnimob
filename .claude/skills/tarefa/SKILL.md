@@ -62,12 +62,22 @@ conflito antes de codar.
 1. Atualize a tarefa: `Status = "Em andamento"`.
 2. `git status` precisa estar limpo; se não estiver, pergunte o que fazer com
    o que está pendente.
-3. Se já estiver numa branch própria (não `main`) que corresponde a esta
-   tarefa, use-a. Senão:
+3. **Sempre** comece trazendo a `main` do servidor — a pessoa pode ter
+   ficado dias sem abrir o projeto, e a `main` local dela é velha:
    ```
-   git switch main && git pull
-   git switch -c <tipo>/<módulo>-<slug-curto>
+   git fetch origin
    ```
+   Depois, uma de duas:
+   - Já existe uma branch própria para esta tarefa (a propriedade `Branch`
+     está preenchida e a branch existe): `git switch <branch>` e
+     `git merge origin/main`, para ela não ficar para trás.
+   - Senão, crie a partir da `main` atualizada:
+     ```
+     git switch main && git pull
+     git switch -c <tipo>/<módulo>-<slug-curto>
+     ```
+   Não pergunte se pode atualizar: é o esperado, e é rápido. Só pare se o
+   `merge` conflitar — aí resolva com a pessoa antes de escrever código.
    **Antes disso, olhe as suas outras tarefas em `Em revisão`.** Se alguma
    toca os mesmos arquivos que esta vai tocar (o mesmo router, o mesmo
    serviço, o `schema.prisma`), duas branches nascidas da mesma `main` vão
