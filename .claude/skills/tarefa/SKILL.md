@@ -14,6 +14,10 @@ Notion. As regras de fundo estão no `CLAUDE.md` e em `docs/CONTRIBUINDO.md`
 
 - Banco **Tarefas** no Notion: `https://app.notion.com/p/44a8d02373554ae89367c54b189826ee`
 - Data source (para consultar): `collection://e057493c-1d02-4da2-bda4-fe37d4ddfd0d`
+
+> Se o data source responder "not found", o banco foi reconstruído de novo:
+> procure "Tarefas" com `notion-search`, use o id que vier, e avise a pessoa
+> para atualizar estas duas linhas.
 - Página de regras: **Como trabalhar** (`https://app.notion.com/p/3db5981bb6c58126ac1cf79ace3d842a`)
 
 Se o conector do Notion não estiver disponível nesta sessão, diga isso e pare:
@@ -34,6 +38,11 @@ filtrando `Status = "Pronta"` e `Responsável` contendo o usuário atual
 Nunca pegue tarefa de outra pessoa nem tarefa em `Backlog`, mesmo que pareça
 fácil: `Backlog` significa que ainda não está definida.
 
+Se a pessoa pedir **mais de uma** ("faça as duas", "todas"), faça **uma de
+cada vez**, do começo ao fim — branch, PR, Notion — e só então comece a
+seguinte. E antes de abrir a segunda branch, leia o passo 3 sobre tarefas
+que tocam os mesmos arquivos.
+
 ### 2. Ler a tarefa inteira
 
 Busque a página e leia contexto, o que fazer e **critérios de aceite**.
@@ -53,12 +62,31 @@ conflito antes de codar.
 1. Atualize a tarefa: `Status = "Em andamento"`.
 2. `git status` precisa estar limpo; se não estiver, pergunte o que fazer com
    o que está pendente.
-3. Se já estiver numa branch própria (não `main`) que corresponde a esta
-   tarefa, use-a. Senão:
+3. **Sempre** comece trazendo a `main` do servidor — a pessoa pode ter
+   ficado dias sem abrir o projeto, e a `main` local dela é velha:
    ```
-   git switch main && git pull
-   git switch -c <tipo>/<módulo>-<slug-curto>
+   git fetch origin
    ```
+   Depois, uma de duas:
+   - Já existe uma branch própria para esta tarefa (a propriedade `Branch`
+     está preenchida e a branch existe): `git switch <branch>` e
+     `git merge origin/main`, para ela não ficar para trás.
+   - Senão, crie a partir da `main` atualizada:
+     ```
+     git switch main && git pull
+     git switch -c <tipo>/<módulo>-<slug-curto>
+     ```
+   Não pergunte se pode atualizar: é o esperado, e é rápido. Só pare se o
+   `merge` conflitar — aí resolva com a pessoa antes de escrever código.
+   **Antes disso, olhe as suas outras tarefas em `Em revisão`.** Se alguma
+   toca os mesmos arquivos que esta vai tocar (o mesmo router, o mesmo
+   serviço, o `schema.prisma`), duas branches nascidas da mesma `main` vão
+   conflitar no GitHub. Aí a escolha é uma de duas, e você diz qual no PR:
+   - **esperar o merge** da outra e só então criar esta a partir da `main`;
+   - **nascer da outra branch** (`git switch -c … <branch-da-outra>`), com
+     uma linha no PR: "depende de #N; mesclar depois dele".
+   Não crie da `main` "para ver no que dá": foi assim que `adminRoutes.js`
+   conflitou entre #7 e #8.
    `<tipo>` é `feat`, `fix`, `refactor`, `chore` ou `docs`; `<módulo>` vem da
    propriedade Módulo em minúsculas (`hub`, `flow`, `vitrine`, `api`,
    `admin`, `infra`).
@@ -84,19 +112,32 @@ pare, crie a branch, e só então commite.
 `npm test` em `apps/api` e em `apps/web`. Se algo falhar, conserte antes de
 abrir o PR; se a falha não for sua, diga qual é e pergunte.
 
+A suíte da API roda contra o banco de dev e é lenta. **Nunca aponte
+`--shadow-database-url` para esse banco** para conferir uma migration: o
+Prisma reseta o shadow database, e isso já apagou o dev uma vez. Em dev o
+schema entra por `prisma db push`; a migration escrita à mão é validada pelo
+CI, num Postgres descartável.
+
 ### 6. Abrir o PR
 
-1. `git push -u origin <branch>` — só depois de os testes passarem: o
+1. **Atualize a branch com a `main` antes do push:**
+   ```
+   git fetch origin && git merge origin/main
+   ```
+   Se conflitar, resolva aqui — com os testes rodando de novo depois — e
+   nunca no botão do GitHub. Um conflito resolvido na sua máquina passa pela
+   suíte; um resolvido no navegador não.
+2. `git push -u origin <branch>` — só depois de os testes passarem: o
    workflow `abrir-pr.yml` abre o PR sozinho, já pronto para revisão, com
    o título do último commit. Por isso o último commit antes do push deve
    ter o título da tarefa como assunto.
-2. Espere o PR existir (`gh pr view --json url,isDraft`; até ~30 s). Se o
+3. Espere o PR existir (`gh pr view --json url,isDraft`; até ~30 s). Se o
    `gh` não estiver disponível, diga à pessoa que o PR abriu sozinho e
    pare aqui com o link da branch.
-3. Preencha o corpo pelo template (`gh pr edit --body-file -`), com a linha
+4. Preencha o corpo pelo template (`gh pr edit --body-file -`), com a linha
    `Tarefa: <link da página no Notion>`, "O que muda", "Por quê" e
    "Como testar" escritos de verdade.
-4. Grave a URL do PR na propriedade `PR` da tarefa e mude
+5. Grave a URL do PR na propriedade `PR` da tarefa e mude
    `Status = "Em revisão"`.
 
 ### 7. O que este skill NÃO faz
