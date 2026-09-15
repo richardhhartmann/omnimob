@@ -1187,6 +1187,19 @@ export const api = {
   listarChamados: (tenantSlug) =>
     request("/api/chamados", { headers: { "x-tenant-slug": tenantSlug } }),
 
+  /* A conversa de um chamado desta imobiliária. Número de outra → 404. */
+  lerChamado: (tenantSlug, numero) =>
+    request(`/api/chamados/${numero}`, { headers: { "x-tenant-slug": tenantSlug } }),
+  /* Responder. Num chamado resolvido, isto o reabre. */
+  responderChamado: (tenantSlug, numero, payload) =>
+    request(`/api/chamados/${numero}/mensagens`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(payload),
+    }),
+  reabrirChamado: (tenantSlug, numero) =>
+    request(`/api/chamados/${numero}/reabrir`, { method: "POST", headers: { "x-tenant-slug": tenantSlug } }),
+
   // Teste grátis, etapa 2: o token do e-mail vira um tenant de verdade.
   confirmarTrialOmnimob: (payload = {}) =>
     request("/public/trial/confirmar", {
@@ -1264,6 +1277,10 @@ export const adminApi = {
   },
   atualizarChamado: (numero, payload) =>
     adminRequest(`/api/admin/chamados/${numero}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  // A conversa de um chamado, e a resposta do suporte (que avisa o cliente).
+  lerChamado: (numero) => adminRequest(`/api/admin/chamados/${numero}`),
+  responderChamado: (numero, texto) =>
+    adminRequest(`/api/admin/chamados/${numero}/mensagens`, { method: "POST", body: JSON.stringify({ texto }) }),
 
   // Progresso bruto dos tutoriais por tenant e usuário; a porcentagem é
   // calculada na tela, que é quem conhece o fluxo.

@@ -3,6 +3,14 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import {
+  COM_CONTAGEM,
+  COM_CONVERSA,
+  mudarStatus,
+  responderComoCliente,
+  serializarChamado,
+  serializarMensagem,
+} from "../services/chamados.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Chamados de suporte — lado da imobiliária.
@@ -58,21 +66,33 @@ const abrirSchema = z.object({
   prints: z.array(z.string().url().max(500)).max(6).optional().default([]),
 });
 
-function serializar(c) {
-  return {
-    numero: c.numero,
-    titulo: c.titulo,
-    descricao: c.descricao,
-    categoria: c.categoria,
-    prioridade: c.prioridade,
-    resolvido: c.resolvido,
-    resolvidoEm: c.resolvidoEm,
-    prints: c.prints,
-    rota: c.rota,
-    criadoEm: c.criadoEm,
-    usuario: c.usuarioNome || "—",
-  };
+/* A forma é a de `services/chamados.js`, a mesma que o super-admin lê: os
+   dois lados olham para o mesmo chamado, e duas serializações divergiriam
+   no primeiro campo novo. */
+const serializar = serializarChamado;
+
+/* Quem está falando, com o login — como `usuarioNome` no chamado. */
+async function nomeDeQuemFala(req) {
+  const usuario = await prisma.usuario.findFirst({
+    where: { id: req.authUserId, tenantId: req.tenant.id },
+    select: { nome: true, login: true },
+  });
+  return usuario ? `${usuario.nome} (${usuario.login})` : "Cliente";
 }
+
+/* `findFirst` com o tenant junto, e não `findUnique` pelo número: o número é
+   sequencial e global — o #12 de uma imobiliária é vizinho do #13 de outra.
+   Fora do tenant, responde 404: não existe, para quem pergunta. */
+async function chamadoDoTenant(req, include) {
+  const numero = Number(req.params.numero);
+  if (!Number.isInteger(numero)) return null;
+  return prisma.chamado.findFirst({ where: { numero, tenantId: req.tenant.id }, include });
+}
+
+const responderSchema = z.object({
+  texto: z.string().trim().min(1, "Escreva a mensagem.").max(4000),
+  prints: z.array(z.string().url().max(500)).max(6).optional().default([]),
+});
 
 /** Abre um chamado em nome de quem está logado. */
 chamadoRouter.post("/", async (req, res) => {
@@ -112,12 +132,64 @@ chamadoRouter.get("/", async (req, res) => {
   try {
     const chamados = await prisma.chamado.findMany({
       where: { tenantId: req.tenant.id },
-      orderBy: { criadoEm: "desc" },
+      /* Abertos primeiro, e dentro de cada grupo o que mexeu por último —
+         é a ordem da caixa de entrada, não a do protocolo. */
+      orderBy: [{ resolvido: "asc" }, { atualizadoEm: "desc" }],
       take: 100,
+      include: COM_CONTAGEM,
     });
     return res.json(chamados.map(serializar));
   } catch (err) {
     console.error("[chamados] falha ao listar:", err);
     return res.status(500).json({ error: "Erro ao carregar os chamados." });
+  }
+});
+
+/** Um chamado com a conversa inteira. */
+chamadoRouter.get("/:numero", async (req, res) => {
+  try {
+    const chamado = await chamadoDoTenant(req, COM_CONVERSA);
+    if (!chamado) return res.status(404).json({ error: "Chamado não encontrado." });
+    return res.json(serializar(chamado));
+  } catch (err) {
+    console.error("[chamados] falha ao abrir a conversa:", err);
+    return res.status(500).json({ error: "Erro ao carregar o chamado." });
+  }
+});
+
+/** O cliente responde. Num chamado resolvido, isto o reabre. */
+chamadoRouter.post("/:numero/mensagens", async (req, res) => {
+  const parsed = responderSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Dados inválidos.", details: parsed.error.flatten() });
+  }
+  try {
+    const chamado = await chamadoDoTenant(req);
+    if (!chamado) return res.status(404).json({ error: "Chamado não encontrado." });
+
+    const { mensagem, chamado: atualizado } = await responderComoCliente(chamado, {
+      ...parsed.data,
+      autorNome: await nomeDeQuemFala(req),
+    });
+    return res.status(201).json({ mensagem: serializarMensagem(mensagem), status: atualizado.status });
+  } catch (err) {
+    console.error("[chamados] falha ao responder:", err);
+    return res.status(500).json({ error: "Não foi possível enviar a mensagem." });
+  }
+});
+
+/** Reabrir um chamado resolvido, sem precisar escrever nada. */
+chamadoRouter.post("/:numero/reabrir", async (req, res) => {
+  try {
+    const chamado = await chamadoDoTenant(req);
+    if (!chamado) return res.status(404).json({ error: "Chamado não encontrado." });
+    if (chamado.status !== "RESOLVIDO") {
+      return res.status(400).json({ error: "Este chamado ainda está aberto." });
+    }
+    const atualizado = await mudarStatus(chamado, "ABERTO", { autorNome: await nomeDeQuemFala(req) });
+    return res.json({ status: atualizado.status });
+  } catch (err) {
+    console.error("[chamados] falha ao reabrir:", err);
+    return res.status(500).json({ error: "Não foi possível reabrir o chamado." });
   }
 });

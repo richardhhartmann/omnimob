@@ -983,6 +983,18 @@ model Chamado {
   descricao    String            @map("cha_descricao")
   categoria    String            @default("duvida") @map("cha_categoria")
   prioridade   ChamadoPrioridade @default(MEDIA) @map("cha_prioridade")
+  /**
+   * Em que pé está a conversa. `resolvido` era um booleano e continua na
+   * tabela como DERIVADO (`status === RESOLVIDO`), regravado a cada mudança —
+   * apagar a coluna exigiria tocar em tudo que a lê, e ela ainda responde a
+   * pergunta mais comum ("está fechado?") sem ninguém decorar a régua.
+   *
+   *   ABERTO              o cliente falou por último (ou acabou de abrir)
+   *   EM_ATENDIMENTO      alguém do suporte assumiu
+   *   AGUARDANDO_CLIENTE  o suporte respondeu; a bola está com o cliente
+   *   RESOLVIDO           fechado — o cliente pode reabrir, e volta a ABERTO
+   */
+  status       ChamadoStatus     @default(ABERTO) @map("cha_status")
   resolvido    Boolean           @default(false) @map("cha_resolvido")
   resolvidoEm  DateTime?         @map("cha_resolvido_em")
   // URLs no Cloudinary, na ordem em que foram enviadas. Array em vez de tabela
@@ -993,8 +1005,9 @@ model Chamado {
   criadoEm     DateTime          @default(now()) @map("created_at")
   atualizadoEm DateTime          @updatedAt @map("updated_at")
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  usuario   Usuario?          @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  mensagens ChamadoMensagem[]
 
   @@index([tenantId, criadoEm])
   @@index([resolvido, prioridade])
@@ -1006,6 +1019,49 @@ enum ChamadoPrioridade {
   MEDIA
   ALTA
   URGENTE
+}
+
+enum ChamadoStatus {
+  ABERTO
+  EM_ATENDIMENTO
+  AGUARDANDO_CLIENTE
+  RESOLVIDO
+}
+
+/**
+ * Uma fala na conversa de um chamado. O cliente e o suporte escrevem no MESMO
+ * fio; a descrição original do chamado não vira mensagem — ela é o cabeçalho
+ * da conversa, e duplicá-la aqui seria duas fontes para o mesmo texto.
+ *
+ * `SISTEMA` é para o que o sistema anota sozinho ("Resolvido por …", "Reaberto
+ * por …"). É um tipo próprio, e não `SUPORTE`, porque a regra do e-mail depende
+ * disso: o cliente é avisado de RESPOSTA, nunca de anotação.
+ *
+ * `tenantId` copiado do chamado, redundante de propósito: é o que permite
+ * filtrar por imobiliária sem `join`, e é a mesma regra de todo modelo editável
+ * pelo cliente — o `where` com o tenant em toda query.
+ */
+model ChamadoMensagem {
+  id            String       @id @default(cuid()) @map("chm_id")
+  tenantId      String       @map("tenant_id")
+  chamadoNumero Int          @map("cha_numero")
+  autorTipo     ChamadoAutor @map("chm_autor_tipo")
+  // Copiado, como `usuarioNome` no chamado: quem escreveu pode sair depois.
+  autorNome     String       @map("chm_autor_nome")
+  texto         String       @map("chm_texto")
+  prints        String[]     @map("chm_prints")
+  criadoEm      DateTime     @default(now()) @map("created_at")
+
+  chamado Chamado @relation(fields: [chamadoNumero], references: [numero], onDelete: Cascade)
+
+  @@index([tenantId, chamadoNumero, criadoEm])
+  @@map("tb_chamado_mensagem")
+}
+
+enum ChamadoAutor {
+  CLIENTE
+  SUPORTE
+  SISTEMA
 }
 
 model UsuarioTutorial {

@@ -16,6 +16,7 @@ import { RecuperarSenhaPage } from "./pages/RecuperarSenhaPage";
 import { AdminLayout } from "./components/AdminLayout";
 import { CargosPage } from "./pages/CargosPage";
 import { AuditoriaPage } from "./pages/AuditoriaPage.jsx";
+import { SuportePage } from "./pages/SuportePage.jsx";
 import { ClientesPage } from "./pages/ClientesPage";
 import { ConfiguracaoPage } from "./pages/ConfiguracaoPage";
 import { TiposImovelPage } from "./pages/TiposImovelPage";
@@ -651,6 +652,12 @@ export default function App() {
             ? <UsuariosPage session={session} />
             : <Navigate to={defaultPublicPath} replace />
         } />
+        {/* Sem permissão, de propósito: pedir ajuda e ler a resposta é direito
+            de qualquer pessoa da equipe — o mesmo motivo de `chamadoRoutes`
+            não ter `requirePermissao`. A lista e a conversa são a MESMA
+            página; a rota diz qual das duas. */}
+        <Route path="/suporte" element={<SuportePage session={session} />} />
+        <Route path="/suporte/:numero" element={<SuportePage session={session} />} />
         {/* Só leitura, e só para quem tem `verAuditoria` — que nasce apenas no
             cargo Administrador. A trilha mostra a movimentação de todo mundo,
             inclusive de quem administra a conta. */}

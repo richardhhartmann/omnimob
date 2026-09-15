@@ -336,8 +336,9 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
                     <code>#{recibo.numero}</code>
                   </p>
                   <p className="aj-feito__texto">
-                    Recebemos. Guarde este número — é por ele que a gente se acha em qualquer
-                    conversa. Você acompanha a resposta pelo e-mail cadastrado na imobiliária.
+                    Recebemos. A resposta chega por e-mail e fica em{" "}
+                    <Link to={`/suporte/${recibo.numero}`} onClick={onClose}>Meus chamados</Link>,
+                    onde você também pode responder.
                   </p>
                 </>
               ) : (

@@ -103,6 +103,13 @@ omnimob/
   motivos de perda, tempo de 1º retorno, por corretor. É outro funil que o de
   `/api/vendas/resumo` (marketing: visita → lead → venda)
 - `/api/auditoria/*` — trilha de quem fez o quê (só leitura; permissão `verAuditoria`)
+- `/api/chamados/*` — **o suporte, do lado da imobiliária**: abrir, listar,
+  ler a conversa (`GET /:numero`), responder (`POST /:numero/mensagens`) e
+  reabrir. Sem `requirePermissao` de propósito — pedir ajuda é de qualquer
+  pessoa da equipe. O número do chamado é sequencial e GLOBAL, então toda
+  busca é `findFirst` com o `tenantId`: o #12 de uma imobiliária é vizinho do
+  #13 de outra, e o de fora responde 404. A régua de status e o e-mail moram
+  em `services/chamados.js`, que o `/api/admin/chamados/*` também usa
 - `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
 - `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`
@@ -172,6 +179,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/avisoVencimento.test.js` | quem recebe aviso de vencimento e quando — os dois lados do silêncio: avisar de menos deixa a conta cair calada, avisar demais parece defeito de cobrança. **Não toca no banco** |
 | `test/mercadoPago.test.js` | a tradução plano → cobrança e a **assinatura do webhook** — um defeito ali vale um ano de plano de graça para quem achar a URL. Não toca no banco |
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
+| `test/suporteChamados.test.js` | a conversa do chamado: B não lê nem escreve no chamado da A pelo número real (404); o ciclo ABERTO → AGUARDANDO_CLIENTE → EM_ATENDIMENTO → RESOLVIDO → reaberto pelos dois lados; anotação de sistema; a conversa some com a imobiliária |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
 cada requisição (ativo? qual cargo?) e ignora o que veio dentro do JWT. Sem
@@ -246,6 +254,15 @@ invisíveis porque com um cliente só o sintoma não aparece.
   paga. Conta em fuso de São Paulo, e não no do servidor — em UTC, às 21h de
   Brasília o dia já virou. Texto diferente para cartão (renova sozinho) e Pix
   (precisa agir)
+- `chamados.js` — a conversa do chamado, **regra única para os dois lados**
+  (cliente em `chamadoRoutes`, suporte em `adminRoutes`). A régua:
+  cliente abre → `ABERTO`; suporte responde → `AGUARDANDO_CLIENTE`; cliente
+  responde → `EM_ATENDIMENTO`; resolver → `RESOLVIDO` + anotação de SISTEMA;
+  reabrir (ou o cliente responder a um resolvido) → `ABERTO` + anotação.
+  `Chamado.resolvido` continua gravado, DERIVADO do status. O e-mail ao
+  cliente sai UMA vez por resposta do suporte (para quem abriu, senão para o
+  e-mail da imobiliária), nunca por anotação de sistema; disparado e
+  esquecido, com link para `/suporte/:numero`
 - `leadsParados.js` — **lead aberto em que ninguém encosta há X horas**
   (`Tenant.leadParadoHoras`, padrão 48). "Encostar" é EVENTO no histórico —
   nota, estágio, responsável —, e não `updatedAt`: o próprio aviso grava no
@@ -429,6 +446,7 @@ Modelos principais:
 | `Webhook` | Endereço que recebe aviso de evento, com segredo de assinatura e desarme por falhas |
 | `Pagamento` | **O histórico de cobrança da imobiliária.** Uma linha por pagamento liquidado, dos três lugares onde dinheiro entra: fatura do Stripe, Pix do Mercado Pago e a ativação manual — que não existe em fornecedor nenhum. Idempotente por `(provedor, externoId)` |
 | `PropertyPublication` | Fila de publicação social (Facebook/Instagram/WhatsApp) |
+| `Chamado` / `ChamadoMensagem` | O chamado de suporte e a conversa dentro dele. `status` tem quatro paradas (ver `services/chamados.js`); `autorTipo` é `CLIENTE`, `SUPORTE` ou `SISTEMA` — o terceiro é o que o sistema anota sozinho ("Resolvido por …") e não gera e-mail. `tenantId` copiado na mensagem, para filtrar sem `join` |
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
 | `Negocio` | **Flow.** O negócio no funil. `codigo` é inteiro sequencial porque é um id que PESSOAS dizem em voz alta. Guarda as duas travas (quem validou e quando) e o split congelado |
 | `NegocioEvento` | Histórico do negócio, com `usuarioNome` copiado |
@@ -505,6 +523,11 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
 /                               → DashboardPage (admin)
 /leads                          → LeadsPage
 /auditoria                      → AuditoriaPage (registro de atividade)
+/suporte[/:numero]              → SuportePage — os chamados da imobiliária e a
+                                  conversa de cada um (lista e conversa são a
+                                  MESMA página). Abrir chamado continua sendo o
+                                  modal de Ajuda; a página não duplica o
+                                  formulário. Chega por Ajuda › Meus chamados
 /imoveis/:propertyId            → PropertyInsightsPage
 ```
 

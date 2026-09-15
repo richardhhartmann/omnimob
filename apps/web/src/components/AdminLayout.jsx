@@ -1315,6 +1315,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 ancoraRef={perfilRef}
                 aoAbrirAjuda={() => { setAjudaEm("menu"); setAjudaAberta(true); }}
                 aoAbrirChamado={() => { setAjudaEm("chamado"); setAjudaAberta(true); }}
+                aoAbrirSuporte={() => navigate("/suporte")}
                 aoAbrirPreferencias={() => setPreferenciasAbertas(true)}
                 aoAbrirPerfil={() => setMeusDadosAbertos(true)}
                 aoVincularGoogle={vincularGoogle}
