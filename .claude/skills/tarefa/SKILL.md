@@ -1,6 +1,6 @@
 ---
 name: tarefa
-description: Pega a próxima tarefa do usuário no banco "Tarefas" do Notion (Omnimob), cria a branch, implementa, roda os testes, abre o PR e atualiza a tarefa. Use quando a pessoa disser /tarefa, "pega minha tarefa", "próxima tarefa do Notion" ou colar o link de uma tarefa.
+description: Pega a próxima tarefa do usuário no banco "Tarefas" do Notion (Omnimob), cria a branch, implementa, roda os testes, abre o PR e atualiza a tarefa. Use quando a pessoa disser /tarefa, "pega minha tarefa", "faça minhas tarefas", "faça minha tarefa", "faça uma tarefa", "próxima tarefa do Notion" ou colar o link de uma tarefa.
 ---
 
 # /tarefa — da fila do Notion ao pull request
@@ -86,14 +86,17 @@ abrir o PR; se a falha não for sua, diga qual é e pergunte.
 
 ### 6. Abrir o PR
 
-1. `git push -u origin <branch>`
-2. Com o `gh` disponível: `gh pr create` contra a `main`, com o título igual
-   ao título da tarefa (ele vira a mensagem do squash) e o corpo seguindo
-   `.github/pull_request_template.md`. Inclua a linha
-   `Tarefa: <link da página no Notion>`.
-   Sem `gh`: diga à pessoa que a branch está no remoto e peça para abrir o
-   PR pela interface, e entregue título e corpo prontos para colar.
-3. Grave a URL do PR na propriedade `PR` da tarefa e mude
+1. `git push -u origin <branch>`. O workflow `abrir-pr.yml` abre o PR
+   sozinho, como rascunho, com o título do último commit — por isso o
+   último commit antes do push deve ter o título da tarefa como assunto.
+2. Espere o PR existir (`gh pr view --json url,isDraft`; até ~30 s). Se o
+   `gh` não estiver disponível, diga à pessoa que o PR abriu sozinho e
+   pare aqui com o link da branch.
+3. Preencha o corpo pelo template (`gh pr edit --body-file -`), com a linha
+   `Tarefa: <link da página no Notion>`, "O que muda", "Por quê" e
+   "Como testar" escritos de verdade.
+4. Marque como pronto: `gh pr ready`. É isso que chama o revisor.
+5. Grave a URL do PR na propriedade `PR` da tarefa e mude
    `Status = "Em revisão"`.
 
 ### 7. O que este skill NÃO faz
