@@ -12,8 +12,8 @@ Notion. As regras de fundo estão no `CLAUDE.md` e em `docs/CONTRIBUINDO.md`
 
 ## Onde as tarefas moram
 
-- Banco **Tarefas** no Notion: `https://app.notion.com/p/5d28dec5bcaf4f5ea36b415f9d97c5bc`
-- Data source (para consultar): `collection://b9e97db6-9da7-40a6-a0ab-abb1d8a29eb0`
+- Banco **Tarefas** no Notion: `https://app.notion.com/p/44a8d02373554ae89367c54b189826ee`
+- Data source (para consultar): `collection://e057493c-1d02-4da2-bda4-fe37d4ddfd0d`
 - Página de regras: **Como trabalhar** (`https://app.notion.com/p/3db5981bb6c58126ac1cf79ace3d842a`)
 
 Se o conector do Notion não estiver disponível nesta sessão, diga isso e pare:
