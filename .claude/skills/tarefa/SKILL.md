@@ -86,17 +86,17 @@ abrir o PR; se a falha não for sua, diga qual é e pergunte.
 
 ### 6. Abrir o PR
 
-1. `git push -u origin <branch>`. O workflow `abrir-pr.yml` abre o PR
-   sozinho, como rascunho, com o título do último commit — por isso o
-   último commit antes do push deve ter o título da tarefa como assunto.
+1. `git push -u origin <branch>` — só depois de os testes passarem: o
+   workflow `abrir-pr.yml` abre o PR sozinho, já pronto para revisão, com
+   o título do último commit. Por isso o último commit antes do push deve
+   ter o título da tarefa como assunto.
 2. Espere o PR existir (`gh pr view --json url,isDraft`; até ~30 s). Se o
    `gh` não estiver disponível, diga à pessoa que o PR abriu sozinho e
    pare aqui com o link da branch.
 3. Preencha o corpo pelo template (`gh pr edit --body-file -`), com a linha
    `Tarefa: <link da página no Notion>`, "O que muda", "Por quê" e
    "Como testar" escritos de verdade.
-4. Marque como pronto: `gh pr ready`. É isso que chama o revisor.
-5. Grave a URL do PR na propriedade `PR` da tarefa e mude
+4. Grave a URL do PR na propriedade `PR` da tarefa e mude
    `Status = "Em revisão"`.
 
 ### 7. O que este skill NÃO faz
