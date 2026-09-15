@@ -1737,7 +1737,7 @@ const CSS = `
 .ds-topbar__grupo {
   width: var(--s-aberta); flex: none; box-sizing: border-box;
   display: flex; align-items: center; gap: 8px;
-  padding: 0 0 0 10px;
+  padding: 0 0 0 25px;
 }
 
 /* ── A PILULA DA CONTA, NO CENTRO DA FAIXA ────────────────────────────────
