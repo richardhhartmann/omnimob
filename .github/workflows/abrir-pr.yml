@@ -1,10 +1,11 @@
 # Abre o pull request sozinho no primeiro push de uma branch.
 #
-# A pessoa faz `git push -u origin minha-branch` e o PR aparece como RASCUNHO,
-# com o título do último commit e o template preenchido. Pushes seguintes só
-# atualizam o PR que já existe. Quando terminar, ela clica em "Ready for
-# review" — é aí que o CODEOWNERS pede a revisão. Abrir já pronto pingaria o
-# revisor no primeiro "wip".
+# A pessoa faz `git push -u origin minha-branch` e o PR aparece já PRONTO para
+# revisão, com o título do último commit e o template preenchido; o CODEOWNERS
+# pede a revisão na hora. Pushes seguintes só atualizam o PR que já existe.
+# A regra do time é "só dá push quando terminou" — por isso sem rascunho
+# (decisão de setembro/2026; se os PRs começarem a chegar pela metade, é
+# acrescentar `--draft` na chamada abaixo).
 #
 # O PR é criado com o GITHUB_TOKEN, e evento gerado por ele NÃO dispara outros
 # workflows (regra do GitHub contra laços). Por isso o ci.yml roda no PUSH da
@@ -38,6 +39,6 @@ jobs:
             exit 0
           fi
           TITULO="$(git log -1 --pretty=%s)"
-          gh pr create --draft --base main --head "$BRANCH" \
+          gh pr create --base main --head "$BRANCH" \
             --title "$TITULO" \
             --body-file .github/pull_request_template.md
