@@ -25,6 +25,7 @@ import { clearSession, loadSession, saveSession } from "./session";
 import { ContaSuspensaPage } from "./pages/ContaSuspensaPage";
 import { ehDominioDaOmnimob, slugDoDominioAtual } from "./utils/dominioVitrine";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
+import { AdminConvitePage } from "./pages/AdminConvitePage";
 import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
 import { LimiteDeErro } from "./components/LimiteDeErro.jsx";
 /* `telaTardia` e o `lazy()` com a barra do topo em volta: a espera abre quando
@@ -534,6 +535,11 @@ export default function App() {
         path="/admin/login"
         element={adminSession ? <Navigate to="/admin" replace /> : <AdminLoginPage onLogin={handleAdminLogin} />}
       />
+      {/* Destino do convite de super-admin (`/admin/definir-senha?token=…`).
+          Pública e sem o `adminSession ?`: quem já está logado e recebeu um
+          convite para OUTRA conta quer definir aquela senha, não voltar ao
+          painel. Ao salvar, a sessão nova substitui a antiga. */}
+      <Route path="/admin/definir-senha" element={<AdminConvitePage onLogin={handleAdminLogin} />} />
       <Route
         path="/admin"
         element={adminSession ? comEntrada(<SuperAdminPage session={adminSession} onLogout={handleAdminLogout} />) : <Navigate to="/admin/login" replace />}

@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { prisma, criarImobiliariaDeTeste, apagarImobiliaria, subirApi } from "./helpers.js";
 import { chamadoRouter } from "../src/routes/chamadoRoutes.js";
 import { adminRouter } from "../src/routes/adminRoutes.js";
+import { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } from "../src/services/permissoesSuperAdmin.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    A conversa do chamado, na junção rota + query.
@@ -29,16 +30,28 @@ test("conversa do chamado", async (t) => {
   const api = await subirApi({ "/api/chamados": chamadoRouter, "/api/admin": adminRouter });
   const comoA = api.comoTenant(a);
   const comoB = api.comoTenant(b);
-  /* O super-admin: o que a `main` de hoje aceita é um token com `role`.
-     Quando o cargo do super-admin entrar (#4), este trecho passa a criar a
-     conta no banco, como `pagamentos.test.js` faz. */
-  const tokenSuporte = jwt.sign({ role: "SUPERADMIN", email: "suporte@omnimob.app" }, JWT_SECRET, { expiresIn: "10m" });
+  /* Um super-admin DE VERDADE, no cargo Administrador: o token só prova
+     identidade, e é o banco que diz o que a pessoa alcança. */
+  const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
+    where: { nome: CARGO_ADMIN_PLATAFORMA },
+    update: {},
+    create: { nome: CARGO_ADMIN_PLATAFORMA, ...permissoesCompletas() },
+  });
+  const atendente = await prisma.superAdmin.create({
+    data: { nome: "Atendente", email: `${a.slug}-suporte@omnimob.app`, senha: "x", ativo: true, cargoId: cargoAdmin.id },
+  });
+  const tokenSuporte = jwt.sign(
+    { role: "SUPERADMIN", superAdminId: atendente.id, email: atendente.email },
+    JWT_SECRET,
+    { expiresIn: "10m" },
+  );
   const suporte = api.comoTenant({ token: tokenSuporte, slug: "" });
 
   t.after(async () => {
     await api.fechar();
     await apagarImobiliaria(a.tenant.id);
     await apagarImobiliaria(b.tenant.id);
+    await prisma.superAdmin.delete({ where: { id: atendente.id } }).catch(() => {});
   });
 
   const aberto = await comoA.post("/api/chamados", {

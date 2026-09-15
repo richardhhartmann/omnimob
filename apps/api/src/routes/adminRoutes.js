@@ -3,7 +3,19 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { prisma } from "../db.js";
-import { requireSuperAdmin } from "../middlewares/superAdminMiddleware.js";
+import {
+  requireSuperAdmin,
+  requirePermissaoAdmin,
+  permissoesDoCargo,
+} from "../middlewares/superAdminMiddleware.js";
+import {
+  CARGO_ADMIN_PLATAFORMA,
+  CHAVES_DA_PLATAFORMA,
+  catalogoDePermissoes,
+  ehAdministradorDaPlataforma,
+  normalizarPermissoes,
+} from "../services/permissoesSuperAdmin.js";
+import { emailConviteSuperAdmin } from "../services/emailTemplates.js";
 import { provisionTenant, senhaTemporaria } from "../services/provisioningService.js";
 import { limparTrials, fidelizarTrial, verificarSlug, MOTIVO_SLUG } from "../services/trialService.js";
 import {
@@ -14,7 +26,7 @@ import {
   normalizarPacote,
   modulosDoPacote,
 } from "../services/pagamentoService.js";
-import { verificarEmail } from "../services/notificationService.js";
+import { isEmailEnabled, sendEmail, verificarEmail } from "../services/notificationService.js";
 import { registrarPagamento } from "../services/pagamentos.js";
 import { diagnosticarBanco } from "../services/healthService.js";
 import { cifrar, decifrar } from "../services/cofre.js";
@@ -27,7 +39,7 @@ import {
   pareceCodigoDeRecuperacao,
   uriDeProvisionamento,
 } from "../services/totp.js";
-import { montarSessao } from "./authRoutes.js";
+import { montarSessao, impressaoDaSenha } from "./authRoutes.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
@@ -70,13 +82,107 @@ const loginLimiter = rateLimit({
    contador por rota daria ao atacante o dobro de tentativas de graça.
    ────────────────────────────────────────────────────────────────────────── */
 
+/* As permissões vão junto para a tela desenhar o menu certo no primeiro
+   quadro — mas NÃO ficam valendo por elas: o que decide é o banco, relido a
+   cada requisição (`requireSuperAdmin`). A tela as reconfirma em
+   `GET /api/admin/eu` ao abrir o painel. */
 function sessaoDoSuperAdmin(admin) {
   const token = jwt.sign(
     { role: "SUPERADMIN", superAdminId: admin.id, email: admin.email },
     JWT_SECRET,
     { expiresIn: "7d" },
   );
-  return { token, email: admin.email, nome: admin.nome };
+  return {
+    token,
+    id: admin.id,
+    email: admin.email,
+    nome: admin.nome,
+    cargo: admin.cargo?.nome || null,
+    cargoId: admin.cargoId ?? null,
+    permissoes: permissoesDoCargo(admin.cargo),
+  };
+}
+
+/* ─── O convite: link de uso único para definir a senha ──────────────────────
+
+   É o MESMO mecanismo do "esqueci a senha" do Hub (`authRoutes`): um JWT com
+   o id e a impressão digital da senha atual. Numa conta recém-criada a senha é
+   vazia; definir a senha muda a impressão e o link deixa de valer — uso único
+   sem tabela e sem revogação para lembrar.
+
+   O propósito é próprio: um token de recuperação de usuário do Hub não pode
+   abrir esta porta, nem o contrário.
+   ────────────────────────────────────────────────────────────────────────── */
+const PROPOSITO_CONVITE = "convite-super-admin";
+const VALIDADE_CONVITE = "24h";
+
+function assinarConvite(admin) {
+  return jwt.sign(
+    { superAdminId: admin.id, proposito: PROPOSITO_CONVITE, fp: impressaoDaSenha(admin.senha) },
+    JWT_SECRET,
+    { expiresIn: VALIDADE_CONVITE },
+  );
+}
+
+/** Devolve o super-admin do convite, ou lança com `.code`. */
+async function superAdminDoConvite(token) {
+  let dados;
+  try {
+    dados = jwt.verify(String(token || ""), JWT_SECRET);
+  } catch (erro) {
+    const expirou = erro.name === "TokenExpiredError";
+    const e = new Error(expirou ? "Este convite expirou. Peça um novo." : "Convite inválido.");
+    e.code = expirou ? "TOKEN_EXPIRADO" : "TOKEN_INVALIDO";
+    throw e;
+  }
+  if (dados.proposito !== PROPOSITO_CONVITE) {
+    const e = new Error("Convite inválido.");
+    e.code = "TOKEN_INVALIDO";
+    throw e;
+  }
+  const admin = await prisma.superAdmin.findUnique({
+    where: { id: String(dados.superAdminId || "") },
+    include: { cargo: true },
+  });
+  if (!admin || !admin.ativo) {
+    const e = new Error("Convite inválido.");
+    e.code = "TOKEN_INVALIDO";
+    throw e;
+  }
+  if (dados.fp !== impressaoDaSenha(admin.senha)) {
+    const e = new Error("Este convite já foi usado. Peça um novo.");
+    e.code = "TOKEN_USADO";
+    throw e;
+  }
+  return admin;
+}
+
+/* Monta e envia o e-mail do convite. Devolve o que a tela precisa saber:
+   se foi enviado e, quando não há transporte de e-mail (ambiente de dev), o
+   próprio link — senão não haveria como concluir o cadastro localmente. Com
+   e-mail configurado o link NUNCA volta na resposta: quem cria a conta não
+   deve ter como escolher a senha da outra pessoa. */
+async function enviarConvite(admin, { convidadoPor }) {
+  const token = assinarConvite(admin);
+  const base = (process.env.APP_URL || "").trim().replace(/\/+$/, "") || "https://omnimob.app";
+  const link = `${base}/admin/definir-senha?token=${encodeURIComponent(token)}`;
+
+  if (!isEmailEnabled()) {
+    console.warn(`[admin/convite] sem transporte de e-mail; link para ${admin.email}: ${link}`);
+    return { enviado: false, link };
+  }
+
+  const modelo = emailConviteSuperAdmin({
+    nome: admin.nome,
+    link,
+    convidadoPor,
+    cargo: admin.cargo?.nome || "",
+  });
+  /* Não aguardado: o transporte tem teto de 10 s, e prender a criação do
+     usuário por isso deixaria a tela travada. Falha vai para o log. */
+  sendEmail({ to: admin.email, subject: modelo.subject, body: modelo.body, html: modelo.html })
+    .catch((e) => console.error("[admin/convite] falha ao enviar:", e.message));
+  return { enviado: true, link: null };
 }
 
 /* Confere o segundo fator, seja o código do aplicativo ou um de recuperação, e
@@ -106,10 +212,13 @@ adminRouter.post("/login", loginLimiter, async (req, res) => {
     const { email, senha } = req.body || {};
     if (!email || !senha) return res.status(400).json({ error: "Email e senha sao obrigatorios." });
 
-    const admin = await prisma.superAdmin.findUnique({ where: { email } });
+    const admin = await prisma.superAdmin.findUnique({ where: { email }, include: { cargo: true } });
     if (!admin || !admin.ativo) return res.status(401).json({ error: "Credenciais invalidas." });
 
-    const ok = await bcrypt.compare(senha, admin.senha);
+    /* Conta convidada que ainda não definiu senha tem `senha` vazia. O
+       `compare` já recusaria; a conferência explícita evita passar uma string
+       vazia ao bcrypt — e deixa dito que este estado existe. */
+    const ok = admin.senha ? await bcrypt.compare(senha, admin.senha) : false;
     if (!ok) return res.status(401).json({ error: "Credenciais invalidas." });
 
     if (admin.totpAtivadoEm) {
@@ -144,7 +253,7 @@ adminRouter.post("/login/totp", loginLimiter, async (req, res) => {
       return res.status(401).json({ error: "Desafio invalido.", code: "DESAFIO_EXPIRADO" });
     }
 
-    const admin = await prisma.superAdmin.findUnique({ where: { id: payload.superAdminId } });
+    const admin = await prisma.superAdmin.findUnique({ where: { id: payload.superAdminId }, include: { cargo: true } });
     if (!admin || !admin.ativo || !admin.totpAtivadoEm) return res.status(401).json({ error: "Credenciais invalidas." });
 
     const conferido = conferirSegundoFator(admin, codigo);
@@ -167,8 +276,52 @@ adminRouter.post("/login/totp", loginLimiter, async (req, res) => {
   }
 });
 
+/* ── O convite, do lado de quem o recebe ─────────────────────────────────────
+   Públicas por natureza: quem está definindo a senha ainda não tem sessão.
+   Montadas ANTES do `requireSuperAdmin`, senão ele as engoliria. */
+
+/* Confere o link ANTES de a pessoa digitar a senha — o mesmo motivo do
+   `GET /auth/redefinir-senha/:token`. */
+adminRouter.get("/convite/:token", async (req, res) => {
+  try {
+    const admin = await superAdminDoConvite(req.params.token);
+    return res.json({ valido: true, nome: admin.nome, email: admin.email, cargo: admin.cargo?.nome || null });
+  } catch (err) {
+    return res.status(400).json({ valido: false, error: err.message, code: err.code });
+  }
+});
+
+adminRouter.post("/convite", loginLimiter, async (req, res) => {
+  try {
+    const { token, novaSenha } = req.body || {};
+    if (String(novaSenha || "").length < 8) {
+      return res.status(400).json({ error: "A senha deve ter ao menos 8 caracteres." });
+    }
+    const admin = await superAdminDoConvite(token);
+    const atualizado = await prisma.superAdmin.update({
+      where: { id: admin.id },
+      data: { senha: await bcrypt.hash(String(novaSenha), 10) },
+      include: { cargo: true },
+    });
+    // Já devolve a sessão: quem definiu a senha entra direto.
+    return res.json(sessaoDoSuperAdmin(atualizado));
+  } catch (err) {
+    if (err.code) return res.status(400).json({ error: err.message, code: err.code });
+    console.error("[POST /admin/convite]", err);
+    return res.status(500).json({ error: "Erro ao definir a senha." });
+  }
+});
+
 // Tudo abaixo exige super-admin.
 adminRouter.use(requireSuperAdmin);
+
+/* Quem sou e o que alcanço — relido do banco pelo middleware. A tela chama ao
+   abrir o painel, e é isto que faz um rebaixamento aparecer na requisição
+   seguinte em vez de daqui a sete dias. */
+adminRouter.get("/eu", (req, res) => {
+  const { id, nome, email, cargoId, cargoNome, permissoes } = req.superAdmin;
+  return res.json({ id, nome, email, cargoId, cargo: cargoNome, permissoes, catalogo: catalogoDePermissoes() });
+});
 
 /* ─── Segundo fator: ligar, conferir e desligar ───────────────────────────────
 
@@ -193,7 +346,7 @@ function situacaoDoSegundoFator(admin) {
   };
 }
 
-adminRouter.get("/totp", async (req, res) => {
+adminRouter.get("/totp", requirePermissaoAdmin("verSeguranca"), async (req, res) => {
   try {
     const admin = await superAdminDaSessao(req);
     if (!admin) return res.status(404).json({ error: "Conta nao encontrada." });
@@ -207,7 +360,7 @@ adminRouter.get("/totp", async (req, res) => {
 /* Gera a chave e a guarda cifrada, SEM ativar. Chamar de novo antes de
    confirmar descarta a anterior — quem começou o cadastro, errou o aplicativo e
    recomeçou não fica preso a uma chave que o celular dele não tem. */
-adminRouter.post("/totp/iniciar", async (req, res) => {
+adminRouter.post("/totp/iniciar", requirePermissaoAdmin("verSeguranca"), async (req, res) => {
   try {
     const admin = await superAdminDaSessao(req);
     if (!admin) return res.status(404).json({ error: "Conta nao encontrada." });
@@ -238,7 +391,7 @@ adminRouter.post("/totp/iniciar", async (req, res) => {
 /* Só o código do aplicativo prova que a chave chegou lá. Ativar sem essa prova
    é a forma exata de se trancar para fora: o login passaria a exigir um código
    que nenhum aplicativo consegue gerar. */
-adminRouter.post("/totp/confirmar", async (req, res) => {
+adminRouter.post("/totp/confirmar", requirePermissaoAdmin("verSeguranca"), async (req, res) => {
   try {
     const { codigo } = req.body || {};
     const admin = await superAdminDaSessao(req);
@@ -266,7 +419,7 @@ adminRouter.post("/totp/confirmar", async (req, res) => {
 /* Desligar exige a senha E um código válido. Só a senha não serviria: senha nas
    mãos erradas é exatamente o que o segundo fator existe para conter, e uma
    rota que o desliga com ela o anula por completo. */
-adminRouter.delete("/totp", async (req, res) => {
+adminRouter.delete("/totp", requirePermissaoAdmin("verSeguranca"), async (req, res) => {
   try {
     const { senha, codigo } = req.body || {};
     const admin = await superAdminDaSessao(req);
@@ -301,7 +454,7 @@ adminRouter.delete("/totp", async (req, res) => {
    só se descobria cadastrando alguém e conferindo a caixa de entrada. */
 /* `?porta=587&seguro=false` testa uma porta alternativa sem mudar variável de
    ambiente nem esperar redeploy — o host segue sendo o configurado. */
-adminRouter.get("/diagnostico/email", async (req, res) => {
+adminRouter.get("/diagnostico/email", requirePermissaoAdmin("verSeguranca"), async (req, res) => {
   const porta = req.query.porta !== undefined ? Number(req.query.porta) : undefined;
   const seguro = req.query.seguro !== undefined ? req.query.seguro !== "false" : undefined;
   if (porta !== undefined && !Number.isInteger(porta)) {
@@ -314,7 +467,7 @@ adminRouter.get("/diagnostico/email", async (req, res) => {
 /* Onde o tempo do banco é gasto, medido de dentro do servidor. Serve para
    decidir entre "mudar de região" e "mexer na conexão" com número em vez de
    palpite — ver o comentário de `diagnosticarBanco`. */
-adminRouter.get("/diagnostico/banco", async (req, res) => {
+adminRouter.get("/diagnostico/banco", requirePermissaoAdmin("verSeguranca"), async (req, res) => {
   const amostras = Math.min(Number(req.query.amostras) || 5, 15);
   return res.json(await diagnosticarBanco({ amostras }));
 });
@@ -322,7 +475,7 @@ adminRouter.get("/diagnostico/banco", async (req, res) => {
 /* Cobrança: modo da chave e se cada preço existe de fato na conta dela. O
    `No such price` do Stripe não distingue "não existe" de "existe em outra
    conta", e é sempre o segundo. */
-adminRouter.get("/diagnostico/stripe", async (_req, res) => {
+adminRouter.get("/diagnostico/stripe", requirePermissaoAdmin("verSeguranca"), async (_req, res) => {
   const r = await diagnosticarPagamento();
   const todosOk = r.configurado && Object.values(r.planos || {}).every((p) => p.ok);
   return res.status(todosOk ? 200 : 503).json(r);
@@ -353,7 +506,7 @@ function serializeTenant(t) {
 
 const withCount = { _count: { select: { usuarios: true, properties: true } } };
 
-adminRouter.get("/tenants", async (_req, res) => {
+adminRouter.get("/tenants", requirePermissaoAdmin("verTenants"), async (_req, res) => {
   try {
     const tenants = await prisma.tenant.findMany({
       orderBy: { createdAt: "desc" },
@@ -366,7 +519,7 @@ adminRouter.get("/tenants", async (_req, res) => {
   }
 });
 
-adminRouter.get("/tenants/:id", async (req, res) => {
+adminRouter.get("/tenants/:id", requirePermissaoAdmin("verTenants"), async (req, res) => {
   try {
     const t = await prisma.tenant.findUnique({ where: { id: req.params.id }, include: withCount });
     if (!t) return res.status(404).json({ error: "Tenant nao encontrado." });
@@ -400,7 +553,7 @@ function modulosDoCorpo(body) {
   return limpos.includes("HUB") ? limpos : ["HUB", ...limpos];
 }
 
-adminRouter.post("/tenants", async (req, res) => {
+adminRouter.post("/tenants", requirePermissaoAdmin("editarTenant"), async (req, res) => {
   try {
     const body = req.body || {};
     const nome = String(body.name || "").trim();
@@ -433,7 +586,7 @@ adminRouter.post("/tenants", async (req, res) => {
   }
 });
 
-adminRouter.put("/tenants/:id", async (req, res) => {
+adminRouter.put("/tenants/:id", requirePermissaoAdmin("editarTenant"), async (req, res) => {
   try {
     const b = req.body || {};
     const data = {};
@@ -471,7 +624,7 @@ adminRouter.put("/tenants/:id", async (req, res) => {
    refém. O que sobra vai no corpo da resposta (`stripe`), para a tela poder
    avisar que aquela assinatura precisa de um cancelamento manual — silenciar
    seria pior que falhar. */
-adminRouter.delete("/tenants/:id", async (req, res) => {
+adminRouter.delete("/tenants/:id", requirePermissaoAdmin("excluirTenant"), async (req, res) => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.params.id },
@@ -505,7 +658,7 @@ adminRouter.delete("/tenants/:id", async (req, res) => {
    A remoção é irreversível e cascateia para imóveis, fotos, leads e usuários,
    então exige `aplicar: true` explícito no corpo. Enquanto não houver agendador
    no projeto, isto é chamado à mão — e depois é só pendurar num cron. */
-adminRouter.post("/trials/faxina", async (req, res) => {
+adminRouter.post("/trials/faxina", requirePermissaoAdmin("excluirTenant"), async (req, res) => {
   try {
     const aplicar = req.body?.aplicar === true;
     const resultado = await limparTrials({ aplicar });
@@ -542,7 +695,7 @@ function serializarChamadoParaAdmin(c) {
 
    A ordenação é por não-resolvido primeiro e depois por data: prioridade alta
    de um chamado já fechado não pode empurrar para baixo uma dúvida aberta. */
-adminRouter.get("/chamados", async (req, res) => {
+adminRouter.get("/chamados", requirePermissaoAdmin("verChamados"), async (req, res) => {
   try {
     const { resolvido, tenantId } = req.query;
     const where = {};
@@ -565,7 +718,7 @@ adminRouter.get("/chamados", async (req, res) => {
 });
 
 /* A conversa de um chamado, de qualquer imobiliária — é o suporte. */
-adminRouter.get("/chamados/:numero", async (req, res) => {
+adminRouter.get("/chamados/:numero", requirePermissaoAdmin("verChamados"), async (req, res) => {
   const numero = Number(req.params.numero);
   if (!Number.isInteger(numero)) return res.status(400).json({ error: "Número inválido." });
   try {
@@ -584,7 +737,7 @@ adminRouter.get("/chamados/:numero", async (req, res) => {
 /* A resposta do suporte. Vai para a conversa, passa a bola para o cliente e
    dispara o e-mail — tudo em `responderComoSuporte`, a MESMA régua que o lado
    do cliente usa. */
-adminRouter.post("/chamados/:numero/mensagens", async (req, res) => {
+adminRouter.post("/chamados/:numero/mensagens", requirePermissaoAdmin("resolverChamado"), async (req, res) => {
   const numero = Number(req.params.numero);
   if (!Number.isInteger(numero)) return res.status(400).json({ error: "Número inválido." });
   const texto = String(req.body?.texto || "").trim();
@@ -610,7 +763,7 @@ adminRouter.post("/chamados/:numero/mensagens", async (req, res) => {
    `resolvido` (o contrato antigo da tela): `true` é RESOLVIDO, `false` reabre.
    `resolvidoEm` é derivado, nunca recebido: é o servidor que sabe quando o
    clique aconteceu. Resolver e reabrir deixam anotação na conversa. */
-adminRouter.patch("/chamados/:numero", async (req, res) => {
+adminRouter.patch("/chamados/:numero", requirePermissaoAdmin("resolverChamado"), async (req, res) => {
   const numero = Number(req.params.numero);
   if (!Number.isInteger(numero)) return res.status(400).json({ error: "Número inválido." });
 
@@ -650,7 +803,7 @@ adminRouter.patch("/chamados/:numero", async (req, res) => {
    exigiria uma segunda cópia dessa lista, fadada a divergir da primeira no dia
    em que uma etapa nova entrar. Por isso mandamos junto o cargo inteiro: é o
    que a tela precisa para montar o fluxo daquele usuário. */
-adminRouter.get("/tutoriais", async (_req, res) => {
+adminRouter.get("/tutoriais", requirePermissaoAdmin("verTutoriais"), async (_req, res) => {
   try {
     const tenants = await prisma.tenant.findMany({
       orderBy: { createdAt: "desc" },
@@ -704,8 +857,10 @@ adminRouter.get("/tutoriais", async (_req, res) => {
 
    ── AS TRÊS TRAVAS ──
 
-   1. SÓ SUPER-ADMIN. `adminRouter.use(requireSuperAdmin)` cobre esta rota como
-      cobre as outras. Não há caminho para um usuário comum chegar aqui.
+   1. SÓ SUPER-ADMIN COM A PERMISSÃO. `adminRouter.use(requireSuperAdmin)`
+      cobre esta rota como cobre as outras, e `entrarNoTenant` é uma permissão
+      própria: um cargo "Suporte" vê a lista de tenants e não entra em conta
+      nenhuma. Não há caminho para um usuário comum chegar aqui.
 
    2. SESSÃO CURTA. Duas horas, e não os sete dias de um login normal. Entrar
       na conta de um cliente é uma visita, não uma mudança: um token de sete
@@ -729,7 +884,7 @@ adminRouter.get("/tutoriais", async (_req, res) => {
    conta de cliente é exatamente o tipo de coisa que ninguém deveria conseguir
    fazer a partir de um botão.
    ──────────────────────────────────────────────────────────────────────────── */
-adminRouter.post("/tenants/:id/entrar", async (req, res) => {
+adminRouter.post("/tenants/:id/entrar", requirePermissaoAdmin("entrarNoTenant"), async (req, res) => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.params.id },
@@ -852,7 +1007,7 @@ adminRouter.post("/tenants/:id/entrar", async (req, res) => {
    perdeu o acesso e não recebe o e-mail de recuperação" é o chamado mais comum
    de todos, e até aqui ele não tinha resposta.
    ──────────────────────────────────────────────────────────────────────────── */
-adminRouter.post("/tenants/:id/senha-admin", async (req, res) => {
+adminRouter.post("/tenants/:id/senha-admin", requirePermissaoAdmin("editarTenant"), async (req, res) => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.params.id },
@@ -947,7 +1102,7 @@ function somarMeses(base, meses) {
   return d;
 }
 
-adminRouter.post("/tenants/:id/fidelizar", async (req, res) => {
+adminRouter.post("/tenants/:id/fidelizar", requirePermissaoAdmin("editarTenant"), async (req, res) => {
   try {
     const b = req.body || {};
     const tenant = await prisma.tenant.findUnique({
@@ -1061,5 +1216,261 @@ adminRouter.post("/tenants/:id/fidelizar", async (req, res) => {
   } catch (err) {
     console.error("[POST /admin/tenants/:id/fidelizar]", err);
     res.status(500).json({ error: "Erro ao ativar a assinatura.", detail: err.message });
+  }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   USUÁRIOS E CARGOS DA PLATAFORMA.
+
+   O desenho é o do Hub — `usuarioRoutes` + `cargoRoutes` —, e não um segundo:
+   catálogo canônico de permissões num serviço, o Administrador reconhecido
+   pelo nome e com as chaves da casa DERIVADAS a cada gravação (não recusadas),
+   ninguém desativa a si mesmo, cargo com gente dentro não é apagado.
+
+   As duas travas de "não ficar sem ninguém" valem aqui como lá: o último
+   Administrador ativo não é desativado nem rebaixado, e o cargo Administrador
+   não é excluído. A plataforma inteira sem ninguém que reabra a porta é o
+   estado que estas linhas existem para impedir.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const SUPER_ADMIN_VISIVEL = {
+  id: true, nome: true, email: true, ativo: true, cargoId: true, createdAt: true,
+  totpAtivadoEm: true,
+  cargo: { select: { id: true, nome: true } },
+};
+
+function serializarSuperAdmin(u) {
+  return {
+    id: u.id,
+    nome: u.nome,
+    email: u.email,
+    ativo: u.ativo,
+    cargoId: u.cargoId,
+    cargo: u.cargo?.nome || null,
+    segundoFator: Boolean(u.totpAtivadoEm),
+    /* Sem senha = convidado que ainda não definiu a dele. A tela oferece
+       "reenviar convite" só nesse estado. */
+    aguardandoConvite: !u.senha,
+    createdAt: u.createdAt,
+  };
+}
+
+/* Quantos Administradores ATIVOS com senha sobram além deste. Serve às duas
+   travas — desativar e rebaixar — e por isso mora numa função só. */
+async function outrosAdministradoresAtivos(excetoId) {
+  return prisma.superAdmin.count({
+    where: { id: { not: excetoId }, ativo: true, senha: { not: "" }, cargo: { nome: CARGO_ADMIN_PLATAFORMA } },
+  });
+}
+
+async function cargoExiste(cargoId) {
+  const id = Number(cargoId);
+  if (!Number.isInteger(id)) return null;
+  return prisma.cargoSuperAdmin.findUnique({ where: { id }, select: { id: true, nome: true } });
+}
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+adminRouter.get("/usuarios", requirePermissaoAdmin("verUsuarios"), async (_req, res) => {
+  try {
+    const lista = await prisma.superAdmin.findMany({
+      orderBy: [{ ativo: "desc" }, { nome: "asc" }],
+      select: { ...SUPER_ADMIN_VISIVEL, senha: true },
+    });
+    return res.json(lista.map(serializarSuperAdmin));
+  } catch (err) {
+    console.error("[GET /admin/usuarios]", err);
+    return res.status(500).json({ error: "Erro ao listar usuários." });
+  }
+});
+
+/* Cria com senha VAZIA e manda o convite. "Definir senha no primeiro acesso"
+   é o único caminho, de propósito: quem cria a conta não escolhe a senha da
+   outra pessoa — é o mesmo motivo de a reemissão de senha do tenant gerar uma
+   temporária em vez de aceitar uma digitada. */
+adminRouter.post("/usuarios", requirePermissaoAdmin("gerenciarUsuarios"), async (req, res) => {
+  try {
+    const nome = String(req.body?.nome || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!nome || !email) return res.status(400).json({ error: "Nome e e-mail são obrigatórios." });
+    if (!EMAIL_VALIDO.test(email)) return res.status(400).json({ error: "E-mail inválido." });
+
+    const cargo = await cargoExiste(req.body?.cargoId);
+    if (!cargo) return res.status(400).json({ error: "Escolha um cargo." });
+
+    const criado = await prisma.superAdmin.create({
+      data: { nome, email, senha: "", ativo: true, cargoId: cargo.id },
+      include: { cargo: true },
+    });
+
+    const convite = await enviarConvite(criado, { convidadoPor: req.superAdmin.nome || req.superAdmin.email });
+    return res.status(201).json({ ...serializarSuperAdmin(criado), convite });
+  } catch (err) {
+    if (err.code === "P2002") return res.status(409).json({ error: "Já existe um usuário com este e-mail." });
+    console.error("[POST /admin/usuarios]", err);
+    return res.status(500).json({ error: "Erro ao criar usuário." });
+  }
+});
+
+adminRouter.put("/usuarios/:id", requirePermissaoAdmin("gerenciarUsuarios"), async (req, res) => {
+  try {
+    const atual = await prisma.superAdmin.findUnique({ where: { id: req.params.id }, include: { cargo: true } });
+    if (!atual) return res.status(404).json({ error: "Usuário não encontrado." });
+
+    const b = req.body || {};
+    const data = {};
+    if (b.nome !== undefined) {
+      data.nome = String(b.nome).trim();
+      if (!data.nome) return res.status(400).json({ error: "Nome é obrigatório." });
+    }
+    if (b.email !== undefined) {
+      data.email = String(b.email).trim().toLowerCase();
+      if (!EMAIL_VALIDO.test(data.email)) return res.status(400).json({ error: "E-mail inválido." });
+    }
+    if (b.ativo !== undefined) data.ativo = Boolean(b.ativo);
+    if (b.cargoId !== undefined) {
+      const cargo = await cargoExiste(b.cargoId);
+      if (!cargo) return res.status(400).json({ error: "Cargo não encontrado." });
+      data.cargoId = cargo.id;
+    }
+
+    /* Desativar a si mesmo é a forma de se trancar para fora com a porta
+       aberta para mais ninguém. A tela já esconde; aqui é a trava de verdade. */
+    if (data.ativo === false && atual.id === req.superAdmin.id) {
+      return res.status(400).json({ error: "Você não pode desativar o seu próprio usuário." });
+    }
+
+    /* O ÚLTIMO Administrador ativo não é desativado nem rebaixado. */
+    const eraAdmin = ehAdministradorDaPlataforma(atual.cargo);
+    const perdeAdmin = data.ativo === false || (data.cargoId !== undefined && data.cargoId !== atual.cargoId);
+    if (eraAdmin && atual.ativo && perdeAdmin && (await outrosAdministradoresAtivos(atual.id)) === 0) {
+      return res.status(400).json({
+        error: "Este é o único Administrador ativo da plataforma. Dê o cargo a outra pessoa antes.",
+      });
+    }
+
+    const atualizado = await prisma.superAdmin.update({
+      where: { id: atual.id },
+      data,
+      select: { ...SUPER_ADMIN_VISIVEL, senha: true },
+    });
+    return res.json(serializarSuperAdmin(atualizado));
+  } catch (err) {
+    if (err.code === "P2002") return res.status(409).json({ error: "Já existe um usuário com este e-mail." });
+    console.error("[PUT /admin/usuarios/:id]", err);
+    return res.status(500).json({ error: "Erro ao atualizar usuário." });
+  }
+});
+
+/* Reenvia o convite. Só para quem ainda não definiu senha: para quem já tem,
+   o link não abriria nada (a impressão digital já é outra) — e mandar assim
+   mesmo seria um e-mail que confunde. */
+adminRouter.post("/usuarios/:id/convite", requirePermissaoAdmin("gerenciarUsuarios"), async (req, res) => {
+  try {
+    const admin = await prisma.superAdmin.findUnique({ where: { id: req.params.id }, include: { cargo: true } });
+    if (!admin) return res.status(404).json({ error: "Usuário não encontrado." });
+    if (!admin.ativo) return res.status(400).json({ error: "Reative o usuário antes de reenviar o convite." });
+    if (admin.senha) return res.status(400).json({ error: "Este usuário já definiu a senha." });
+
+    const convite = await enviarConvite(admin, { convidadoPor: req.superAdmin.nome || req.superAdmin.email });
+    return res.json({ convite });
+  } catch (err) {
+    console.error("[POST /admin/usuarios/:id/convite]", err);
+    return res.status(500).json({ error: "Erro ao reenviar o convite." });
+  }
+});
+
+// ─── Cargos ──────────────────────────────────────────────────────────────────
+
+function serializarCargo(c) {
+  const { _count, ...resto } = c;
+  return { ...resto, ehAdministrador: ehAdministradorDaPlataforma(c), usuarios: _count?.superAdmins ?? 0 };
+}
+
+const COM_CONTAGEM = { _count: { select: { superAdmins: true } } };
+
+/* `verUsuarios` também lê: a tela de usuários precisa da lista de cargos para
+   o seletor, e exigir `verCargos` ali obrigaria quem gere gente a também poder
+   reescrever permissões. */
+adminRouter.get("/cargos", requirePermissaoAdmin("verCargos", "verUsuarios"), async (_req, res) => {
+  try {
+    const cargos = await prisma.cargoSuperAdmin.findMany({ orderBy: { id: "asc" }, include: COM_CONTAGEM });
+    /* `ehAdministrador` e as chaves travadas vão CALCULADOS: a tela que
+       desenha a caixa travada precisa concordar com quem recusa o PUT. */
+    return res.json({ cargos: cargos.map(serializarCargo), catalogo: catalogoDePermissoes(), travadas: CHAVES_DA_PLATAFORMA });
+  } catch (err) {
+    console.error("[GET /admin/cargos]", err);
+    return res.status(500).json({ error: "Erro ao listar cargos." });
+  }
+});
+
+adminRouter.post("/cargos", requirePermissaoAdmin("verCargos"), async (req, res) => {
+  try {
+    const nome = String(req.body?.nome || "").trim();
+    if (!nome) return res.status(400).json({ error: "Nome é obrigatório." });
+    const data = { nome, ...normalizarPermissoes(req.body, { nome }) };
+    const cargo = await prisma.cargoSuperAdmin.create({ data, include: COM_CONTAGEM });
+    return res.status(201).json(serializarCargo(cargo));
+  } catch (err) {
+    if (err.code === "P2002") return res.status(409).json({ error: "Já existe um cargo com este nome." });
+    console.error("[POST /admin/cargos]", err);
+    return res.status(500).json({ error: "Erro ao criar cargo." });
+  }
+});
+
+adminRouter.put("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cargo = Number.isInteger(id) ? await prisma.cargoSuperAdmin.findUnique({ where: { id } }) : null;
+    if (!cargo) return res.status(404).json({ error: "Cargo não encontrado." });
+
+    const data = {};
+    if (req.body?.nome !== undefined) {
+      data.nome = String(req.body.nome).trim();
+      if (!data.nome) return res.status(400).json({ error: "Nome é obrigatório." });
+      /* Renomear o Administrador o faria deixar de ser reconhecido — e as
+         chaves da casa deixariam de ser derivadas. Recusar é mais simples
+         que inventar uma flag para marcá-lo. */
+      if (ehAdministradorDaPlataforma(cargo) && data.nome !== cargo.nome) {
+        return res.status(400).json({ error: "O cargo Administrador não pode ser renomeado." });
+      }
+    }
+    Object.assign(data, normalizarPermissoes(req.body, { nome: data.nome ?? cargo.nome, base: cargo }));
+
+    /* Quem edita não tira `verCargos` do PRÓPRIO cargo — seria se trancar do
+       lado de fora, e sem ninguém para reabrir. Mesma trava do Hub. */
+    if (id === req.superAdmin.cargoId && data.verCargos === false) {
+      return res.status(400).json({ error: "Você não pode remover 'Cargos' do seu próprio cargo." });
+    }
+
+    const atualizado = await prisma.cargoSuperAdmin.update({ where: { id }, data, include: COM_CONTAGEM });
+    return res.json(serializarCargo(atualizado));
+  } catch (err) {
+    if (err.code === "P2002") return res.status(409).json({ error: "Já existe um cargo com este nome." });
+    console.error("[PUT /admin/cargos/:id]", err);
+    return res.status(500).json({ error: "Erro ao atualizar cargo." });
+  }
+});
+
+adminRouter.delete("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cargo = Number.isInteger(id)
+      ? await prisma.cargoSuperAdmin.findUnique({ where: { id }, include: COM_CONTAGEM })
+      : null;
+    if (!cargo) return res.status(404).json({ error: "Cargo não encontrado." });
+    if (ehAdministradorDaPlataforma(cargo)) {
+      return res.status(400).json({ error: "O cargo Administrador não pode ser excluído." });
+    }
+    if (cargo._count.superAdmins > 0) {
+      return res.status(400).json({
+        error: `Cargo está vinculado a ${cargo._count.superAdmins} usuário(s). Reatribua-os antes de excluir.`,
+      });
+    }
+    await prisma.cargoSuperAdmin.delete({ where: { id } });
+    return res.status(204).send();
+  } catch (err) {
+    console.error("[DELETE /admin/cargos/:id]", err);
+    return res.status(500).json({ error: "Erro ao excluir cargo." });
   }
 });

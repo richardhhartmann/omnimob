@@ -60,7 +60,9 @@ function quando(iso) {
   return `há ${dias} dias · ${data}`;
 }
 
-export function AdminChamadosPage({ aoContarAbertos }) {
+/* `podeResolver` vem do cargo (`resolverChamado`). Sem ela a fila é só
+   leitura: o botão de resolver some, e não fica desabilitado. */
+export function AdminChamadosPage({ aoContarAbertos, podeResolver = false }) {
   const [chamados, setChamados] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -388,19 +390,21 @@ export function AdminChamadosPage({ aoContarAbertos }) {
                         Ver vitrine
                       </Button>
                     ) : null}
-                    <Button
-                      as="button"
-                      type="button"
-                      variant={c.resolvido ? "outline" : "primary"}
-                      className="dl-btn--sm"
-                      arrow={false}
-                      disabled={salvando === c.numero}
-                      onClick={() => alternarResolvido(c)}
-                    >
-                      {salvando === c.numero
-                        ? "Salvando…"
-                        : c.resolvido ? "Reabrir chamado" : "Marcar como resolvido"}
-                    </Button>
+                    {podeResolver ? (
+                      <Button
+                        as="button"
+                        type="button"
+                        variant={c.resolvido ? "outline" : "primary"}
+                        className="dl-btn--sm"
+                        arrow={false}
+                        disabled={salvando === c.numero}
+                        onClick={() => alternarResolvido(c)}
+                      >
+                        {salvando === c.numero
+                          ? "Salvando…"
+                          : c.resolvido ? "Reabrir chamado" : "Marcar como resolvido"}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

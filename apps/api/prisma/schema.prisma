@@ -567,7 +567,72 @@ model SuperAdmin {
   totpUltimoPasso Int?
   totpRecuperacao String?
 
+  /*
+   * ─── O cargo dentro da plataforma ──────────────────────────────────────────
+   *
+   * Até aqui existia UM tipo de conta: quem entrava via e fazia tudo. O cargo
+   * repete o desenho do Hub (`Cargo` por imobiliária): permissões por aba e
+   * por ação, lidas do banco a cada requisição (`superAdminMiddleware`).
+   *
+   * Nulo é "sem cargo", e sem cargo é SEM PERMISSÃO NENHUMA — não "tudo". A
+   * coluna nasce anulável porque `NOT NULL` sem padrão numa tabela com linhas
+   * trava o deploy; a migração cria o cargo Administrador e pendura nele quem
+   * já existia, então na prática ninguém fica nulo. Quem for criado depois
+   * passa pela rota, que exige o cargo.
+   *
+   * `Restrict`, e não `SetNull`: apagar um cargo com gente dentro deixaria
+   * essas pessoas sem acesso em silêncio. A rota recusa antes.
+   */
+  cargoId Int?
+  cargo   CargoSuperAdmin? @relation(fields: [cargoId], references: [id], onDelete: Restrict)
+
+  @@index([cargoId])
   @@map("tb_super_admin")
+}
+
+/**
+ * Cargo de quem opera a PLATAFORMA — o irmão do `Cargo` do Hub, e não uma
+ * segunda ideia: nome + permissões booleanas, catálogo canônico num serviço
+ * (`services/permissoesSuperAdmin.js`), o Administrador reconhecido pelo nome e
+ * com as chaves da casa travadas, e o servidor relendo tudo a cada requisição.
+ *
+ * Sem `tenantId`, e é a única tabela editável pela tela que não tem: ela não
+ * pertence a imobiliária nenhuma — pertence à Omnimob.
+ *
+ * Dois níveis de permissão, de propósito. `ver*` abre uma ABA do painel;
+ * as outras liberam uma AÇÃO dentro dela. Um cargo "Suporte" vê Tenants e
+ * Chamados, mas não entra na conta de ninguém nem exclui nada — e essa
+ * diferença não cabe numa lista chata de abas.
+ */
+model CargoSuperAdmin {
+  id        Int      @id @default(autoincrement())
+  nome      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Por aba ──
+  verTenants   Boolean @default(false)
+  verChamados  Boolean @default(false)
+  verTutoriais Boolean @default(false)
+  verSeguranca Boolean @default(false)
+  verUsuarios  Boolean @default(false)
+  verCargos    Boolean @default(false)
+
+  // ── Por ação, dentro da aba ──
+  /** Tenants: entrar na conta do cliente como o Administrador dela. */
+  entrarNoTenant Boolean @default(false)
+  /** Tenants: criar, editar, ativar à mão e reemitir a senha do administrador. */
+  editarTenant Boolean @default(false)
+  /** Tenants: excluir a imobiliária (e cancelar a assinatura dela). */
+  excluirTenant Boolean @default(false)
+  /** Chamados: marcar resolvido, reabrir e repriorizar. */
+  resolverChamado Boolean @default(false)
+  /** Usuários: criar, editar, desativar e reenviar convite. */
+  gerenciarUsuarios Boolean @default(false)
+
+  superAdmins SuperAdmin[]
+
+  @@map("tb_cargo_super_admin")
 }
 
 // ─── Cargo (substitui o enum UserRole) ───────────────────────────────────────
@@ -1593,7 +1658,13 @@ model SessaoRevogada {
 
 model Auditoria {
   id          String   @id @default(cuid()) @map("aud_id")
-  tenantId    String   @map("tenant_id")
+  /**
+   * Nulo quando o ator é a PLATAFORMA e não uma imobiliária: criar um
+   * super-admin ou mexer num cargo da Omnimob não pertence à trilha de cliente
+   * nenhum. A tela da imobiliária filtra por `tenantId`, então essas linhas
+   * nunca aparecem lá. Ver `MODELOS_DA_PLATAFORMA` em `services/auditoria.js`.
+   */
+  tenantId    String?  @map("tenant_id")
   usuarioId   String?  @map("usu_id")
   usuarioNome String?  @map("aud_usuario_nome")
   /**
@@ -1616,7 +1687,7 @@ model Auditoria {
   rota        String?  @map("aud_rota")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, createdAt])
   @@index([tenantId, entidade, entidadeId])

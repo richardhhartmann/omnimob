@@ -1285,4 +1285,33 @@ export const adminApi = {
   // Progresso bruto dos tutoriais por tenant e usuário; a porcentagem é
   // calculada na tela, que é quem conhece o fluxo.
   listTutoriais: () => adminRequest("/api/admin/tutoriais"),
+
+  /* ─── Quem sou e o que alcanço ─────────────────────────────────────────────
+     Relido do banco a cada chamada. O painel chama ao abrir: é o que faz um
+     rebaixamento aparecer no menu na hora, e não daqui a sete dias. */
+  eu: () => adminRequest("/api/admin/eu"),
+
+  // ─── Usuários da plataforma ───────────────────────────────────────────────
+  listUsuarios: () => adminRequest("/api/admin/usuarios"),
+  /* Cria sem senha e manda o convite. `convite.link` só volta quando o
+     servidor não tem transporte de e-mail (dev). */
+  criarUsuario: (payload) =>
+    adminRequest("/api/admin/usuarios", { method: "POST", body: JSON.stringify(payload) }),
+  atualizarUsuario: (id, payload) =>
+    adminRequest(`/api/admin/usuarios/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  reenviarConvite: (id) => adminRequest(`/api/admin/usuarios/${id}/convite`, { method: "POST" }),
+
+  /* O convite, do lado de quem o recebe. Públicas: não há sessão ainda. */
+  lerConvite: (token) => adminRequest(`/api/admin/convite/${encodeURIComponent(token)}`),
+  aceitarConvite: (token, novaSenha) =>
+    adminRequest("/api/admin/convite", { method: "POST", body: JSON.stringify({ token, novaSenha }) }),
+
+  // ─── Cargos da plataforma ─────────────────────────────────────────────────
+  /* Devolve `{ cargos, catalogo, travadas }`: a grade de permissões é desenhada
+     a partir do catálogo do servidor, e não de uma cópia aqui. */
+  listCargos: () => adminRequest("/api/admin/cargos"),
+  criarCargo: (payload) => adminRequest("/api/admin/cargos", { method: "POST", body: JSON.stringify(payload) }),
+  atualizarCargo: (id, payload) =>
+    adminRequest(`/api/admin/cargos/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  excluirCargo: (id) => adminRequest(`/api/admin/cargos/${id}`, { method: "DELETE" }),
 };

@@ -112,7 +112,19 @@ omnimob/
   em `services/chamados.js`, que o `/api/admin/chamados/*` também usa
 - `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
 - `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP
-- `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`
+- `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`.
+  **Tem cargo**: `CargoSuperAdmin` com permissão por ABA (`verTenants`,
+  `verChamados`, `verTutoriais`, `verUsuarios`, `verCargos`, `verSeguranca`) e
+  por AÇÃO (`entrarNoTenant`, `editarTenant`, `excluirTenant`,
+  `resolverChamado`, `gerenciarUsuarios`). Catálogo único em
+  `services/permissoesSuperAdmin.js`; `requireSuperAdmin` relê cargo e `ativo`
+  do banco a cada requisição e cada rota fica atrás de
+  `requirePermissaoAdmin("…")`. Super-admin sem cargo não alcança NADA.
+  `/api/admin/usuarios/*` e `/api/admin/cargos/*` são a gestão; o convite
+  (`POST /usuarios` → e-mail com link de uso único → `POST /api/admin/convite`)
+  reaproveita a impressão digital da senha do "esqueci a senha". O
+  Administrador da plataforma não é excluído, renomeado, nem perde
+  `verUsuarios`/`verCargos`/`gerenciarUsuarios` (`CHAVES_DA_PLATAFORMA`)
 - `/api/social/*` — publicação e OAuth Meta (+ webhook em `/api/social/webhook`)
 - `/api/ai/*` — geração de conteúdo com IA (Gemini)
 - `/api/v1/*` — **a API da imobiliária**, autenticada por CHAVE (não por JWT).
@@ -180,6 +192,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/mercadoPago.test.js` | a tradução plano → cobrança e a **assinatura do webhook** — um defeito ali vale um ano de plano de graça para quem achar a URL. Não toca no banco |
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
 | `test/suporteChamados.test.js` | a conversa do chamado: B não lê nem escreve no chamado da A pelo número real (404); o ciclo ABERTO → AGUARDANDO_CLIENTE → EM_ATENDIMENTO → RESOLVIDO → reaberto pelos dois lados; anotação de sistema; a conversa some com a imobiliária |
+| `test/superAdminPermissoes.test.js` | cargo "Suporte" recebe 403 no `entrar`/`editar`/`excluir` mesmo chamando a URL; rebaixar vale na requisição seguinte; Administrador não perde as chaves da casa; convite é de uso único; a escrita entra na `Auditoria` com `tenantId` nulo |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
 cada requisição (ativo? qual cargo?) e ignora o que veio dentro do JWT. Sem
@@ -196,6 +209,11 @@ na camada de banco de propósito: rota nova entra na trilha sozinha, sem ningué
 lembrar de chamar nada. `create`/`update` guardam os campos enviados; `delete`
 lê a linha antes de apagar (senão o log diria "excluiu Property cmc3x9…"). Senha
 e token nunca entram — `SEGREDO` casa por nome de campo, não por lista fechada.
+`SuperAdmin` e `CargoSuperAdmin` entram com `tenantId` **nulo** (o ator é a
+Omnimob, não uma imobiliária) e só quando o contexto diz `plataforma: true` —
+o login também escreve em `SuperAdmin` e isso não é "alguém alterou um
+usuário". A tela da imobiliária filtra por `tenantId`, então essas linhas
+nunca aparecem lá; ainda não há tela que as mostre.
 
 **Isolamento multi-tenant:** `Cargo` e `TipoImovel` já foram tabelas globais —
 sem `tenantId`, compartilhadas por todas as imobiliárias, com CRUD aberto na
@@ -439,7 +457,8 @@ Modelos principais:
 | `PropertyImage` | Fotos no Cloudinary, ordenadas por `position` |
 | `PropertyLead` | Leads da vitrine — com `responsavelId`, `estagio`, `primeiroContatoEm`, `motivoPerda` (obrigatório ao perder, limpo ao voltar) e `avisoParadoEm` |
 | `LeadEvento` | Histórico do lead (mudou de estágio, trocou de dono, nota) |
-| `Auditoria` | Quem criou/alterou/excluiu o quê. Sem FK para `Usuario` — o registro sobrevive à remoção de quem o gerou |
+| `Auditoria` | Quem criou/alterou/excluiu o quê. Sem FK para `Usuario` — o registro sobrevive à remoção de quem o gerou. `tenantId` nulo = escrita da plataforma (super-admin) |
+| `SuperAdmin` / `CargoSuperAdmin` | Quem opera a Omnimob e o que alcança. Sem `tenantId` de propósito — é a única tabela editável pela tela que não pertence a imobiliária nenhuma. `cargoId` nulo = sem permissão nenhuma |
 | `PerfilBusca` | O que um cliente procura; base do cruzamento com o acervo |
 | `ChaveApi` | Crachá de integração de terceiro. Hash, prefixo visível, escopos, revogação por marcação |
 | `FonteImportacao` | Endereço de feed guardado, para reler. `desativarAusentes` é a política de ausência |
@@ -469,6 +488,12 @@ onde tirar o verdadeiro.
 **Seed:** `apps/api/prisma/seed.js`
 - Tenant `imobiliaria-centro` e `casa-nobre`
 - Usuários de teste (senha `admin`): `admin`, `editor`, `admin-casa`
+- Super-admin `super@omnimob.app` no cargo `Administrador` da plataforma (tudo ligado)
+
+> **Nunca aponte `--shadow-database-url` para o banco de dev.** `prisma migrate
+> diff --from-migrations` RESETA o shadow database para replicar as migrations
+> nele; apontado para o Supabase de dev, ele apaga tudo. Para conferir uma
+> migration escrita à mão, use um Postgres local descartável (o CI faz isso).
 
 ---
 
@@ -948,6 +973,10 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
   landing — sem erro nenhum, como o preço anual fez quando entrou
 - **A troca de módulo pelo super-admin.** Hoje é `npm run modulos` ou a
   assinatura; falta a tela
+- **Ver a trilha da plataforma.** As escritas do super-admin (usuários e cargos
+  da Omnimob) já entram na `Auditoria` com `tenantId` nulo; falta a aba que as
+  mostre. "Recuperar senha" de super-admin também não existe — hoje é o
+  convite (só para quem nunca definiu senha) ou mexer no banco
 - Blog/conteúdo para SEO (o site institucional já existe: `/sobre`, `/contato`, `/termos`, `/privacidade`, `/vitrines`)
 - Testes automatizados e deploy CI/CD (recuperação de senha **já existe** — `POST /api/auth/recuperar-senha`)
 
