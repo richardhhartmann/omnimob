@@ -53,6 +53,21 @@ git switch main && git pull
 git switch -c feat/flow-comissoes-split
 ```
 
+### Duas tarefas que tocam o mesmo arquivo
+
+Duas branches nascidas da mesma `main` que mexem no mesmo router, no mesmo
+serviço ou no `schema.prisma` vão conflitar no GitHub — e o botão de resolver
+conflito do navegador não roda a suíte. Foi o caso de #7 e #8, os dois em
+`adminRoutes.js`.
+
+Antes de criar a segunda, decida: **esperar o merge** da primeira, ou **nascer
+dela** (`git switch -c feat/b feat/a`) e dizer no PR "depende de #N". E, em
+qualquer branch, traga a `main` antes de dar push:
+
+```bash
+git fetch origin && git merge origin/main   # resolve aqui, roda os testes, e só então push
+```
+
 ---
 
 ## Commits
