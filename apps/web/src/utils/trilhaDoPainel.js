@@ -1,7 +1,7 @@
 import {
   House, ChartPieSlice, Buildings, SquaresFour, UserCircle, UserSquare, Shield,
   GearSix, PlusCircle, PencilSimple, Tag, ClockCounterClockwise,
-  Kanban, Handshake, FileText, Scroll, Broadcast, Coins, SealCheck,
+  Kanban, Handshake, FileText, Scroll, Broadcast, Coins, SealCheck, Lifebuoy,
 } from "@phosphor-icons/react";
 import { IconeRelatorios } from "./iconesRelatorios";
 
@@ -52,6 +52,7 @@ export const TELAS_DO_PAINEL = {
   "/usuarios": { rotulo: "Usuários", Icone: UserSquare, pai: "/" },
   "/cargos": { rotulo: "Cargos", Icone: Shield, pai: "/" },
   "/auditoria": { rotulo: "Registro de Atividade", Icone: ClockCounterClockwise, pai: "/" },
+  "/suporte": { rotulo: "Suporte", Icone: Lifebuoy, pai: "/" },
   "/configuracoes": { rotulo: "Configurações", Icone: GearSix, pai: "/" },
 
   "/flow": { rotulo: "Dashboard", Icone: House },

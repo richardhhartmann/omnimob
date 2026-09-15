@@ -625,6 +625,49 @@ export function emailConviteSuperAdmin({ nome, link, convidadoPor, cargo }) {
   return { subject, body, html };
 }
 
+/* O suporte respondeu um chamado.
+
+   Traz o texto da resposta INTEIRO, e não só "há uma resposta": quem abriu o
+   chamado costuma ler no celular, e um e-mail que obriga a entrar no painel
+   para saber o que foi dito é um e-mail que fica para depois. O link leva à
+   conversa, para responder. Um por resposta do suporte; anotação de sistema
+   não avisa (ver `services/chamados.js`). */
+/* `titulo` do chamado vira `assunto` aqui dentro: `titulo` é o helper de
+   layout importado no topo, e sombreá-lo chamaria uma string como função. */
+export function emailRespostaChamado({ nome, imobiliaria, numero, titulo: assunto, autor, texto, link }) {
+  const subject = `Chamado #${numero}: ${assunto}`;
+
+  const body = [
+    `Olá, ${nome}.`,
+    "",
+    `${autor}, do suporte da Omnimob, respondeu o chamado #${numero} (${assunto})${imobiliaria ? ` da ${imobiliaria}` : ""}:`,
+    "",
+    texto,
+    "",
+    "Para responder, abra a conversa no painel:",
+    link,
+  ].join("\n");
+
+  const html = layoutEmail({
+    preheader: `${autor} respondeu: ${String(texto).slice(0, 90)}`,
+    conteudo: [
+      eyebrow(`● CHAMADO #${numero}`),
+      titulo(assunto),
+      paragrafo(
+        `Olá, ${forte(nome)}. ${forte(esc(autor))}, do suporte da Omnimob, respondeu${
+          imobiliaria ? ` o chamado da ${forte(esc(imobiliaria))}` : ""
+        }:`,
+      ),
+      `<blockquote style="margin:0 0 20px;padding:14px 18px;border-left:3px solid ${COR.acento};background:${COR.superficie2};color:${COR.forte};font-size:14px;line-height:1.7;white-space:pre-wrap;">${esc(texto)}</blockquote>`,
+      botao("Abrir a conversa", link),
+      linkDeReserva(link),
+      aviso("Responda pelo painel, e não a este e-mail — é lá que o suporte lê."),
+    ].join(""),
+  });
+
+  return { subject, body, html };
+}
+
 // ─── 8. Relatório mensal da imobiliária ──────────────────────────────────────
 
 /* Vai para quem assina Profissional ou Premium, no começo de cada mês, com o

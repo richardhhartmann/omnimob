@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import {
   GearSix, Question, SignOut, CaretRight, GoogleLogo, IdentificationBadge,
-  LifebuoyIcon, Notebook, FileText, ShieldCheck, Bug, Check, Buildings,
+  LifebuoyIcon, Notebook, FileText, ShieldCheck, Bug, Check, Buildings, ChatsCircle,
 } from "@phosphor-icons/react";
 import { planoInfo } from "../utils/planos";
 
@@ -149,7 +149,7 @@ function Linha({ Icone, rotulo, detalhe, aoClicar, temSubmenu, submenu, aoAbrirS
 
 export function MenuDoPerfil({
   aberto, aoFechar, usuario, tenant, ancoraRef,
-  aoAbrirAjuda, aoAbrirChamado, aoAbrirPreferencias, aoAbrirPerfil, aoSair,
+  aoAbrirAjuda, aoAbrirChamado, aoAbrirSuporte, aoAbrirPreferencias, aoAbrirPerfil, aoSair,
   aoVincularGoogle,
 }) {
   const navegar = useNavigate();
@@ -342,6 +342,12 @@ export function MenuDoPerfil({
             <button type="button" className="mp-linha" onClick={() => { aoFechar(); aoAbrirChamado(); }}>
               <span className="mp-linha__icone"><Bug size={17} /></span>
               <span className="mp-linha__texto">Abrir um chamado</span>
+            </button>
+            {/* Onde a resposta chega. Sem esta linha o chamado saía daqui e
+                sumia: a pessoa só ficava sabendo pelo e-mail. */}
+            <button type="button" className="mp-linha" onClick={() => { aoFechar(); aoAbrirSuporte?.(); }}>
+              <span className="mp-linha__icone"><ChatsCircle size={17} /></span>
+              <span className="mp-linha__texto">Meus chamados</span>
             </button>
             <button type="button" className="mp-linha" onClick={() => { aoFechar(); aoAbrirAjuda(); }}>
               <span className="mp-linha__icone"><LifebuoyIcon size={17} /></span>

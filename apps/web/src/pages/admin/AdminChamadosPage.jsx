@@ -34,6 +34,16 @@ const CATEGORIA_ROTULO = {
   sugestao: "Sugestão",
 };
 
+/* A régua do chamado — a mesma de `services/chamados.js` na API. A cor diz de
+   quem é a vez: rosa é "o cliente precisa responder", âmbar é "estamos com
+   ele", e o verde fecha. */
+const STATUS_META = {
+  ABERTO:             { label: "Aberto",          cor: "#a5b4fc", fundo: "rgba(129,140,248,0.12)", borda: "rgba(129,140,248,0.28)" },
+  EM_ATENDIMENTO:     { label: "Em atendimento",  cor: "#fbbf24", fundo: "rgba(251,191,36,0.12)",  borda: "rgba(251,191,36,0.30)" },
+  AGUARDANDO_CLIENTE: { label: "Aguardando cliente", cor: "#f9a8d4", fundo: "rgba(244,114,182,0.12)", borda: "rgba(244,114,182,0.30)" },
+  RESOLVIDO:          { label: "Resolvido",       cor: "#86efac", fundo: "rgba(52,211,153,0.14)",  borda: "rgba(52,211,153,0.30)" },
+};
+
 const FILTROS = [
   { chave: "abertos", rotulo: "Abertos" },
   { chave: "resolvidos", rotulo: "Resolvidos" },
@@ -60,6 +70,12 @@ export function AdminChamadosPage({ aoContarAbertos, podeResolver = false }) {
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(null);   // número do chamado expandido
   const [salvando, setSalvando] = useState(0);
+  /* A conversa do chamado expandido. Carregada ao abrir, e só dele: a lista
+     traz a contagem, não o fio — 300 conversas na listagem seria a página
+     inteira esperando por quem só quer ver a fila. */
+  const [conversa, setConversa] = useState(null);
+  const [resposta, setResposta] = useState("");
+  const [respondendo, setRespondendo] = useState(false);
 
   async function carregar() {
     setCarregando(true);
@@ -111,19 +127,71 @@ export function AdminChamadosPage({ aoContarAbertos, podeResolver = false }) {
 
   const abertos = chamados.filter((c) => !c.resolvido).length;
 
+  /* Abrir um cartão carrega a conversa dele; fechar, esquece. */
+  useEffect(() => {
+    if (aberto == null) { setConversa(null); return undefined; }
+    let vivo = true;
+    setConversa(null);
+    setResposta("");
+    adminApi.lerChamado(aberto)
+      .then((c) => { if (vivo) setConversa(c.conversa || []); })
+      .catch((e) => { if (vivo) setErro(e.message || "Não consegui carregar a conversa."); });
+    return () => { vivo = false; };
+  }, [aberto]);
+
+  function aplicarNaLista(numero, campos) {
+    setChamados((prev) => {
+      const proximo = prev.map((x) => (x.numero === numero ? { ...x, ...campos } : x));
+      aoContarAbertos?.(proximo.filter((x) => !x.resolvido).length);
+      return proximo;
+    });
+  }
+
   async function alternarResolvido(c) {
     setSalvando(c.numero);
     try {
       const r = await adminApi.atualizarChamado(c.numero, { resolvido: !c.resolvido });
-      setChamados((prev) => {
-        const proximo = prev.map((x) => (x.numero === c.numero ? { ...x, ...r } : x));
-        aoContarAbertos?.(proximo.filter((x) => !x.resolvido).length);
-        return proximo;
-      });
+      aplicarNaLista(c.numero, r);
+      /* Resolver e reabrir deixam anotação na conversa; se ela está aberta,
+         recarrega para a anotação aparecer sem a pessoa fechar e abrir. */
+      if (aberto === c.numero) adminApi.lerChamado(c.numero).then((x) => setConversa(x.conversa || [])).catch(() => {});
     } catch (e) {
       setErro(e.message || "Não foi possível atualizar.");
     } finally {
       setSalvando(0);
+    }
+  }
+
+  async function mudarStatus(c, status) {
+    setSalvando(c.numero);
+    try {
+      const r = await adminApi.atualizarChamado(c.numero, { status });
+      aplicarNaLista(c.numero, r);
+      if (aberto === c.numero) adminApi.lerChamado(c.numero).then((x) => setConversa(x.conversa || [])).catch(() => {});
+    } catch (e) {
+      setErro(e.message || "Não foi possível atualizar.");
+    } finally {
+      setSalvando(0);
+    }
+  }
+
+  /* A resposta vai para a conversa, passa a bola ao cliente e dispara o
+     e-mail — tudo no servidor. Aqui só se acrescenta a mensagem ao fio. */
+  async function responder(c, e) {
+    e.preventDefault();
+    const texto = resposta.trim();
+    if (!texto) return;
+    setRespondendo(true);
+    setErro("");
+    try {
+      const r = await adminApi.responderChamado(c.numero, texto);
+      setConversa((prev) => [...(prev || []), r.mensagem]);
+      setResposta("");
+      aplicarNaLista(c.numero, { status: r.status, resolvido: r.status === "RESOLVIDO", mensagens: (c.mensagens || 0) + 1 });
+    } catch (e2) {
+      setErro(e2.message || "Não foi possível responder.");
+    } finally {
+      setRespondendo(false);
     }
   }
 
@@ -209,9 +277,17 @@ export function AdminChamadosPage({ aoContarAbertos, podeResolver = false }) {
                     </span>
                   );
                 })()}
-                {c.resolvido ? (
-                  <span className="dl-pill ch-pill--ok">Resolvido</span>
-                ) : null}
+                {/* O status substitui o selo "Resolvido" de antes, com as
+                    quatro paradas da conversa. */}
+                {(() => {
+                  const sm = STATUS_META[c.status] || STATUS_META.ABERTO;
+                  return (
+                    <span className="dl-pill" style={{ background: sm.fundo, color: sm.cor, borderColor: sm.borda }}>
+                      {sm.label}
+                    </span>
+                  );
+                })()}
+                {c.mensagens ? <span className="dl-mono ch-quando">{c.mensagens} msg</span> : null}
                 <span className="dl-mono ch-quando">{quando(c.criadoEm)}</span>
                 <span className={`ch-seta${expandido ? " is-on" : ""}`} aria-hidden="true">▾</span>
               </button>
@@ -242,7 +318,73 @@ export function AdminChamadosPage({ aoContarAbertos, podeResolver = false }) {
                     <p className="dl-mono ch-sem-print">// sem prints anexados</p>
                   )}
 
+                  {/* ── A conversa ────────────────────────────────────────
+                      Cliente à direita, suporte à esquerda, anotação de
+                      sistema numa linha entre os dois. A abertura do chamado
+                      (descrição acima) é o primeiro balão, e por isso não se
+                      repete aqui. */}
+                  <div className="ch-conversa">
+                    {conversa == null ? (
+                      <p className="dl-mono ch-sem-print">// carregando a conversa…</p>
+                    ) : conversa.length === 0 ? (
+                      <p className="dl-mono ch-sem-print">// ninguém respondeu ainda</p>
+                    ) : (
+                      conversa.map((m) =>
+                        m.autorTipo === "SISTEMA" ? (
+                          <p key={m.id} className="dl-mono ch-sistema">{m.texto} · {quando(m.criadoEm)}</p>
+                        ) : (
+                          <div key={m.id} className={`ch-balao ${m.autorTipo === "SUPORTE" ? "is-suporte" : "is-cliente"}`}>
+                            <span className="dl-mono ch-balao__quem">
+                              {m.autorTipo === "SUPORTE" ? `${m.autorNome} · Omnimob` : m.autorNome} · {quando(m.criadoEm)}
+                            </span>
+                            <p>{m.texto}</p>
+                            {m.prints?.length ? (
+                              <div className="ch-prints">
+                                {m.prints.map((url, n) => (
+                                  <a key={url} href={url} target="_blank" rel="noreferrer" className="ch-print ch-print--mini" title={`Print ${n + 1}`}>
+                                    <img src={url} alt={`Print ${n + 1}`} />
+                                  </a>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ),
+                      )
+                    )}
+                  </div>
+
+                  <form className="ch-responder" onSubmit={(e) => responder(c, e)}>
+                    <textarea
+                      className="dl-input"
+                      rows={3}
+                      value={resposta}
+                      onChange={(e) => setResposta(e.target.value)}
+                      placeholder="Responder ao cliente… (ele recebe por e-mail e vê no painel)"
+                      maxLength={4000}
+                      disabled={respondendo}
+                    />
+                    <div className="ch-responder__acoes">
+                      <span className="dl-mono ch-sem-print">
+                        {c.status === "RESOLVIDO"
+                          ? "// responder não reabre: só o cliente reabre"
+                          : "// ao responder, o chamado passa a Aguardando cliente"}
+                      </span>
+                      <Button as="button" type="submit" variant="accent" className="dl-btn--sm" arrow={false} disabled={respondendo || !resposta.trim()}>
+                        {respondendo ? "Enviando…" : "Responder"}
+                      </Button>
+                    </div>
+                  </form>
+
                   <div className="ch-acoes">
+                    {/* "Assumir" é o único status que não tem botão próprio
+                        em outro lugar: resolver/reabrir já existe abaixo, e
+                        Aguardando cliente é efeito de responder. */}
+                    {c.status === "ABERTO" ? (
+                      <Button as="button" type="button" variant="ghost" className="dl-btn--sm" arrow={false}
+                        disabled={salvando === c.numero} onClick={() => mudarStatus(c, "EM_ATENDIMENTO")}>
+                        Assumir
+                      </Button>
+                    ) : null}
                     {c.tenantSlug ? (
                       <Button href={`/vitrine/${c.tenantSlug}`} target="_blank" rel="noreferrer" variant="ghost" className="dl-btn--sm" arrow={false}>
                         Ver vitrine
@@ -321,6 +463,23 @@ export const CHAMADOS_CSS = `
 .ch-print img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ch-sem-print { color: var(--placeholder); font-size: 9.5px; text-transform: none; letter-spacing: 0.05em; margin: 0; }
 .ch-acoes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* A conversa. */
+.ch-conversa { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px dashed var(--line-soft); }
+.ch-balao {
+  max-width: min(80%, 620px); padding: 10px 14px; border-radius: 13px;
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.ch-balao.is-suporte { align-self: flex-start; background: rgba(99,102,241,0.12); border-color: rgba(129,140,248,0.28); border-bottom-left-radius: 4px; }
+.ch-balao.is-cliente { align-self: flex-end; border-bottom-right-radius: 4px; }
+.ch-balao__quem { display: block; margin-bottom: 4px; color: var(--placeholder); font-size: 9px; text-transform: none; letter-spacing: 0.05em; }
+.ch-balao p { margin: 0; font-size: 13px; line-height: 1.7; color: var(--default); white-space: pre-wrap; word-break: break-word; }
+.ch-print--mini { width: 84px; height: 60px; border-radius: 8px; }
+.ch-sistema { align-self: center; margin: 0; color: var(--placeholder); font-size: 9.5px; text-transform: none; letter-spacing: 0.05em; }
+
+.ch-responder { display: grid; gap: 8px; }
+.ch-responder textarea.dl-input { resize: vertical; min-height: 70px; font-family: inherit; line-height: 1.6; }
+.ch-responder__acoes { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 `;
 
 export default AdminChamadosPage;
