@@ -580,6 +580,51 @@ export function emailRecuperarSenha({ nome, link, imobiliaria }) {
   return { subject, body, html };
 }
 
+/* Convite para operar a plataforma (super-admin).
+
+   O MESMO mecanismo do link de redefinir senha: um JWT curto com a impressão
+   digital da senha atual — que, numa conta recém-criada, é vazia. Definir a
+   senha muda a impressão e o link morre sozinho. Sem tabela de convites, sem
+   lixo para limpar. Vale 24 horas em vez de 1: quem é convidado não está
+   esperando o e-mail na frente da tela, como quem acabou de pedir a
+   recuperação. */
+export function emailConviteSuperAdmin({ nome, link, convidadoPor, cargo }) {
+  const subject = "Seu acesso ao painel da Omnimob";
+
+  const body = [
+    `Olá, ${nome}.`,
+    "",
+    `${convidadoPor} criou um acesso para você no painel da plataforma Omnimob${cargo ? `, com o cargo ${cargo}` : ""}.`,
+    "",
+    "Abra o link abaixo para definir a sua senha e entrar:",
+    link,
+    "",
+    "O link vale por 24 horas e só pode ser usado uma vez.",
+    "Se você não esperava este convite, ignore esta mensagem.",
+  ].join("\n");
+
+  const html = layoutEmail({
+    preheader: "Defina a sua senha para entrar no painel da plataforma.",
+    conteudo: [
+      eyebrow("● PAINEL DA PLATAFORMA"),
+      titulo("Você foi convidado"),
+      paragrafo(
+        `Olá, ${forte(nome)}. ${forte(esc(convidadoPor))} criou um acesso para você no painel da plataforma Omnimob${
+          cargo ? `, com o cargo ${forte(esc(cargo))}` : ""
+        }.`,
+      ),
+      botao("Definir minha senha", link),
+      linkDeReserva(link),
+      aviso(
+        `Este link vale por <strong style="color:${COR.forte};">24 horas</strong> e só funciona uma vez. ` +
+          "Se você não esperava este convite, é só ignorar.",
+      ),
+    ].join(""),
+  });
+
+  return { subject, body, html };
+}
+
 // ─── 8. Relatório mensal da imobiliária ──────────────────────────────────────
 
 /* Vai para quem assina Profissional ou Premium, no começo de cada mês, com o

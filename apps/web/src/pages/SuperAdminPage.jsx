@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, GraduationCap, Lifebuoy, ShieldCheck } from "@phosphor-icons/react";
+import { Buildings, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -12,6 +12,8 @@ import { slugify, motivoLocal, MOTIVO_SLUG } from "../utils/slug";
 import { AdminChamadosPage, CHAMADOS_CSS } from "./admin/AdminChamadosPage";
 import { AdminTutoriaisPage, TUTORIAIS_CSS } from "./admin/AdminTutoriaisPage";
 import { AdminSegurancaPage, SEGURANCA_CSS } from "./admin/AdminSegurancaPage";
+import { AdminUsuariosPage, USUARIOS_CSS } from "./admin/AdminUsuariosPage";
+import { AdminCargosPage, CARGOS_CSS } from "./admin/AdminCargosPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -120,39 +122,89 @@ function StatsGrid({ stats, pronto }) {
 }
 
 /* Abas do painel. A ordem é a da rotina: primeiro quem são os clientes, depois
-   o que eles estão pedindo, depois se eles entenderam o produto. */
+   o que eles estão pedindo, depois se eles entenderam o produto.
+
+   Cada aba tem a PERMISSÃO que a abre (`permissao`, a coluna do cargo). Aba
+   sem permissão some do menu — não fica desabilitada — e não abre por estado:
+   ver `abasPermitidas` abaixo. Quem decide de verdade é o servidor, rota a
+   rota; aqui é só para não desenhar uma porta que dá em 403. */
 const ABAS = [
   {
     chave: "tenants",
+    permissao: "verTenants",
     rotulo: "Tenants",
     nota: "imobiliárias provisionadas, cobrança e provisionamento",
     icone: <Buildings size={16} />,
   },
   {
     chave: "chamados",
+    permissao: "verChamados",
     rotulo: "Chamados",
     nota: "suporte aberto pelo botão de Ajuda dentro dos painéis",
     icone: <Lifebuoy size={16} />,
   },
   {
     chave: "tutoriais",
+    permissao: "verTutoriais",
     rotulo: "Tutoriais",
     nota: "quanto do tour cada pessoa percorreu",
     icone: <GraduationCap size={16} />,
+  },
+  /* Quem opera a plataforma, e o que cada um alcança. Depois das abas de
+     rotina e antes da conta própria: é gestão, não operação. */
+  {
+    chave: "usuarios",
+    permissao: "verUsuarios",
+    rotulo: "Usuários",
+    nota: "quem entra neste painel e com qual cargo",
+    icone: <UsersThree size={16} />,
+  },
+  {
+    chave: "cargos",
+    permissao: "verCargos",
+    rotulo: "Cargos",
+    nota: "permissões por aba e por ação",
+    icone: <IdentificationBadge size={16} />,
   },
   /* Por último, e é o lugar certo: não é rotina, é a conta de quem opera. Só
      se mexe nela ao trocar de celular ou ao ligar o segundo fator. */
   {
     chave: "seguranca",
+    permissao: "verSeguranca",
     rotulo: "Segurança",
     nota: "verificação em duas etapas desta conta",
     icone: <ShieldCheck size={16} />,
   },
 ];
 
+const abasPermitidas = (permissoes) => ABAS.filter((a) => permissoes?.[a.permissao]);
+
 export function SuperAdminPage({ session, onLogout }) {
   const navegar = useNavigate();
-  const [aba, setAba] = useState("tenants");
+  /* Quem sou e o que alcanço. Começa com o que veio no login (para o primeiro
+     quadro não piscar vazio) e é RELIDO do servidor ao abrir: um rebaixamento
+     feito ontem precisa aparecer hoje, e a sessão guardada não sabe dele. */
+  const [eu, setEu] = useState(() => ({
+    id: session?.id || null,
+    cargoId: session?.cargoId ?? null,
+    permissoes: session?.permissoes || null,
+  }));
+  const permissoes = eu.permissoes || {};
+  const abasVisiveis = abasPermitidas(permissoes);
+  const [abaEscolhida, setAba] = useState("tenants");
+  /* A aba escolhida só vale se o cargo a alcança; senão cai na primeira que
+     alcança. É o "não abre por URL" desta tela, que troca de aba por estado. */
+  const aba = abasVisiveis.some((a) => a.chave === abaEscolhida) ? abaEscolhida : abasVisiveis[0]?.chave;
+
+  useEffect(() => {
+    adminApi.eu()
+      .then((r) => setEu({ id: r.id, cargoId: r.cargoId ?? null, permissoes: r.permissoes }))
+      .catch((err) => {
+        /* Acesso encerrado (desativado, token velho): sai avisando, em vez de
+           deixar a tela cheia de 401. */
+        if (err?.status === 401) onLogout?.();
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Contado pela aba de chamados quando ela carrega, e exibido no menu — é o
   // único número do painel que pede ação imediata.
   const [chamadosAbertos, setChamadosAbertos] = useState(0);
@@ -199,16 +251,19 @@ export function SuperAdminPage({ session, onLogout }) {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (permissoes.verTenants) load();
+  }, [permissoes.verTenants]);
 
   /* O contador do menu é buscado na entrada, não quando a aba de chamados
      abre: um badge que só aparece depois de você clicar no item não avisa
      nada. É uma requisição pequena, e só conta os abertos. */
   useEffect(() => {
+    if (!permissoes.verChamados) return;
     adminApi.listChamados({ resolvido: false })
       .then((l) => setChamadosAbertos(l.length))
       .catch(() => {});
-  }, []);
+  }, [permissoes.verChamados]);
 
   /* O que dá para julgar sem rede (tamanho, caracteres, nomes reservados) é
      julgado na hora; só o "esse já é de alguém" pergunta ao servidor, e espera
@@ -514,7 +569,7 @@ export function SuperAdminPage({ session, onLogout }) {
     }
   }
 
-  const abas = ABAS.map((a) => (a.chave === "chamados" ? { ...a, badge: chamadosAbertos } : a));
+  const abas = abasVisiveis.map((a) => (a.chave === "chamados" ? { ...a, badge: chamadosAbertos } : a));
 
   return (
     <AdminShell
@@ -523,12 +578,25 @@ export function SuperAdminPage({ session, onLogout }) {
       abas={abas}
       aba={aba}
       aoTrocarAba={setAba}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}`}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}`}
     >
       {confirmModal}
 
-      {aba === "chamados" ? <AdminChamadosPage aoContarAbertos={setChamadosAbertos} /> : null}
+      {/* Cargo sem aba nenhuma: a pessoa entrou e não alcança nada. Dizer
+          isso é melhor que um painel em branco. */}
+      {abasVisiveis.length === 0 && eu.permissoes ? (
+        <div className="sa-empty">
+          <p className="sa-empty__title">Seu cargo não abre nenhuma aba</p>
+          <p className="sa-empty__desc">Peça a um Administrador da plataforma para ajustar as permissões do seu cargo.</p>
+        </div>
+      ) : null}
+
+      {aba === "chamados" ? (
+        <AdminChamadosPage aoContarAbertos={setChamadosAbertos} podeResolver={Boolean(permissoes.resolverChamado)} />
+      ) : null}
       {aba === "tutoriais" ? <AdminTutoriaisPage /> : null}
+      {aba === "usuarios" ? <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} /> : null}
+      {aba === "cargos" ? <AdminCargosPage meuCargoId={eu.cargoId} /> : null}
       {aba === "seguranca" ? <AdminSegurancaPage /> : null}
 
       {aba === "tenants" ? (
@@ -553,9 +621,11 @@ export function SuperAdminPage({ session, onLogout }) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nome, slug ou e-mail…"
           />
-          <Button as="button" type="button" variant="accent" onClick={openCreate}>
-            Novo tenant
-          </Button>
+          {permissoes.editarTenant ? (
+            <Button as="button" type="button" variant="accent" onClick={openCreate}>
+              Novo tenant
+            </Button>
+          ) : null}
         </div>
 
         {error ? <Alert tone="danger">{error}</Alert> : null}
@@ -605,9 +675,14 @@ export function SuperAdminPage({ session, onLogout }) {
                   <Button href={`/vitrine/${t.slug}`} target="_blank" rel="noreferrer" variant="ghost" className="dl-btn--sm" arrow={false}>
                     Vitrine
                   </Button>
-                  <Button as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false} onClick={() => openEdit(t)}>
-                    Editar
-                  </Button>
+                  {/* Botão sem permissão SOME — não aparece desabilitado. Um
+                      botão cinza convida a perguntar "por que não posso?"; a
+                      resposta certa é o cargo, e ela mora na aba Cargos. */}
+                  {permissoes.editarTenant ? (
+                    <Button as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false} onClick={() => openEdit(t)}>
+                      Editar
+                    </Button>
+                  ) : null}
                   {/* ── ENTRAR NA CONTA DO CLIENTE ────────────────────────
                       "Não consigo publicar" é impossível de responder sem ver
                       a tela que a pessoa está vendo, e a alternativa que
@@ -617,16 +692,20 @@ export function SuperAdminPage({ session, onLogout }) {
                       Fica ao lado de Editar e ANTES de Excluir de propósito:
                       é uma ação de suporte, não destrutiva, e encostá-la no
                       botão vermelho aumentaria a chance do clique errado. */}
-                  <Button
-                    as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false}
-                    disabled={entrando === t.id}
-                    onClick={() => entrarComo(t)}
-                  >
-                    {entrando === t.id ? "Entrando…" : "Entrar"}
-                  </Button>
-                  <Button as="button" type="button" variant="danger" className="dl-btn--sm" arrow={false} onClick={() => handleDelete(t)}>
-                    Excluir
-                  </Button>
+                  {permissoes.entrarNoTenant ? (
+                    <Button
+                      as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false}
+                      disabled={entrando === t.id}
+                      onClick={() => entrarComo(t)}
+                    >
+                      {entrando === t.id ? "Entrando…" : "Entrar"}
+                    </Button>
+                  ) : null}
+                  {permissoes.excluirTenant ? (
+                    <Button as="button" type="button" variant="danger" className="dl-btn--sm" arrow={false} onClick={() => handleDelete(t)}>
+                      Excluir
+                    </Button>
+                  ) : null}
                 </div>
               </Reveal>
             );

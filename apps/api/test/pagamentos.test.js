@@ -6,6 +6,7 @@ import { subirApi, criarImobiliariaDeTeste, apagarImobiliaria } from "./helpers.
 import { adminRouter } from "../src/routes/adminRoutes.js";
 import { tenantRouter } from "../src/routes/tenantRoutes.js";
 import { CARGOS_PADRAO, CARGO_ADMIN, PERMISSOES } from "../src/services/cargosPadrao.js";
+import { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } from "../src/services/permissoesSuperAdmin.js";
 import {
   registrarPagamento,
   historicoDoTenant,
@@ -58,6 +59,7 @@ test.before(async () => {
 after(async () => {
   await apiT?.fechar?.();
   await prisma.tenant.deleteMany({ where: { slug: { startsWith: PREFIXO } } });
+  await prisma.superAdmin.deleteMany({ where: { email: { startsWith: PREFIXO } } });
   await prisma.$disconnect();
 });
 
@@ -226,8 +228,19 @@ test("apagar a imobiliária leva o histórico junto", async () => {
    ────────────────────────────────────────────────────────────────────────── */
 test("ativar à mão grava o pagamento, com quem liberou e o período coberto", async () => {
   const t = await criarTenant("rota");
+  /* Um super-admin DE VERDADE, no cargo Administrador: o token só prova
+     identidade, e é o banco que diz se a pessoa existe e o que alcança
+     (`requireSuperAdmin`). Um token assinado para ninguém recebe 401. */
+  const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
+    where: { nome: CARGO_ADMIN_PLATAFORMA },
+    update: {},
+    create: { nome: CARGO_ADMIN_PLATAFORMA, ...permissoesCompletas() },
+  });
+  const equipe = await prisma.superAdmin.create({
+    data: { nome: "Equipe", email: `${PREFIXO}-equipe@omnimob.app`, senha: "x", ativo: true, cargoId: cargoAdmin.id },
+  });
   const token = jwt.sign(
-    { role: "SUPERADMIN", email: "equipe@omnimob.app" },
+    { role: "SUPERADMIN", superAdminId: equipe.id, email: equipe.email },
     process.env.JWT_SECRET || "omnimob-dev-secret",
   );
 
