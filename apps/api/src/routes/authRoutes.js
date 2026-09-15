@@ -775,7 +775,10 @@ const PROPOSITO_RECUPERACAO = "recuperar-senha";
 /* Deriva a impressão digital do hash da senha. É o hash de um hash: o valor não
    volta a ser a senha nem em teoria, e ainda assim muda a cada troca — que é a
    única propriedade de que precisamos. */
-function impressaoDaSenha(senhaHash) {
+/* Exportada porque o convite do super-admin (`adminRoutes`) usa o MESMO
+   mecanismo de link de uso único — e uma segunda impressão digital ali
+   divergiria desta no primeiro ajuste. */
+export function impressaoDaSenha(senhaHash) {
   return crypto.createHash("sha256").update(String(senhaHash || "")).digest("hex").slice(0, 16);
 }
 

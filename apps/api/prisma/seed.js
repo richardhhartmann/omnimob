@@ -4,6 +4,7 @@ import prismaPkg from "@prisma/client";
    novo usa a MESMA lista, e duas cópias divergiriam na primeira permissão nova
    (foi assim que `verConfiguracoes` quase nasceu só num dos dois lados). */
 import { CARGOS_PADRAO as CARGOS, dadosDoCargo } from "../src/services/cargosPadrao.js";
+import { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } from "../src/services/permissoesSuperAdmin.js";
 import { TIPOS_IMOVEL, criarTiposPadrao } from "../src/services/tiposPadrao.js";
 
 const {
@@ -483,21 +484,32 @@ async function seedImoveis(tenants, tiposMap, atributosMap) {
       });
     }
 
-    // Publicações sociais
+    // Publicações sociais. `(propertyId, channel)` deixou de ser único — um
+    // imóvel pode ser publicado mais de uma vez no mesmo canal —, então não há
+    // `upsert` por essa chave: procura a primeira do canal e cria se não houver.
     for (const [channel, status] of Object.entries(im.publications ?? {})) {
-      await prisma.propertyPublication.upsert({
-        where: { propertyId_channel: { propertyId: property.id, channel: PublicationChannel[channel] } },
-        update: { status: PublicationStatus[status], lastAttemptAt: new Date() },
-        create: {
-          tenantId: tenant.id,
-          propertyId: property.id,
-          channel: PublicationChannel[channel],
-          status: PublicationStatus[status],
-          externalRef: status === "PUBLISHED" ? `seed-${channel.toLowerCase()}-${property.id}` : null,
-          errorMessage: status === "FAILED" ? "Token de acesso expirado (exemplo de seed)" : null,
-          lastAttemptAt: new Date(),
-        },
+      const existente = await prisma.propertyPublication.findFirst({
+        where: { propertyId: property.id, channel: PublicationChannel[channel] },
+        select: { id: true },
       });
+      if (existente) {
+        await prisma.propertyPublication.update({
+          where: { id: existente.id },
+          data: { status: PublicationStatus[status], lastAttemptAt: new Date() },
+        });
+      } else {
+        await prisma.propertyPublication.create({
+          data: {
+            tenantId: tenant.id,
+            propertyId: property.id,
+            channel: PublicationChannel[channel],
+            status: PublicationStatus[status],
+            externalRef: status === "PUBLISHED" ? `seed-${channel.toLowerCase()}-${property.id}` : null,
+            errorMessage: status === "FAILED" ? "Token de acesso expirado (exemplo de seed)" : null,
+            lastAttemptAt: new Date(),
+          },
+        });
+      }
     }
 
     // Leads reais (quantidade = leadCount) + eventos de métrica correspondentes
@@ -567,13 +579,28 @@ async function seedSuperAdmin() {
   const nome = process.env.SUPER_ADMIN_NOME || "Super Admin";
   const senhaPlain = process.env.SUPER_ADMIN_PASSWORD || "superadmin";
 
+  /* O cargo Administrador da plataforma, com tudo ligado. A lista de
+     permissões vem do catálogo — a mesma que a rota grava e o middleware lê —,
+     e não de uma cópia aqui. Idempotente: existir é o bastante. */
+  const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
+    where: { nome: CARGO_ADMIN_PLATAFORMA },
+    update: permissoesCompletas(),
+    create: { nome: CARGO_ADMIN_PLATAFORMA, ...permissoesCompletas() },
+  });
+
   const existing = await prisma.superAdmin.findUnique({ where: { email } });
   if (existing) {
-    // Não sobrescreve a senha de um super-admin já existente.
-    await prisma.superAdmin.update({ where: { email }, data: { nome, ativo: true } });
+    // Não sobrescreve a senha de um super-admin já existente. O cargo só é
+    // preenchido se estiver vazio — quem foi rebaixado de propósito continua.
+    await prisma.superAdmin.update({
+      where: { email },
+      data: { nome, ativo: true, ...(existing.cargoId ? {} : { cargoId: cargoAdmin.id }) },
+    });
     console.log(`  ✓ Super-admin já existe: ${email}`);
   } else {
-    await prisma.superAdmin.create({ data: { email, nome, senha: await hashPassword(senhaPlain), ativo: true } });
+    await prisma.superAdmin.create({
+      data: { email, nome, senha: await hashPassword(senhaPlain), ativo: true, cargoId: cargoAdmin.id },
+    });
     console.log(`  ✓ Super-admin criado: ${email}`);
   }
   if (!process.env.SUPER_ADMIN_PASSWORD) {

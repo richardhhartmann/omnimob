@@ -33,8 +33,13 @@ export function AdminLoginPage({ onLogin }) {
 
   function entrar(res) {
     setAdminToken(res.token);
-    // A troca de sessão só acontece quando a tela terminar de sair.
-    sair(() => onLogin({ token: res.token, email: res.email, nome: res.nome }));
+    /* A troca de sessão só acontece quando a tela terminar de sair. As
+       permissões vão junto para o painel desenhar o menu certo no primeiro
+       quadro — ele as relê do servidor logo em seguida (`GET /api/admin/eu`). */
+    sair(() => onLogin({
+      token: res.token, email: res.email, nome: res.nome, id: res.id,
+      cargo: res.cargo, cargoId: res.cargoId, permissoes: res.permissoes,
+    }));
   }
 
   async function handleSenha(e) {

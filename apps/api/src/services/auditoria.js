@@ -43,6 +43,10 @@ function novoStore(req) {
     usuarioId: null,
     usuarioNome: null,
     tenantId: null,
+    /* `true` quando quem age é a Omnimob (super-admin), e não uma imobiliária.
+       É o que libera a gravação dos modelos da plataforma, que não têm
+       `tenantId` para pendurar. Ver `MODELOS_DA_PLATAFORMA`. */
+    plataforma: false,
     ip: req.ip || req.headers["x-forwarded-for"] || null,
     rota: `${req.method} ${req.originalUrl?.split("?")[0] || req.path}`,
   };
@@ -94,6 +98,15 @@ const MODELOS = new Set([
   "TipoImovel", "ModeloAtributo", "Venda", "Tenant", "PerfilBusca",
 ]);
 
+/* Os modelos da PLATAFORMA: pertencem à Omnimob, não a uma imobiliária.
+
+   Entram na mesma tabela, com `tenantId` nulo — a tela do cliente filtra por
+   imobiliária e nunca os vê. Só são gravados quando o contexto diz que o ator
+   é um super-admin (`plataforma: true`, posto por `requireSuperAdmin`): o login
+   também escreve em `SuperAdmin` (o passo do TOTP consumido), e isso não é
+   "alguém alterou um usuário", é a própria pessoa entrando. */
+const MODELOS_DA_PLATAFORMA = new Set(["SuperAdmin", "CargoSuperAdmin"]);
+
 const ACAO = {
   create: "CRIOU", createMany: "CRIOU",
   update: "ALTEROU", updateMany: "ALTEROU", upsert: "ALTEROU",
@@ -106,7 +119,7 @@ const ACAO = {
  * `metaAccessToken` que apareça amanhã já nasce protegido. Falso positivo aqui
  * custa um campo a menos no log; falso negativo custa uma senha em texto puro
  * numa tabela feita para ser lida. */
-const SEGREDO = /senha|password|token|secret|chave|apikey|api_key/i;
+const SEGREDO = /senha|password|token|secret|segredo|recuperacao|chave|apikey|api_key/i;
 
 function limparSegredos(valor, profundidade = 0) {
   if (valor === null || valor === undefined) return valor;
@@ -174,10 +187,11 @@ export function extensaoDeAuditoria(client) {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
           const acao = ACAO[operation];
-          if (!acao || !MODELOS.has(model)) return query(args);
+          const daPlataforma = MODELOS_DA_PLATAFORMA.has(model);
+          if (!acao || !(MODELOS.has(model) || daPlataforma)) return query(args);
 
           const ctx = contextoAtual();
-          if (!ctx?.tenantId) return query(args);
+          if (daPlataforma ? !ctx?.plataforma : !ctx?.tenantId) return query(args);
 
           /* Só na exclusão vale a leitura extra: depois do delete não há mais o
              que ler, e "excluiu Property cmc3x9…" não é resposta para ninguém. */
@@ -192,7 +206,7 @@ export function extensaoDeAuditoria(client) {
 
           const alvo = anterior || (operation.endsWith("Many") ? null : resultado);
           await registrar(client, {
-            tenantId: ctx.tenantId,
+            tenantId: daPlataforma ? null : ctx.tenantId,
             usuarioId: ctx.usuarioId,
             usuarioNome: ctx.usuarioNome,
             acao,
