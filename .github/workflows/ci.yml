@@ -1,4 +1,10 @@
-# Roda em todo PR e em todo push na main.
+# Roda em todo push, de qualquer branch.
+#
+# Por que PUSH e não pull_request: o abrir-pr.yml cria o PR com o GITHUB_TOKEN,
+# e evento gerado por esse token não dispara workflow nenhum — com
+# pull_request aqui, o PR automático nasceria sem check e nunca poderia entrar.
+# Os checks ficam no commit; o PR os encontra pelo SHA, e a regra da main os
+# exige do mesmo jeito.
 #
 # Dois jobs, um por app, porque os testes têm naturezas diferentes (ver
 # CLAUDE.md): os do web são de função pura e renderização isolada; os da API
@@ -7,9 +13,7 @@
 name: CI
 
 on:
-  pull_request:
   push:
-    branches: [main]
 
 # PR que recebe push novo cancela a rodada anterior.
 concurrency:

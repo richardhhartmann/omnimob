@@ -83,8 +83,9 @@ final — então capriche no título do PR, mesmo que os commits da branch sejam
 
 ## Pull requests
 
-1. Abra o PR contra a `main` assim que houver algo para mostrar — como
-   **rascunho** (draft) se ainda não estiver pronto para revisão.
+1. O PR abre **sozinho** no primeiro `git push` da branch, como rascunho
+   (`.github/workflows/abrir-pr.yml`). Quando estiver pronto para revisão,
+   clique em **Ready for review** — é isso que chama o revisor.
 2. Preencha o template. O campo que mais importa é **"Por quê"**: o diff já
    diz o quê.
 3. O CI precisa passar (`.github/workflows/ci.yml` roda os testes dos dois

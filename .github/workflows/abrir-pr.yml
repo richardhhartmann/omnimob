@@ -1,0 +1,43 @@
+# Abre o pull request sozinho no primeiro push de uma branch.
+#
+# A pessoa faz `git push -u origin minha-branch` e o PR aparece como RASCUNHO,
+# com o título do último commit e o template preenchido. Pushes seguintes só
+# atualizam o PR que já existe. Quando terminar, ela clica em "Ready for
+# review" — é aí que o CODEOWNERS pede a revisão. Abrir já pronto pingaria o
+# revisor no primeiro "wip".
+#
+# O PR é criado com o GITHUB_TOKEN, e evento gerado por ele NÃO dispara outros
+# workflows (regra do GitHub contra laços). Por isso o ci.yml roda no PUSH da
+# branch, e não em pull_request: os checks ficam no commit, e o PR os enxerga
+# pelo SHA.
+name: Abrir PR
+
+on:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  abrir:
+    name: abrir pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Criar o PR se ainda não existir
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if gh pr list --head "$BRANCH" --state open --json number --jq 'length' | grep -qv '^0$'; then
+            echo "PR já existe para $BRANCH; nada a fazer."
+            exit 0
+          fi
+          TITULO="$(git log -1 --pretty=%s)"
+          gh pr create --draft --base main --head "$BRANCH" \
+            --title "$TITULO" \
+            --body-file .github/pull_request_template.md
