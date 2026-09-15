@@ -1,0 +1,16 @@
+# Quebra de linha: o Git for Windows converte para CRLF no checkout por padrão
+# (core.autocrlf=true). Para a maior parte do código isso é indiferente, mas o
+# cabeçalho YAML dos skills do Claude Code (.claude/skills/*/SKILL.md) deixa de
+# ser reconhecido com \r no fim de "name: tarefa" — o /tarefa simplesmente não
+# aparece. O mesmo vale para shell script e para os workflows do Actions.
+.claude/**        text eol=lf
+.github/**        text eol=lf
+*.sh              text eol=lf
+*.mjs             text eol=lf
+
+# Binários: nunca converter.
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary
+*.pptx binary
