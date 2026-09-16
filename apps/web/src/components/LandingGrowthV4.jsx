@@ -194,6 +194,11 @@ function Cena({ etapa }) {
   if (etapa === "lead") return <CenaLead />;
   return <CenaCadastro />;
 }
+/* A cena e a folha, para a landing usar as tres cenas dentro da secao de
+   Recursos (uma por aba) sem montar a ProductStorySection inteira. A folha
+   vai junto porque as cenas so se desenham com ela — e ela mora aqui, num
+   template literal, e nao no styles.css. */
+export { Cena as CenaDoFluxo };
 
 /* `divisor`: o DivisorDeOndas da landing, como em TrustStrip. */
 export function ProductStorySection({ onTeste, divisor = null }) {
@@ -1580,5 +1585,10 @@ button.gv4-palco__cta:focus-visible {
 }
 /* OMNIMOB_LANDING_GROWTH_V4_CSS_END */
 `;
+/* Exportada AQUI, depois da declaracao: uma const de modulo so existe a
+   partir da linha dela, e o `export const GV4_CSS = CSS` que morava junto de
+   CenaDoFluxo (200 linhas acima) quebrava no dev do Vite com "Cannot access
+   CSS before initialization" — o build passava porque o Rollup reordena. */
+export const GV4_CSS = CSS;
 
 export default ProductStorySection;

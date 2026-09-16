@@ -9,9 +9,6 @@ import { Iridescencia } from "../components/Iridescencia.jsx";
 import { StaggeredMenu } from "../components/StaggeredMenu.jsx";
 import {
   Buildings,
-  HouseLine,
-  MapPin,
-  Signature,
   PaintBrushBroad,
   ChartLineUp,
   Megaphone,
@@ -19,16 +16,6 @@ import {
   ShieldCheck,
   FacebookLogo,
   InstagramLogo,
-  CloudArrowUp,
-  Sparkle,
-  Globe,
-  ChatCircleText,
-  Storefront,
-  Tag,
-  CreditCard,
-  EnvelopeSimple,
-  FileArrowUp,
-  LinkSimple,
 } from "@phosphor-icons/react";
 import { api } from "../api";
 import { OmnimobSplash } from "../components/OmnimobSplash";
@@ -38,8 +25,9 @@ import Counter from "../components/Counter";
 import SpecularButton from "../components/SpecularButton";
 import { TrialModal } from "../components/TrialModal";
 import {
+  CenaDoFluxo,
+  GV4_CSS,
   MobileStickyCTA,
-  ProductStorySection,
   TrustStrip,
   trackLandingEvent,
 } from "../components/LandingGrowthV4"; // OMNIMOB_LANDING_GROWTH_V4_IMPORT
@@ -206,10 +194,26 @@ const JORNADA = [
 // emoji, que renderiza com a fonte do sistema e destoa entre Windows e Mac.
 // `tela`, `url` e `legenda` alimentam o mock ao lado: cada recurso mostra a
 // parte do produto de que está falando.
+/* ── As seis abas de Recursos, e o que cada uma mostra na moldura ────────────
+
+   Três seções viraram esta: "Recursos" (as abas), "Editor de vitrine" (a demo
+   interativa) e "Veja acontecer" (as três cenas do fluxo cadastro → vitrine →
+   lead). Eram três blocos dizendo a mesma coisa em três desenhos, um atrás do
+   outro; agora é uma tela só, e cada aba abre o que antes era uma seção.
+
+   `tela` decide o que a moldura desenha:
+   - `editor`   → a demo interativa do editor (EditorAoVivo), que já tem a
+                  própria barra de navegador e por isso entra SEM o BrowserMock.
+                  No carrossel do celular ela vira a cena "vitrine" do fluxo:
+                  a demo reage ao ponteiro, e num carrossel de arrastar isso
+                  briga com o gesto.
+   - `cadastro`, `vitrine`, `lead` → as cenas do fluxo (CenaDoFluxo, em
+                  LandingGrowthV4), dentro do BrowserMock.
+   - o resto   → os mocks em silhueta de sempre (Tela). */
 const RECURSOS = [
-  { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar.", tela: "imoveis", url: "omnimob.app / imóveis", legenda: "PAINEL WEB · IMÓVEIS" },
-  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual intuitivo de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "vitrine", url: "omnimob.app / vitrine / editar", legenda: "PAINEL WEB · EDITOR DE VITRINE" },
-  { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel.", tela: "metricas", url: "omnimob.app / métricas", legenda: "PAINEL WEB · MÉTRICAS" },
+  { Icon: Buildings, title: "Gestão de imóveis", desc: "Cadastre imóveis com fotos, atributos, tipos e status. Tudo organizado e pronto para divulgar.", tela: "cadastro", url: "omnimob.app / imóveis / novo", legenda: "PAINEL WEB · NOVO IMÓVEL" },
+  { Icon: PaintBrushBroad, title: "Vitrine personalizável", desc: "Um editor visual intuitivo de arrastar e soltar para montar a página pública da sua imobiliária, do seu jeito.", tela: "editor", url: "omnimob.app / vitrine / editar", legenda: "PAINEL WEB · EDITOR DE VITRINE" },
+  { Icon: ChartLineUp, title: "Leads e métricas", desc: "Capture interessados pela vitrine e acompanhe visualizações, leads e vendas por imóvel.", tela: "lead", url: "omnimob.app / leads", legenda: "PAINEL WEB · LEADS" },
   { Icon: Megaphone, title: "Publicação em redes", desc: "Divulgue imóveis no Facebook, Instagram e WhatsApp com legenda pronta em poucos cliques.", tela: "redes", url: "omnimob.app / publicações", legenda: "PAINEL WEB · PUBLICAÇÕES" },
   { Icon: UsersThree, title: "Usuários e permissões", desc: "Crie cargos com permissões granulares para corretores, marketing, gerência e mais.", tela: "usuarios", url: "omnimob.app / usuários", legenda: "PAINEL WEB · EQUIPE" },
   { Icon: ShieldCheck, title: "Multi-tenant seguro", desc: "Cada imobiliária com seus próprios dados, usuários e vitrine — isolados e seguros.", tela: "tenants", url: "omnimob.app / admin", legenda: "SUPER-ADMIN · TENANTS" },
@@ -550,188 +554,186 @@ const PAGINAS_DA_OMNIMOB = [
   { para: "/contato", label: "Falar com a gente" },
 ];
 
-/* `cor` é qualquer fundo CSS (as marcas com degradê usam o mesmo do painel, em
-   PropertyForm) e `texto` só aparece quando o fundo é claro demais para branco
-   — caso do dourado das métricas. */
-/* `curto` é o rótulo que aparece no baralho. O leque deixa ~77px de cada peça à
-   mostra, e nomes como "Formulário de contato" saíam cortados no meio — numa
-   seção cujo trabalho é justamente nomear os canais. O nome inteiro continua em
-   `name`, que é o que vai para a lista lida por leitor de tela. */
-const INTEGRACOES = [
-  { type: "REDES", name: "Facebook", Icon: FacebookLogo, cor: "#1877f2" },
+/* ── OS RELATOS DA PAREDE ────────────────────────────────────────────────────
+
+   Cada cartão da parede "Por que Omnimob" é uma pessoa falando: nome, cargo,
+   imobiliária, cidade e o que ela diz. `frase` é o que cabe no cartão; `relato`
+   é o texto inteiro, que abre no painel ao clicar.
+
+   ── TUDO AQUI É FICTÍCIO, E ESTÁ ESCRITO ASSIM DE PROPÓSITO ──
+   Pessoas, imobiliárias e cidades não existem — são hipóteses de uso do
+   produto, uma por recurso, para a parede não ser uma lista de funcionalidades
+   com outro nome. Por isso NÃO há fotos de pessoas: `foto` fica vazio e o
+   cartão desenha um avatar de iniciais. No dia em que houver depoimentos de
+   verdade, é só preencher `foto` (public/relatos/…) e trocar o texto — e é
+   nesse dia que esta seção deixa de ser hipótese. Depoimento inventado com
+   rosto de gente numa página que vende é publicidade enganosa (CDC, art. 37).
+
+   `tom` (mint | gold | accent | rose) pinta o cartão como os antigos cartões de
+   estatística: é o "marca-texto" que dá ritmo à parede. Os de tom `rose` são
+   os do Omniflow.
+
+   ── O TOM DO TEXTO ──
+   Escrito como gente escreve, e não como release: minúscula no começo, frase
+   sem ponto, "pra", "tá", "kkk", número em algarismo, um parêntese no meio da
+   ideia. Vinte e quatro depoimentos todos na mesma gramática perfeita denunciam
+   a origem de longe — e é a irregularidade que faz parecer que são pessoas
+   diferentes. Ao editar, resista a "corrigir" para o padrão. */
+const RELATOS = [
   {
-    type: "REDES",
-    name: "Instagram",
-    Icon: InstagramLogo,
-    cor: "linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",
+    nome: "Mariana Teles", cargo: "Sócia-diretora", imobiliaria: "Horizonte Azul Imóveis", cidade: "Vila Serena", uf: "SP",
+    frase: "o lead chega do site já com o imóvel e o corretor certo. acabou a planilha de segunda de manhã, graças a Deus",
+    relato: "Antes os contatos do site caíam num e-mail que alguém lembrava (ou não) de repassar no grupo. Hoje o interessado aparece no painel com o imóvel que ele viu, de onde veio e quem vai atender. Pela primeira vez eu sei de onde vem cada negócio, e olha que já tô nisso há 14 anos.",
   },
-  { type: "MENSAGENS", name: "WhatsApp", Icon: WhatsappMarca, cor: "#25d366" },
-  { type: "IA", name: "Google Gemini", curto: "Gemini", Icon: Sparkle, cor: "linear-gradient(135deg,#4285f4,#9b72cb,#d96570)" },
-  { type: "VITRINE", name: "Página online", curto: "Página Online", Icon: Globe, cor: ACCENT },
-  /* ── Os portais ────────────────────────────────────────────────────────────
-     Substituíram Contato, Painel e Planilhas: os três eram recursos INTERNOS
-     numa faixa que se chama "Canais e integrações". Portal é integração de
-     verdade — e é o que a imobiliária procura ao decidir se troca de sistema.
-
-     As cores são as das marcas. O DESENHO não: usar o logotipo real exigiria
-     baixá-lo de algum lugar, e logotipo de terceiro numa página de vendas é
-     pedido de licença de uso, não detalhe técnico. Um ícone nosso na cor deles
-     identifica sem se apropriar.
-
-     `texto` inverte a tinta nos fundos claros: o amarelo do Mercado Livre e o
-     laranja do ZAP não sustentam texto branco. */
-  { type: "PORTAL", name: "Mercado Livre", curto: "Mercado Livre", Icon: Storefront, cor: "#ffe600", texto: "#2d3277" },
-  { type: "PORTAL", name: "OLX Imóveis", curto: "OLX", Icon: Tag, cor: "#6e0ad6" },
-  { type: "PORTAL", name: "ZAP Imóveis", curto: "ZAP Imóveis", Icon: Buildings, cor: "#ff6600", texto: "#0a0a0b" },
-  /* VivaReal e Imovelweb leem o MESMO feed que o ZAP e a OLX — o VRSync é o
-     esquema do Grupo OLX, e o XML que servimos declara o namespace deles
-     (ver feedPortais.js). Não é integração nova: é a mesma porta, e estavam
-     faltando na lista de quem entra por ela.
-
-     #0092FF do VivaReal foi conferido. O vermelho do Imovelweb é ESTIMATIVA —
-     não achei o hex publicado em fonte de marca confiável. Trocar aqui basta. */
-  { type: "PORTAL", name: "VivaReal", curto: "VivaReal", Icon: HouseLine, cor: "#0092ff" },
-  { type: "PORTAL", name: "Imovelweb", curto: "Imovelweb", Icon: MapPin, cor: "#e6332a" },
-  /* #4C00FF é o cobalto do guia de marca oficial da DocuSign. O adaptador de
-     assinatura fala com ela e com a Clicksign; a Clicksign ficou de fora da
-     faixa só porque não confirmei a cor dela. */
-  { type: "ASSINATURA", name: "DocuSign", curto: "DocuSign", Icon: Signature, cor: "#4c00ff" },
-  { type: "DOMÍNIO", name: "Domínio próprio", curto: "Domínio", Icon: LinkSimple, cor: "#111827" },
+  {
+    nome: "Rafael Nogueira", cargo: "Corretor", imobiliaria: "Casa & Cia", cidade: "Monte Aurora", uf: "MG",
+    frase: "montei a vitrine num sábado de manhã arrastando os bloco. não liguei pra ninguém de TI kkk",
+    relato: "Sempre dependi de agência pra mexer no site, e cada vírgula levava uma semana e um boleto. No editor eu mesmo troquei a ordem dos blocos, botei as cores da imobiliária e escrevi direto na página. O que tá no editor é o que sai no ar, sem surpresa.",
+    tom: "mint",
+  },
+  {
+    nome: "Cláudia Farias", cargo: "Gerente comercial", imobiliaria: "Lar Serrano", cidade: "Alto do Cedro", uf: "RS",
+    frase: "Sei qual imóvel todo mundo abre e ninguém pergunta. Aí é foto ou preço, não tem erro",
+    relato: "O desempenho por imóvel me mostra visualização, lead e venda no mesmo cadastro. Apartamento que recebe 300 visitas e zero contato tem alguma coisa errada — antes eu ia descobrir isso 3 meses depois, na reunião de resultado. Agora vejo na quarta-feira.",
+  },
+  {
+    nome: "Diego Salvatti", cargo: "Dono", imobiliaria: "Pontal Imóveis", cidade: "Porto das Garças", uf: "SC",
+    frase: "Cadastro uma vez e vai pro site, pro ZAP e pro Instagram. Uma ficha só. Parece bobagem mas não é",
+    relato: "Eu mantinha três cadastros do mesmo imóvel: sistema, site e portal. Preço errado em um deles e pronto, dor de cabeça com cliente. Hoje a ficha é uma, o feed dos portais e a publicação nas redes leem dela e eu durmo tranquilo.",
+    tom: "gold",
+  },
+  {
+    nome: "Beatriz Camargo", cargo: "Corretora", imobiliaria: "Maresia Imobiliária", cidade: "Baía Clara", uf: "ES",
+    frase: "o aviso de lead parado me salvou de perder um cliente que eu tinha esquecido na quinta. ele fechou.",
+    relato: "Recebo um e-mail quando um lead fica dois dias sem ninguém encostar. Parece pouco, mas eu atendo umas 30 pessoas por semana e sempre alguém cai no esquecimento, é humano. Agora quem cai volta — e o cliente nem fica sabendo que quase foi esquecido rs",
+  },
+  {
+    nome: "Henrique Dutra", cargo: "Sócio", imobiliaria: "Raiz Imóveis", cidade: "São Bento das Colinas", uf: "PR",
+    frase: "cada um vê o que é dele. estagiário não apaga imóvel mais. sim, isso já aconteceu aqui",
+    relato: "Criei os cargos: administrador, corretor e um só pra quem edita a vitrine. Antes era todo mundo com a mesma senha de admin, e um belo dia sumiram 12 imóveis e ninguém sabia como. Hoje o registro de atividade diz quem fez o quê, e cada um alcança o que o cargo permite.",
+    tom: "accent",
+  },
+  {
+    nome: "Luciana Prado", cargo: "Diretora", imobiliaria: "Bem-Morar", cidade: "Santa Rita das Pedras", uf: "GO",
+    frase: "Nosso domínio, nossa cara. O cliente não faz ideia que tem uma Omnimob por trás, e é assim que tem que ser",
+    relato: "A vitrine está no nosso endereço, com as nossas cores e o nosso logo. A tecnologia fica invisível. Quem aparece pra quem procura imóvel é a imobiliária — o software é coadjuvante, e o bom coadjuvante ninguém nota.",
+  },
+  {
+    nome: "Tiago Menezes", cargo: "Corretor autônomo", imobiliaria: "Tiago Menezes Imóveis", cidade: "Bosque Alegre", uf: "SP",
+    frase: "sou eu sozinho. pago no pix, sem cartão, e o sistema me lembra antes de vencer. nunca mais acordei fora do ar",
+    relato: "Não tenho CNPJ com cartão corporativo, é eu e o celular. Pago o plano mensal por Pix e recebo um lembrete 7 dias antes e outro na véspera. Pra quem trabalha sozinho um dia fora do ar é um dia sem trabalhar, então isso pra mim não é detalhe não.",
+    tom: "mint",
+  },
+  {
+    nome: "Fernanda Lisboa", cargo: "Marketing", imobiliaria: "Vértice Imóveis", cidade: "Ribeirão Dourado", uf: "MG",
+    frase: "A descrição do imóvel a IA escreve em 10 segundos. Eu dou uma revisada, ajusto o tom e vai",
+    relato: "Escrever descrição pra 40 imóveis novos por mês era o meu gargalo, sério. Hoje a IA gera título, descrição e legenda a partir da ficha. Eu tiro os exageros, boto a nossa voz e publico. O tempo que sobrou virou vídeo e story, que é o que traz gente de verdade.",
+  },
+  {
+    nome: "Paulo Sérgio Andrade", cargo: "Dono", imobiliaria: "Alameda Imóveis", cidade: "Pedra Branca do Norte", uf: "CE",
+    frase: "importei 1.200 imóveis do sistema antigo pela URL do feed. numa tarde. eu tinha pavor disso",
+    relato: "Eu tinha medo de trocar de sistema por causa do acervo, era o que me segurava. Colei o endereço do feed do sistema antigo, conferi a prévia — preço no lugar certo, fotos copiadas — e rodei. Entraram como rascunho e a equipe revisou aos poucos antes de publicar. Nem doeu.",
+    tom: "gold",
+  },
+  {
+    nome: "Aline Botelho", cargo: "Corretora", imobiliaria: "Sol Nascente", cidade: "Vale dos Ipês", uf: "MT",
+    frase: "errei o layout inteiro da vitrine e voltei atrás com ctrl+z. umas 50 vezes, se bobear",
+    relato: "No editor eu experimento sem medo: mudo tudo de lugar, não gosto, desfaço. Ele guarda 50 passos e vai salvando sozinho enquanto eu mexo. Nunca mais perdi uma versão que estava boa por ter clicado no lugar errado.",
+  },
+  {
+    nome: "Marcos Vinícius Rocha", cargo: "Gerente", imobiliaria: "Terra Firme Imóveis", cidade: "Campo Sereno", uf: "MS",
+    frase: "O celular tem o layout dele. Não é o site do computador espremido — isso muda tudo pra gente",
+    relato: "70% dos nossos acessos são pelo celular. Na Omnimob a vitrine do celular é montada separada da do computador: mesma informação, outra ordem, outro tamanho de foto. Foi a diferença entre o cliente rolar a página e o cliente ir embora.",
+    tom: "accent",
+  },
+  {
+    nome: "Renata Siqueira", cargo: "Atendimento", imobiliaria: "Novo Lar", cidade: "Serra do Lume", uf: "RJ",
+    frase: "o funil me mostrou onde os leads morriam. era na visita. mudamos o roteiro e pronto",
+    relato: "O relatório de atendimento mostra até onde cada lead chegou e por que os perdidos se perderam. Descobrimos que a maioria parava depois da visita. Trocamos quem acompanhava as visitas, e o motivo de perda mais comum simplesmente sumiu do gráfico. Dado bom é isso.",
+  },
+  {
+    nome: "Gustavo Amorim", cargo: "Corretor", imobiliaria: "Recanto Imóveis", cidade: "Lagoa Nova do Sul", uf: "RS",
+    frase: "peço a arte do status com um toque, publico e vou pra próxima visita. eram 6 por dia no Canva, dentro do carro",
+    relato: "O sistema gera a arte do imóvel no formato do status do WhatsApp, com foto, preço e o meu contato. Eu só publico. Parece detalhe mas eu posto 6 imóveis por dia, e antes fazia cada um no Canva, no estacionamento, entre uma visita e outra. Ganhei uma hora por dia fácil.",
+    tom: "gold",
+  },
+  {
+    nome: "Simone Carvalho", cargo: "Sócia", imobiliaria: "Trilha Imóveis", cidade: "Cruzeiro das Palmas", uf: "BA",
+    frase: "Abri um chamado 22h e de manhã a resposta tava lá no painel, com a conversa inteira. Não é ticket perdido em e-mail",
+    relato: "O suporte fica dentro do sistema: abro o chamado, o print da tela vai junto, e a conversa continua ali. Quando resolvem eu sei quem resolveu e quando. Se o problema voltar, reabro o mesmo chamado em vez de explicar tudo de novo pra outra pessoa.",
+  },
+  {
+    nome: "Eduardo Peixoto", cargo: "Diretor", imobiliaria: "Ipê Amarelo Imobiliária", cidade: "Praia do Sol Nascente", uf: "RN",
+    frase: "Meus dados são meus. Exportei tudo num arquivo só pra ter certeza — e tinha tudo mesmo",
+    relato: "Antes de assinar perguntei como é que eu saía, se um dia quisesse. A resposta foi um botão: exporta imóveis, clientes, leads e equipe num JSON. Testei no primeiro mês. Saber que a porta tá aberta foi, ironicamente, o que me fez ficar.",
+    tom: "mint",
+  },
+  {
+    nome: "Patrícia Ramalho", cargo: "Gerente de locação", imobiliaria: "Âncora Imóveis", cidade: "Mirante Alto", uf: "SP",
+    frase: "O cliente diz o que procura e o sistema me avisa quando entra um imóvel parecido. Já fechei locação no dia que o imóvel entrou",
+    relato: "Cadastro o perfil de busca: bairro, faixa de preço, quartos. Quando entra um imóvel que casa com o perfil, ou quase casa, um pouquinho acima do teto, eu vejo o cruzamento e ligo na hora. Locação é velocidade, quem liga primeiro leva.",
+  },
+  {
+    nome: "Ricardo Tavares", cargo: "Dono", imobiliaria: "Mirante Imobiliária", cidade: "Jardim das Acácias", uf: "PR",
+    frase: "a página de cada bairro aparece no Google. gente chega procurando \"apartamento em\" e cai na minha vitrine, do nada",
+    relato: "A vitrine gera uma página por bairro e por tipo de imóvel, com o texto certo pra busca. Não fiz nada além de cadastrar bem o endereço. Em 4 meses o site passou a trazer mais contato que o portal que eu pago caro. Tô até repensando o portal.",
+    tom: "accent",
+  },
+  {
+    nome: "Camila Ferraz", cargo: "Corretora", imobiliaria: "Aurora Imóveis", cidade: "Terra Nova do Vale", uf: "TO",
+    frase: "o interessado marca a visita direto na página do imóvel, com dia e período. metade do vai-e-vem do zap sumiu",
+    relato: "O formulário do imóvel tem pedido de visita: a pessoa escolhe a data e se prefere de manhã ou à tarde, e isso chega pra mim como lead já com contexto. Ligo só pra confirmar. Antes eram uns 8 áudios pra marcar uma visita, vocês sabem como é.",
+  },
+  /* ── O Omniflow ── */
+  {
+    nome: "Dra. Helena Vasconcelos", cargo: "Jurídico", imobiliaria: "Vale Verde Imobiliária", cidade: "Colinas do Oeste", uf: "MG",
+    frase: "O contrato não sai com campo em branco. Falta dado, ele não gera — e me diz o que falta. Pro jurídico isso é tudo",
+    relato: "Nas minutas do Omniflow um marcador sem informação vira pendência, não um espaço vazio no documento. Já vi contrato assinado com o CPF do comprador em branco, em outro sistema, e o transtorno que deu. Aqui isso é impossível por construção.",
+    tom: "rose",
+  },
+  {
+    nome: "Otávio Brandão", cargo: "Financeiro", imobiliaria: "Acácia Imóveis", cidade: "Enseada Bonita", uf: "SC",
+    frase: "a comissão é dividida no fechamento e fica congelada ali. mudou a política depois? o passado não muda. fechar o mês virou conferência",
+    relato: "O split do negócio é calculado uma vez, com aritmética decimal (quem já viu 50838,000000000007 numa planilha sabe do que eu falo), e gravado no próprio negócio. Quando a diretoria mudou os percentuais em janeiro, nada de dezembro foi reescrito.",
+    tom: "rose",
+  },
+  {
+    nome: "Vanessa Quintela", cargo: "Gerente de vendas", imobiliaria: "Brisa Imobiliária", cidade: "Vila Formosa do Sul", uf: "RS",
+    frase: "O negócio só vira ganho com jurídico e financeiro validando. E o painel diz o que falta — acabou o \"quem tava esperando quem\"",
+    relato: "A trava de fechamento não bloqueia em silêncio, ela lista os motivos: falta a validação jurídica, falta a financeira, falta o contrato assinado. Cada um sabe o que é seu. Antes era reunião de meia hora pra descobrir que faltava uma assinatura.",
+    tom: "rose",
+  },
+  {
+    nome: "Bruno Cavalcanti", cargo: "Corretor", imobiliaria: "Marco Zero Imóveis", cidade: "Pontal das Águas", uf: "PE",
+    frase: "o lead do ZAP entra no funil sozinho. colei uma URL no portal e nunca mais copiei e colei nada",
+    relato: "Cada portal ganhou um endereço de captação, e é isso que vai no integrador deles. O que chega vira negócio no primeiro estágio, com nome, telefone e o imóvel. Quando um portal mudou o formato do envio, o suporte olhou o corpo original da chamada e ajustou no mesmo dia.",
+    tom: "rose",
+  },
+  {
+    nome: "Isabela Monteiro", cargo: "Sócia", imobiliaria: "Girassol Imóveis", cidade: "Morro Azul da Serra", uf: "SP",
+    frase: "o contrato vai pra assinatura digital de dentro do negócio e volta assinado pro mesmo lugar. eram 4 sistemas antes",
+    relato: "Gero a minuta, mando pra Clicksign sem sair da tela e acompanho quem já assinou. Quando o último assina, o negócio recebe o contrato e libera o fechamento. Antes eram quatro sistemas abertos e um e-mail com anexo pra cada parte. Não sinto falta.",
+    tom: "rose",
+  },
 ];
 
-// Faixa horizontal de destaques. Cards claros funcionam como "marca-texto"
-// no meio dos escuros — mesma ideia da faixa de depoimentos da referência.
-/* `detalhe` é o que aparece ao clicar na peça, na parede de destaques. Texto
-   novo — confira a redação antes de publicar; o resto dos campos é o que já
-   existia na faixa. */
-const FAIXA_EXTRA = [
-  {
-    kind: "text",
-    title: "Leads direto no painel",
-    desc: "O interesse começa na vitrine e chega até sua equipe sem planilha no caminho.",
-    detalhe: "Quando um visitante entra em contato por um imóvel, o lead fica associado à imobiliária e pode ser acompanhado pelo painel. Você centraliza imóvel, interessado e origem da oportunidade no mesmo lugar.",
-  },
-  {
-    kind: "stat",
-    value: "1",
-    label: "Painel para toda a operação",
-    tone: "mint",
-    detalhe: "Imóveis, leads, usuários, clientes, divulgação e desempenho convivem dentro da mesma plataforma. Menos abas abertas, menos informação espalhada e mais contexto para sua equipe trabalhar.",
-  },
-  {
-    kind: "text",
-    title: "Sua marca, não a nossa",
-    desc: "Cores, identidade e conteúdo da vitrine ficam com a cara da sua imobiliária.",
-    detalhe: "A Omnimob permite personalizar cores, textos, destaques, banners e a organização dos blocos. A tecnologia fica por trás — quem aparece para o cliente é a sua marca.",
-  },
-  {
-    kind: "text",
-    title: "Salvo enquanto você cria",
-    desc: "A vitrine acompanha suas alterações sem depender de um botão Salvar a cada passo.",
-    detalhe: "As mudanças realizadas no editor são salvas automaticamente. Você pode ajustar textos, posições, cores e blocos com mais fluidez sem interromper o processo a cada alteração.",
-  },
-  {
-    kind: "stat",
-    value: "50",
-    label: "Alterações que você pode retroceder.",
-    tone: "accent",
-    detalhe: "O editor mantém até cinquenta etapas no histórico de desfazer e refazer. Isso deixa você experimentar layouts, posições e estilos sem medo de perder uma versão que estava funcionando melhor.",
-  },
-  {
-    kind: "text",
-    title: "Desempenho por imóvel",
-    desc: "Entenda quais imóveis recebem atenção e quais realmente geram oportunidades.",
-    detalhe: "A plataforma registra eventos de visualização, leads e vendas ligados aos imóveis. Assim, o cadastro deixa de ser apenas uma ficha e passa a carregar também o histórico de desempenho daquele anúncio.",
-  },
-  {
-    kind: "text",
-    title: "Uma ficha, vários usos",
-    desc: "Cadastre a informação uma vez e reaproveite em toda a jornada do imóvel.",
-    detalhe: "Título, preço, endereço, atributos, imagens e demais informações partem do mesmo cadastro. A vitrine, os insights e os recursos de divulgação trabalham sobre essa única fonte de dados.",
-  },
-  {
-    kind: "text",
-    title: "Equipe com acessos diferentes",
-    desc: "Administração, operação e edição da vitrine não precisam ter as mesmas permissões.",
-    detalhe: "A plataforma diferencia funções como administrador, agente e editor de vitrine. Isso permite organizar a equipe de acordo com o papel de cada pessoa sem entregar o mesmo nível de acesso para todo mundo.",
-  },
-  {
-    kind: "text",
-    title: "Imagens prontas para a vitrine",
-    desc: "Fotos dos imóveis organizadas e disponíveis para uso direto na experiência pública.",
-    detalhe: "As imagens ficam associadas ao cadastro do imóvel, com ordenação própria e armazenamento em nuvem. Assim, a galeria exibida para o visitante parte diretamente do conteúdo administrado pela imobiliária.",
-  },
-  {
-    kind: "text",
-    title: "Do painel para a vitrine",
-    desc: "Ativou o imóvel? Ele já pode fazer parte da experiência pública da imobiliária.",
-    detalhe: "O mesmo catálogo administrado internamente alimenta a vitrine pública. Isso reduz retrabalho e evita manter uma relação de imóveis no sistema e outra completamente separada no site.",
-  },
-  {
-    kind: "stat",
-    value: "2",
-    label: "Experiências de layout por vitrine",
-    tone: "gold",
-    detalhe: "Desktop e mobile possuem layouts independentes. Você pode tratar cada tela como uma experiência própria ou começar pelo desktop e copiar a estrutura para o celular antes dos ajustes finais.",
-  },
-  {
-    kind: "text",
-    title: "Sua operação cresce junto",
-    desc: "A Omnimob foi construída para atender várias imobiliárias sem misturar nenhuma delas.",
-    detalhe: "Cada imobiliária possui seu próprio contexto de usuários, imóveis, leads, configurações e vitrine. A arquitetura multi-tenant permite que a plataforma cresça mantendo cada operação logicamente isolada.",
-  },
-
-  /* ── O OMNIMOB FLOW ────────────────────────────────────────────────────────
-     Os cartões acima falam do que a imobiliária TEM: acervo, vitrine, leads,
-     equipe. Estes falam do que ela está FECHANDO — é a divisão dos dois módulos,
-     e a parede é o lugar onde ela aparece sem precisar de uma seção própria.
-
-     Ficam no fim e juntos de propósito. Na parede a ordem some (cada coluna
-     recebe um recorte embaralhado do acervo), mas a lista de acessibilidade
-     logo abaixo lê na ordem escrita, e ali eles formam um bloco com assunto
-     único em vez de aparecerem intercalados sem contexto.
-
-     O tom `rose` existe só aqui: é o rosa da palavra "flow" na arte, o mesmo
-     acento que o módulo usa no painel. Um cartão de estatística do Flow com o
-     índigo do Hub diria a coisa errada de relance. */
-  {
-    kind: "stat",
-    value: "7",
-    label: "Estágios até o negócio fechar",
-    tone: "rose",
-    detalhe: "O funil do Omniflow vai de Lead a Ganho passando por Contato, Visita, Proposta, Negociação e Aprovação. Perdido fica fora dessa sequência de propósito: um negócio perdido não é uma etapa a caminho da seguinte, e tratá-lo como tal distorceria qualquer leitura do funil.",
-  },
-  {
-    kind: "text",
-    title: "Do portal direto ao funil",
-    desc: "O interessado que chega pelo ZAP, VivaReal ou OLX entra como negócio, sem ninguém copiar e colar.",
-    detalhe: "Cada canal de captação recebe um endereço próprio, e é ele que a imobiliária cola no integrador do portal. O Omniflow entende os formatos conhecidos e ainda assim guarda o corpo original de cada chamada por noventa dias — é o que permite descobrir por que uma integração parou, em vez de apenas constatar que parou.",
-  },
-  {
-    kind: "text",
-    title: "O contrato não sai pela metade",
-    desc: "Campo sem dado vira pendência, e não um espaço em branco no documento assinado.",
-    detalhe: "As minutas são modelos com marcadores que o Omniflow preenche a partir do negócio. Quando falta a informação de um marcador, o contrato não é gerado: o sistema lista o que falta. Um documento com lacuna é pior que documento nenhum, porque parece pronto.",
-  },
-  {
-    kind: "text",
-    title: "Fechar exige mais de um sim",
-    desc: "Jurídico e financeiro validam antes de o negócio virar ganho — e o painel diz exatamente o que falta.",
-    detalhe: "A trava de fechamento é conferida num lugar só e devolve os motivos, nunca um simples bloqueio. Quem olha a tela sabe se o que falta é a validação jurídica, a financeira ou o contrato assinado, em vez de descobrir por tentativa.",
-  },
-  {
-    kind: "text",
-    title: "Comissão dividida na hora",
-    desc: "O split é calculado no fechamento e congelado ali, com a parte da imobiliária saindo como resto.",
-    detalhe: "Os valores ficam gravados no próprio negócio: mudar a política de comissão depois não reescreve o que já foi fechado. O cálculo usa aritmética decimal do começo ao fim e arredonda uma vez só — em ponto flutuante, uma comissão de 6% sobre R$ 847.300 não fecha a conta.",
-  },
-  {
-    kind: "text",
-    title: "Assinatura sem sair do fluxo",
-    desc: "O contrato gerado segue para assinatura digital e o negócio acompanha o retorno.",
-    detalhe: "O Omniflow conversa com Clicksign e DocuSign por um adaptador único, com quatro verbos: enviar, consultar, cancelar e ler o retorno. O resto do sistema nunca fala com o fornecedor diretamente, então trocar de provedor é trabalho de um arquivo — e não de todas as telas que mencionam contrato.",
-  },
-];
+/* Avatar de iniciais, no lugar da foto que não existe (ver o cabeçalho de
+   RELATOS). Uma cor por pessoa, tirada do nome, para dois cartões vizinhos não
+   saírem iguais. Com `foto` preenchida, a imagem entra no lugar. */
+const CORES_DO_AVATAR = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#14b8a6", "#f97316"];
+function AvatarDoRelato({ nome, foto }) {
+  if (foto) return <img className="dl-relato__foto" src={foto} alt="" width={44} height={44} loading="lazy" />;
+  const partes = nome.replace(/^Dra?\.\s*/, "").split(/\s+/);
+  const iniciais = (partes[0][0] + (partes[partes.length - 1][0] || "")).toUpperCase();
+  let h = 0;
+  for (const ch of nome) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+  const cor = CORES_DO_AVATAR[h % CORES_DO_AVATAR.length];
+  return (
+    <span className="dl-relato__foto dl-relato__foto--iniciais" style={{ "--avatar": cor }} aria-hidden="true">
+      {iniciais}
+    </span>
+  );
+}
 
 
 
@@ -1002,6 +1004,12 @@ function usePrecosVigentes(periodo, pacotes) {
           nota: mediaMensal != null ? notaDoAnual(p, doPeriodo.valor) : NOTA_DO_PERIODO.mensal,
           notaLonga: mediaMensal != null,
           economia: ehAnual ? vivo.economia || null : null,
+          /* A economia do anual SEMPRE, independente do periodo em vista: e
+             dela que o alternador tira o selo "Anual (2,5 meses gratis)" — e o
+             selo so serve enquanto o Mensal esta marcado. `economia`, acima,
+             continua condicionada ao periodo porque o "economize R$ …" do
+             cartao so faz sentido quando o preco mostrado ja e o anual. */
+          economiaAnual: vivo?.economia || null,
         };
       }),
     [precos, periodo, pacotes, carregando],
@@ -1062,7 +1070,7 @@ function PeriodoToggle({ valor, aoTrocar, selo }) {
         className={`pl-periodo__rotulo${anual ? " is-on" : ""}`}
         onClick={() => aoTrocar("anual")}
       >
-        Anual{selo ? <span className="pl-periodo__selo"> ({selo})</span> : null}
+        Anual
       </button>
     </div>
   );
@@ -1506,71 +1514,12 @@ function DashboardMockup() {
    capturas reais —, montadas com as mesmas peças (`dl-skel`, cartões, chips)
    para as seis telas parecerem o mesmo produto. */
 function Tela({ tipo }) {
-  /* A célula fala do EDITOR de vitrine, e o que estava aqui era uma vitrine
-     pronta — banner e cartões, a página publicada, não a ferramenta que a monta.
-     Este é um recorte do editor de verdade: barra com desfazer/refazer e o par
-     desktop/mobile, painel lateral com abas e tema de cores, e a tela com os
-     blocos, um deles selecionado. Continua tudo em silhueta, como os outros
-     mocks — o que interessa é reconhecer a ferramenta, não ler o conteúdo. */
-  if (tipo === "vitrine") {
-    return (
-      <div className="dl-builder">
-        <div className="dl-builder__barra">
-          <span className="dl-builder__acoes">
-            <i /><i />
-          </span>
-          <span className="dl-builder__modos">
-            <i className="is-on" /><i />
-          </span>
-          <span className="dl-mono dl-builder__salvo">● SALVO</span>
-        </div>
-
-        <div className="dl-builder__corpo">
-          <aside className="dl-builder__painel">
-            <span className="dl-builder__abas">
-              <i className="is-on" /><i />
-            </span>
-            <span className="dl-skel dl-builder__rot" />
-            <span className="dl-builder__cores">
-              {/* Quatro amostras, não cinco: a quinta não cabia na largura do
-                  painel e escapava por fora dele. */}
-              {[ACCENT, GOLD, MINT, "#0ea5e9"].map((cor, i) => (
-                <i key={cor} className={i === 0 ? "is-on" : ""} style={{ background: cor }} />
-              ))}
-            </span>
-            <span className="dl-skel dl-builder__rot" style={{ width: "46%" }} />
-            {[68, 40].map((v) => (
-              <span key={v} className="dl-builder__slider">
-                <i style={{ width: `${v}%` }} />
-              </span>
-            ))}
-            {/* Os campos de dados da imobiliária fecham o painel por baixo — é o
-                que ele tem no editor de verdade, e é o que impede a coluna de
-                terminar no meio quando a moldura estica. */}
-            <span className="dl-builder__campos">
-              <i /><i />
-            </span>
-          </aside>
-
-          <div className="dl-builder__tela">
-            {BUILDER_BLOCOS.map((b) => (
-              <span
-                key={b.id}
-                className={`dl-builder__bloco${b.sel ? " is-sel" : ""}`}
-                style={{ gridArea: b.id }}
-              >
-                <em className="dl-mono">{b.nome}</em>
-                {b.sel
-                  ? ["no", "ne", "so", "se"].map((quina) => (
-                      <i key={quina} className={`dl-builder__alca dl-builder__alca--${quina}`} />
-                    ))
-                  : null}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+  /* As três cenas do fluxo (cadastro → vitrine → lead) vêm do módulo do
+     "Veja acontecer", que era uma seção própria — ver o cabeçalho de RECURSOS.
+     A cena traz a própria moldura de cartão; dentro do navegador ela perde a
+     borda (ver .dl-browser__tela .gv4-cena no CSS). */
+  if (tipo === "cadastro" || tipo === "vitrine" || tipo === "lead") {
+    return <CenaDoFluxo etapa={tipo} />;
   }
 
   if (tipo === "metricas") {
@@ -1751,7 +1700,7 @@ function Tela({ tipo }) {
    são quadros — as esteiras do acervo, o editor, os ambientes dos tenants —, e
    quadro que termina no meio da moldura deixa um vão morto embaixo. As outras
    são listas: elas acabam onde o conteúdo acaba, e é assim que devem acabar. */
-const TELAS_CHEIAS = new Set(["imoveis", "vitrine", "tenants"]);
+const TELAS_CHEIAS = new Set(["imoveis", "tenants", "cadastro", "vitrine", "lead"]);
 
 /* Mock do painel dentro de uma moldura de navegador (seção de recursos).
 
@@ -1937,7 +1886,7 @@ function Recursos() {
                   o encaixe do trilho não deixa passar mais de um cartão por
                   gesto, então a próxima já chega pronta. */}
               <BrowserMock
-                recurso={f}
+                recurso={f.tela === "editor" ? { ...f, tela: "vitrine" } : f}
                 indice={i}
                 vazio={Math.abs(i - ativo) > 1}
                 painelId={`dl-tela-recurso-${i}`}
@@ -1984,7 +1933,9 @@ function Recursos() {
         ))}
       </div>
       <Reveal className="dl-split__tela" delay={160} style={{ display: "flex" }}>
-        <BrowserMock recurso={RECURSOS[ativo]} indice={ativo} />
+        {RECURSOS[ativo].tela === "editor"
+          ? <EditorAoVivo key="editor" />
+          : <BrowserMock recurso={RECURSOS[ativo]} indice={ativo} />}
       </Reveal>
     </div>
   );
@@ -2613,21 +2564,18 @@ function Planos({ planos, aoTestar, temFlow, aoAlternarPacote }) {
    Mesma marcação da faixa que existia antes (`dl-fcard`), com um modificador
    que a solta da largura fixa: dentro da parede quem manda no tamanho é a
    peça, e o cartão só precisa preenchê-la. */
-function cartaoDaFaixa(c) {
+function cartaoDaFaixa(r) {
   return (
-    <div className={`dl-fcard dl-fcard--parede ${c.kind === "stat" ? `dl-fcard--${c.tone}` : ""}`}>
-      {c.kind === "stat" ? (
-        <>
-          <strong className="dl-fcard__value">{c.value}</strong>
-          <span className="dl-fcard__label">{c.label}</span>
-        </>
-      ) : (
-        <>
-          <span className="dl-fcard__quote" aria-hidden="true">”</span>
-          <h3 className="dl-fcard__title">{c.title}</h3>
-          <p className="dl-fcard__desc">{c.desc}</p>
-        </>
-      )}
+    <div className={`dl-fcard dl-fcard--parede dl-relato${r.tom ? ` dl-fcard--${r.tom}` : ""}`}>
+      <div className="dl-relato__quem">
+        <AvatarDoRelato nome={r.nome} foto={r.foto} />
+        <div className="dl-relato__nome">
+          <strong>{r.nome}</strong>
+          <span>{r.cargo} · {r.imobiliaria}</span>
+        </div>
+      </div>
+      <p className="dl-relato__frase">“{r.frase}”</p>
+      <span className="dl-relato__onde">{r.cidade} · {r.uf}</span>
     </div>
   );
 }
@@ -2645,230 +2593,6 @@ function cartaoDaFaixa(c) {
 
    No celular a parede encolhe em vez de sumir: menos colunas, peças menores e
    menos inclinação — a mesma cena, num palco estreito. */
-/* ── A GRADE DE CANAIS ───────────────────────────────────────────────────────
-
-   Substitui o baralho em leque (BounceCards). O leque tinha um problema de
-   leitura: peças giradas e sobrepostas escondem umas às outras, e quem chega
-   nesta seção está fazendo exatamente uma pergunta — "o sistema fala com os
-   canais que eu uso?". Essa pergunta se responde vendo os NOVE de uma vez, e
-   não descobrindo o nono embaixo do oitavo.
-
-   ── A COR SÓ EXISTE NO HOVER ──
-
-   Em repouso os nove cartões são iguais: superfície neutra, ícone e nome em
-   cinza. Nenhum acende sozinho. É o que impede a seção de virar uma vitrine de
-   logotipos de terceiros brigando entre si — nove marcas fortes acesas ao mesmo
-   tempo roubam a página de quem ela é.
-
-   Ao passar o mouse, aquele cartão vira a marca: fundo na cor dela, e uma cena
-   curta mostrando o que a Omnimob FAZ ali. Uma de cada vez, porque só há um
-   ponteiro.
-
-   ── AS CENAS SÃO DOM, E SÓ RODAM NO HOVER ──
-
-   Cada cena é meia dúzia de divs com keyframes. Nada de vídeo, nada de GIF: o
-   mais pesado da seção continua sendo o texto. E a animação é declarada DENTRO
-   do :hover, não pausada por `animation-play-state` — assim ela recomeça do
-   zero a cada entrada do ponteiro, em vez de a pessoa pegar a cena no meio.
-
-   Quem pediu menos movimento recebe o quadro final parado: a cor entra, a cena
-   aparece montada, nada se move. Ver o bloco de prefers-reduced-motion no CSS.
-
-   ── SOBRE OS DESENHOS DAS MARCAS ──
-
-   Vale a mesma regra que já valia no leque, e ela está no comentário de
-   INTEGRACOES: as CORES são das marcas, os ÍCONES são nossos. Logotipo de
-   terceiro numa página de vendas é pedido de licença, não detalhe técnico. */
-
-/* O que a Omnimob faz em cada canal, em meia dúzia de elementos.
-
-   A cena responde "o que acontece aqui?", e não "como é a tela desse app?" —
-   desenhar o feed do Instagram seria imitar a interface deles; mostrar uma
-   grade em que UM quadro acende é mostrar a publicação sendo feita. */
-function CenaDoCanal({ nome }) {
-  switch (nome) {
-    /* O post sobe e assenta no topo do feed. */
-    case "Facebook":
-      return (
-        <span className="cn-cena cn-cena--feed">
-          <i className="cn-post" />
-          <i className="cn-linha" />
-          <i className="cn-linha" />
-          <i className="cn-linha" />
-        </span>
-      );
-
-    /* Nove quadros da grade do perfil; o novo acende e cresce. */
-    case "Instagram":
-      return (
-        <span className="cn-cena cn-cena--grade">
-          {Array.from({ length: 9 }, (_, k) => (
-            <i key={k} className={k === 4 ? "cn-quadro cn-quadro--novo" : "cn-quadro"} />
-          ))}
-        </span>
-      );
-
-    /* A arte 1080×1920 subindo como status: a barra corre no topo. */
-    case "WhatsApp":
-      return (
-        <span className="cn-cena cn-cena--status">
-          <i className="cn-fone">
-            <i className="cn-barra" />
-            <i className="cn-arte" />
-          </i>
-        </span>
-      );
-
-    /* A descrição se escrevendo sozinha, com o brilho da IA piscando. */
-    case "Google Gemini":
-      return (
-        <span className="cn-cena cn-cena--texto">
-          <i className="cn-brilho" />
-          <i className="cn-frase" />
-          <i className="cn-frase" />
-          <i className="cn-frase" />
-        </span>
-      );
-
-    /* A vitrine se montando: cabeçalho desce, dois cartões sobem. */
-    case "Página online":
-      return (
-        <span className="cn-cena cn-cena--vitrine">
-          <i className="cn-topo" />
-          <i className="cn-bloco" />
-          <i className="cn-bloco" />
-        </span>
-      );
-
-    /* O anúncio criado pela API: a caixa se desenha e o aceite chega. */
-    case "Mercado Livre":
-      return (
-        <span className="cn-cena cn-cena--anuncio">
-          <i className="cn-caixa" />
-          <i className="cn-aceite" />
-        </span>
-      );
-
-    /* O anúncio no ar, com o selo assentando por cima. */
-    case "OLX Imóveis":
-      return (
-        <span className="cn-cena cn-cena--selo">
-          <i className="cn-cartao" />
-          <i className="cn-etiqueta" />
-        </span>
-      );
-
-    /* O ZAP vem BUSCAR o feed, e o lead volta pelo mesmo caminho. Os dois
-       sentidos importam: é a única integração da lista que é de mão dupla, e
-       ela é puxada por eles, não empurrada por nós. */
-    case "ZAP Imóveis":
-      return (
-        <span className="cn-cena cn-cena--troca">
-          <i className="cn-doc" />
-          <i className="cn-trilho" />
-          <i className="cn-ida" />
-          <i className="cn-volta" />
-        </span>
-      );
-
-    /* O endereço trocando de dono. Aqui o texto é texto de verdade, e não
-       barrinha cega: o argumento desta integração É o endereço. */
-    case "Domínio próprio":
-      return (
-        <span className="cn-cena cn-cena--url">
-          <i className="cn-barra-url">
-            <span className="cn-url cn-url--nossa">omnimob.app/sua-marca</span>
-            <span className="cn-url cn-url--dela">suaimobiliaria.com.br</span>
-          </i>
-        </span>
-      );
-
-    /* O MESMO feed servindo tres portais de uma vez. E a verdade da integracao:
-       nao ha uma ligacao por portal, ha um XML que os tres vem buscar. */
-    case "VivaReal":
-      return (
-        <span className="cn-cena cn-cena--leque">
-          <i className="cn-fonte" />
-          <i className="cn-raio" />
-          <i className="cn-raio" />
-          <i className="cn-raio" />
-          <i className="cn-destino" />
-          <i className="cn-destino" />
-          <i className="cn-destino" />
-        </span>
-      );
-
-    /* O imovel caindo no mapa. Diferencia do VivaReal de proposito: dois
-       cartoes contando a mesma historia do feed seria repeticao. */
-    case "Imovelweb":
-      return (
-        <span className="cn-cena cn-cena--mapa">
-          <i className="cn-malha" />
-          <i className="cn-alfinete" />
-          <i className="cn-sombra" />
-        </span>
-      );
-
-    /* A rubrica se desenhando. E o unico traco de verdade das doze cenas —
-       stroke-dashoffset num caminho SVG, porque assinatura e um GESTO, e
-       barrinha nenhuma diz isso. */
-    case "DocuSign":
-      return (
-        <span className="cn-cena cn-cena--rubrica">
-          <i className="cn-papel" />
-          <svg className="cn-traco" viewBox="0 0 120 40" aria-hidden="true">
-            <path d="M4 30C14 8 20 6 24 16s-2 20 2 20 10-26 16-26 4 22 9 22 8-14 14-14 6 8 12 8 12-6 15-10" />
-          </svg>
-          <i className="cn-selo" />
-        </span>
-      );
-
-    default:
-      return null;
-  }
-}
-
-function CartaoDeCanal({ it }) {
-  return (
-    <li
-      className={`cn-card${it.texto ? " cn-card--claro" : ""}`}
-      style={{ "--canal-cor": it.cor, "--canal-tinta": it.texto || "#ffffff" }}
-    >
-      {/* O fundo é uma camada própria, e não o `background` do cartão: a cor de
-          algumas marcas é um degradê (Instagram, Gemini), e degradê não faz
-          transição. Uma camada por cima, com a opacidade animada, faz. */}
-      <i className="cn-card__cor" aria-hidden="true" />
-
-      <span className="cn-card__repouso" aria-hidden="true">
-        <it.Icon size={30} weight="fill" />
-        <b>{it.curto || it.name}</b>
-      </span>
-
-      <span className="cn-card__ativo" aria-hidden="true">
-        <CenaDoCanal nome={it.name} />
-        <span className="cn-card__rodape">
-          <it.Icon size={15} weight="fill" />
-          <b>{it.curto || it.name}</b>
-        </span>
-      </span>
-
-      {/* O nome de verdade, para leitor de tela e para busca. As duas camadas
-          acima são `aria-hidden` porque repetem o mesmo nome duas vezes. */}
-      <span className="cn-card__rotulo">{it.type}: {it.name}</span>
-    </li>
-  );
-}
-
-function GradeDeCanais() {
-  return (
-    <ul className="cn-grade">
-      {INTEGRACOES.map((it) => (
-        <CartaoDeCanal key={it.name} it={it} />
-      ))}
-    </ul>
-  );
-}
-
 function ParedeDeDestaques() {
   // Congela a deriva quando a máquina não sustenta o laço por quadro.
   const { podeQuadroAQuadro } = useEfeitos();
@@ -2893,7 +2617,7 @@ function ParedeDeDestaques() {
   }, []);
 
   const pecas = useMemo(
-    () => FAIXA_EXTRA.map((c) => ({ title: c.label || c.title, content: cartaoDaFaixa(c), dados: c })),
+    () => RELATOS.map((r) => ({ title: r.nome, content: cartaoDaFaixa(r), dados: r })),
     [],
   );
 
@@ -2946,26 +2670,30 @@ function ParedeDeDestaques() {
           não anunciar. Aqui eles aparecem uma vez só, na ordem escrita, e cada
           um abre o mesmo painel que o clique na peça abre. */}
       <ul className="dl-porque__lista">
-        {FAIXA_EXTRA.map((c) => (
-          <li key={c.title || c.label}>
-            <button type="button" onClick={() => setAberto(c)}>
-              {c.title || `${c.value} — ${c.label}`}
+        {RELATOS.map((r) => (
+          <li key={r.nome}>
+            <button type="button" onClick={() => setAberto(r)}>
+              {r.nome}, {r.imobiliaria}
             </button>
           </li>
         ))}
       </ul>
 
       {aberto ? (
-        <div className="dl-porque__painel" role="dialog" aria-modal="true" aria-label={aberto.title || aberto.label}>
+        <div className="dl-porque__painel" role="dialog" aria-modal="true" aria-label={`Relato de ${aberto.nome}`}>
           {/* Fundo clicável para fechar: com a parede andando atrás, um clique
               fora do painel é o gesto que a pessoa tenta primeiro. */}
           <div className="dl-porque__saida" onClick={() => setAberto(null)} aria-hidden="true" />
           <Reveal className="dl-porque__caixa">
-            <span className="dl-porque__tag">
-              {aberto.kind === "stat" ? aberto.value : "DESTAQUE"}
-            </span>
-            <h3>{aberto.title || aberto.label}</h3>
-            <p>{aberto.detalhe || aberto.desc}</p>
+            <span className="dl-porque__tag">RELATO</span>
+            <div className="dl-relato__quem dl-relato__quem--painel">
+              <AvatarDoRelato nome={aberto.nome} foto={aberto.foto} />
+              <div className="dl-relato__nome">
+                <h3>{aberto.nome}</h3>
+                <span>{aberto.cargo} · {aberto.imobiliaria} · {aberto.cidade}, {aberto.uf}</span>
+              </div>
+            </div>
+            <p>“{aberto.frase}”</p>
             <Button
               as="button"
               type="button"
@@ -3161,7 +2889,7 @@ function ConteudoDaLanding() {
   /* O selo do alternador é o melhor desconto entre os planos — um número só
      para uma escolha só. Por plano, a economia em reais aparece no cartão. */
   const seloPeriodo = useMemo(() => {
-    const melhor = PLANS.map((p) => p.economia)
+    const melhor = PLANS.map((p) => p.economiaAnual)
       .filter(Boolean)
       .sort((x, y) => (y.mesesGratis || 0) - (x.mesesGratis || 0))[0];
     return selosDaEconomia(melhor);
@@ -3204,7 +2932,11 @@ function ConteudoDaLanding() {
 
   return (
     <div className="dl-root">
-      <OmnimobStyles extra={CSS} />
+      {/* A folha das cenas do fluxo vai junto: elas moram na secao de
+          Recursos agora (ver RECURSOS), e nao numa secao propria que trazia o
+          proprio <style>. */}
+      <OmnimobStyles extra={`${CSS}
+${GV4_CSS}`} />
 
       <OmnimobSplash />
 
@@ -3386,32 +3118,6 @@ function ConteudoDaLanding() {
         </div>
       </section>
 
-      {/* ── Editor de vitrine ── */}
-      <section className="dl-section dl-section--alt dl-section--amplo" id="editor">
-        <DivisorDeOndas tom="escuro" />
-        <div className="dl-wrap dl-editor">
-          <Reveal>
-            <Eyebrow tone={ROSE}>EDITOR VISUAL</Eyebrow>
-            <h2 className="dl-h2">
-              <span className="dl-h2__strong">Sua vitrine,</span>
-              <span className="dl-h2__soft">montada arrastando e soltando.</span>
-            </h2>
-            <p className="dl-lead" style={{ maxWidth: "460px" }}>
-              Monte sua vitrine arrastando blocos, ajuste cores e escreva direto na página.
-            </p>
-            <p className="dl-body" style={{ maxWidth: "460px" }}>
-              Desktop e mobile têm layouts independentes. Tudo é salvo automaticamente enquanto você edita.
-            </p>
-          </Reveal>
-
-          <EditorAoVivo />
-        </div>
-      </section>
-
-      {/* OMNIMOB_LANDING_ZEBRA_V41 */}
-      {/* OMNIMOB_LANDING_GROWTH_V4_PRODUCT_START */}
-      <ProductStorySection onTeste={() => abrirTeste("", "product-story")} divisor={<DivisorDeOndas tom="grafite" />} />
-      {/* OMNIMOB_LANDING_GROWTH_V4_PRODUCT_END */}
       {/* ── Recursos + mock ── */}
       <section id="recursos" className="dl-section dl-section--alt">
         <DivisorDeOndas tom="escuro" />
@@ -3426,15 +3132,52 @@ function ConteudoDaLanding() {
 
       
 
-      {/* ── Integrações ── */}
+      {/* ── Integrações ──────────────────────────────────────────────────────
+          Texto de um lado, a arte com as marcas do outro. Substitui a grade de
+          doze cartões animados (uma cena por canal): a seção virou uma
+          apresentação, não uma lista de consulta — quem quer saber "tem ZAP?"
+          vê a marca na arte, e quem quer entender o argumento lê o texto.
+
+          A arte é UMA imagem, e as marcas de terceiros estão nela: os ícones
+          próprios que a grade desenhava existiam para não usar logotipo alheio
+          sem licença — regra que continua valendo para o que este código
+          desenha. A imagem é responsabilidade de quem a montou.
+
+          Arte à esquerda e texto à direita no desktop; empilhados, texto
+          primeiro, no celular (o argumento antes da ilustração). */}
       <section className="dl-section dl-section--compacto" id="integracoes">
         <DivisorDeOndas tom="grafite" />
-        <div className="dl-wrap">
-          <SectionHead eyebrow="CANAIS E INTEGRAÇÕES" strong="Conectada aos canais" soft="onde seu cliente já está.">
-            Do cadastro aos portais, redes e assinatura digital — sem espalhar a operação por várias ferramentas.
-          </SectionHead>
+        <div className="dl-wrap dl-canais">
+          <Reveal className="dl-canais__copy">
+            <Eyebrow>CANAIS E INTEGRAÇÕES</Eyebrow>
+            <h2 className="dl-h2">
+              <span className="dl-h2__strong">Conectada aos canais</span>
+              <span className="dl-h2__soft">onde seu cliente já está.</span>
+            </h2>
+            <p className="dl-lead">
+              Do cadastro aos portais, redes e assinatura digital — sem espalhar a operação por
+              várias ferramentas.
+            </p>
+            <p className="dl-body">
+              ZAP, VivaReal, OLX e Mercado Livre recebem os imóveis direto do acervo; Facebook,
+              Instagram e WhatsApp, a publicação; o contrato sai assinado pela Clicksign ou DocuSign.
+              E há uma API própria, com webhooks, para o que a sua equipe já usa.
+            </p>
+            <div className="dl-btn-row">
+              <Button href="/contato" variant="ghost" arrow={false}>Falar sobre integrações</Button>
+            </div>
+          </Reveal>
 
-          <GradeDeCanais />
+          <Reveal className="dl-canais__arte" delay={120}>
+            <img
+              src="/plataformas_omnimob.png"
+              alt="Marcas dos portais, redes sociais e serviços conectados à Omnimob"
+              width={1280}
+              height={720}
+              loading="lazy"
+              decoding="async"
+            />
+          </Reveal>
         </div>
       </section>
 
@@ -3620,18 +3363,21 @@ function ConteudoDaLanding() {
         </div>
       </section>
 
-      {/* ── CTA final (seção clara) ── */}
-      <section id="contato" className="dl-cta" ref={vantaRef}>
-        {/* A seção escura de cima escorre em ondas sobre esta, a clara. */}
-        <DivisorDeOndas tom="escuro" />
-        {/* ── O fundo ────────────────────────────────────────────────────
-            Sem escalopes aqui: o shader já é o movimento desta seção, e as
-            flores disputavam com ele em cima do mesmo fundo claro.
+      {/* ── O FECHO: CTA + rodapé sobre um fundo só ──────────────────────
+          O shader iridescente era o fundo do CTA; agora é o fundo dos DOIS.
+          O rodapé virou um cartão escuro arredondado no meio, e o que sobra
+          dos lados dele é o shader continuando — a página termina na mesma
+          textura em que o CTA começou, em vez de num retângulo preto.
 
-            `seguirMouse` LIGADO nesta seção e em nenhuma outra: é o fim da
-            página, o lugar onde a pessoa já parou para decidir. O deslocamento
-            é pequeno (`amplitude`) — o suficiente para o fundo responder sem
-            virar brinquedo por cima de um botão. */}
+          ── O fundo ──
+          Sem escalopes aqui: o shader já é o movimento desta seção, e as
+          flores disputavam com ele em cima do mesmo fundo claro.
+
+          `seguirMouse` LIGADO aqui e em nenhuma outra seção: é o fim da
+          página, o lugar onde a pessoa já parou para decidir. O deslocamento
+          é pequeno (`amplitude`) — o suficiente para o fundo responder sem
+          virar brinquedo por cima de um botão. */}
+      <div className="dl-fecho">
         {podeWebGL ? (
           <Iridescencia
             ativo={nevoaPerto}
@@ -3639,49 +3385,106 @@ function ConteudoDaLanding() {
             velocidade={0.55}
             amplitude={0.12}
             seguirMouse
-            className="dl-cta__fundo"
+            className="dl-fecho__fundo"
           />
         ) : null}
+
+      {/* ── CTA final (seção clara) ── */}
+      <section id="contato" className="dl-cta" ref={vantaRef}>
+        {/* Sem onda aqui: a seção escura de cima vira esta por um degradê que
+            começa por baixo dela — ver .dl-fecho no CSS. */}
+        {/* ── DUAS PLACAS QUE SE ENCAIXAM ──────────────────────────────────
+            À esquerda, a placa do texto: um cartão de contorno com o lado
+            direito INCLINADO; à direita, uma placa menor, recortada pelo
+            `clip-path` no formato complementar, que hoje é só um espaço
+            reservado (a imagem entra depois). As duas se sobrepõem um pouco
+            (margem negativa) para lerem como peças de um encaixe, e não como
+            duas caixas lado a lado.
+
+            As formas são dois SVGs cada (desktop e celular): no celular o
+            corte inclinado vira uma base curva, e a placa da direita passa a
+            ser uma faixa embaixo do texto. A do contorno é só traço
+            (preserveAspectRatio="none", para acompanhar a caixa); a do recorte
+            é um clipPath em objectBoundingBox, para valer em qualquer tamanho. */}
         <Reveal className="dl-wrap dl-cta__inner">
-          {/* A marca fecha a página aqui, e não por acaso: esta é a única
-              seção clara, a única em que os vazados do PNG (as janelas e o
-              miolo do "D") têm fundo para aparecer. */}
-          <span className="dl-cta__brand">
-            <img src={LOGO_SIMBOLO_SRC} alt="Omnimob" />
-          </span>
-          {/* Sem `tone`: a bolinha índigo se perdia sobre o shader, do mesmo
-              jeito que os cinzas do texto se perdiam. A eyebrow inteira é
-              branca aqui — as três regras estão juntas em `.dl-cta`. */}
-          <Eyebrow>PRÓXIMO PASSO</Eyebrow>
-          <h2 className="dl-cta__title">
-            <span>Pronto para vender</span>
-            <span>mais imóveis</span>
-            {/* Dois spans, e nao um: a lapide usa o `background` do elemento
-                para o vidro, e `background-clip: text` recortaria a PLACA no
-                formato das letras. O de dentro carrega o texto e o degrade. */}
-            <span className="dl-cta__grad">
-              <span className="dl-cta__grad-texto">com processo?</span>
-            </span>
-          </h2>
-          <p className="dl-cta__sub">
-            Crie um ambiente de teste em segundos. Já tem uma imobiliária rodando? A gente traz a
-            sua base junto.
-          </p>
-          {/* Um botão só. A dupla "Testar grátis / Assinar a Omnimob" oferecia
-              uma escolha que não existe mais — e ainda dividia a atenção no
-              exato ponto em que a página pede uma decisão. */}
-          <div className="dl-btn-row dl-btn-row--center">
-            <Button as="button" type="button" variant="dark" onClick={() => abrirTeste()}>
-              Testar grátis
-            </Button>
+          <svg className="dl-cta__defs" aria-hidden="true" width="0" height="0">
+            <defs>
+              <clipPath id="dl-cta-forma-desktop" clipPathUnits="objectBoundingBox">
+                <path transform="scale(0.002331002331002331 0.0016666666666666668)" d="M428.5 520C428.5 564.183 392.682 600 348.5 600L80.5996 600C25.5366 600 -13.0652 545.668 5.05588 493.672L158.401 53.6723C169.601 21.5336 199.91 3.3688e-05 233.944 3.77597e-05L348.499 5.14644e-05C392.682 5.67502e-05 428.5 35.8173 428.5 80.0001L428.5 520Z" />
+              </clipPath>
+              <clipPath id="dl-cta-forma-mobile" clipPathUnits="objectBoundingBox">
+                <path transform="scale(0.002777777777777778 0.006289308176100629)" d="M2.06245e-06 102.967C9.23389e-07 133.895 25.0721 158.967 56 158.967L309.384 158.967C337.338 158.967 360 136.306 360 108.351C360 84.7272 343.659 64.2451 320.625 58.9985L68.437 1.55576C33.3874 -6.42777 5.11036e-06 20.2099 3.78644e-06 56.1572L2.06245e-06 102.967Z" />
+              </clipPath>
+            </defs>
+          </svg>
+
+          <div className="dl-cta__dupla">
+            <div className="dl-cta__placa">
+              <svg className="dl-cta__contorno dl-cta__contorno--desktop" preserveAspectRatio="none" viewBox="0 0 915 594" aria-hidden="true">
+                <path d="M80 0.500007C36.0934 0.500003 0.499999 36.0934 0.499997 80L0.49998 514C0.499978 557.906 36.0933 593.5 80 593.5L681.855 593.5C715.615 593.5 745.693 572.178 756.871 540.323L909.161 106.323C927.303 54.6234 888.936 0.500081 834.146 0.500076L80 0.500007Z" />
+              </svg>
+              <svg className="dl-cta__contorno dl-cta__contorno--mobile" preserveAspectRatio="none" viewBox="0 0 360 501" aria-hidden="true">
+                <path d="M359.5 40.9673C359.5 19.1521 341.815 1.46728 320 1.46728L40.0001 1.46726C18.1849 1.46726 0.500151 19.152 0.500149 40.9672L0.500022 396.121C0.50002 414.526 13.2114 430.492 31.1485 434.616L311.148 498.999C335.892 504.688 359.5 485.893 359.5 460.503L359.5 40.9673Z" />
+              </svg>
+
+              <div className="dl-cta__texto">
+                {/* Sem `tone`: a bolinha índigo se perdia sobre o shader, do
+                    mesmo jeito que os cinzas do texto se perdiam. A eyebrow
+                    inteira é branca aqui — as três regras estão juntas em
+                    `.dl-cta`. */}
+                <Eyebrow>PRÓXIMO PASSO</Eyebrow>
+                <h2 className="dl-cta__title">
+                  <span>Pronto para vender</span>
+                  <span>mais imóveis</span>
+                  {/* Dois spans, e nao um: a lapide usa o `background` do
+                      elemento para o vidro, e `background-clip: text`
+                      recortaria a PLACA no formato das letras. O de dentro
+                      carrega o texto e o degrade. */}
+                  <span className="dl-cta__grad">
+                    <span className="dl-cta__grad-texto">com processo?</span>
+                  </span>
+                </h2>
+                <p className="dl-cta__sub">
+                  Crie um ambiente de teste em segundos. Já tem uma imobiliária rodando? A gente
+                  traz a sua base junto.
+                </p>
+              </div>
+
+              {/* O principal continua sendo um só: "Testar grátis". O segundo
+                  não concorre com ele — é a saída para quem quer conversar
+                  antes de testar, e leva a /contato. */}
+              <div className="dl-btn-row">
+                <Button as="button" type="button" variant="dark" onClick={() => abrirTeste()}>
+                  Testar grátis
+                </Button>
+                <Button href="/contato" variant="light" arrow={false}>
+                  Falar com a gente
+                </Button>
+              </div>
+            </div>
+
+            {/* O espaço da imagem. Vazio de propósito por enquanto — a forma
+                já está no lugar para a arte entrar como `object-fit: cover`. */}
+            <div className="dl-cta__vaga" aria-hidden="true">
+              <svg className="dl-cta__vaga-traco dl-cta__vaga-traco--desktop" preserveAspectRatio="none" viewBox="0 0 429 600">
+                <path d="M428.5 520C428.5 564.183 392.682 600 348.5 600L80.5996 600C25.5366 600 -13.0652 545.668 5.05588 493.672L158.401 53.6723C169.601 21.5336 199.91 3.3688e-05 233.944 3.77597e-05L348.499 5.14644e-05C392.682 5.67502e-05 428.5 35.8173 428.5 80.0001L428.5 520Z" />
+              </svg>
+              <svg className="dl-cta__vaga-traco dl-cta__vaga-traco--mobile" preserveAspectRatio="none" viewBox="0 0 360 159">
+                <path d="M2.06245e-06 102.967C9.23389e-07 133.895 25.0721 158.967 56 158.967L309.384 158.967C337.338 158.967 360 136.306 360 108.351C360 84.7272 343.659 64.2451 320.625 58.9985L68.437 1.55576C33.3874 -6.42777 5.11036e-06 20.2099 3.78644e-06 56.1572L2.06245e-06 102.967Z" />
+              </svg>
+            </div>
           </div>
+
           <p className="dl-mono dl-cta__note">OMNIMOB · IMÓVEIS · VITRINE · LEADS · IA · GESTÃO DE IMOBILIÁRIAS</p>
         </Reveal>
       </section>
 
       {/* ── Footer ── */}
       <footer className="dl-footer">
-        {/* O CTA claro escorre sobre o rodapé, como a seção escura escorreu sobre ele. */}
+        {/* O cartão: tudo do rodapé mora dentro dele. É ele que é escuro e
+            arredondado; o <footer> em si é transparente, e o shader do fecho
+            aparece nas laterais e embaixo. */}
+        <div className="dl-footer__cartao">
         {/* O par da marca fechando a página. Grande e quase invisível (4%): o
             rodapé é onde o olho já desacelerou, e uma forma discreta ali é a
             diferença entre a página TERMINAR e a página simplesmente parar.
@@ -3763,7 +3566,9 @@ function ConteudoDaLanding() {
           <SeletorDeEfeitos />
           <span>FEITO PARA IMOBILIÁRIAS BRASILEIRAS</span>
         </div>
+        </div>
       </footer>
+      </div>
     </div>
   );
 }
@@ -4321,100 +4126,18 @@ const CSS = `
 .dl-browser__tela.is-cheia { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 /* O quadro é sempre o último filho — o que vem antes é o rótulo ou os chips. */
 .dl-browser__tela.is-cheia > :last-child { flex: 1; min-height: 0; }
+/* As cenas do fluxo dentro do navegador: a moldura de cartao que elas trazem
+   (borda, raio, sombra, largura de 660px) e do palco antigo; aqui quem e a
+   moldura e o proprio navegador. */
+.dl-browser__tela .gv4-cena { width: 100%; border: 0; border-radius: 0; box-shadow: none; }
+/* A demo do editor no lugar do mock: ela e um grid, e o pai e flex — sem isto
+   ela encolhe ao conteudo em vez de ocupar a coluna. */
+.dl-split__tela > .dl-ed { flex: 1; min-width: 0; }
 @keyframes dlTela {
   from { opacity: 0; transform: translateY(9px); }
   to { opacity: 1; transform: none; }
 }
 
-/* ── Editor de vitrine (tela "vitrine") ──
-   Barra de ferramentas, painel lateral e tela com os blocos: as três partes do
-   editor de verdade, na ordem em que elas aparecem lá. O que estava aqui antes
-   era uma vitrine publicada — o resultado, não a ferramenta —, e a célula fala
-   justamente da ferramenta. */
-.dl-builder { display: flex; flex-direction: column; gap: 10px; }
-.dl-builder__barra {
-  display: flex; align-items: center; gap: 8px;
-  padding-bottom: 9px; border-bottom: 1px solid var(--line);
-}
-.dl-builder__acoes { display: flex; gap: 4px; }
-.dl-builder__acoes i { width: 18px; height: 14px; border-radius: 4px; background: rgba(255,255,255,0.10); }
-/* Par desktop/mobile: um segmentado, com o lado ativo aceso. */
-.dl-builder__modos { display: flex; gap: 3px; padding: 2px; border-radius: 6px; background: rgba(255,255,255,0.05); }
-.dl-builder__modos i { width: 22px; height: 10px; border-radius: 4px; background: rgba(255,255,255,0.10); }
-.dl-builder__modos i.is-on { background: rgba(255,255,255,0.34); }
-.dl-builder__salvo { margin-left: auto; font-size: 8px; color: var(--mint); }
-
-.dl-builder__corpo { display: grid; grid-template-columns: 86px 1fr; gap: 10px; flex: 1; min-height: 0; }
-.dl-builder__painel {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 9px; border-radius: 10px;
-  background: var(--surface); border: 1px solid var(--line);
-}
-.dl-builder__abas { display: flex; gap: 4px; }
-.dl-builder__abas i { flex: 1; height: 11px; border-radius: 4px; background: rgba(255,255,255,0.08); }
-.dl-builder__abas i.is-on { background: rgba(129,140,248,0.45); }
-.dl-builder__rot { width: 62%; height: 4px; }
-.dl-builder__cores { display: flex; gap: 4px; }
-/* Podem encolher, mas não crescer, e continuam redondas ao encolher (aspect-
-   ratio no lugar de uma altura fixa). O painel é estreito e fica mais estreito
-   ainda no celular: com largura fixa, a última amostra escapava por fora dele em
-   vez de a fila se ajustar. */
-.dl-builder__cores i {
-  flex: 0 1 11px; aspect-ratio: 1 / 1; min-width: 0;
-  border-radius: 999px; box-shadow: 0 0 0 1px rgba(255,255,255,0.16);
-}
-.dl-builder__cores i.is-on { box-shadow: 0 0 0 1.5px #fff; }
-.dl-builder__slider { display: block; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.10); }
-.dl-builder__slider i { display: block; height: 100%; border-radius: 999px; background: var(--accent-soft); }
-.dl-builder__campos { display: flex; flex-direction: column; gap: 5px; margin-top: auto; }
-.dl-builder__campos i { height: 16px; border-radius: 5px; background: rgba(255,255,255,0.06); }
-
-/* A tela repete o arranjo padrão do editor: linha cheia em cima e embaixo,
-   destaques dividindo a do meio com os imóveis.
-
-   As linhas são proporcionais, e não fixas em pixels: a moldura estica com a
-   altura disponível, e com alturas fixas a linha do meio comia toda a sobra
-   enquanto cabeçalho, widgets e rodapé continuavam três lascas no topo e no pé.
-   Em fração elas crescem juntas e o desenho continua sendo uma página. */
-.dl-builder__tela {
-  display: grid; gap: 5px; padding: 6px;
-  grid-template-columns: 1fr 1fr;
-  grid-template-areas: "cab cab" "tit tit" "des imo" "wid wid" "rod rod";
-  grid-template-rows: 0.45fr 0.55fr 2.4fr 0.85fr 0.4fr;
-  min-height: 170px;
-  border-radius: 10px; background: rgba(0,0,0,0.32); border: 1px solid var(--line);
-}
-.dl-builder__bloco {
-  position: relative; display: flex; align-items: center; justify-content: center;
-  border-radius: 5px; overflow: hidden;
-  background: linear-gradient(135deg, rgba(99,102,241,0.32), rgba(212,175,55,0.20));
-}
-.dl-builder__bloco em {
-  font-style: normal; font-size: 7px; letter-spacing: 0.14em;
-  color: rgba(255,255,255,0.66); white-space: nowrap; overflow: hidden;
-}
-/* O selecionado é o que conta a história — sem ele isto seria um wireframe
-   qualquer. Contorno tracejado, alças nas quinas e um pulso lento, como o bloco
-   em foco no editor. O overflow volta a visível porque as alças ficam metade
-   para fora da caixa. */
-.dl-builder__bloco.is-sel {
-  overflow: visible;
-  background: linear-gradient(135deg, rgba(99,102,241,0.50), rgba(212,175,55,0.30));
-  outline: 1px dashed rgba(129,140,248,0.9); outline-offset: 1px;
-  animation: dlBuilderSel 3.2s ease-in-out infinite;
-}
-@keyframes dlBuilderSel {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(129,140,248,0.45); }
-  55%, 99% { box-shadow: 0 0 0 6px rgba(129,140,248,0); }
-}
-.dl-builder__alca {
-  position: absolute; width: 5px; height: 5px; border-radius: 999px;
-  background: #fff; box-shadow: 0 0 0 1px rgba(99,102,241,0.9);
-}
-.dl-builder__alca--no { top: -2.5px; left: -2.5px; }
-.dl-builder__alca--ne { top: -2.5px; right: -2.5px; }
-.dl-builder__alca--so { bottom: -2.5px; left: -2.5px; }
-.dl-builder__alca--se { bottom: -2.5px; right: -2.5px; }
 
 .dl-browser__kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .dl-browser__kpi {
@@ -4570,7 +4293,6 @@ const CSS = `
 }
 
 /* ── Editor ── */
-.dl-editor { display: grid; grid-template-columns: 1fr 0.85fr; gap: 48px; align-items: center; }
 /* ── Editor ao vivo ──
    Uma tela de desktop com os blocos da vitrine sendo reposicionados por um
    ponteiro, em laço. As posições e o caminho do ponteiro são calculados em
@@ -4885,477 +4607,6 @@ ${editorCSS()}
   letter-spacing: inherit;
 }
 
-/* ── A GRADE DE CANAIS ───────────────────────────────────────────────────────
-   Ver o cabecalho de GradeDeCanais para o porque da troca do leque.
-   (Sem crases nestes comentarios: este CSS mora num template literal.) */
-.cn-grade {
-  list-style: none;
-  margin: clamp(20px, 3vw, 34px) 0 0;
-  padding: 0;
-  display: grid;
-  /* auto-fit e nao um numero fixo de colunas: nove cartoes nunca fecham uma
-     grade redonda, entao qualquer numero fixo deixa buraco em alguma largura.
-     Assim a ultima fila fica curta, que e o unico arranjo honesto para nove. */
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  gap: 10px;
-}
-
-.cn-card {
-  position: relative;
-  /* Alto e estreito, como na referencia: o formato e o que faz nove caberem sem
-     virar uma parede de quadrados. */
-  aspect-ratio: 200 / 260;
-  min-height: 180px;
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  isolation: isolate;
-}
-
-/* A cor da marca numa camada propria. Duas marcas (Instagram, Gemini) tem
-   degrade como cor, e degrade nao aceita transition — opacidade de uma camada
-   por cima aceita, e vale igual para cor chapada. */
-.cn-card__cor {
-  position: absolute; inset: 0; z-index: 0;
-  background: var(--canal-cor);
-  opacity: 0;
-  transition: opacity 0.42s ease;
-}
-.cn-card:hover .cn-card__cor,
-.cn-card:focus-within .cn-card__cor { opacity: 1; }
-
-/* ── Repouso: cinza, igual para os nove ── */
-.cn-card__repouso {
-  position: absolute; inset: 0; z-index: 2;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 11px;
-  color: var(--placeholder);
-  transition: opacity 0.3s ease, transform 0.42s ease;
-}
-.cn-card__repouso b {
-  font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em;
-  color: var(--subtle);
-}
-.cn-card:hover .cn-card__repouso,
-.cn-card:focus-within .cn-card__repouso {
-  opacity: 0;
-  transform: scale(0.94);
-}
-
-/* ── Ativo: a cena e o rodape, na tinta da marca ── */
-.cn-card__ativo {
-  position: absolute; inset: 0; z-index: 3;
-  display: flex; flex-direction: column;
-  padding: 16px 14px 13px;
-  color: var(--canal-tinta);
-  opacity: 0;
-  transition: opacity 0.3s ease 0.06s;
-}
-.cn-card:hover .cn-card__ativo,
-.cn-card:focus-within .cn-card__ativo { opacity: 1; }
-
-.cn-card__rodape {
-  margin-top: auto;
-  display: flex; align-items: center; gap: 7px;
-  font-size: 11.5px; font-weight: 650; letter-spacing: -0.01em;
-}
-
-/* Nome de verdade, so para leitor de tela e busca. */
-.cn-card__rotulo {
-  position: absolute; width: 1px; height: 1px;
-  margin: -1px; padding: 0; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
-}
-
-/* ── O palco das cenas ── */
-.cn-cena {
-  position: relative;
-  display: block;
-  flex: 1;
-  min-height: 0;
-}
-/* As pecas herdam a tinta da marca. Uma cor so por cartao: quem da variedade e
-   a coreografia, nao a paleta. */
-.cn-cena i {
-  position: absolute;
-  display: block;
-  background: currentColor;
-  border-radius: 3px;
-}
-
-/* ── 01 · Facebook: o post sobe e assenta no topo do feed ── */
-.cn-cena--feed .cn-linha {
-  left: 0; width: 100%; height: 7px; border-radius: 4px; opacity: 0.34;
-}
-.cn-cena--feed .cn-linha:nth-of-type(2) { top: 52%; }
-.cn-cena--feed .cn-linha:nth-of-type(3) { top: 68%; width: 82%; }
-.cn-cena--feed .cn-linha:nth-of-type(4) { top: 84%; width: 64%; }
-.cn-cena--feed .cn-post {
-  left: 0; top: 0; width: 100%; height: 42%;
-  border-radius: 7px; opacity: 0.9;
-}
-.cn-card:hover .cn-cena--feed .cn-post {
-  animation: cnSobe 0.62s cubic-bezier(0.2, 0.9, 0.25, 1) both;
-}
-@keyframes cnSobe {
-  from { transform: translateY(150%); opacity: 0; }
-  to { transform: translateY(0); opacity: 0.9; }
-}
-
-/* ── 02 · Instagram: nove quadros, o novo acende ── */
-.cn-cena--grade {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: 1fr; gap: 4px;
-}
-.cn-cena--grade .cn-quadro {
-  position: relative; width: 100%; height: 100%;
-  border-radius: 4px; opacity: 0.26;
-}
-.cn-card:hover .cn-cena--grade .cn-quadro--novo {
-  animation: cnAcende 0.7s cubic-bezier(0.2, 0.9, 0.25, 1) 0.1s both;
-}
-@keyframes cnAcende {
-  from { opacity: 0.26; transform: scale(0.6); }
-  60%  { opacity: 1; transform: scale(1.14); }
-  to   { opacity: 1; transform: scale(1); }
-}
-
-/* ── 03 · WhatsApp: a arte 9:16 subindo como status ── */
-.cn-cena--status { display: flex; align-items: center; justify-content: center; }
-.cn-cena--status .cn-fone {
-  position: relative; width: 52%; height: 100%;
-  border-radius: 8px; background: transparent;
-  border: 2px solid currentColor; opacity: 0.5;
-  overflow: hidden;
-}
-.cn-cena--status .cn-barra {
-  left: 5px; top: 5px; right: 5px; width: auto; height: 3px;
-  border-radius: 2px; opacity: 0.55; transform-origin: left center;
-}
-.cn-cena--status .cn-arte {
-  left: 5px; right: 5px; top: 13px; bottom: 5px; width: auto; height: auto;
-  border-radius: 5px; opacity: 0.3;
-}
-.cn-card:hover .cn-cena--status .cn-fone { opacity: 1; }
-.cn-card:hover .cn-cena--status .cn-barra {
-  animation: cnCorre 1.5s linear 0.15s both;
-}
-.cn-card:hover .cn-cena--status .cn-arte {
-  animation: cnEntra 0.5s ease 0.1s both;
-}
-@keyframes cnCorre {
-  from { transform: scaleX(0); }
-  to   { transform: scaleX(1); }
-}
-@keyframes cnEntra {
-  from { opacity: 0; transform: scale(0.88); }
-  to   { opacity: 0.34; transform: scale(1); }
-}
-
-/* ── 04 · Gemini: a descricao se escrevendo ── */
-.cn-cena--texto .cn-brilho {
-  left: 0; top: 4px; width: 13px; height: 13px; border-radius: 0;
-  opacity: 0.85;
-  /* Losango: e a forma que o produto ja usa para IA, e nao um circulo. */
-  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
-}
-.cn-cena--texto .cn-frase {
-  left: 0; height: 7px; border-radius: 4px; opacity: 0.4;
-  transform-origin: left center;
-}
-.cn-cena--texto .cn-frase:nth-of-type(2) { top: 32%; width: 100%; }
-.cn-cena--texto .cn-frase:nth-of-type(3) { top: 52%; width: 88%; }
-.cn-cena--texto .cn-frase:nth-of-type(4) { top: 72%; width: 56%; }
-.cn-card:hover .cn-cena--texto .cn-brilho { animation: cnPisca 1.4s ease-in-out infinite; }
-.cn-card:hover .cn-cena--texto .cn-frase:nth-of-type(2) { animation: cnDigita 0.5s ease-out 0.12s both; }
-.cn-card:hover .cn-cena--texto .cn-frase:nth-of-type(3) { animation: cnDigita 0.5s ease-out 0.44s both; }
-.cn-card:hover .cn-cena--texto .cn-frase:nth-of-type(4) { animation: cnDigita 0.5s ease-out 0.76s both; }
-@keyframes cnDigita {
-  from { transform: scaleX(0); opacity: 0.4; }
-  to   { transform: scaleX(1); opacity: 0.4; }
-}
-@keyframes cnPisca {
-  0%, 100% { opacity: 0.85; transform: scale(1); }
-  50%      { opacity: 0.4; transform: scale(0.8); }
-}
-
-/* ── 05 · Pagina online: a vitrine se montando ── */
-.cn-cena--vitrine .cn-topo {
-  left: 0; top: 0; width: 100%; height: 22%; border-radius: 6px; opacity: 0.75;
-}
-.cn-cena--vitrine .cn-bloco {
-  top: 30%; bottom: 0; height: auto; width: 47%; border-radius: 6px; opacity: 0.34;
-}
-.cn-cena--vitrine .cn-bloco:nth-of-type(2) { left: 0; }
-.cn-cena--vitrine .cn-bloco:nth-of-type(3) { right: 0; }
-.cn-card:hover .cn-cena--vitrine .cn-topo { animation: cnDesce 0.42s cubic-bezier(0.2,0.9,0.25,1) both; }
-.cn-card:hover .cn-cena--vitrine .cn-bloco:nth-of-type(2) { animation: cnMonta 0.45s cubic-bezier(0.2,0.9,0.25,1) 0.2s both; }
-.cn-card:hover .cn-cena--vitrine .cn-bloco:nth-of-type(3) { animation: cnMonta 0.45s cubic-bezier(0.2,0.9,0.25,1) 0.32s both; }
-@keyframes cnDesce {
-  from { transform: translateY(-130%); opacity: 0; }
-  to   { transform: translateY(0); opacity: 0.75; }
-}
-@keyframes cnMonta {
-  from { transform: translateY(38%); opacity: 0; }
-  to   { transform: translateY(0); opacity: 0.34; }
-}
-
-/* ── 06 · Mercado Livre: o anuncio criado pela API ── */
-.cn-cena--anuncio .cn-caixa {
-  left: 0; top: 6%; width: 100%; height: 62%;
-  border-radius: 7px; opacity: 0.32; transform-origin: center top;
-}
-.cn-cena--anuncio .cn-aceite {
-  left: 50%; bottom: 4%; width: 26px; height: 26px; border-radius: 999px;
-  margin-left: -13px; opacity: 0.9;
-}
-.cn-card:hover .cn-cena--anuncio .cn-caixa { animation: cnDesenha 0.5s ease-out both; }
-.cn-card:hover .cn-cena--anuncio .cn-aceite { animation: cnEstoura 0.5s cubic-bezier(0.2,1.5,0.4,1) 0.44s both; }
-@keyframes cnDesenha {
-  from { transform: scaleY(0); opacity: 0.32; }
-  to   { transform: scaleY(1); opacity: 0.32; }
-}
-@keyframes cnEstoura {
-  from { transform: scale(0); opacity: 0; }
-  to   { transform: scale(1); opacity: 0.9; }
-}
-
-/* ── 07 · OLX: o selo assentando sobre o anuncio ── */
-.cn-cena--selo .cn-cartao {
-  left: 0; top: 12%; width: 100%; height: 76%; border-radius: 7px; opacity: 0.3;
-}
-.cn-cena--selo .cn-etiqueta {
-  right: 6%; top: 4%; width: 46%; height: 20px; border-radius: 999px; opacity: 0.92;
-}
-.cn-card:hover .cn-cena--selo .cn-cartao { animation: cnEntra 0.4s ease both; }
-.cn-card:hover .cn-cena--selo .cn-etiqueta { animation: cnAssenta 0.55s cubic-bezier(0.2,1.3,0.35,1) 0.26s both; }
-@keyframes cnAssenta {
-  from { transform: translate(18px, -22px) rotate(-14deg); opacity: 0; }
-  to   { transform: translate(0, 0) rotate(-6deg); opacity: 0.92; }
-}
-
-/* ── 08 · ZAP: eles vem buscar, e o lead volta ──
-   Os dois sentidos importam: e a unica integracao da lista que e de mao dupla,
-   e ela e PUXADA por eles, nao empurrada por nos. */
-.cn-cena--troca .cn-doc {
-  left: 0; top: 50%; width: 30%; height: 46%;
-  margin-top: -23%; border-radius: 5px; opacity: 0.42;
-}
-.cn-cena--troca .cn-trilho {
-  right: 0; top: 50%; width: 58%; height: 2px; margin-top: -1px;
-  border-radius: 2px; opacity: 0.25;
-}
-.cn-cena--troca .cn-ida,
-.cn-cena--troca .cn-volta {
-  top: 50%; width: 9px; height: 9px; border-radius: 999px; margin-top: -4.5px;
-  left: 34%; opacity: 0;
-}
-.cn-card:hover .cn-cena--troca .cn-ida { animation: cnVai 0.8s ease-in-out 0.1s both; }
-.cn-card:hover .cn-cena--troca .cn-volta { animation: cnVolta 0.8s ease-in-out 0.95s both; }
-@keyframes cnVai {
-  0%   { transform: translateX(0); opacity: 0; }
-  15%  { opacity: 1; }
-  85%  { opacity: 1; }
-  100% { transform: translateX(180%); opacity: 0; }
-}
-@keyframes cnVolta {
-  0%   { transform: translateX(180%); opacity: 0; }
-  15%  { opacity: 1; }
-  85%  { opacity: 1; }
-  100% { transform: translateX(0); opacity: 0; }
-}
-
-/* ── 09 · Dominio proprio: o endereco troca de dono ──
-   Aqui o texto e texto de verdade, e nao barrinha cega: o argumento desta
-   integracao E o endereco, entao esconde-lo esvaziaria a cena. */
-.cn-cena--url { display: flex; align-items: center; }
-.cn-cena--url .cn-barra-url {
-  position: relative; display: block; width: 100%; height: 30px;
-  border-radius: 999px; background: transparent;
-  border: 1.5px solid currentColor; opacity: 0.85;
-  overflow: hidden;
-}
-.cn-url {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 8.5px; letter-spacing: 0.01em;
-  padding: 0 6px; text-align: center;
-}
-.cn-url--dela { opacity: 0; }
-.cn-card:hover .cn-cena--url .cn-url--nossa { animation: cnSaiUrl 0.45s ease 0.5s both; }
-.cn-card:hover .cn-cena--url .cn-url--dela { animation: cnEntraUrl 0.45s ease 0.72s both; }
-@keyframes cnSaiUrl {
-  from { transform: translateY(0); opacity: 1; }
-  to   { transform: translateY(-120%); opacity: 0; }
-}
-@keyframes cnEntraUrl {
-  from { transform: translateY(120%); opacity: 0; }
-  to   { transform: translateY(0); opacity: 1; }
-}
-
-/* ── 10 · VivaReal: um feed, tres portais ──
-   A fonte fica a esquerda e tres raios abrem em leque ate tres destinos, que
-   acendem em cascata. E a unica cena da faixa com mais de um alvo, e e de
-   proposito: o argumento aqui nao e "falamos com o VivaReal", e "o mesmo XML
-   atende o VivaReal, o ZAP e a OLX de uma vez". */
-.cn-cena--leque .cn-fonte {
-  left: 0; top: 50%; width: 22%; height: 40%;
-  margin-top: -20%; border-radius: 5px; opacity: 0.5;
-}
-.cn-cena--leque .cn-raio {
-  left: 24%; top: 50%; width: 46%; height: 2px; margin-top: -1px;
-  border-radius: 2px; opacity: 0.22; transform-origin: left center;
-}
-.cn-cena--leque .cn-raio:nth-of-type(2) { transform: rotate(-26deg); }
-.cn-cena--leque .cn-raio:nth-of-type(4) { transform: rotate(26deg); }
-.cn-cena--leque .cn-destino {
-  right: 0; width: 13px; height: 13px; border-radius: 4px; opacity: 0.28;
-}
-.cn-cena--leque .cn-destino:nth-of-type(5) { top: 14%; }
-.cn-cena--leque .cn-destino:nth-of-type(6) { top: 50%; margin-top: -6.5px; }
-.cn-cena--leque .cn-destino:nth-of-type(7) { bottom: 14%; }
-.cn-card:hover .cn-cena--leque .cn-destino:nth-of-type(5) { animation: cnChega 0.4s ease 0.30s both; }
-.cn-card:hover .cn-cena--leque .cn-destino:nth-of-type(6) { animation: cnChega 0.4s ease 0.44s both; }
-.cn-card:hover .cn-cena--leque .cn-destino:nth-of-type(7) { animation: cnChega 0.4s ease 0.58s both; }
-@keyframes cnChega {
-  from { opacity: 0.28; transform: scale(0.6); }
-  60%  { opacity: 1; transform: scale(1.22); }
-  to   { opacity: 0.95; transform: scale(1); }
-}
-
-/* ── 11 · Imovelweb: o imovel caindo no mapa ──
-   A malha e o mapa em silhueta; o alfinete cai e quica, e a sombra abre embaixo
-   dele no mesmo tempo. Sao os dois movimentos que fazem uma queda parecer peso
-   e nao teletransporte. */
-.cn-cena--mapa .cn-malha {
-  left: 0; top: 12%; right: 0; bottom: 12%; width: auto; height: auto;
-  border-radius: 7px; opacity: 0.16;
-  background:
-    repeating-linear-gradient(0deg, currentColor 0 1px, transparent 1px 22px),
-    repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 26px);
-}
-/* A receita classica do alfinete: tres cantos redondos e um reto, girado -45
-   graus para o canto reto virar a ponta e apontar para BAIXO. A versao anterior
-   girava +45 e nascia de cabeca para baixo.
-
-   E o giro usa a propriedade INDEPENDENTE rotate, nao transform. Com os dois
-   dentro do mesmo transform, o translate da queda acontece no eixo JA GIRADO —
-   o alfinete descia na diagonal e o quique saia de lado. Separados, cada um
-   compoe no seu proprio eixo e a queda e vertical de verdade. */
-.cn-cena--mapa .cn-alfinete {
-  left: 50%; top: 30%; width: 16px; height: 16px;
-  margin-left: -8px;
-  border-radius: 50% 50% 50% 0;
-  rotate: -45deg;
-  opacity: 0.95;
-}
-/* Perto o bastante para ler como sombra DELE. A 62% ficava a meia altura de
-   distancia e virava um tracinho solto no mapa. */
-.cn-cena--mapa .cn-sombra {
-  left: 50%; top: 52%; width: 26px; height: 6px;
-  margin-left: -13px; border-radius: 999px; opacity: 0;
-}
-.cn-card:hover .cn-cena--mapa .cn-alfinete { animation: cnCai 0.66s cubic-bezier(0.35, 0, 0.2, 1) 0.12s both; }
-.cn-card:hover .cn-cena--mapa .cn-sombra { animation: cnAbre 0.66s cubic-bezier(0.35, 0, 0.2, 1) 0.12s both; }
-@keyframes cnCai {
-  0%   { translate: 0 -70px; opacity: 0; }
-  55%  { translate: 0 0; opacity: 0.95; }
-  72%  { translate: 0 -8px; }
-  100% { translate: 0 0; opacity: 0.95; }
-}
-@keyframes cnAbre {
-  0%, 40% { opacity: 0; transform: scaleX(0.3); }
-  60%     { opacity: 0.4; transform: scaleX(1.15); }
-  100%    { opacity: 0.3; transform: scaleX(1); }
-}
-
-/* ── 12 · DocuSign: a rubrica se desenhando ──
-   A unica cena com traco de verdade. Um caminho SVG com o tracejado do tamanho
-   do proprio caminho: animando o deslocamento de 100% a 0, a linha aparece como
-   se estivesse sendo escrita. Barrinha nenhuma diz "assinatura" — o que diz e o
-   GESTO, e gesto e caminho. */
-.cn-cena--rubrica .cn-papel {
-  left: 0; top: 8%; right: 0; bottom: 8%; width: auto; height: auto;
-  border-radius: 6px; opacity: 0.16;
-}
-.cn-cena--rubrica .cn-traco {
-  position: absolute;
-  left: 8%; right: 8%; top: 50%;
-  width: 84%; height: auto;
-  transform: translateY(-58%);
-  overflow: visible;
-}
-.cn-cena--rubrica .cn-traco path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  /* 260 cobre o comprimento do caminho com folga; medir exato exigiria JS, e a
-     folga so faz a animacao comecar um instante antes de o traco aparecer. */
-  stroke-dasharray: 260;
-  stroke-dashoffset: 260;
-  opacity: 0.95;
-}
-.cn-card:hover .cn-cena--rubrica .cn-traco path {
-  animation: cnEscreve 1.15s cubic-bezier(0.4, 0, 0.3, 1) 0.14s both;
-}
-@keyframes cnEscreve {
-  from { stroke-dashoffset: 260; }
-  to   { stroke-dashoffset: 0; }
-}
-.cn-cena--rubrica .cn-selo {
-  right: 4%; bottom: 4%; width: 22px; height: 22px;
-  border-radius: 999px; opacity: 0; background: transparent;
-  border: 2px solid currentColor;
-}
-.cn-card:hover .cn-cena--rubrica .cn-selo {
-  animation: cnCarimba 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) 1.2s both;
-}
-@keyframes cnCarimba {
-  from { opacity: 0; transform: scale(1.9) rotate(-16deg); }
-  to   { opacity: 0.9; transform: scale(1) rotate(-8deg); }
-}
-
-/* Menos movimento: o quadro final das tres novas. */
-@media (prefers-reduced-motion: reduce) {
-  .cn-cena--leque .cn-destino { opacity: 0.95; transform: none; }
-  .cn-cena--mapa .cn-alfinete { translate: none; opacity: 0.95; }
-  .cn-cena--mapa .cn-sombra { opacity: 0.3; transform: none; }
-  .cn-cena--rubrica .cn-traco path { stroke-dashoffset: 0; }
-  .cn-cena--rubrica .cn-selo { opacity: 0.9; transform: rotate(-8deg); }
-}
-
-/* ── Marcas de fundo claro ──
-   O amarelo do Mercado Livre e o laranja do ZAP nao sustentam tinta branca; a
-   tinta deles vem do campo texto em INTEGRACOES e desce por --canal-tinta. O
-   que muda aqui e so a borda, que sumiria contra o proprio fundo claro. */
-.cn-card--claro:hover { border-color: rgba(10,10,11,0.18); }
-
-/* ── Menos movimento: o quadro FINAL, parado ──
-   Nao e desligar a animacao e deixar o estado inicial — varias cenas comecam
-   invisiveis ou com escala zero, e isso deixaria o cartao vazio no hover. O que
-   fica e a cena montada: a cor entra, tudo aparece no lugar, nada se move. */
-@media (prefers-reduced-motion: reduce) {
-  .cn-card *,
-  .cn-card *::before,
-  .cn-card *::after { animation: none !important; transition: none !important; }
-  .cn-cena--feed .cn-post { opacity: 0.9; transform: none; }
-  .cn-cena--vitrine .cn-topo { opacity: 0.75; transform: none; }
-  .cn-cena--vitrine .cn-bloco { opacity: 0.34; transform: none; }
-  .cn-cena--grade .cn-quadro--novo { opacity: 1; transform: none; }
-  .cn-cena--status .cn-barra { transform: none; }
-  .cn-cena--status .cn-arte { opacity: 0.34; transform: none; }
-  .cn-cena--anuncio .cn-caixa { transform: none; }
-  .cn-cena--anuncio .cn-aceite { opacity: 0.9; transform: none; }
-  .cn-cena--selo .cn-etiqueta { opacity: 0.92; transform: rotate(-6deg); }
-  .cn-cena--troca .cn-ida { opacity: 0; }
-  .cn-cena--troca .cn-volta { opacity: 1; transform: translateX(90%); }
-  .cn-cena--url .cn-url--nossa { opacity: 0; }
-  .cn-cena--url .cn-url--dela { opacity: 1; }
-}
-
 /* ── Destaques: parede à deriva no fundo da seção ──
    A seção é o palco e a parede é a camada de trás. Altura mínima porque a
    parede precisa de espaço vertical para a perspectiva fazer sentido — só com
@@ -5512,11 +4763,41 @@ ${editorCSS()}
   padding: 18px 20px; border-radius: inherit;
   overflow: hidden;
 }
-.dl-fcard__quote { font-size: 26px; line-height: 0.6; color: var(--accent-soft); }
-.dl-fcard__title { font-size: 14px; font-weight: 700; color: var(--strong); letter-spacing: -0.02em; }
-.dl-fcard__desc { font-size: 13px; line-height: 1.7; color: var(--subtle); }
-.dl-fcard__value { font-size: 38px; font-weight: 700; letter-spacing: -0.05em; line-height: 1; margin-top: auto; }
-.dl-fcard__label { font-size: 12.5px; line-height: 1.6; opacity: 0.78; }
+/* ── O cartao de relato ────────────────────────────────────────────────────
+   Quem fala em cima (avatar, nome, cargo e imobiliaria), a frase no meio e a
+   cidade embaixo, colada no pe. Nos cartoes de tom (mint, gold, accent, rose)
+   as cores vem do proprio tom, por currentColor — por isso nada aqui escreve
+   uma cor de texto fixa alem da do cartao neutro.
+   (Sem crases nestes comentarios: template literal.) */
+.dl-relato { gap: 10px; }
+.dl-relato__quem { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dl-relato__foto {
+  width: 40px; height: 40px; border-radius: 50%; flex: none; object-fit: cover;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dl-relato__foto--iniciais {
+  background: var(--avatar); color: #fff;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+}
+.dl-relato__nome { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dl-relato__nome strong { font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em; color: var(--strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-relato__nome span { font-size: 11px; line-height: 1.4; color: var(--subtle); opacity: 0.9; }
+.dl-relato__frase { font-size: 13px; line-height: 1.6; color: var(--subtle); margin: 0; }
+.dl-relato__onde {
+  margin-top: auto; font-family: var(--mono, ui-monospace, monospace);
+  font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--placeholder);
+}
+/* Nos cartoes de tom o texto e escuro (ou branco, no accent) — herda. */
+.dl-fcard--mint .dl-relato__nome strong, .dl-fcard--gold .dl-relato__nome strong, .dl-fcard--accent .dl-relato__nome strong, .dl-fcard--rose .dl-relato__nome strong,
+.dl-fcard--mint .dl-relato__frase, .dl-fcard--gold .dl-relato__frase, .dl-fcard--accent .dl-relato__frase, .dl-fcard--rose .dl-relato__frase { color: inherit; }
+.dl-fcard--mint .dl-relato__nome span, .dl-fcard--gold .dl-relato__nome span, .dl-fcard--accent .dl-relato__nome span, .dl-fcard--rose .dl-relato__nome span,
+.dl-fcard--mint .dl-relato__onde, .dl-fcard--gold .dl-relato__onde, .dl-fcard--accent .dl-relato__onde, .dl-fcard--rose .dl-relato__onde { color: inherit; opacity: 0.72; }
+/* No painel o mesmo bloco de "quem", maior. */
+.dl-relato__quem--painel { margin: 6px 0 4px; }
+.dl-relato__quem--painel .dl-relato__foto { width: 52px; height: 52px; font-size: 16px; }
+.dl-relato__quem--painel h3 { margin: 0; }
+.dl-relato__quem--painel span { font-size: 12.5px; }
 .dl-fcard--mint { background: #a7f3d0; border-color: #a7f3d0; color: #052e21; }
 .dl-fcard--gold { background: #fde68a; border-color: #fde68a; color: #3b2f05; }
 .dl-fcard--accent { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -6613,6 +5894,61 @@ ${editorCSS()}
 }
 .dl-app-soon__copy .dl-h2 { margin-top: 14px; }
 .dl-app-soon__copy .dl-lead { max-width: 530px; }
+
+/* ── CANAIS E INTEGRACOES: texto de um lado, a arte do outro ──────────────
+   Mesma familia da secao do aplicativo, invertida: a arte fica a ESQUERDA
+   (60%) e o texto a direita (40%). No celular vira uma coluna, com o texto
+   antes da arte — a ordem do DOM ja e essa, e so a grade de duas colunas
+   troca os lados, pelo order.
+   (Sem crases nestes comentarios: template literal.) */
+.dl-canais {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  /* Mais larga que o .dl-wrap comum (1120px): a arte e grande e o texto ao
+     lado precisa de linha de leitura. Nos 1120 nao cabiam os dois. */
+  max-width: 1360px;
+  /* A proporcao entre arte e texto e 3 : 1 — mas o texto tem um PISO de
+     400px. Sem o piso, em 3 : 1 sobravam ~250px para dois paragrafos, e
+     nenhum fr conserta isso: a faixa e que e curta. Com o piso, quem cede
+     quando falta espaco e a arte, nao a leitura. */
+  grid-template-columns: minmax(0, 3fr) minmax(min(100%, 500px), 1fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 56px);
+}
+.dl-canais__copy { order: 2; display: flex; flex-direction: column; gap: 6px; }
+.dl-canais__copy .dl-h2 { margin-top: 14px; }
+/* Teto dos paragrafos: acima disto a linha fica longa demais para ler. Se a
+   coluna for mais estreita que isto, e ela quem manda. */
+.dl-canais__copy .dl-lead { max-width: 580px; }
+.dl-canais__copy .dl-body { max-width: 580px; }
+.dl-canais__copy .dl-btn-row { margin-top: 22px; }
+
+/* ── A arte: inteira no centro, esvaindo nas bordas ─────────────────────────
+   Uma mascara radial na propria <img>: opaca ate 45% do raio, e dali vai a
+   transparente na borda. A imagem e uma so, sem camadas — a mascara recorta a
+   opacidade, e o fundo da secao atravessa nas beiradas. Os dois numeros do
+   gradiente sao os botoes: o primeiro % e ate onde a imagem fica inteira, o
+   segundo e onde some de vez. A elipse acompanha o 16:9 da imagem.
+   Sem crases nestes comentarios: template literal. */
+.dl-canais__arte {
+  order: 1; min-width: 0;
+  /* Sangra 5% para a esquerda, para dentro do respiro do .dl-wrap. */
+  width: 110%; margin-left: -5%;
+}
+.dl-canais__arte img {
+  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain;
+  -webkit-mask-image: radial-gradient(ellipse 100% 100% at 50% 50%, #000 35%, transparent 50%);
+          mask-image: radial-gradient(ellipse 100% 100% at 50% 50%, #000 35%, transparent 50%);
+}
+/* No celular a arte vem PRIMEIRO: e a peca que diz "com quem a Omnimob fala"
+   de relance, e o texto embaixo explica. E a mesma ordem do DOM, entao basta
+   zerar o order das duas. */
+@media (max-width: 860px) {
+  .dl-canais { grid-template-columns: 1fr; gap: 28px; }
+  .dl-canais__copy { order: 2; }
+  .dl-canais__arte { order: 1; width: 100%; margin-left: 0; }
+}
 .dl-app-soon__stores {
   display: flex;
   flex-wrap: wrap;
@@ -6670,13 +6006,49 @@ ${editorCSS()}
 }
 
 /* ── CTA final (claro) ── */
+/* ── O FECHO: o fundo comum do CTA e do rodape ──────────────────────────────
+   A cor lisa e o shader ficam AQUI, e nao no CTA: o rodape, logo abaixo, e um
+   cartao escuro flutuando sobre o mesmo fundo, e o shader precisa continuar
+   por tras dele. Sem overflow hidden — o canvas ja tem o tamanho exato da
+   caixa, e o CTA e o rodape recortam o que e deles.
+
+   ── A TRANSICAO INVADE A SECAO DE CIMA ──
+   O fecho SOBE --fecho-invasao por baixo da secao anterior (margem negativa)
+   e o degrade escuro → claro (o ::before) comeca la em cima, opaco na cor do
+   fundo da pagina. Assim a transicao tem o comprimento que precisa sem
+   empurrar o titulo do CTA para baixo: a parte de cima dela acontece onde a
+   secao anterior so tinha respiro. O que a invasao cobre e escondido pelo
+   escuro opaco — e por isso ela nao pode passar do respiro de baixo daquela
+   secao, senao come a ilustracao.
+   (Sem crases nestes comentarios: template literal.) */
+.dl-fecho {
+  position: relative;
+  z-index: 1;
+  background: #f4f5f7;
+  /* Igual ao respiro de baixo da secao anterior (--pad-sec do .dl-section):
+     e ate onde da para subir sem cobrir a ilustracao dela. */
+  --fecho-invasao: clamp(64px, 8vw, 112px);
+  /* Quanto do degrade fica DENTRO do fecho, acima do titulo do CTA. */
+  --degrade-h: clamp(220px, 28vw, 420px);
+  margin-top: calc(-1 * var(--fecho-invasao));
+}
+.dl-fecho::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: calc(var(--fecho-invasao) + var(--degrade-h));
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, #0a0a0b 0%, #0a0a0b 18%, rgba(10,10,11,0.75) 45%, rgba(10,10,11,0) 100%);
+}
 .dl-cta {
   position: relative;
+  z-index: 1;
   overflow: hidden;
-  background: #f4f5f7;
   color: #0c121a;
-  /* O respiro de cima soma a altura da onda (ver .dl-ondas). */
-  padding: calc(clamp(72px, 9vw, 128px) + var(--ondas-h)) 0 clamp(72px, 9vw, 128px);
+  /* O respiro de cima soma a invasao (o pedaco do fecho que esta por baixo
+     da secao anterior) e o degrade: o titulo comeca onde o fundo ja e claro. */
+  padding: calc(clamp(56px, 7vw, 96px) + var(--fecho-invasao) + var(--degrade-h)) 0 clamp(72px, 9vw, 128px);
 }
 /* ── O fundo de iridescencia ────────────────────────────────────────────────
 
@@ -6691,14 +6063,14 @@ ${editorCSS()}
 
    (Sem crases nestes comentarios: isto vive dentro de um template literal, e
    uma crase aqui encerra a string inteira em silencio.) */
-.dl-cta__fundo {
+.dl-fecho__fundo {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   opacity: 0.9;
 }
-.dl-cta__fundo canvas {
+.dl-fecho__fundo canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -6712,37 +6084,85 @@ ${editorCSS()}
 /* O conteudo sobe acima do fundo. Sem isto ele fica no mesmo plano do canvas e
    a ordem passa a depender de quem vem depois no DOM. */
 .dl-cta__inner {
-  position: relative; z-index: 1;
+  position: relative; z-index: 2;
   text-align: center; display: flex; flex-direction: column; align-items: center;
 }
 
-/* Marca de fechamento. O halo é ::before e a imagem é relative de propósito:
-   as duas são caixas posicionadas, então quem vem depois no DOM pinta por
-   cima — sem isso o brilho cobriria a logo. */
-.dl-cta__brand {
-  position: relative;
-  display: inline-flex;
-  margin-bottom: 24px;
+/* ── As duas placas ─────────────────────────────────────────────────────────
+   A da esquerda (.dl-cta__placa) tem 75% e a da direita (.dl-cta__vaga) 38%:
+   somam mais que 100% de proposito, e a margem negativa da esquerda e o que
+   as sobrepoe — o lado inclinado de uma entra no recorte da outra.
+
+   AS DUAS ENCOLHEM JUNTAS. O flex reduz as duas na proporcao das larguras
+   para caber nos 100%, e e essa proporcao (75 : 38) que faz as duas
+   inclinacoes terem a mesma largura horizontal e coincidirem. Travar uma
+   delas (flex: none) joga todo o encolhimento na outra e os tracos ficam
+   paralelos, com um vao entre eles — foi o primeiro defeito desta placa.
+
+   A MARGEM E O ENCOSTO. Medido na tela, e nao calculado: -6.5% (o valor da
+   referencia) deixava ~25px de vao entre os dois tracos; -8% enfiava a placa
+   da direita ~20px dentro da esquerda. -7.2% e onde as duas se encostam. Se
+   a largura das placas ou dos tracos mudar, e este numero que se reacerta,
+   olhando.
+   (Sem crases nestes comentarios: template literal.) */
+.dl-cta__defs { position: absolute; width: 0; height: 0; }
+.dl-cta__dupla {
+  width: 100%;
+  display: flex; align-items: stretch; justify-content: space-between;
+  text-align: left;
+}
+.dl-cta__placa {
+  position: relative; box-sizing: border-box;
+  width: 80%; margin-right: -6.5%; min-width: 0;
+  aspect-ratio: 1 / 0.68;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: clamp(28px, 4vw, 56px);
+  padding: clamp(28px, 5.5vw, 80px);
+}
+.dl-cta__placa > * { position: relative; z-index: 1; }
+/* O contorno. 108% de largura no desktop: o traco inclinado precisa passar
+   da caixa para entrar na placa vizinha. Branco, como na referencia — sobre o
+   shader o branco e o que se le como linha. */
+.dl-cta__contorno {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  width: 108%; height: 100%;
+}
+.dl-cta__contorno path { fill: none; stroke: rgba(255,255,255,0.92); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.dl-cta__contorno--mobile { display: none; }
+.dl-cta__texto { display: flex; flex-direction: column; align-items: flex-start; }
+.dl-cta__placa .dl-cta__grad { align-self: flex-start; }
+.dl-cta__placa .dl-btn-row { justify-content: flex-start; }
+/* A placa da direita: o recorte pelo clipPath, um fundo escuro leve e o
+   traco por cima. Vazia por enquanto; a imagem entra aqui com object-fit:
+   cover e o clip cuida do formato. */
+.dl-cta__vaga {
+  position: relative; width: 38%; min-width: 0;
+  clip-path: url(#dl-cta-forma-desktop);
+  background: rgba(255,255,255,0.12);
+}
+.dl-cta__vaga-traco { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.dl-cta__vaga-traco path { fill: none; stroke: rgba(255,255,255,0.92); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.dl-cta__vaga-traco--mobile { display: none; }
+@media (max-width: 860px) {
+  .dl-cta__dupla { flex-direction: column; }
+  .dl-cta__placa {
+    width: 100%; margin-right: -4%;
+    aspect-ratio: 1 / 1.3;
+    padding: 24px 24px 100px;
+    gap: 32px;
+  }
+  .dl-cta__contorno { width: 100%; }
+  .dl-cta__contorno--desktop { display: none; }
+  .dl-cta__contorno--mobile { display: block; }
+  .dl-cta__vaga {
+    width: 100%; margin-top: -16.4%;
+    aspect-ratio: 1 / 0.44;
+    clip-path: url(#dl-cta-forma-mobile);
+  }
+  .dl-cta__vaga-traco--desktop { display: none; }
+  .dl-cta__vaga-traco--mobile { display: block; }
 }
 
-.dl-cta__brand::before {
-  content: "";
-  position: absolute;
-  inset: -60%;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgba(212,175,55,0.30), transparent 75%);
-  opacity: 0;
-  transition: opacity 0.3s ease-in-out;
-}
-
-.dl-cta__brand:hover::before {
-  opacity: 1;
-}
-.dl-cta__brand img {
-  position: relative; display: block;
-  width: 82px; height: 82px; object-fit: contain;
-  filter: drop-shadow(0 12px 26px rgba(180,145,50,0.32));
-}
 .dl-cta__title {
   display: flex; flex-direction: column; margin: 18px 0 0;
   font-size: clamp(34px, 5vw, 66px); line-height: 1.04;
@@ -6955,8 +6375,30 @@ ${editorCSS()}
   border-top: 0;
 }
 
-.dl-footer { position: relative; background: #050506; padding: calc(56px + var(--ondas-h)) 0 26px; overflow: hidden; }
-.dl-footer::before {
+/* ── O rodape e um CARTAO sobre o fundo do fecho ────────────────────────────
+   O <footer> e transparente e so da o respiro em volta; quem e escuro,
+   arredondado e recorta as formas e o predio e o .dl-footer__cartao. A
+   largura e a do .dl-wrap (1120px): os dois .dl-wrap de dentro continuam com
+   o padding deles, entao o texto fica a 24px da borda do cartao.
+   (Sem crases nestes comentarios: template literal.) */
+.dl-footer {
+  position: relative;
+  z-index: 1;
+  padding: 0 clamp(14px, 2.5vw, 32px) clamp(14px, 2.5vw, 32px);
+}
+.dl-footer__cartao {
+  position: relative;
+  overflow: hidden;
+  /* Quase de ponta a ponta: o cartao e o fecho da pagina, e um bloco tímido
+     no meio de um fundo claro lia como um rodape de outro site. O conteudo
+     continua nos 1120px do .dl-wrap, centrado dentro dele. */
+  max-width: 1480px;
+  margin: 0 auto;
+  background: #050506;
+  border-radius: clamp(22px, 3vw, 40px);
+  padding: clamp(72px, 8vw, 112px) 0 36px;
+}
+.dl-footer__cartao::before {
   content: ""; position: absolute; left: -80px; top: -60px; width: 420px; height: 260px;
   background: radial-gradient(closest-side, rgba(99,102,241,0.22), transparent);
   pointer-events: none;
@@ -7278,8 +6720,6 @@ ${editorCSS()}
   .dl-esteira__card { padding: 6px; gap: 4px; }
   .dl-esteira__foto { min-height: 20px; }
   .dl-esteira__foto svg { max-width: 28px; }
-  .dl-builder__corpo { grid-template-columns: 70px 1fr; gap: 8px; }
-  .dl-builder__tela { min-height: 132px; }
   .dl-tenants { gap: 9px; }
   .dl-tenants__box { padding: 8px; gap: 6px; }
   .dl-tenants__vitrine { min-height: 26px; gap: 4px; }
@@ -7301,8 +6741,7 @@ ${editorCSS()}
   .dl-header__tipo, .dl-header.is-scrolled .dl-header__tipo { height: 34px; }
   /* Sem cursor não há foco para revelar a palavra — ela só ocuparia memória. */
   .dl-ghost { display: none; }
-  .dl-cta__brand img { width: 66px; height: 66px; }
-  .dl-mockup { transform: none; }
+    .dl-mockup { transform: none; }
   .dl-mockup__body { grid-template-columns: 72px 1fr; }
   .dl-chip-float { display: none; }
   .dl-stage__float { animation: none; }
@@ -7394,13 +6833,12 @@ ${editorCSS()}
   /* Cartões da faixa: mais estreitos, para caber um inteiro na tela em vez de
      um e meio cortado, e a máscara recua para não comer o que aparece. */
   .dl-fcard { width: 224px; min-height: 150px; padding: 18px 20px; }
-  .dl-fcard__value { font-size: 32px; }
     /* Na parede a leitura do cartão é o que importa, e num palco estreito o
      texto encolhe junto com a peça. Um degrau a menos de tamanho evita que a
      descrição vire duas linhas de nada. */
   .dl-fcard--parede { padding: 14px 16px; gap: 6px; }
-  .dl-fcard--parede .dl-fcard__value { font-size: 30px; }
-  .dl-fcard--parede .dl-fcard__desc { font-size: 12px; line-height: 1.55; }
+  .dl-fcard--parede .dl-relato__frase { font-size: 12px; line-height: 1.5; }
+  .dl-fcard--parede .dl-relato__foto { width: 32px; height: 32px; font-size: 11px; }
 
   /* A barra do mock do editor não comporta URL e aviso lado a lado; some a
      URL, que é enfeite, e fica o aviso, que é a história da seção. */
@@ -7477,7 +6915,7 @@ ${editorCSS()}
   /* As esteiras de imóveis param na primeira cópia, que já é uma grade cheia; o
      bloco selecionado do editor fica só com o contorno, sem o pulso; e a
      etiqueta do plano fica com o degradê parado, que já é a cor dela. */
-  .dl-esteira__linha, .dl-builder__bloco.is-sel { animation: none; }
+  .dl-esteira__linha { animation: none; }
   /* O editor congela no primeiro layout, que já é a posição base dos blocos.
      O aviso de salvo para de piscar e fica só posto. */
   .dl-ed__bloco { animation: none; }
@@ -7870,37 +7308,6 @@ ${editorCSS()}
   }
 }
 
-/* ── INTEGRACOES: DE NOVE MINI-HEROS PARA UMA GRADE DE CONSULTA ─────────── */
-@media (min-width: 861px) {
-  #integracoes .cn-grade {
-    /* Seis por fila, fixo: sao doze cartoes, e com auto-fit a grade fechava em
-       sete e cinco — a segunda fila curta parecia sobra. Abaixo de 861px volta
-       o auto-fit da regra geral. */
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 9px;
-    margin-top: clamp(16px, 2.3vw, 26px);
-  }
-
-  #integracoes .cn-card {
-    aspect-ratio: 1 / 1.12;
-    min-height: 154px;
-    border-radius: 15px;
-  }
-
-  /* Ainda ha a recompensa de cor no hover, mas ela nao acende a secao inteira. */
-  #integracoes .cn-card__cor {
-    opacity: 0.025;
-  }
-  #integracoes .cn-card:hover .cn-card__cor,
-  #integracoes .cn-card:focus-within .cn-card__cor {
-    opacity: 0.82;
-  }
-
-  #integracoes .cn-card__repouso {
-    gap: 8px;
-  }
-}
-
 /* ── FLOW: UM GRANDE CAPITULO, NAO UMA SEQUENCIA DE CINCO CLIMAXES ──────── */
 .dl-manifesto__forma--a,
 .dl-manifesto__forma--b {
@@ -7961,12 +7368,12 @@ ${editorCSS()}
   );
 }
 
-/* No desktop o hover ainda revela a parede, mas o titulo nao desaparece quase
-   por completo. A secao continua legivel enquanto se explora. */
+/* No desktop o hover revela a parede e o titulo sai quase de vez: a parede e
+   o conteudo desta secao, e o titulo ja foi lido antes de o mouse chegar. */
 @media (hover: hover) and (pointer: fine) {
   #porque:hover .dl-porque__frente {
-    opacity: 0.62;
-    filter: blur(1.5px);
+    opacity: 0.06;
+    filter: blur(8px);
   }
 
   #porque:hover .dl-porque__fundo::after {
@@ -7990,20 +7397,13 @@ ${editorCSS()}
 
 /* ── CTA FINAL: SEGUNDO PICO ────────────────────────────────────────────── */
 .dl-cta {
-  padding: calc(clamp(88px, 11vw, 152px) + var(--ondas-h)) 0 clamp(88px, 11vw, 152px);
+  padding: calc(clamp(64px, 8vw, 112px) + var(--fecho-invasao) + var(--degrade-h)) 0 clamp(88px, 11vw, 152px);
 }
 
-.dl-cta__fundo {
+.dl-fecho__fundo {
   opacity: 1;
 }
 
-.dl-cta__brand::before {
-  opacity: 0.20;
-}
-
-.dl-cta__brand:hover::before {
-  opacity: 0.52;
-}
 
 /* ── TABLET / MOBILE ────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
