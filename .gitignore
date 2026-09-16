@@ -2,6 +2,8 @@ node_modules
 dist
 .env
 .env.*
+# O modelo entra no repositório: só chaves, sem valor.
+!.env.example
 coverage
 apps/web/.vite
 apps/api/prisma/dev.db

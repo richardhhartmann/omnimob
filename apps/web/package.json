@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node ../../scripts/com-env.mjs -- vite",
     "build": "vite build",
     "preview": "vite preview",
     "tokenizar-cores": "node scripts/tokenizar-cores.mjs src",

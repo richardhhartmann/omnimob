@@ -351,6 +351,16 @@ invisíveis porque com um cliente só o sintoma não aparece.
 > (`omnimob.app`). Trocar as duas coisas é o erro clássico — e o sintoma nunca
 > diz o que houve: o app quebra no CORS, ou o link do e-mail cai num 404.
 
+> **Os scripts do `package.json` passam por `scripts/com-env.mjs`**: com o
+> `.infisical.json` na raiz e o CLI `infisical` no PATH, as variáveis vêm do
+> cofre (`infisical run`); sem eles, o `.env` local vale como sempre. `COFRE=0`
+> desliga; ver "Variáveis de ambiente: o cofre" em `docs/CONTRIBUINDO.md`.
+>
+> Modelos prontos para copiar: `apps/api/.env.example` e `apps/web/.env.example`
+> (só chaves; entram no repositório — variável nova entra LÁ, senão ninguém
+> fica sabendo). Para a `PLATAFORMA_DATABASE_URL` dos devs, use o role restrito
+> de `docs/plataforma-role.sql`, e não a credencial principal de produção.
+
 **`apps/api/.env`** — obrigatórias:
 
 | Variável | Aponta p/ | Dev | Produção |

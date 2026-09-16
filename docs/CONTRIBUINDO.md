@@ -156,6 +156,41 @@ ou pelo conector do claude.ai).
 
 ---
 
+## Variáveis de ambiente: o cofre
+
+Os segredos de desenvolvimento não andam por chat nem por e-mail. Eles vivem
+num **cofre** (Infisical) e entram no processo na hora de rodar — o `.env` na
+máquina é opcional.
+
+Quem chega na equipe faz uma vez:
+
+```bash
+npm install -g @infisical/cli      # ou brew/scoop/winget — ver infisical.com/docs/cli
+infisical login                     # abre o navegador; o convite ao projeto vem de quem administra
+```
+
+E pronto: `npm run dev`, `npm test`, `npm run faxina` etc. já passam por
+`scripts/com-env.mjs`, que detecta o `.infisical.json` da raiz (o id do
+projeto — não é segredo, e está no repositório) mais o CLI no PATH, e roda o
+comando dentro de `infisical run`. Sem o CLI, o mesmo script segue direto e o
+`.env` local vale, como sempre — o CI e o Render nunca passam pelo cofre.
+
+- **Um ambiente, duas pastas**: `/api` e `/web`, em `Development` e em
+  `Production`. O invólucro escolhe a pasta pelo app de onde o comando roda
+  (`apps/api` → `/api`). Em produção, `/api` sincroniza com o Render e `/web`
+  com a Vercel (Secret Syncs, com *Import (Prioritize destino)* no primeiro
+  sync e *Disable Secret Deletion* ligado).
+- **Variável nova** entra em dois lugares: no cofre, na pasta do app (todo
+  mundo recebe no próximo `npm run dev`, sem aviso) e no `.env.example` do app
+  (é a lista do que existe).
+- `COFRE=0 npm run dev` desliga o cofre naquela execução, para testar um
+  `.env` na mão. `INFISICAL_ENV=staging` troca o ambiente.
+- O acesso de quem sai da equipe é removido no painel do Infisical. A senha do
+  role `omnimob_plataforma` (ver `docs/plataforma-role.sql`) só existe lá, então
+  ninguém a leva no bolso.
+
+---
+
 ## Hotfix
 
 Produção quebrada não espera revisão longa, mas **não pula o PR**: abre
