@@ -40,6 +40,7 @@ import {
   uriDeProvisionamento,
 } from "../services/totp.js";
 import { montarSessao, impressaoDaSenha } from "./authRoutes.js";
+import { ehTenantProtegido, MOTIVO_PROTEGIDO } from "../services/tenantProtegido.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
@@ -504,6 +505,8 @@ function serializeTenant(t) {
     id: t.id,
     name: t.name,
     slug: t.slug,
+    // A tela esconde o "Excluir" (e explica por quê); quem recusa é a rota.
+    protegido: ehTenantProtegido(t.slug),
     email: t.email,
     whatsapp: t.whatsapp,
     cnpj: t.cnpj,
@@ -649,6 +652,12 @@ adminRouter.delete("/tenants/:id", requirePermissaoAdmin("excluirTenant"), async
       select: { id: true, slug: true },
     });
     if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+    /* ANTES do Stripe: cancelar a assinatura e depois recusar a exclusão
+       deixaria a conta viva e sem cobrança. A tela esconde o botão; isto é o
+       que vale quando alguém chama a URL. */
+    if (ehTenantProtegido(tenant.slug)) {
+      return res.status(403).json({ error: MOTIVO_PROTEGIDO, code: "TENANT_PROTEGIDO" });
+    }
 
     let stripeResultado = { configurado: false, encontradas: 0, canceladas: [], falhas: [] };
     try {

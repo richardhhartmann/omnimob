@@ -6,6 +6,9 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
+import { isEmailEnabled, sendEmail } from "../services/notificationService.js";
+import { emailConviteUsuario } from "../services/emailTemplates.js";
+import { assinarTokenRecuperacao } from "./authRoutes.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O QUE UM USUÁRIO MOSTRA — E O QUE NUNCA SAI
@@ -67,10 +70,12 @@ usuarioRouter.get("/", async (req, res) => {
   try {
     const usuarios = await prisma.usuario.findMany({
       where: { tenantId: req.tenant.id },
-      select: USUARIO_VISIVEL,
+      select: { ...USUARIO_VISIVEL, senha: true },
       orderBy: { nome: "asc" },
     });
-    return res.json(usuarios);
+    /* `semSenha` é o que a tela usa para oferecer "Reenviar convite": conta
+       que ainda não foi ativada. O hash em si nunca sai. */
+    return res.json(usuarios.map(({ senha, ...u }) => ({ ...u, semSenha: !senha })));
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erro ao listar usuários." });
@@ -125,39 +130,101 @@ function camposDeVitrine(corpo) {
   return data;
 }
 
+/* ── O CONVITE ───────────────────────────────────────────────────────────────
+   Usuário novo nasce SEM senha, e a senha só nasce pelo link deste e-mail. É
+   a mesma mecânica do "esqueci a senha" (token de uso único com a impressão
+   digital da senha atual — que aqui é vazia) e do convite do super-admin.
+
+   Por que por e-mail, e não "define no primeiro acesso": o primeiro acesso
+   sem senha aceitava a senha de QUEM CHEGASSE PRIMEIRO com o login — e o
+   login é previsível (nome + slug). O link só chega ao dono do endereço.
+
+   Sem transporte de e-mail (dev), o link volta na resposta para a tela
+   mostrar; com transporte, NUNCA volta — quem cadastra não pode escolher a
+   senha da outra pessoa. */
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function enviarConvite(usuario, { tenant, convidadoPor }) {
+  const token = assinarTokenRecuperacao(usuario, { validade: "24h" });
+  const base = (process.env.APP_URL || "").trim().replace(/\/+$/, "") || "https://omnimob.app";
+  const link = `${base}/redefinir-senha?token=${encodeURIComponent(token)}&convite=1`;
+
+  if (!isEmailEnabled()) {
+    console.warn(`[usuarios/convite] sem transporte de e-mail; link para ${usuario.email}: ${link}`);
+    return { enviado: false, link };
+  }
+  const modelo = emailConviteUsuario({
+    nome: usuario.nome,
+    link,
+    convidadoPor,
+    imobiliaria: tenant.name,
+    cargo: usuario.cargo?.descricao || "",
+  });
+  // Disparado e esquecido: o transporte tem teto de 10 s, e prender a criação
+  // do usuário por isso deixaria a tela travada. Falha vai para o log.
+  sendEmail({ to: usuario.email, subject: modelo.subject, body: modelo.body, html: modelo.html })
+    .catch((e) => console.error("[usuarios/convite] falha ao enviar:", e.message));
+  return { enviado: true, link: null };
+}
+
+/* Reenviar o convite: para quem perdeu o e-mail ou deixou o link vencer. Só
+   para conta ainda SEM senha — para quem já tem, o caminho é o "esqueci a
+   senha", que a própria pessoa aciona. Gera um link novo; o antigo, se ainda
+   valia, continua valendo até a senha nascer (a impressão é da senha vazia). */
+usuarioRouter.post("/:id/convite", async (req, res) => {
+  try {
+    const usuario = await prisma.usuario.findFirst({
+      where: { id: req.params.id, tenantId: req.tenant.id },
+      select: { ...USUARIO_VISIVEL, senha: true, cargo: { select: { descricao: true } } },
+    });
+    if (!usuario) return res.status(404).json({ error: "Usuário não encontrado." });
+    if (!usuario.ativo) return res.status(400).json({ error: "Reative o usuário antes de reenviar o convite." });
+    if (usuario.senha) return res.status(400).json({ error: "Esta conta já tem senha. Quem esqueceu usa o \"esqueci a senha\" na tela de entrada." });
+    if (!usuario.email) return res.status(400).json({ error: "Este usuário não tem e-mail. Preencha o e-mail e tente de novo." });
+    const convite = await enviarConvite(usuario, { tenant: req.tenant, convidadoPor: req.authUserNome || "O administrador" });
+    return res.json({ convite });
+  } catch (err) {
+    console.error("[POST /usuarios/:id/convite]", err);
+    return res.status(500).json({ error: "Erro ao reenviar o convite." });
+  }
+});
+
 usuarioRouter.post("/", async (req, res) => {
   try {
-    const { nome, senha, cargoCodigo, email } = req.body;
+    const { nome, cargoCodigo } = req.body;
+    const email = String(req.body.email || "").trim().toLowerCase();
     // Só na criação. Aplicar isto na edição renomearia logins anteriores à
     // regra (o `admin` do seed, por exemplo) e tiraria a pessoa do ar.
     const login = comSufixoDoTenant(req.body.login || "", req.tenant.slug);
     if (!nome || !login || !cargoCodigo) {
       return res.status(400).json({ error: "Nome, login e cargo são obrigatórios." });
     }
+    /* Obrigatório porque é por ele que a conta é ATIVADA. Sem e-mail não há
+       como a pessoa criar a senha — e não há outro caminho de propósito. */
+    if (!EMAIL_VALIDO.test(email)) {
+      return res.status(400).json({ error: "Informe um e-mail válido: é por ele que a pessoa cria a senha e entra." });
+    }
     if (!await cargoDoTenant(cargoCodigo, req.tenant.id)) {
       return res.status(400).json({ error: "Cargo não encontrado nesta imobiliária." });
     }
-    // Senha é opcional na criação. Se vier, é apenas uma senha provisória; de
-    // qualquer forma o usuário é obrigado a definir uma no primeiro acesso.
-    const senhaHash = senha ? await bcrypt.hash(String(senha), 10) : "";
     const usuario = await prisma.usuario.create({
       data: {
         tenantId: req.tenant.id,
         nome,
         login,
-        // Normaliza para null: string vazia faria a busca da recuperação de
-        // senha casar dois usuários "sem e-mail" como se fossem o mesmo.
-        email: String(email || "").trim().toLowerCase() || null,
-        senha: senhaHash,
+        email,
+        senha: "", // nasce sem senha; ver `enviarConvite`
         cargoCodigo: Number(cargoCodigo),
-        forcaAlterarSenha: true, // novos usuários sempre trocam a senha no 1º acesso
+        forcaAlterarSenha: false, // a senha que o link cria já é a definitiva
         ativo: true,
         ...camposDeVitrine(req.body),
       },
-      select: USUARIO_VISIVEL,
+      select: { ...USUARIO_VISIVEL, senha: true, cargo: { select: { descricao: true } } },
     });
     limparCacheDaVitrine(req.tenant.id);
-    return res.status(201).json(usuario);
+    const convite = await enviarConvite(usuario, { tenant: req.tenant, convidadoPor: req.authUserNome || "O administrador" });
+    const { senha: _senha, cargo: _cargo, ...visivel } = usuario;
+    return res.status(201).json({ ...visivel, semSenha: true, convite });
   } catch (err) {
     if (err.code === "P2002") return res.status(400).json({ error: "Login já está em uso." });
     console.error(err);

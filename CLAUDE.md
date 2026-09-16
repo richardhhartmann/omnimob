@@ -108,7 +108,12 @@ omnimob/
   fim do tour só oferece "criar o teste grátis" ou "voltar à página inicial",
   e os dois encerram a sessão — não existe passeio livre pela conta de exemplo.
   O tour bloqueia a interação por ouvinte de CAPTURA no documento, não só pela
-  lâmina: apagar a div pelo DevTools não libera a tela
+  lâmina: apagar a div pelo DevTools não libera a tela. **A imobiliária de
+  demonstração não se apaga**: `services/tenantProtegido.js` (o slug de
+  `DEMO_TENANT_SLUG` e o literal `demonstracao`) é lido pelo
+  `DELETE /api/admin/tenants/:id` (403 `TENANT_PROTEGIDO`, antes do Stripe),
+  pela faxina de trials (`slug notIn`) e pela tela, que troca o "Excluir" por
+  um selo
 - `/api/tenants/*` — perfil, configuração do tenant
 - `/api/properties/*` — CRUD de imóveis, imagens, métricas (inclui `POST /:id/ai/gerar`)
 - `/api/leads/*` — leads do tenant (dono, estágio do funil, histórico e notas).
@@ -126,7 +131,14 @@ omnimob/
   #13 de outra, e o de fora responde 404. A régua de status e o e-mail moram
   em `services/chamados.js`, que o `/api/admin/chamados/*` também usa
 - `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
-- `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP
+- `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP. **Usuário novo
+  nasce sem senha e é ativado por e-mail**: `POST /api/usuarios` exige e-mail e
+  manda o convite (link de uso único de 24 h, o mesmo token do "esqueci a
+  senha" — `assinarTokenRecuperacao`); `POST /:id/convite` reenvia. O login e
+  o `definir-senha` recusam conta sem senha (`precisaAtivar`) — antes, quem
+  soubesse o login definia a senha no "primeiro acesso". **O login aceita
+  login ou e-mail**; e-mail não é único (o dono de duas imobiliárias), então
+  com vários candidatos quem decide a conta é a senha. `test/conviteUsuario.test.js`
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`.
   **Tem cargo**: `CargoSuperAdmin` com permissão por ABA (`verTenants`,
   `verChamados`, `verTutoriais`, `verUsuarios`, `verCargos`, `verSeguranca`) e

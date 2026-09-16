@@ -121,6 +121,11 @@ export function LoginPage({ onLogin }) {
         // Cai na tela de definir nova senha.
         setNovaSenhaFor({ login: err.body.login || form.login, senhaAtual: form.senha });
         setError("");
+      } else if (err?.body?.precisaAtivar) {
+        /* Conta criada pelo painel e ainda sem senha: a ativação é pelo link
+           do e-mail de convite, e não por aqui. A mensagem do servidor já diz
+           isso e aponta o reenvio pelo administrador. */
+        setError(err.message);
       } else {
         setError(err.message);
       }
@@ -189,10 +194,10 @@ export function LoginPage({ onLogin }) {
         </>
       }
     >
-      <Field label="Login">
+      <Field label="Login ou e-mail">
         <input
           className="dl-input"
-          placeholder="seu.login"
+          placeholder="seu.login ou voce@email.com"
           value={form.login}
           onChange={(e) => setForm((prev) => ({ ...prev, login: e.target.value }))}
           required

@@ -154,6 +154,7 @@ test("usuários: criar com cargo de outra imobiliária é recusado", async () =>
   const r = await api.comoTenant(A).post("/api/usuarios", {
     nome: "Intruso",
     login: "intruso",
+    email: "intruso@exemplo.test", // obrigatório desde o convite por e-mail
     cargoCodigo: B.cargoAdmin.id,
   });
   assert.equal(r.status, 400);

@@ -3064,13 +3064,14 @@ ${GV4_CSS}`} />
               >
                 <span className="dl-hero__demo-brilho" aria-hidden="true" />
                 <DashboardMockup />
-                <span className="dl-hero__demo-etiqueta" aria-hidden="true">
-                  <span className="dl-hero__demo-play">▶</span>
-                  <span>
-                    <strong>Ver por dentro</strong>
-                    <small>Tour guiado · sem cadastro</small>
-                  </span>
-                  <Arrow />
+                {/* A pílula roxa, no CENTRO do mockup (50% / 50%), com o
+                    cursor: "clique aqui e faça o tour". Por cima da imagem,
+                    como um botão de play sobre um vídeo. */}
+                <span className="dl-hero__demo-selo" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M5 3l14 8.5-6.2 1.3L16 19l-2.6 1.5-3.2-6.1L5 18.5V3z" />
+                  </svg>
+                  Faça um tour guiado
                 </span>
               </Link>
             </Reveal>
@@ -3972,25 +3973,22 @@ const CSS = `
   background: #6d28d9; opacity: 0.2; filter: blur(90px);
 }
 .dl-hero__demo .dl-stage { position: relative; z-index: 1; }
-.dl-hero__demo-etiqueta {
-  position: absolute; z-index: 2; left: 50%; bottom: -14px; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 12px; white-space: nowrap;
-  padding: 10px 16px 10px 12px; border-radius: 999px;
-  background: rgba(12,12,16,0.92); border: 1px solid rgba(255,255,255,0.14);
-  box-shadow: 0 18px 40px -18px rgba(0,0,0,0.9);
-  color: var(--strong); font-size: 13px; line-height: 1.15;
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
+.dl-hero__demo-selo {
+  position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: inline-flex; align-items: center; gap: 9px; white-space: nowrap;
+  padding: 11px 20px 11px 16px; border-radius: 12px;
+  background: linear-gradient(180deg, #6d28d9 0%, #4c1d95 100%);
+  border: 1px solid rgba(196,181,253,0.35);
+  box-shadow: 0 14px 34px -12px rgba(109,40,217,0.75), inset 0 1px 0 rgba(255,255,255,0.18);
+  color: #fff; font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+  opacity: 0.75;
 }
-.dl-hero__demo-etiqueta strong { display: block; font-weight: 700; }
-.dl-hero__demo-etiqueta small { display: block; font-size: 11px; color: #a1a1aa; margin-top: 2px; }
-.dl-hero__demo-etiqueta svg { transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
-.dl-hero__demo-play {
-  width: 30px; height: 30px; border-radius: 50%; flex: none;
-  display: grid; place-items: center; font-size: 11px; padding-left: 2px;
-  background: var(--accent); color: #fff;
+.dl-hero__demo-selo svg { flex: none; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.35)); }
+.dl-hero__demo:hover .dl-hero__demo-selo {
+  transform: translate(-50%, -50%) scale(1.04);
+  box-shadow: 0 20px 40px -12px rgba(109,40,217,0.9), inset 0 1px 0 rgba(255,255,255,0.22);
 }
-.dl-hero__demo:hover .dl-hero__demo-etiqueta { transform: translateX(-50%) translateY(-3px); border-color: rgba(129,140,248,0.6); }
-.dl-hero__demo:hover .dl-hero__demo-etiqueta svg { transform: translateX(4px); }
 /* O mockup endireita no hover do palco; com o link em volta, o hover e do
    link inteiro — inclusive da etiqueta. */
 .dl-hero__demo:hover .dl-mockup { transform: perspective(1700px) rotateY(-6deg) rotateX(3deg) rotateZ(0deg); }
@@ -6901,7 +6899,7 @@ ${editorCSS()}
   .dl-hero__copy > * { order: 1; margin-bottom: 22px; }
   .dl-stage { order: 2; margin-bottom: 24px; width: 100%; }
   .dl-hero__copy > :last-child { order: 3; margin-bottom: 0; }
-  .dl-hero__demo-etiqueta { bottom: -18px; }
+  .dl-hero__demo-selo { font-size: 13.5px; padding: 9px 16px 9px 13px; }
   /* Mesmo motivo do .dl-hero__grid: "center" serve à grade de duas colunas do
      desktop, mas em coluna ele encolhe cada bloco até o conteúdo e centraliza.
      Quem denunciava era o eyebrow — por ser inline-flex, ele é o mais estreito

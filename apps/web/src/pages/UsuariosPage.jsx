@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useNavigate, useParams, useLocation } from "react-router-dom";
 import { api } from "../api";
-import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo } from "../components/ActionIcons";
+import { BtnAtivar, BtnDesativar, BtnEditar, BtnExcluir, BtnNovo, BtnReenviarConvite } from "../components/ActionIcons";
 import { Avatar, Chip, EmptyState, FilterTabs, SearchInput, StatCard, StatGrid, StatusPill } from "../components/adminUi";
 import { useConfirm } from "../components/ConfirmModal";
 import { SelectCustom } from "../components/SelectCustom";
@@ -15,6 +15,8 @@ import { degrausAte } from "../utils/trilhaDoPainel";
 import { useSaidaDaTela } from "../components/useSaidaDaTela";
 import { useTituloDaTela } from "../utils/contextoDeCabecalho.jsx";
 import { mesmoId } from "../utils/mesmoId";
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const FORM_EMPTY = {
   nome: "", login: "", email: "", cargoCodigo: "", ativo: true, forcaAlterarSenha: false,
@@ -138,6 +140,21 @@ export function UsuariosPage({ session }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | inactive
   const [enviandoFoto, setEnviandoFoto] = useState(false);
+  /* O link de ativação de um usuário recém-criado, QUANDO não há transporte
+     de e-mail (dev): a única forma de a conta ser ativada é alguém passar o
+     link à mão. Com e-mail configurado o servidor nunca devolve o link, e
+     este estado fica nulo. */
+  const [conviteGerado, setConviteGerado] = useState(null);
+
+  async function reenviarConvite(u) {
+    try {
+      const { convite } = await api.reenviarConviteUsuario(tenantSlug, u.id);
+      if (convite?.enviado) showToast?.(`Convite reenviado para ${u.email}.`);
+      else setConviteGerado({ nome: u.nome, email: u.email, link: convite?.link || "" });
+    } catch (err) {
+      showToast?.(err.message, "error");
+    }
+  }
 
   /* A foto vai direto do navegador para o Cloudinary, como a do imóvel e a
      logo — o backend nunca vê o arquivo. O que fica no formulário é a URL. */
@@ -296,6 +313,10 @@ export function UsuariosPage({ session }) {
       setError("Informe o login do usuário.");
       return;
     }
+    if (!editando && !EMAIL_VALIDO.test(form.email.trim())) {
+      setError("Informe um e-mail válido: é por ele que a pessoa cria a senha e entra.");
+      return;
+    }
     // O que vai para a API é sempre o login completo; o campo mostra só a base.
     const loginFinal = juntarLogin(form.login, tenantSlug, form.comSufixo);
     setLoading(true);
@@ -319,17 +340,20 @@ export function UsuariosPage({ session }) {
         setUsuarios((prev) => prev.map((u) => u.id === updated.id ? updated : u));
         showToast?.(`${updated.nome} atualizado.`);
       } else {
-        // Novo usuário: sem senha; ele define a própria no primeiro acesso.
-        const created = await api.createUsuario(tenantSlug, {
+        /* Novo usuário: sem senha. O servidor manda o convite por e-mail e a
+           pessoa cria a senha pelo link. Sem transporte de e-mail (dev) o link
+           volta na resposta, e a tela o mostra para ser passado à mão. */
+        const { convite, ...created } = await api.createUsuario(tenantSlug, {
           nome: form.nome,
           login: loginFinal,
-          email: form.email.trim() || null,
+          email: form.email.trim().toLowerCase(),
           cargoCodigo: Number(form.cargoCodigo),
           ativo: form.ativo,
           ...camposDeVitrine(form),
         });
         setUsuarios((prev) => [...prev, created]);
-        showToast?.(`${created.nome} cadastrado.`);
+        if (convite?.enviado) showToast?.(`Convite enviado para ${created.email}.`);
+        else setConviteGerado({ nome: created.nome, email: created.email, link: convite?.link || "" });
       }
       navigate("/usuarios");
     } catch (err) {
@@ -399,22 +423,26 @@ export function UsuariosPage({ session }) {
             required disabled={loading}
           />
 
-          {/* Opcional, mas é o que permite a pessoa recuperar a própria senha.
-              Sem e-mail, quem esquece a senha depende de alguém redefinir por
-              ela — daí a legenda dizer isso em vez de só "opcional". */}
+          {/* Obrigatório na criação: é por este e-mail que a pessoa ATIVA a
+              conta (o convite com o link de criar a senha) e é com ele que
+              ela pode entrar depois. Na edição continua opcional para não
+              travar a tela nos usuários antigos, que nasceram sem e-mail. */}
           <div>
             <input
               type="email"
-              placeholder="E-mail (para recuperação de senha)"
+              placeholder={editando ? "E-mail (para recuperação de senha)" : "E-mail (recebe o convite de acesso)"}
               value={form.email}
               onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
               disabled={loading}
+              required={!editando}
               autoComplete="off"
             />
             <p style={{ margin: "5px 2px 0", fontSize: "11.5px", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {form.email.trim()
-                ? "É para cá que vai o link de redefinir senha."
-                : "Sem e-mail, esta pessoa não consegue recuperar a senha sozinha."}
+              {editando
+                ? (form.email.trim()
+                  ? "É para cá que vai o link de redefinir senha — e serve como login."
+                  : "Sem e-mail, esta pessoa não consegue recuperar a senha sozinha.")
+                : "A pessoa recebe um e-mail com o link para criar a senha. Depois, entra com o login ou com este e-mail."}
             </p>
           </div>
           {/* Campo composto: a pessoa digita a base e vê o sufixo do tenant
@@ -504,8 +532,8 @@ export function UsuariosPage({ session }) {
 
           {!editando && (
             <p data-tour="usuario-senha" style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              O usuário não recebe senha aqui. No primeiro acesso, ele informa o login e
-              define a própria senha na tela seguinte.
+              Ninguém escolhe a senha por aqui. Ao salvar, a pessoa recebe um e-mail com um
+              link de uso único (vale 24 horas) para criar a própria senha e entrar.
             </p>
           )}
 
@@ -635,6 +663,33 @@ export function UsuariosPage({ session }) {
         )}
       </div>
 
+      {/* O link de ativação, quando o e-mail não sai daqui (dev). Aparece uma
+          vez, como a senha temporária do super-admin: quem cadastrou passa o
+          link à pessoa, e o link morre sozinho quando ela cria a senha. */}
+      {conviteGerado ? (
+        <div className="glass-panel" style={{ padding: "16px 18px", marginBottom: "16px", display: "grid", gap: "8px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+            <strong style={{ fontSize: "14px" }}>Link de ativação de {conviteGerado.nome}</strong>
+            <button type="button" className="button-secondary" style={{ width: "auto", padding: "6px 10px" }} onClick={() => setConviteGerado(null)}>Fechar</button>
+          </div>
+          <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+            Sem e-mail configurado neste ambiente, o convite não foi enviado para <strong>{conviteGerado.email}</strong>.
+            Passe o link à pessoa — vale por 24 horas e só funciona uma vez.
+          </p>
+          <code style={{ fontSize: "11.5px", wordBreak: "break-all", padding: "8px 10px", borderRadius: "8px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}>
+            {conviteGerado.link}
+          </code>
+          <div>
+            <button
+              type="button" className="button-secondary" style={{ width: "auto", padding: "6px 12px" }}
+              onClick={() => navigator.clipboard?.writeText(conviteGerado.link).then(() => showToast?.("Link copiado."))}
+            >
+              Copiar link
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {semNenhum ? (
         <ConviteDeCriacao
           plena
@@ -691,11 +746,13 @@ export function UsuariosPage({ session }) {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
                     {u.cargo?.descricao ? <Chip color="#a78bfa">{u.cargo.descricao}</Chip> : null}
                     {u.forcaAlterarSenha ? <Chip color="#f59e0b" title="O usuário deverá trocar a senha no próximo acesso">Trocar senha</Chip> : null}
+                    {u.semSenha ? <Chip color="#f59e0b" title="Ainda não criou a senha pelo link do convite">Aguardando ativação</Chip> : null}
                   </div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <StatusPill active={u.ativo} />
+                {u.semSenha && u.ativo ? <BtnReenviarConvite onClick={() => reenviarConvite(u)} /> : null}
                 <BtnEditar onClick={() => abrirEditar(u)} />
                 {/* Nada de ação destrutiva na própria linha — nem a
                     reversível, nem a definitiva. */}

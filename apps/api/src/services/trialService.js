@@ -4,6 +4,7 @@ import { provisionTenant, senhaTemporaria } from "./provisioningService.js";
 import { sendEmail } from "./notificationService.js";
 import { emailTrialExpirado } from "./emailTemplates.js";
 import { enderecoDaVitrine } from "./dominioService.js";
+import { slugsProtegidos } from "./tenantProtegido.js";
 
 /**
  * ─── Trial Service ───────────────────────────────────────────────────────────
@@ -318,7 +319,12 @@ export async function limparTrials({ aplicar = false, somenteIds = null } = {}) 
      `limparTrials({ aplicar: true })` na suíte levaria junto qualquer conta
      vencida de verdade que estivesse ali — inclusive as que a pessoa usa para
      trabalhar. */
-  const recorte = somenteIds?.length ? { id: { in: somenteIds } } : {};
+  /* A imobiliária de demonstração fica fora da faxina, sempre — mesmo que
+     alguém a tenha posto em TRIAL à mão. Ver `tenantProtegido.js`. */
+  const recorte = {
+    ...(somenteIds?.length ? { id: { in: somenteIds } } : {}),
+    slug: { notIn: slugsProtegidos() },
+  };
   const limiteTrial = new Date(agora.getTime() - DIAS_ATE_REMOVER * 86400000);
   const limitePagante = new Date(agora.getTime() - DIAS_ATE_REMOVER_PAGANTE * 86400000);
 

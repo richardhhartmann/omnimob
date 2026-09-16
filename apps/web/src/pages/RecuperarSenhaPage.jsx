@@ -20,8 +20,12 @@ import { CascaDeAcesso } from "../components/CascaDeAcesso.jsx";
 export function RecuperarSenhaPage({ onLogin }) {
   const [params] = useSearchParams();
   const token = params.get("token");
+  /* `convite=1`: o link veio do cadastro de usuário, e a pessoa está CRIANDO a
+     senha, não redefinindo. Mesma tela, mesma rota do servidor — só o texto
+     muda, porque "recuperar acesso" para quem nunca teve acesso confunde. */
+  const convite = params.get("convite") === "1";
   return token
-    ? <DefinirNova token={token} onLogin={onLogin} />
+    ? <DefinirNova token={token} onLogin={onLogin} convite={convite} />
     : <PedirLink />;
 }
 
@@ -103,7 +107,7 @@ function PedirLink() {
 
 // ─── Momento 2: escolher a senha nova ───────────────────────────────────────
 
-function DefinirNova({ token, onLogin }) {
+function DefinirNova({ token, onLogin, convite = false }) {
   const navigate = useNavigate();
   const [checando, setChecando] = useState(true);
   const [valido, setValido] = useState(false);
@@ -188,10 +192,12 @@ function DefinirNova({ token, onLogin }) {
 
   return (
     <CascaDeAcesso
-      eyebrow="RECUPERAR ACESSO"
-      strong={nome ? `Olá, ${nome.split(" ")[0]}.` : "Quase lá."}
-      soft="Escolha a sua nova senha."
-      descricao="Depois de salvar, você já entra no painel — não precisa fazer login de novo."
+      eyebrow={convite ? "SEU ACESSO" : "RECUPERAR ACESSO"}
+      strong={nome ? (convite ? `Bem-vindo, ${nome.split(" ")[0]}.` : `Olá, ${nome.split(" ")[0]}.`) : "Quase lá."}
+      soft={convite ? "Crie a sua senha para entrar." : "Escolha a sua nova senha."}
+      descricao={convite
+        ? "Esta senha é a da sua conta no painel. Depois de salvar, você já entra — e nas próximas vezes pode entrar com o seu e-mail."
+        : "Depois de salvar, você já entra no painel — não precisa fazer login de novo."}
       error={error}
       nota="// mínimo de 6 caracteres"
       rodape={<Link to="/login" className="ax-alt">Voltar para o login</Link>}

@@ -588,6 +588,46 @@ export function emailRecuperarSenha({ nome, link, imobiliaria }) {
    lixo para limpar. Vale 24 horas em vez de 1: quem é convidado não está
    esperando o e-mail na frente da tela, como quem acabou de pedir a
    recuperação. */
+/* O convite de USUÁRIO de uma imobiliária: o administrador cadastrou a pessoa
+   no painel e ela precisa criar a senha pelo link. Irmão do convite do
+   super-admin, com o nome da imobiliária no lugar da plataforma. */
+export function emailConviteUsuario({ nome, link, convidadoPor, imobiliaria, cargo }) {
+  const subject = `Seu acesso ao painel da ${imobiliaria}`;
+
+  const body = [
+    `Olá, ${nome}.`,
+    "",
+    `${convidadoPor} criou um acesso para você no painel da ${imobiliaria}${cargo ? `, com o cargo ${cargo}` : ""}.`,
+    "",
+    "Abra o link abaixo para criar a sua senha e entrar:",
+    link,
+    "",
+    "O link vale por 24 horas e só pode ser usado uma vez.",
+    "Se você não esperava este convite, ignore esta mensagem.",
+  ].join("\n");
+
+  const html = layoutEmail({
+    preheader: `Crie a sua senha para entrar no painel da ${imobiliaria}.`,
+    conteudo: [
+      eyebrow("● SEU ACESSO"),
+      titulo("Você foi convidado"),
+      paragrafo(
+        `Olá, ${forte(nome)}. ${forte(esc(convidadoPor))} criou um acesso para você no painel da ${forte(esc(imobiliaria))}${
+          cargo ? `, com o cargo ${forte(esc(cargo))}` : ""
+        }.`,
+      ),
+      botao("Criar minha senha", link),
+      linkDeReserva(link),
+      aviso(
+        `Este link vale por <strong style="color:${COR.forte};">24 horas</strong> e só funciona uma vez. ` +
+          "Se você não esperava este convite, é só ignorar.",
+      ),
+    ].join(""),
+  });
+
+  return { subject, body, html };
+}
+
 export function emailConviteSuperAdmin({ nome, link, convidadoPor, cargo }) {
   const subject = "Seu acesso ao painel da Omnimob";
 

@@ -701,7 +701,15 @@ export function SuperAdminPage({ session, onLogout }) {
                       {entrando === t.id ? "Entrando…" : "Entrar"}
                     </Button>
                   ) : null}
-                  {permissoes.excluirTenant ? (
+                  {/* A imobiliária de demonstração não tem "Excluir": a rota
+                      recusa de qualquer jeito (403 TENANT_PROTEGIDO), e um botão
+                      que só devolve erro ensina que a tela está quebrada. O
+                      selo diz o motivo no lugar dele. */}
+                  {t.protegido ? (
+                    <span className="sa-protegido" title="A imobiliária de demonstração não pode ser excluída.">
+                      🔒 Demonstração
+                    </span>
+                  ) : permissoes.excluirTenant ? (
                     <Button as="button" type="button" variant="danger" className="dl-btn--sm" arrow={false} onClick={() => handleDelete(t)}>
                       Excluir
                     </Button>
@@ -1148,6 +1156,14 @@ const CSS = `
 .sa-modal__title { font-size: 24px; font-weight: 800; letter-spacing: -0.035em; color: var(--strong); }
 .sa-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .sa-modal__extra-label { color: var(--placeholder); font-size: 9.5px; text-transform: none; letter-spacing: 0.05em; line-height: 1.6; }
+/* O selo que ocupa o lugar do "Excluir" na imobiliária de demonstração. */
+.sa-protegido {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: #e8d79b;
+  background: rgba(212,175,55,0.10); border: 1px solid rgba(212,175,55,0.28);
+  cursor: help;
+}
 .sa-modal__foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
 /* ── Endereço da vitrine ──────────────────────────────────────────────────
