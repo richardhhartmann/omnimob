@@ -33,6 +33,7 @@ import { ModalRascunhosDeImovel } from "./RascunhosDeImovel.jsx";
 import { ModalPreferencias, ModalMeusDados } from "./ModaisDoPerfil.jsx";
 import { TEMAS, observarSistema, temaEfetivo, temaEscolhido } from "../utils/temaDoPainel";
 import { lerDoTenant, lerDoUsuario, gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
+import { clearSession } from "../session";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
 import { useAtalhos } from "./useAtalhos";
 import { ProvedorDeAtalhos } from "./ContextoDeAtalhos.jsx";
@@ -226,6 +227,21 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const userInitial = userName.charAt(0)?.toUpperCase() || "U";
   const userRole    = session?.usuario?.cargo?.descricao || "Operador";
   const cargo       = session?.usuario?.cargo;
+  /* A sessão de DEMONSTRAÇÃO (ver DemoPage e `POST /api/auth/demo`): conta
+     compartilhada, somente leitura, com o tour obrigatório. O que muda no
+     layout: o assistente de boas-vindas não entra (ele grava), o tour entra
+     direto sem convite, e uma faixa avisa que nada é salvo. Quem trava a
+     escrita é o servidor — aqui é só a conversa com a pessoa. */
+  const demo        = Boolean(session?.demo);
+  /* Sair da demonstração: limpa a sessão e volta à LANDING — não ao login,
+     que é para onde o logout normal vai. Quem estava na demo não tem conta
+     para entrar; o lugar dela é a página de onde veio. */
+  const sairDaDemo = useCallback((destino = "/") => {
+    clearSession();
+    /* Navegação completa, e não pelo roteador: a sessão saiu do storage mas
+       continua no estado do App, e o `/` com sessão viva cairia no painel. */
+    window.location.assign(typeof destino === "string" ? destino : "/");
+  }, []);
 
   /* A cor da imobiliária, publicada uma vez para tudo que fica embaixo do
      shell: o ladrilho da marca, o avatar do perfil e as iniciais das listas de
@@ -402,7 +418,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      Para quem NÃO administra a conta ele já nasce resolvido: o assistente da
      conta nem é montado para essa pessoa, então ninguém chamaria `aoResolver`
      e o tour esperaria para sempre um sinal que não vem. */
-  const [contaResolvida, setContaResolvida] = useState(() => !cargo?.verConfiguracoes);
+  const [contaResolvida, setContaResolvida] = useState(() => demo || !cargo?.verConfiguracoes);
   const marcarContaResolvida = useCallback(() => setContaResolvida(true), []);
   // Enquanto o tour global ocupa a tela, os tours de tela esperam a vez.
   const [tourGlobalAtivo, setTourGlobalAtivo] = useState(false);
@@ -432,6 +448,23 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);
+
+  /* Escrita recusada na demonstração (o cliente HTTP avisa por evento — ver
+     `request` em api.js). Um aviso só, do layout, em vez de cada formulário
+     traduzir o 403 do seu jeito. Sem repetição em rajada: um clique em
+     "salvar" pode disparar mais de uma requisição. */
+  useEffect(() => {
+    if (!demo) return undefined;
+    let ultimo = 0;
+    const aoBloquear = () => {
+      const agora = Date.now();
+      if (agora - ultimo < 2500) return;
+      ultimo = agora;
+      showToast("Isto é uma demonstração: nada é salvo. Crie sua conta para usar de verdade.", "warning");
+    };
+    window.addEventListener("omnimob:demo-bloqueado", aoBloquear);
+    return () => window.removeEventListener("omnimob:demo-bloqueado", aoBloquear);
+  }, [demo, showToast]);
 
   /* Vincular a conta do Google.
 
@@ -910,7 +943,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
           Quem não administra segue direto para o convite do tour, que é o que
           faz sentido no primeiro acesso de qualquer pessoa. */}
-      {cargo?.verConfiguracoes ? (
+      {cargo?.verConfiguracoes && !demo ? (
       <BoasVindasModal
         tenantSlug={tenantSlug}
         tenantId={tenantId}
@@ -945,17 +978,24 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
           session={session}
           pronto={contaResolvida}
           aoMudarEstado={setTourGlobalAtivo}
+          demo={demo}
+          aoSairDaDemo={sairDaDemo}
         />
       )}
 
       {/* Tours de tela: abrem só quando a pessoa entra na página por vontade
           própria, e ficam quietos enquanto o global estiver na frente. */}
-      <TourDeTela
-        session={session}
-        globalAtivo={tourGlobalAtivo}
-        pronto={contaResolvida}
-        pedido={pedidoTour}
-      />
+      {/* Na demonstração só existe o tour global: os de tela gravam progresso
+          ao terminar, e na conta compartilhada isso vira o aviso de "nada é
+          salvo" no fim de cada um — ruído sem informação. */}
+      {demo ? null : (
+        <TourDeTela
+          session={session}
+          globalAtivo={tourGlobalAtivo}
+          pronto={contaResolvida}
+          pedido={pedidoTour}
+        />
+      )}
 
       {/* Pergunta espontânea de quem está em teste. Vem por último na fila e
           por um motivo: os três acima são de ENTRADA (recepção, tour, tour de
@@ -2732,6 +2772,40 @@ const CSS = `
    fica embaixo dele. Um cartão quase preto sobre um painel claro lê como aviso
    do sistema operacional, não do produto.
    ────────────────────────────────────────────────────────────────────────── */
+/* ── A faixa da demonstracao ──────────────────────────────────────────────
+   Uma pilula fixa no pe da tela, no centro, acima do conteudo e abaixo dos
+   modais (o tour precisa passar por cima dela). Escura nos dois temas: ela e
+   um aviso, nao parte da moldura, e o contraste com o painel claro e o que a
+   faz ser lida.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-demo {
+  position: fixed; left: 50%; bottom: 18px; z-index: 9000;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 10px 9px 16px; border-radius: 999px;
+  background: rgba(14,14,19,0.94); color: #e5e7eb;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 20px 48px -18px rgba(0,0,0,0.9);
+  font-size: 13px; white-space: nowrap;
+}
+.ds-demo__ponto { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,0.18); flex: none; }
+.ds-demo__texto strong { color: #fff; font-weight: 700; }
+.ds-shell .ds-demo__sair, .ds-demo__sair {
+  width: auto; padding: 7px 10px; border-radius: 999px; flex: none; cursor: pointer;
+  background: transparent; border: 1px solid transparent; color: #9ca3af;
+  font: inherit; font-size: 12.5px; font-weight: 600; box-shadow: none; transform: none;
+}
+.ds-shell .ds-demo__sair:hover, .ds-demo__sair:hover { color: #fff; background: rgba(255,255,255,0.08); box-shadow: none; transform: none; }
+.ds-shell .ds-demo__cta, .ds-demo__cta {
+  width: auto; padding: 7px 14px; border-radius: 999px; background: #f1f5f9; color: #0c0f1a;
+  border: 1px solid #f1f5f9; font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; flex: none;
+  cursor: pointer; box-shadow: none; transform: none;
+}
+.ds-shell .ds-demo__cta:hover, .ds-demo__cta:hover { background: #fff; color: #0c0f1a; box-shadow: none; transform: none; }
+@media (max-width: 640px) {
+  .ds-demo { left: 12px; right: 12px; transform: none; white-space: normal; }
+}
+
 .ds-toasts {
   position: fixed; bottom: 24px; right: 24px; z-index: 99999;
   display: flex; flex-direction: column; gap: 8px; pointer-events: none;

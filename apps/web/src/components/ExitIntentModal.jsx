@@ -37,8 +37,22 @@ function progressoDaPagina() {
   return Math.min(1, Math.max(0, window.scrollY / rolavel));
 }
 
+/* Duração da saída. Bate com `ei-caixa-out` / `ei-sheet-out` no CSS: é o
+   tempo que o componente espera antes de desmontar. */
+const SAIDA_MS = 240;
+
 export function ExitIntentModal({ trialAberto = false, onTeste }) {
   const [aberto, setAberto] = useState(false);
+  /* ── O FECHAMENTO ANIMA ─────────────────────────────────────────────────
+     `setAberto(false)` desmonta na hora, e a caixa sumia num corte seco
+     depois de ter entrado deslizando. `saindo` liga a classe de saída (a
+     entrada ao contrário) e só depois dela o modal sai do DOM. Todos os
+     caminhos de fechar da PESSOA — botão, Esc, clique no véu, "agora não" —
+     passam por `fechar`; os fechamentos por TROCA de modal (o Trial abrindo)
+     continuam secos de propósito: ali outra superfície entra no lugar, e duas
+     animações no mesmo quadro brigam. */
+  const [saindo, setSaindo] = useState(false);
+  const saidaRef = useRef(0);
   const [ehMobile, setEhMobile] = useState(false);
 
   const nasceuEm = useRef(Date.now());
@@ -47,6 +61,11 @@ export function ExitIntentModal({ trialAberto = false, onTeste }) {
   const bloqueado = useRef(false);
   const botaoPrincipalRef = useRef(null);
   const focoAnteriorRef = useRef(null);
+  const saindoRef = useRef(false);
+
+  // Se o modal desmontar no meio da saída (o Trial abriu), o timer não pode
+  // mexer em estado de componente que já se foi.
+  useEffect(() => () => window.clearTimeout(saidaRef.current), []);
 
   const debug =
     typeof window !== "undefined" &&
@@ -213,7 +232,7 @@ export function ExitIntentModal({ trialAberto = false, onTeste }) {
       if (evento.key === "Escape") {
         evento.preventDefault();
         evento.stopPropagation();
-        setAberto(false);
+        fechar();
         return;
       }
 
@@ -247,9 +266,20 @@ export function ExitIntentModal({ trialAberto = false, onTeste }) {
     };
   }, [aberto]);
 
-  if (!aberto || trialAberto) return null;
+  /* Declarada antes do retorno vazio: o efeito do teclado (acima) a chama.
+     Idempotente — clique duplo no "×" não reinicia a saída. */
+  function fechar() {
+    if (saindoRef.current) return;
+    saindoRef.current = true;
+    setSaindo(true);
+    saidaRef.current = window.setTimeout(() => {
+      saindoRef.current = false;
+      setSaindo(false);
+      setAberto(false);
+    }, SAIDA_MS);
+  }
 
-  const fechar = () => setAberto(false);
+  if (!aberto || trialAberto) return null;
 
   const testar = () => {
     bloqueado.current = true;
@@ -262,7 +292,7 @@ export function ExitIntentModal({ trialAberto = false, onTeste }) {
 
   return (
     <div
-      className="ei-veu"
+      className={`ei-veu${saindo ? " is-saindo" : ""}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) fechar();
       }}
@@ -271,7 +301,7 @@ export function ExitIntentModal({ trialAberto = false, onTeste }) {
       <style>{EXIT_CSS}</style>
 
       <section
-        className="ei-caixa"
+        className={`ei-caixa${saindo ? " is-saindo" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="ei-titulo"
@@ -375,8 +405,12 @@ const EXIT_CSS = `
     rgba(5,5,7,.76);
   backdrop-filter: blur(12px) saturate(.9);
   -webkit-backdrop-filter: blur(12px) saturate(.9);
-  animation: ei-veu-in .24s ease both;
+  animation: ei-veu-in .28s ease both;
 }
+/* A saida: o inverso da entrada, mais curta (o que fecha nao precisa
+   apresentar nada). pointer-events none para um segundo clique no veu, no
+   meio da saida, nao acertar a pagina por baixo. */
+.ei-veu.is-saindo { animation: ei-veu-out .24s ease both; pointer-events: none; }
 
 .ei-caixa {
   --ei-linha: rgba(255,255,255,.10);
@@ -397,8 +431,9 @@ const EXIT_CSS = `
     0 46px 110px -34px rgba(0,0,0,.92),
     inset 0 1px 0 rgba(255,255,255,.055);
   color: var(--ei-forte);
-  animation: ei-caixa-in .42s cubic-bezier(.2,.8,.2,1) both;
+  animation: ei-caixa-in .5s cubic-bezier(.22, 1, .36, 1) both;
 }
+.ei-caixa.is-saindo { animation: ei-caixa-out .24s cubic-bezier(.4, 0, 1, 1) both; }
 
 .ei-caixa::before {
   content: "";
@@ -795,9 +830,22 @@ const EXIT_CSS = `
   to { opacity: 1; }
 }
 
+/* Entrada: sobe e cresce de 94%, com a curva "out-expo" que assenta sem
+   quicar. Era 14px e 97,5% — quase imperceptivel sobre o veu escurecendo ao
+   mesmo tempo. */
 @keyframes ei-caixa-in {
-  from { opacity: 0; transform: translateY(14px) scale(.975); }
+  from { opacity: 0; transform: translateY(28px) scale(.94); }
   to { opacity: 1; transform: none; }
+}
+/* Saida: encolhe e desce de leve, apagando — o mesmo movimento ao contrario,
+   mais curto. */
+@keyframes ei-caixa-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(16px) scale(.96); }
+}
+@keyframes ei-veu-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @media (max-width: 760px) {
@@ -817,6 +865,9 @@ const EXIT_CSS = `
     border-radius: 28px 28px 0 0;
     animation-name: ei-sheet-in;
   }
+  /* No celular a caixa e uma folha que sobe do rodape; a saida e ela
+     descendo de volta. */
+  .ei-caixa.is-saindo { animation-name: ei-sheet-out; }
 
   .ei-caixa::after {
     content: "";
@@ -924,6 +975,8 @@ const EXIT_CSS = `
   .ei-caixa {
     animation: none;
   }
+  /* Sem percurso, mas ainda com esmaecimento: sumir de estalo desorienta. */
+  .ei-veu.is-saindo, .ei-caixa.is-saindo { animation: ei-veu-out .16s ease both; }
 
   .ei-caixa button,
   .ei-browser,
@@ -933,8 +986,12 @@ const EXIT_CSS = `
 }
 
 @keyframes ei-sheet-in {
-  from { opacity: 0; transform: translateY(28px); }
+  from { opacity: 0; transform: translateY(100%); }
   to { opacity: 1; transform: none; }
+}
+@keyframes ei-sheet-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(100%); }
 }
 /* OMNIMOB_EXIT_INTENT_V1_CSS_END */
 `;

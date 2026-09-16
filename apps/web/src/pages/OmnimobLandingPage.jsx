@@ -142,12 +142,14 @@ const HERO_BULLETS = [
   "Publicação em Facebook, Instagram e WhatsApp",
 ];
 
-const HERO_ASIDE = [
-  "Editor de arrastar e soltar, sem escrever código",
-  "Layout do mobile independente do desktop",
-  "Cada lead já chega vinculado ao imóvel",
-  "Facebook, Instagram e WhatsApp integrados",
-  "Descrição e legenda geradas por IA",
+/* O bloco ao lado do mockup do hero é a porta da DEMONSTRAÇÃO: um clique
+   abre o painel de uma imobiliária de exemplo, com o tour guiado, sem
+   cadastro (ver DemoPage e /api/auth/demo). A lista diz o que a pessoa vai
+   encontrar — e o que NÃO vai precisar fazer. */
+const HERO_DEMO = [
+  "Tour guiado de 3 minutos pelo painel de verdade",
+  "Imóveis, leads e vitrine de uma imobiliária de exemplo",
+  "Nada para preencher, nenhum cadastro",
 ];
 
 // Números de vitrine. Os três primeiros são os mesmos que já estavam na página;
@@ -1249,7 +1251,10 @@ function ManifestoDoFlow() {
           <p className="dl-manifesto__fecho">
             O Omnimob cuida do que a sua imobiliária tem.
             <br />
-            <em>O Omniflow cuida do que ela está fechando.</em>
+            {/* A palavra vira a marca: a arte do "flow" no tamanho da linha,
+                alinhada pela base do texto. O alt mantém a frase inteira
+                para leitor de tela. */}
+            <em>O <img className="dl-manifesto__marca" src="/flow.png" alt="Omniflow" width={422} height={166} loading="lazy" /> cuida do que ela está fechando.</em>
           </p>
           {/* A frase que fecha a secao, ao lado da imagem do negocio fechando.
               E o unico ponto da pagina inteira que mostra alguem CONSEGUINDO —
@@ -2859,6 +2864,21 @@ function ConteudoDaLanding() {
     setTrialAberto(true);
   };
 
+  /* `/?teste=1` abre o teste grátis ao chegar. É o endereço para onde a
+     DEMONSTRAÇÃO manda quem gostou (a faixa do painel, o fim do tour, a
+     tela estreita): de lá não dá para chamar `abrirTeste`, só navegar. A
+     query sai da barra em seguida para o recarregamento não reabrir o modal. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("teste")) return;
+    abrirTeste("", "demo");
+    params.delete("teste");
+    const resto = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${resto ? `?${resto}` : ""}${window.location.hash}`);
+    // Só na chegada: `abrirTeste` é recriada a cada render e não é dependência aqui.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* Mensal ou anual. Começa no mensal de propósito: é o menor número da tela,
      e abrir no anual faria o cartão anunciar quatro dígitos para quem só quer
      saber quanto custa. */
@@ -3029,22 +3049,30 @@ ${GV4_CSS}`} />
             </div>
 
             <Reveal className="dl-hero__side" delay={220}>
-              <DashboardMockup />
-
-              <div className="dl-hero__aside dl-glass">
-                <p className="dl-hero__claim">
-                  Imóvel sem vitrine
-                  <span> é imóvel invisível.</span>
-                </p>
-                <ul className="dl-hero__list">
-                  {HERO_ASIDE.map((item) => (
-                    <li key={item}>
-                      <i aria-hidden="true" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {/* ── O MOCKUP É A PORTA DA DEMONSTRAÇÃO ─────────────────────
+                  Como na referência: a imagem do produto é o link, com um
+                  brilho roxo desfocado atrás. Não há print do painel no
+                  repositório, e o mockup já é a imagem do produto que o hero
+                  tem — então é ele que se clica. A etiqueta em cima diz o
+                  que acontece ("tour guiado, sem cadastro"); o bloco de texto
+                  que morava embaixo saiu, porque a promessa cabe nela. */}
+              <Link
+                className="dl-hero__demo"
+                to="/demo"
+                aria-label={`Ver por dentro: ${HERO_DEMO.join(", ")}`}
+                onClick={() => trackLandingEvent("demo_open", { source: "hero" })}
+              >
+                <span className="dl-hero__demo-brilho" aria-hidden="true" />
+                <DashboardMockup />
+                <span className="dl-hero__demo-etiqueta" aria-hidden="true">
+                  <span className="dl-hero__demo-play">▶</span>
+                  <span>
+                    <strong>Ver por dentro</strong>
+                    <small>Tour guiado · sem cadastro</small>
+                  </span>
+                  <Arrow />
+                </span>
+              </Link>
             </Reveal>
           </div>
         </div>
@@ -3463,9 +3491,12 @@ ${GV4_CSS}`} />
               </div>
             </div>
 
-            {/* O espaço da imagem. Vazio de propósito por enquanto — a forma
-                já está no lugar para a arte entrar como `object-fit: cover`. */}
+            {/* A arte das plataformas, inclinada 30° para a esquerda e com as
+                bordas esvaindo (máscara radial na própria imagem — ver
+                .dl-cta__vaga-arte). O clip-path da vaga recorta o que passa
+                da forma; o traço branco vem por cima. */}
             <div className="dl-cta__vaga" aria-hidden="true">
+              <img className="dl-cta__vaga-arte" src="/plataformas_omnimob_dl-cta__vaga.png" alt="" width={1000} height={2000} loading="lazy" decoding="async" />
               <svg className="dl-cta__vaga-traco dl-cta__vaga-traco--desktop" preserveAspectRatio="none" viewBox="0 0 429 600">
                 <path d="M428.5 520C428.5 564.183 392.682 600 348.5 600L80.5996 600C25.5366 600 -13.0652 545.668 5.05588 493.672L158.401 53.6723C169.601 21.5336 199.91 3.3688e-05 233.944 3.77597e-05L348.499 5.14644e-05C392.682 5.67502e-05 428.5 35.8173 428.5 80.0001L428.5 520Z" />
               </svg>
@@ -3922,18 +3953,47 @@ const CSS = `
 }
 
 /* ── Bloco lateral do hero ── */
-.dl-hero__aside { margin-top: 30px; padding: 22px 24px; border-radius: 18px; }
-.dl-hero__claim { font-size: 18.5px; font-weight: 700; letter-spacing: -0.028em; line-height: 1.38; color: var(--strong); }
-.dl-hero__claim span { color: var(--accent-soft); }
-.dl-hero__list { display: grid; gap: 12px; margin-top: 20px; }
-.dl-hero__list li {
-  display: flex; align-items: baseline; gap: 11px;
-  font-size: 13.5px; line-height: 1.75; color: #d2d2dc; letter-spacing: -0.004em; 
+/* ── O mockup como link da demonstracao ─────────────────────────────────────
+   Referencia: a imagem do produto e um <a>, com um borrao roxo grande atras
+   (150% de largura, deslocado para cima e para a esquerda, blur de 90px). O
+   mockup ja tem um brilho proprio (.dl-stage__glow), menor; este e a nevoa de
+   fundo, mais larga e mais fraca, e os dois convivem. A etiqueta no canto
+   inferior diz o que o clique faz e cresce um pouco no hover — o mockup
+   sozinho nao parece clicavel, e e por isso que ela existe.
+   (Sem crases nestes comentarios: template literal.) */
+.dl-hero__demo {
+  position: relative; display: block; color: inherit; text-decoration: none;
+  border-radius: 18px;
 }
-.dl-hero__list i {
-  width: 4px; height: 4px; border-radius: 999px; flex: 0 0 auto;
-  background: var(--accent-soft); transform: translateY(-3px); opacity: 0.85;
+.dl-hero__demo:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 6px; }
+.dl-hero__demo-brilho {
+  position: absolute; left: -25%; top: -10%; z-index: 0; pointer-events: none;
+  width: 150%; aspect-ratio: 1 / 0.5; border-radius: 120px;
+  background: #6d28d9; opacity: 0.2; filter: blur(90px);
 }
+.dl-hero__demo .dl-stage { position: relative; z-index: 1; }
+.dl-hero__demo-etiqueta {
+  position: absolute; z-index: 2; left: 50%; bottom: -14px; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 12px; white-space: nowrap;
+  padding: 10px 16px 10px 12px; border-radius: 999px;
+  background: rgba(12,12,16,0.92); border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 18px 40px -18px rgba(0,0,0,0.9);
+  color: var(--strong); font-size: 13px; line-height: 1.15;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
+}
+.dl-hero__demo-etiqueta strong { display: block; font-weight: 700; }
+.dl-hero__demo-etiqueta small { display: block; font-size: 11px; color: #a1a1aa; margin-top: 2px; }
+.dl-hero__demo-etiqueta svg { transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+.dl-hero__demo-play {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-size: 11px; padding-left: 2px;
+  background: var(--accent); color: #fff;
+}
+.dl-hero__demo:hover .dl-hero__demo-etiqueta { transform: translateX(-50%) translateY(-3px); border-color: rgba(129,140,248,0.6); }
+.dl-hero__demo:hover .dl-hero__demo-etiqueta svg { transform: translateX(4px); }
+/* O mockup endireita no hover do palco; com o link em volta, o hover e do
+   link inteiro — inclusive da etiqueta. */
+.dl-hero__demo:hover .dl-mockup { transform: perspective(1700px) rotateY(-6deg) rotateX(3deg) rotateZ(0deg); }
 
 /* ── Recursos e integrações ── */
 .dl-feature { display: flex; flex-direction: column; gap: 7px; }
@@ -5342,6 +5402,14 @@ ${editorCSS()}
   font-style: normal;
   color: var(--flow);
 }
+/* A marca no lugar da palavra: altura da linha de texto (1em, menos o respiro
+   que a arte ja traz), largura proporcional, e a base alinhada com a das
+   letras — sem o vertical-align a imagem senta na linha de base e parece
+   flutuar acima do resto. */
+.dl-manifesto__marca {
+  display: inline-block; height: 0.95em; width: auto;
+  vertical-align: -0.14em; margin: 0 0.05em;
+}
 
 @media (max-width: 760px) {
   .dl-manifesto__corpo { grid-template-columns: 1fr; gap: 0; }
@@ -6136,9 +6204,23 @@ ${editorCSS()}
    traco por cima. Vazia por enquanto; a imagem entra aqui com object-fit:
    cover e o clip cuida do formato. */
 .dl-cta__vaga {
-  position: relative; width: 38%; min-width: 0;
+  position: relative; width: 42%; min-width: 0;
   clip-path: url(#dl-cta-forma-desktop);
   background: rgba(255,255,255,0.12);
+}
+/* A arte: centrada na vaga, girada 30° para a esquerda e maior que a caixa
+   (a rotacao abre cantos vazios, e o clip-path recorta a sobra). A mascara e
+   na PROPRIA imagem, entao gira junto com ela — sao as bordas da arte que
+   esvaem, e nao as da vaga. Os dois numeros da mascara: onde a imagem deixa
+   de ser inteira (58%) e onde some (100%). */
+.dl-cta__vaga-arte {
+  position: absolute; left: 50%; top: 50%;
+  height: 115%; width: auto; max-width: none;
+  transform: translate(-35%, -50%) rotate(15deg);
+  transform-origin: center;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, #000 30%, transparent 100%);
+          mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, #000 30%, transparent 100%);
 }
 .dl-cta__vaga-traco { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .dl-cta__vaga-traco path { fill: none; stroke: rgba(255,255,255,0.92); stroke-width: 2; vector-effect: non-scaling-stroke; }
@@ -6161,6 +6243,8 @@ ${editorCSS()}
   }
   .dl-cta__vaga-traco--desktop { display: none; }
   .dl-cta__vaga-traco--mobile { display: block; }
+  /* A vaga vira uma faixa larga e baixa: a arte acompanha pela LARGURA. */
+  .dl-cta__vaga-arte { height: auto; width: 90%; }
 }
 
 .dl-cta__title {
@@ -6817,7 +6901,7 @@ ${editorCSS()}
   .dl-hero__copy > * { order: 1; margin-bottom: 22px; }
   .dl-stage { order: 2; margin-bottom: 24px; width: 100%; }
   .dl-hero__copy > :last-child { order: 3; margin-bottom: 0; }
-  .dl-hero__aside { display: none; }
+  .dl-hero__demo-etiqueta { bottom: -18px; }
   /* Mesmo motivo do .dl-hero__grid: "center" serve à grade de duas colunas do
      desktop, mas em coluna ele encolhe cada bloco até o conteúdo e centraliza.
      Quem denunciava era o eyebrow — por ser inline-flex, ele é o mais estreito

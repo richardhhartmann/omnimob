@@ -45,6 +45,26 @@ const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
    ────────────────────────────────────────────────────────────────────────── */
 export const ESCOPO_REATIVACAO = "reativar";
 
+/* ── A SESSÃO DE DEMONSTRAÇÃO: entra em tudo, não escreve em nada ───────────
+
+   A landing tem um "ver por dentro": quem clica cai no painel de uma
+   imobiliária de demonstração, com o tour guiado, sem cadastro. A conta é
+   COMPARTILHADA por todo visitante, então ela não pode ser alterada por nenhum
+   deles — e é este middleware, e não a tela, que garante isso. Esconder botões
+   no front seria proteção de vitrine: qualquer requisição montada à mão
+   passaria.
+
+   A regra é pelo MÉTODO, não por lista de rotas: com escopo `demo`, qualquer
+   coisa que não seja leitura (GET/HEAD/OPTIONS) recebe 403 antes de chegar na
+   rota. Assim uma rota nova de escrita já nasce bloqueada para a demonstração
+   sem ninguém precisar lembrar dela. O que sobra fora daqui é o que não passa
+   por `requireAuth` — o `logout`, que só revoga o próprio token do visitante.
+
+   A tela lê o `code` para explicar ("na demonstração nada é salvo") em vez de
+   mostrar um erro genérico. Ver `POST /api/auth/demo`. */
+export const ESCOPO_DEMO = "demo";
+const METODOS_DE_LEITURA = new Set(["GET", "HEAD", "OPTIONS"]);
+
 function autenticar({ aceitaReativacao = false } = {}) {
   return async function middlewareDeAutenticacao(req, res, next) {
     if (!aceitaReativacao) {
@@ -133,6 +153,16 @@ async function autenticarBase(req, res, next) {
        carrega o tenant antigo e todo o filtro multi-tenant sai dele. */
     if (usuario.tenantId !== payload.tenantId) {
       return res.status(401).json({ error: "Token invalido ou expirado.", sessaoEncerrada: true });
+    }
+
+    if (payload.escopo === ESCOPO_DEMO) {
+      if (!METODOS_DE_LEITURA.has(req.method)) {
+        return res.status(403).json({
+          error: "Isto é uma demonstração: nada aqui pode ser alterado. Crie sua conta para usar de verdade.",
+          code: "SOMENTE_DEMO",
+        });
+      }
+      req.authDemo = true;
     }
 
     req.authUserId = usuario.id;

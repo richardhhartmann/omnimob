@@ -75,7 +75,14 @@ function prender(valor, min, max) {
  * @param {Function} aoRegistrar (chave, status, passoParou, totalPassos)
  * @param {Function} aoTerminar  (motivo: "concluiu" | "pulou")
  */
-export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
+/* `obrigatorio`: sem o "×" e sem o Esc — o tour só termina no último passo.
+   É o modo da DEMONSTRAÇÃO da landing: quem entrou por ali entrou para ser
+   guiado, e a conta é compartilhada e somente leitura, então não há o que
+   "explorar por conta própria" antes de ver o tour. */
+/* `aoSair`: a saída do tour obrigatório. Não é o "×" (que pula o tour e deixa
+   a pessoa no painel): é ir embora — a demonstração chama para voltar à
+   landing. Aparece como um link discreto no rodapé do cartão. */
+export function TourGuiado({ fluxo, aoRegistrar, aoTerminar, obrigatorio = false, aoSair }) {
   const navegar = useNavigate();
   const local = useLocation();
 
@@ -656,7 +663,7 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
 
   useEffect(() => {
     function aoTeclar(e) {
-      if (e.key === "Escape") { e.preventDefault(); encerrar("pulou"); return; }
+      if (e.key === "Escape") { e.preventDefault(); if (!obrigatorio) encerrar("pulou"); return; }
 
       /* TAB NÃO ATRAVESSA A LÂMINA.
 
@@ -726,6 +733,56 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
     document.addEventListener("keydown", aoTeclar);
     return () => document.removeEventListener("keydown", aoTeclar);
   }, [avancar, voltar, encerrar, liberado, interativo, retangulo?.el]);
+
+  /* ── A TRAVA QUE NÃO MORA NO DOM ─────────────────────────────────────────
+
+     A lâmina (abaixo, no JSX) é o que a pessoa VÊ bloqueando a tela. Mas ela é
+     uma div — e bastava apagá-la pelo DevTools para o aplicativo inteiro voltar
+     a receber clique com o tour aberto: na demonstração, navegar por onde o
+     roteiro ainda não chegou; no produto, sair do tour por uma porta que ele
+     não previu.
+
+     Esta trava é um ouvinte de CAPTURA no documento, e não um elemento: ela
+     roda antes de qualquer alvo receber o evento, e continua valendo com a
+     lâmina apagada. Só passa o que está dentro do cartão do tour e, em passo
+     interativo, dentro do alvo destacado — a mesma regra da lâmina, escrita
+     num lugar que não dá para arrastar para a lixeira.
+
+     `preventDefault` no pointerdown é o que impede o FOCO de ir para trás; o
+     `focusin` cobre o foco que chegue por outro caminho (script, gesto de
+     acessibilidade) e o devolve ao cartão.
+
+     Continua sendo navegador: quem pausar o JavaScript passa. O que isto
+     fecha é a porta que estava aberta — apagar uma div. E, na demonstração, o
+     que vale de verdade é o servidor recusando toda escrita. */
+  useEffect(() => {
+    if (saindo) return undefined;
+
+    const dentro = (alvo) => {
+      if (!(alvo instanceof Node)) return false;
+      if (cartaoRef.current?.contains(alvo)) return true;
+      const el = retangulo?.el;
+      return Boolean(interativo && el?.isConnected && el.contains(alvo));
+    };
+    const barrar = (e) => {
+      if (dentro(e.target)) return;
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+    };
+    const aoFocar = (e) => {
+      if (dentro(e.target)) return;
+      e.stopPropagation();
+      cartaoRef.current?.querySelector("button:not([disabled])")?.focus({ preventScroll: true });
+    };
+
+    const EVENTOS = ["pointerdown", "mousedown", "click", "auxclick", "dblclick", "contextmenu", "touchstart"];
+    for (const nome of EVENTOS) document.addEventListener(nome, barrar, { capture: true, passive: false });
+    document.addEventListener("focusin", aoFocar, true);
+    return () => {
+      for (const nome of EVENTOS) document.removeEventListener(nome, barrar, { capture: true });
+      document.removeEventListener("focusin", aoFocar, true);
+    };
+  }, [saindo, interativo, retangulo?.el]);
 
   if (!etapa || !passo) return null;
 
@@ -832,11 +889,13 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
               linha de base e nenhuma centralização de caixa conserta isso — o
               que a grade centraliza é a caixa da fonte, não a tinta. Duas linhas
               desenhadas no meio do viewBox ficam onde deveriam. */}
-          <button type="button" className="tg-fechar" onClick={() => encerrar("pulou")} aria-label="Encerrar tutorial">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-              <line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" />
-            </svg>
-          </button>
+          {obrigatorio ? null : (
+            <button type="button" className="tg-fechar" onClick={() => encerrar("pulou")} aria-label="Encerrar tutorial">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                <line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <span className="tg-etapa">{etapa.titulo}</span>
@@ -869,6 +928,13 @@ export function TourGuiado({ fluxo, aoRegistrar, aoTerminar }) {
             </button>
           </div>
         </div>
+        {/* A saída do tour obrigatório: ir embora da demonstração. Fora do
+            rodapé dos botões para não parecer um terceiro passo. */}
+        {obrigatorio && aoSair ? (
+          <button type="button" className="tg-sair" onClick={() => aoSair("/")}>
+            Sair da demonstração e voltar à página inicial
+          </button>
+        ) : null}
       </div>
     </>,
     document.body,
@@ -1044,6 +1110,12 @@ const CSS = `
 }
 .tg-cartao .tg-voltar:hover:not(:disabled) { background: rgba(139,92,246,0.16); color: #ede9f6; box-shadow: none; transform: none; }
 .tg-cartao .tg-voltar:disabled { opacity: 0.35; cursor: default; }
+.tg-cartao .tg-sair {
+  width: auto; align-self: flex-start; margin-top: 10px; padding: 0;
+  background: none; border: 0; box-shadow: none; transform: none; cursor: pointer;
+  font: inherit; font-size: 11.5px; color: #94a3b8; text-decoration: underline; text-underline-offset: 3px;
+}
+.tg-cartao .tg-sair:hover { color: #e2e8f0; background: none; box-shadow: none; transform: none; }
 
 /* Dourado com texto quase preto: sobre #0a0a0b é o maior contraste que a
    paleta tem, e o roxo fica para o holofote — duas peças, dois papéis. */

@@ -27,7 +27,8 @@
     "test": "node ../../scripts/com-env.mjs -- node --test \"test/*.test.js\"",
     "test:isolamento": "node ../../scripts/com-env.mjs -- node --test test/isolamento.test.js",
     "conferir-nomes": "node ../web/scripts/conferir-imports.mjs src",
-    "modulos": "node ../../scripts/com-env.mjs -- node scripts/modulos.js"
+    "modulos": "node ../../scripts/com-env.mjs -- node scripts/modulos.js",
+    "demonstracao": "node ../../scripts/com-env.mjs -- node scripts/demonstracao.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

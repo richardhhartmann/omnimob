@@ -55,6 +55,13 @@ async function request(path, options = {}) {
     const error = new Error(normalizeErrorMessage(body));
     error.body = body; // permite ler flags como forcaAlterarSenha
     error.status = response.status;
+    /* Escrita recusada na DEMONSTRAÇÃO. Avisa o painel por evento, aqui no
+       único ponto por onde toda requisição passa: cada tela continua tratando
+       o erro do jeito dela, e o layout põe por cima um aviso só ("nada é
+       salvo na demonstração") em vez de cada formulário inventar o seu. */
+    if (response.status === 403 && body?.code === "SOMENTE_DEMO") {
+      window.dispatchEvent(new CustomEvent("omnimob:demo-bloqueado", { detail: { path } }));
+    }
     throw error;
   }
 
@@ -72,6 +79,10 @@ async function request(path, options = {}) {
 export const api = {
   login: (payload) =>
     request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+
+  /* A sessão de demonstração: sem senha, somente leitura, 45 minutos. Ver
+     `POST /api/auth/demo` e a página /demo. */
+  entrarDemo: () => request("/api/auth/demo", { method: "POST" }),
 
   definirSenha: (payload) =>
     request("/api/auth/definir-senha", { method: "POST", body: JSON.stringify(payload) }),
