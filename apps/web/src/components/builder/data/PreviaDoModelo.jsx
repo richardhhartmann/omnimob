@@ -16,6 +16,10 @@ import { useEffect, useState } from "react";
    clicar em nada. No celular os widgets empilham em coluna, que é o que a
    vitrine faz abaixo do ponto de quebra.
 
+   Os DOIS quadros ficam montados, sobrepostos, e a troca é um esmaecimento
+   cruzado (`opacity` com transição). Trocar o elemento de vez, como era,
+   dava um corte seco a cada 1,3 s — e um piscar quando o mouse entrava.
+
    Um componente só para as três telas que mostram modelos (o assistente de
    boas-vindas, a gaveta "Modelos de página" do editor e o painel do editor
    clássico): três miniaturas divergiriam no primeiro widget novo.
@@ -23,6 +27,7 @@ import { useEffect, useState } from "react";
 
 const INTERVALO_MS = 1300;
 const ZOOM = 0.75;
+const FADE_MS = 380;
 
 /* Os widgets do modelo em linhas, pela posição do desktop: mesma faixa de `y`
    (com folga) é a mesma linha; dentro da linha, ordenados por `x`. */
@@ -170,24 +175,32 @@ export function PreviaDoModelo({ tpl, altura = 150, alternar = true }) {
   }, [mouse, alternar]);
 
   const c = paleta(tpl);
+  /* Cada quadro cobre o espaço inteiro e só a opacidade muda entre eles. O
+     que está escondido não recebe o ponteiro nem é lido pelo leitor de tela. */
+  const camada = (visivel) => ({
+    position: "absolute", inset: 0, display: "flex", justifyContent: "center",
+    opacity: visivel ? 1 : 0, transition: `opacity ${FADE_MS}ms ease`,
+    pointerEvents: visivel ? "auto" : "none",
+  });
   return (
     <div
       className="previa-modelo"
       onMouseEnter={() => setMouse(true)}
       onMouseLeave={() => setMouse(false)}
-      style={{ height: altura, borderRadius: 8, overflow: "hidden", background: c.escuro ? "#0b1020" : "#e6e9ef", border: `1px solid ${c.borda}`, display: "flex", alignItems: mobile ? "center" : "flex-start", justifyContent: "center", position: "relative" }}
+      style={{ height: altura, borderRadius: 8, overflow: "hidden", background: c.escuro ? "#0b1020" : "#e6e9ef", border: `1px solid ${c.borda}`, position: "relative" }}
       aria-label={`Prévia do modelo ${tpl.name || ""}${mobile ? " (celular)" : " (computador)"}`}
     >
-      {mobile ? (
-        /* O celular: quadro estreito, com moldura, centrado no mesmo espaço. */
+      {/* Reduzida por `zoom` para a página INTEIRA caber no quadro: o que
+          distingue um modelo do outro são os widgets, e eles ficam embaixo. */}
+      <div style={{ ...camada(!mobile), alignItems: "flex-start" }} aria-hidden={mobile}>
+        <div style={{ width: `calc(100% / ${ZOOM})`, height: `calc(100% / ${ZOOM})`, zoom: ZOOM, overflow: "hidden" }}><Pagina tpl={tpl} mobile={false} /></div>
+      </div>
+      {/* O celular: quadro estreito, com moldura, centrado no mesmo espaço. */}
+      <div style={{ ...camada(mobile), alignItems: "center" }} aria-hidden={!mobile}>
         <div style={{ width: Math.round(altura * 0.46), height: altura - 12, borderRadius: 8, border: `2px solid ${c.escuro ? "#334155" : "#94a3b8"}`, overflow: "hidden", boxSizing: "border-box" }}>
           <div style={{ width: `calc(100% / ${ZOOM})`, height: `calc(100% / ${ZOOM})`, zoom: ZOOM }}><Pagina tpl={tpl} mobile /></div>
         </div>
-      ) : (
-        /* Reduzida por `zoom` para a página INTEIRA caber no quadro: o que
-           distingue um modelo do outro são os widgets, e eles ficam embaixo. */
-        <div style={{ width: `calc(100% / ${ZOOM})`, height: `calc(100% / ${ZOOM})`, zoom: ZOOM, overflow: "hidden" }}><Pagina tpl={tpl} mobile={false} /></div>
-      )}
+      </div>
       <span style={{ position: "absolute", right: 6, bottom: 5, fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", color: c.escuro ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)", background: c.escuro ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.6)", padding: "1px 5px", borderRadius: 999 }}>
         {mobile ? "CELULAR" : "DESKTOP"}
       </span>

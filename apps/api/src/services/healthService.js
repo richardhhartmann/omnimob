@@ -1,4 +1,4 @@
-import { prisma } from "../db.js";
+import { prisma, plataforma, plataformaExterna } from "../db.js";
 import { getSchemaVersion } from "./migrationService.js";
 
 /**
@@ -27,15 +27,27 @@ const COMMIT = (
   ""
 ).slice(0, 7) || null;
 
-/** Testa a conexão com o banco medindo latência. */
-export async function checkDatabase() {
+async function medirBanco(client) {
   const started = Date.now();
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await client.$queryRaw`SELECT 1`;
     return { ok: true, latencyMs: Date.now() - started };
   } catch (err) {
     return { ok: false, latencyMs: Date.now() - started, error: err.message };
   }
+}
+
+/** Testa a conexão com o banco medindo latência.
+ *
+ * Quando o super-admin vive em outro banco (`PLATAFORMA_DATABASE_URL`, ver
+ * `db.js`), ele entra como `plataforma` na resposta e derruba o `ok` junto:
+ * com ele fora do ar o painel da Omnimob não abre, mesmo com o banco principal
+ * inteiro — e sem a medição separada o sintoma seria só "login não funciona". */
+export async function checkDatabase() {
+  const principal = await medirBanco(prisma);
+  if (!plataformaExterna) return principal;
+  const daPlataforma = await medirBanco(plataforma);
+  return { ...principal, ok: principal.ok && daPlataforma.ok, plataforma: daPlataforma };
 }
 
 /**

@@ -6,6 +6,7 @@ import prismaPkg from "@prisma/client";
 import { CARGOS_PADRAO as CARGOS, dadosDoCargo } from "../src/services/cargosPadrao.js";
 import { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } from "../src/services/permissoesSuperAdmin.js";
 import { TIPOS_IMOVEL, criarTiposPadrao } from "../src/services/tiposPadrao.js";
+import { plataformaExterna } from "../src/db.js";
 
 const {
   PrismaClient,
@@ -575,6 +576,16 @@ async function seedVendas(tenants) {
 
 async function seedSuperAdmin() {
   console.log("→ Super-admin (base)...");
+
+  /* Super-admin em OUTRO banco (`PLATAFORMA_DATABASE_URL`, ver `src/db.js`):
+     as pessoas já existem lá, e semear aqui criaria `super@omnimob.app` com a
+     senha padrão no banco compartilhado — que em dev costuma ser o de
+     produção. Quem precisa criar ou consertar uma conta lá usa
+     `scripts/super-admin-senha.js`, que aponta para o mesmo banco. */
+  if (plataformaExterna) {
+    console.log("  ↷ super-admins vivem no banco da plataforma (PLATAFORMA_DATABASE_URL); nada a semear aqui.");
+    return;
+  }
   const email = process.env.SUPER_ADMIN_EMAIL || "super@omnimob.app";
   const nome = process.env.SUPER_ADMIN_NOME || "Super Admin";
   const senhaPlain = process.env.SUPER_ADMIN_PASSWORD || "superadmin";

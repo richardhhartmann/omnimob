@@ -1,8 +1,8 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
-import { prisma } from "../src/db.js";
 import { subirApi, criarImobiliariaDeTeste, apagarImobiliaria } from "./helpers.js";
+import { prisma } from "../src/db.js";
 import { adminRouter } from "../src/routes/adminRoutes.js";
 import { tenantRouter } from "../src/routes/tenantRoutes.js";
 import { CARGOS_PADRAO, CARGO_ADMIN, PERMISSOES } from "../src/services/cargosPadrao.js";

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import prismaPkg from "@prisma/client";
+import { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } from "../src/services/permissoesSuperAdmin.js";
 
 /**
  * Define a senha do super-admin pela linha de comando.
@@ -16,17 +17,27 @@ import prismaPkg from "@prisma/client";
  * produção reverteria a senha para o valor da env). O app também não expõe rota
  * de troca de senha para este usuário.
  *
- * Como apontar para produção: rode com a DATABASE_URL de produção no ambiente.
+ * Em qual banco mexe: o da PLATAFORMA — `PLATAFORMA_DATABASE_URL` se estiver
+ * definida, senão `DATABASE_URL`. É a mesma regra do `src/db.js`: os
+ * super-admins são as mesmas pessoas em dev e em produção, e vivem num banco
+ * só. Com o `.env` de dev apontando para a produção, rodar daqui já é mexer na
+ * conta real. Para apontar para outro lugar, sobrescreva no ambiente:
  *
- *   bash:        DATABASE_URL="postgresql://..." node scripts/super-admin-senha.js --senha "..."
- *   PowerShell:  $env:DATABASE_URL="postgresql://..."; node scripts/super-admin-senha.js --senha "..."
+ *   bash:        PLATAFORMA_DATABASE_URL="postgresql://..." node scripts/super-admin-senha.js --senha "..."
+ *   PowerShell:  $env:PLATAFORMA_DATABASE_URL="postgresql://..."; node scripts/super-admin-senha.js --senha "..."
+ *
+ * Conta criada aqui nasce no cargo Administrador (tudo ligado), e o cargo é
+ * criado se não existir — é o que permite este script inaugurar um banco de
+ * plataforma novo, já que o seed se recusa a semear super-admin em banco
+ * externo.
  *
  * A senha nunca é impressa, nem no modo de listagem: o que fica registrado é só
  * o e-mail e se a conta está ativa.
  */
 
 const { PrismaClient } = prismaPkg;
-const prisma = new PrismaClient();
+const URL_DO_BANCO = (process.env.PLATAFORMA_DATABASE_URL || process.env.DATABASE_URL || "").trim();
+const prisma = new PrismaClient(URL_DO_BANCO ? { datasourceUrl: URL_DO_BANCO } : undefined);
 
 const arg = (nome) => {
   const i = process.argv.indexOf(`--${nome}`);
@@ -39,14 +50,14 @@ const nome = arg("nome") || process.env.SUPER_ADMIN_NOME || "Super Admin";
 const renomear = arg("renomear");
 
 // Sem a URL do banco o Prisma falharia com um erro que não explica nada.
-if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL não definida. Rode com a URL do banco no ambiente.");
+if (!URL_DO_BANCO) {
+  console.error("Nem PLATAFORMA_DATABASE_URL nem DATABASE_URL definidas. Rode com a URL do banco no ambiente.");
   process.exit(1);
 }
 
 // Mostra em qual banco vamos mexer, sem revelar a senha da conexão.
-const alvo = process.env.DATABASE_URL.replace(/\/\/[^@]*@/, "//<credenciais>@");
-console.log(`banco: ${alvo}\n`);
+const alvo = URL_DO_BANCO.replace(/\/\/[^@]*@/, "//<credenciais>@");
+console.log(`banco da plataforma: ${alvo}\n`);
 
 if (!senha) {
   const todos = await prisma.superAdmin.findMany({
@@ -99,8 +110,13 @@ if (existente) {
       : `✓ Senha redefinida para ${email} (conta reativada, se estava inativa).`,
   );
 } else {
-  await prisma.superAdmin.create({ data: { email, nome, senha: hash, ativo: true } });
-  console.log(`✓ Super-admin criado: ${email}`);
+  const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
+    where: { nome: CARGO_ADMIN_PLATAFORMA },
+    update: {},
+    create: { nome: CARGO_ADMIN_PLATAFORMA, ...permissoesCompletas() },
+  });
+  await prisma.superAdmin.create({ data: { email, nome, senha: hash, ativo: true, cargoId: cargoAdmin.id } });
+  console.log(`✓ Super-admin criado: ${email} (cargo ${CARGO_ADMIN_PLATAFORMA})`);
 }
 
 await prisma.$disconnect();

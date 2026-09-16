@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UsersThree, Tag, CheckCircle, Sparkle } from "@phosphor-icons/react";
+import { UsersThree, Tag, CheckCircle } from "@phosphor-icons/react";
 import { api } from "../api";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -104,18 +104,12 @@ export function CatalogosPasso({ tenantSlug, aoConcluir }) {
 
       {erro ? <p className="cat-erro">{erro}</p> : null}
 
-      <div className="cat-acoes">
-        {/* O botão diz o que vai acontecer, e muda quando nada está marcado —
-            "Criar e continuar" com as duas chaves desligadas seria promessa
-            falsa. */}
-        <button type="button" className="cat-botao" onClick={continuar} disabled={criando}>
-          {criando ? (
-            <><span className="cat-giro" aria-hidden="true" /> Criando…</>
-          ) : algumMarcado ? (
-            <><Sparkle size={15} weight="fill" /> Criar e continuar</>
-          ) : (
-            "Continuar sem nada disso"
-          )}
+      {/* O rodapé é o do assistente (`.bv-acoes` + `.bv-botao`, em
+          BoasVindasModal) — cada passo tinha o seu. O que vai acontecer é
+          dito pelas chaves marcadas; o botão só continua. */}
+      <div className="bv-acoes">
+        <button type="button" className="bv-botao" onClick={continuar} disabled={criando}>
+          {criando ? "Criando…" : "Continuar"}
         </button>
       </div>
     </div>
@@ -251,31 +245,10 @@ export const CATALOGOS_CSS = `
 
 .cat-erro { margin: 0; font-size: 12px; color: #fca5a5; }
 
-.cat-acoes { display: flex; justify-content: flex-end; }
-.bv-caixa .cat-botao, .cat-botao {
-  width: auto; display: inline-flex; align-items: center; gap: 8px;
-  padding: 11px 20px; border-radius: 11px; border: 0; cursor: pointer;
-  font-size: 13.5px; font-weight: 600; color: #fff;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  box-shadow: 0 10px 26px -14px rgba(99,102,241,0.9);
-  transition: transform 0.18s ease, filter 0.18s ease;
-}
-.cat-botao:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
-.cat-botao:disabled { opacity: 0.75; cursor: default; }
-
-.cat-giro {
-  width: 13px; height: 13px; border-radius: 50%; flex: none;
-  border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
-  animation: catGiro 0.7s linear infinite;
-}
-@keyframes catGiro { to { transform: rotate(360deg); } }
-
 @media (max-width: 560px) {
   .cat-item { grid-template-columns: 1fr; gap: 10px; }
-  .cat-acoes { justify-content: stretch; }
-  .bv-caixa .cat-botao { width: 100%; justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cat-item, .cat-item__bola, .cat-giro { transition: none; animation: none; }
+  .cat-item, .cat-item__bola { transition: none; animation: none; }
 }
 `;

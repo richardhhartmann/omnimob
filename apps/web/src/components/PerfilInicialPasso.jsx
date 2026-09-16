@@ -123,6 +123,9 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
     }
   }
 
+  /* Veio do nosso upload (Cloudinary), e não de um endereço colado. */
+  const logoEnviado = /res\.cloudinary\.com\//i.test(form.logoUrl || "");
+
   async function enviarLogo(evento) {
     const arquivo = evento.target.files?.[0];
     evento.target.value = "";
@@ -272,16 +275,33 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
                 ? <img src={form.logoUrl} alt="" onError={(e) => { e.currentTarget.style.opacity = 0; }} />
                 : <span className="pi-logo__vazio">{(form.name || "D").charAt(0).toUpperCase()}</span>}
             </span>
-            <input
-              className="pi-entrada pi-logo__url"
-              value={form.logoUrl}
-              onChange={(e) => set("logoUrl", e.target.value.trim())}
-              placeholder="https://…/logo.png"
-              disabled={ocupado}
-            />
+            {/* Arquivo enviado: o que a pessoa vê é "enviado", e não o
+                endereço do Cloudinary. A URL continua no formulário — é o que
+                a vitrine grava —, mas é infraestrutura nossa, não informação
+                para o cliente ler. Endereço colado por ela continua visível:
+                é dela. */}
+            {logoEnviado ? (
+              <span className="pi-logo__enviado">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                Imagem enviada
+              </span>
+            ) : (
+              <input
+                className="pi-entrada pi-logo__url"
+                value={form.logoUrl}
+                onChange={(e) => set("logoUrl", e.target.value.trim())}
+                placeholder="https://…/logo.png"
+                disabled={ocupado}
+              />
+            )}
             <button type="button" className="pi-botao pi-botao--fino" onClick={() => arquivoRef.current?.click()} disabled={ocupado}>
-              {logoSubindo ? "Enviando…" : "Enviar"}
+              {logoSubindo ? "Enviando…" : logoEnviado ? "Trocar" : "Enviar"}
             </button>
+            {logoEnviado ? (
+              <button type="button" className="pi-botao pi-botao--fino pi-botao--apagar" onClick={() => set("logoUrl", "")} disabled={ocupado} aria-label="Remover o logotipo">
+                Remover
+              </button>
+            ) : null}
             <input ref={arquivoRef} type="file" accept="image/*" onChange={enviarLogo} hidden />
           </div>
         </Campo>
@@ -333,18 +353,21 @@ export function PerfilInicialPasso({ tenantSlug, aoConcluir, aoPular }) {
 
       {erro ? <p className="pi-erro">{erro}</p> : null}
 
-      <div className="pi-acoes">
+      {/* O rodapé é o do assistente (`.bv-acoes` + `.bv-botao`, em
+          BoasVindasModal): cada passo tinha o seu, e eram quatro botões
+          diferentes para a mesma ação. */}
+      <div className="bv-acoes">
         {/* Desligado enquanto faltar campo, com o motivo no `title`. O clique
             ainda é validado dentro do `salvar` — o botão desligado orienta,
             não protege: o Enter num campo passaria por cima dele. */}
         <button
           type="button"
-          className="pi-botao pi-botao--primario"
+          className="bv-botao"
           onClick={salvar}
           disabled={ocupado || faltando.size > 0}
           title={faltando.size ? `Falta preencher: ${rotuloDoQueFalta.join(", ")}` : undefined}
         >
-          {salvando ? "Salvando…" : "Salvar e continuar"}
+          {salvando ? "Salvando…" : "Continuar"}
         </button>
       </div>
     </div>
@@ -487,6 +510,12 @@ ${HORARIO_ATENDIMENTO_CSS}
 .pi-logo__previa img { width: 100%; height: 100%; object-fit: contain; }
 .pi-logo__vazio { font-size: 15px; font-weight: 700; color: #a9a3ba; }
 .bv-caixa .pi-logo__url { flex: 1; min-width: 0; }
+.pi-logo__enviado {
+  flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 600; color: #34d399;
+}
+.bv-caixa .pi-botao--apagar { background: transparent; border-color: var(--linha-14, rgba(255,255,255,0.14)); color: #94a3b8; }
+.bv-caixa .pi-botao--apagar:hover { background: rgba(239,68,68,0.12); color: #fca5a5; border-color: rgba(239,68,68,0.3); }
 
 .pi-cor { display: flex; align-items: center; gap: 8px; }
 .pi-cor__amostra {
@@ -511,15 +540,12 @@ ${HORARIO_ATENDIMENTO_CSS}
   background: rgba(239,68,68,0.10); border: 1px solid rgba(239,68,68,0.26);
 }
 
-.pi-acoes { display: flex; gap: 9px; justify-content: flex-end; margin-top: 2px; }
 .bv-caixa .pi-botao {
   width: auto; padding: 10px 17px; border-radius: 10px; cursor: pointer;
   font-family: inherit; font-size: 12.5px; font-weight: 650;
   border: 1px solid transparent; box-shadow: none; transform: none;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.bv-caixa .pi-botao--primario { background: #d4af37; color: #17130a; }
-.bv-caixa .pi-botao--primario:hover { background: #e5c158; box-shadow: none; transform: none; }
 .bv-caixa .pi-botao--fantasma { background: transparent; border-color: rgba(167,139,250,0.22); color: #a9a3ba; }
 .bv-caixa .pi-botao--fantasma:hover { background: rgba(139,92,246,0.14); color: #ede9f6; box-shadow: none; transform: none; }
 .bv-caixa .pi-botao--fino { padding: 8px 13px; font-size: 12px; background: rgba(139,92,246,0.18); color: #ede9f6; flex-shrink: 0; }
@@ -528,8 +554,6 @@ ${HORARIO_ATENDIMENTO_CSS}
 
 @media (max-width: 620px) {
   .pi-grade { grid-template-columns: 1fr; }
-  .pi-acoes { flex-direction: column-reverse; }
-  .bv-caixa .pi-acoes .pi-botao { width: 100%; }
 }
 `;
 

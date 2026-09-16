@@ -47,6 +47,22 @@ delete process.env.RESEND_API_KEY;
 delete process.env.SMTP_USER;
 delete process.env.SMTP_PASS;
 
+/* NENHUM teste encosta no super-admin de produção.
+
+   Com `PLATAFORMA_DATABASE_URL` no `.env` de dev, `SuperAdmin` e
+   `CargoSuperAdmin` vivem no banco compartilhado — normalmente o de produção
+   (ver `src/db.js`). A suíte cria super-admins descartáveis e, num dos
+   testes, DESATIVA todos os outros por alguns segundos para provar a trava do
+   último Administrador. Contra o banco real isso derrubaria o acesso da
+   equipe no meio de um `npm test`.
+
+   Igualar à `DATABASE_URL` faz o `plataforma` de `db.js` ser o mesmo cliente
+   do banco de dev, que é o que o `prisma` deste arquivo também consulta. Vale
+   porque `db.js` lê a variável ao carregar, e este módulo é avaliado antes
+   dele em todo arquivo de teste (é o primeiro import). Sobrescrever, e não
+   apagar: o `new PrismaClient()` recarrega o `.env` e traria a URL de volta. */
+process.env.PLATAFORMA_DATABASE_URL = process.env.DATABASE_URL || "";
+
 const { PrismaClient } = prismaPkg;
 export const prisma = new PrismaClient();
 

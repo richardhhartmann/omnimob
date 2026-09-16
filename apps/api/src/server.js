@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import { prisma } from "./db.js";
+import { prisma, plataformaExterna } from "./db.js";
 import { adminRouter } from "./routes/adminRoutes.js";
 import { aiRouter } from "./routes/aiRoutes.js";
 import { vendaRouter } from "./routes/vendaRoutes.js";
@@ -307,6 +307,10 @@ app.use((error, _req, res, _next) => {
 
 app.listen(port, () => {
   console.log(`API rodando em http://localhost:${port}`);
+  /* Dito no boot porque é o tipo de coisa que se esquece: com isto ligado, o
+     login e a tela de usuários do super-admin mexem no banco compartilhado —
+     normalmente o de produção. Ver `db.js`. */
+  if (plataformaExterna) console.log("Super-admin: em banco externo (PLATAFORMA_DATABASE_URL) — as contas são as de produção.");
   // Só liga com FAXINA_AUTOMATICA=true — ver o porquê em faxinaScheduler.js.
   iniciarFaxinaAutomatica();
   iniciarRelatorioMensal();

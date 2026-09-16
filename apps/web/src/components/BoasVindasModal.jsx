@@ -423,13 +423,15 @@ ${MODELO_CSS}`}</style>
                 Sem ele, a saída é resolver o domínio ou voltar para o endereço
                 da Omnimob. Fechar o modal continua possível pelo Esc. */}
             {enderecoResolvido ? (
-              <button
-                type="button"
-                className="bv-botao bv-botao--espacado"
-                onClick={() => (temMigracao ? setPasso("dados") : fechar())}
-              >
-                {temMigracao ? "Continuar" : "Concluir"}
-              </button>
+              <div className="bv-acoes bv-acoes--espacado">
+                <button
+                  type="button"
+                  className="bv-botao"
+                  onClick={() => (temMigracao ? setPasso("dados") : fechar())}
+                >
+                  {temMigracao ? "Continuar" : "Concluir"}
+                </button>
+              </div>
             ) : null}
           </>
         ) : passo === "dados" ? (
@@ -461,12 +463,14 @@ ${MODELO_CSS}`}</style>
               </p>
             ) : null}
 
-            <button type="button" className="bv-botao bv-botao--espacado" onClick={() => encerrarMigracao(true)}>
-              Importar agora
-            </button>
-            <button type="button" className="bv-secundario" onClick={() => encerrarMigracao(false)}>
-              Faço isso depois
-            </button>
+            <div className="bv-acoes">
+              <button type="button" className="bv-secundario" onClick={() => encerrarMigracao(false)}>
+                Faço isso depois
+              </button>
+              <button type="button" className="bv-botao" onClick={() => encerrarMigracao(true)}>
+                Importar agora
+              </button>
+            </div>
             <p className="bv-texto bv-texto--fraco bv-nota">
               A importação fica em <strong>Configurações → Dados</strong>, sempre que você quiser.
             </p>
@@ -568,13 +572,15 @@ ${MODELO_CSS}`}</style>
 
             Então a pergunta certa não é "qual recepção é esta?", é "a ficha já
             está preenchida?". Uma condição só, que atende os dois casos. */}
-        <button
-          type="button"
-          className="bv-botao"
-          onClick={() => (fichaPreenchida ? (modeloEscolhido ? fechar() : setPasso("modelo")) : setPasso("perfil"))}
-        >
-          {fichaPreenchida && modeloEscolhido ? "Começar" : "Continuar"}
-        </button>
+        <div className="bv-acoes bv-acoes--centro">
+          <button
+            type="button"
+            className="bv-botao"
+            onClick={() => (fichaPreenchida ? (modeloEscolhido ? fechar() : setPasso("modelo")) : setPasso("perfil"))}
+          >
+            {fichaPreenchida && modeloEscolhido ? "Começar" : "Continuar"}
+          </button>
+        </div>
         </>
         )}
       </div>
@@ -605,9 +611,29 @@ ${MODELO_CSS}`}</style>
 }
 
 const CSS = `
-/* Descola o botão do bloco acima. No passo do endereço ele vem logo depois de
-   uma tabela de registros DNS, e colado dava a impressão de fazer parte dela. */
-.bv-botao--espacado { margin-top: 18px; }
+/* ── UM rodapé para todos os passos ──────────────────────────────────────────
+
+   Cada passo é um componente com o próprio rodapé, e cada um tinha inventado o
+   seu: pílula branca centrada na boas-vindas, botão dourado quadrado na ficha,
+   gradiente índigo nos catálogos, pílula esticada até as bordas no modelo. A
+   regra agora é uma: o botão principal é o ".bv-botao", dentro de uma
+   ".bv-acoes" alinhada à direita — como um formulário. A boas-vindas é a
+   única centrada ("--centro"), porque o conteúdo dela é centrado.
+
+   O secundário (".bv-secundario") entra na MESMA linha, à esquerda do
+   principal. */
+.bv-acoes {
+  width: 100%; display: flex; align-items: center; justify-content: flex-end;
+  gap: 9px; margin-top: 4px;
+}
+.bv-acoes--centro { justify-content: center; }
+/* Descola do bloco acima. No passo do endereço a linha vem logo depois de uma
+   tabela de registros DNS, e colada dava a impressão de fazer parte dela. */
+.bv-acoes--espacado { margin-top: 18px; }
+@media (max-width: 560px) {
+  .bv-acoes { flex-direction: column-reverse; align-items: stretch; }
+  .bv-acoes .bv-botao, .bv-acoes .bv-secundario { width: 100%; margin-top: 0; }
+}
 
 /* Espera enquanto /me/trial responde. Sem animação de entrada: ele aparece no
    primeiro quadro, porque o que ele impede é justamente o clique apressado. */
@@ -772,9 +798,13 @@ const CSS = `
   color: #f1f5f9; line-height: 1.28;
 }
 
-/* Passo do perfil: a caixa cresce para caber a grade de dois campos por linha,
-   e o conteúdo desencosta do centro — formulário centralizado é ilegível. */
-.bv-caixa:has(.pi-corpo), .bv-caixa:has(.pi-carregando) {
+/* Nos passos numerados a caixa cresce e o conteúdo desencosta do centro —
+   formulário centralizado é ilegível. Valia só para a ficha (".pi-corpo"),
+   e nos outros passos a caixa continuava centrada e encolhida ao conteúdo: o
+   Voltar caía no meio da tela, o cartão "Em branco" do modelo saía fino e o
+   botão de cada rodapé ficava num lugar. A linha do passo é o que todos têm
+   em comum, então é ela quem decide. */
+.bv-caixa:has(.bv-passo-topo) {
   width: min(680px, 100%); justify-items: stretch; text-align: left;
 }
 .bv-titulo--perfil, .bv-texto--perfil { text-align: left; width: 100%; }
@@ -795,20 +825,21 @@ const CSS = `
 }
 
 .ds-shell .bv-botao, .bv-botao {
-  width: auto; padding: 11px 22px; border-radius: 999px; cursor: pointer;
+  width: auto; flex: none; padding: 11px 22px; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 13px; font-weight: 600;
   background: #f1f5f9; border: 1px solid #f1f5f9; color: #0c0f1a;
   box-shadow: none; transform: none;
-  transition: background 0.18s ease;
+  transition: background 0.18s ease, opacity 0.18s ease;
 }
-.bv-botao:hover { background: #fff; color: #0c0f1a; box-shadow: none; transform: none; }
+.bv-botao:hover:not(:disabled) { background: #fff; color: #0c0f1a; box-shadow: none; transform: none; }
 .bv-botao:active { scale: 1; }
+.ds-shell .bv-botao:disabled, .bv-botao:disabled { opacity: 0.5; cursor: default; }
 
 /* Recusar tem que ser possível sem parecer o caminho certo. Daí o botão sem
    preenchimento: continua sendo botão de verdade, com área de clique inteira,
    mas não disputa o olho com o "Importar agora" logo acima. */
 .ds-shell .bv-secundario, .bv-secundario {
-  width: auto; margin-top: 10px; padding: 9px 18px; border-radius: 999px; cursor: pointer;
+  width: auto; flex: none; padding: 10px 18px; border-radius: 999px; cursor: pointer;
   font-family: inherit; font-size: 12.5px; font-weight: 600;
   background: transparent; border: 1px solid var(--linha-14, rgba(255,255,255,0.14)); color: #94a3b8;
   box-shadow: none; transform: none;
