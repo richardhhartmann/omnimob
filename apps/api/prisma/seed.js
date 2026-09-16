@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { pathToFileURL } from "node:url";
 import prismaPkg from "@prisma/client";
 /* O catálogo de cargos vive no serviço, não aqui: o provisionamento de tenant
    novo usa a MESMA lista, e duas cópias divergiriam na primeira permissão nova
@@ -18,7 +19,7 @@ const {
   AndamentoImovel,
 } = prismaPkg;
 
-const prisma = new PrismaClient();
+export const prisma = new PrismaClient();
 
 // Os dados de exemplo (tenants, usuários, imóveis, leads, vendas) só são criados
 // quando o seed roda com a flag `--dev` (ou SEED_DEV=true). Sem ela, apenas os
@@ -26,7 +27,7 @@ const prisma = new PrismaClient();
 // tenant novo precisa em produção; imóveis ficam restritos ao ambiente de dev.
 const SEED_DEV = process.argv.includes("--dev") || process.env.SEED_DEV === "true";
 
-async function hashPassword(plain) {
+export async function hashPassword(plain) {
   return bcrypt.hash(plain, 10);
 }
 
@@ -40,7 +41,7 @@ async function hashPassword(plain) {
 //  DADOS DEV — somente com --dev (apenas para desenvolvimento)
 // ════════════════════════════════════════════════════════════════════════════
 
-const TENANTS_DEV = [
+export const TENANTS_DEV = [
   {
     slug: "imobiliaria-centro",
     name: "Imobiliaria Centro",
@@ -81,7 +82,7 @@ const TENANTS_DEV = [
   },
 ];
 
-const USUARIOS_DEV = [
+export const USUARIOS_DEV = [
   { login: "admin",         nome: "Administrador Centro",     tenantSlug: "imobiliaria-centro", cargo: "Administrador" },
   { login: "gerente",       nome: "Gerente Centro",           tenantSlug: "imobiliaria-centro", cargo: "Gerente" },
   { login: "corretor1",     nome: "Carlos Andrade",           tenantSlug: "imobiliaria-centro", cargo: "Corretor" },
@@ -95,7 +96,7 @@ const USUARIOS_DEV = [
 
 // Cada imóvel referencia o tipo e os atributos pela descrição (resolvidos para id
 // no momento de criar). Os atributos listados devem existir no respectivo tipo.
-const IMOVEIS_DEV = [
+export const IMOVEIS_DEV = [
   {
     id: "seed-prop-1", tenantSlug: "imobiliaria-centro", tipo: "Apartamento",
     title: "Apartamento 2 quartos no Centro",
@@ -252,13 +253,13 @@ const IMOVEIS_DEV = [
   },
 ];
 
-const CLIENTES_DEV = [
+export const CLIENTES_DEV = [
   { id: "seed-cli-1", tenantSlug: "imobiliaria-centro", nome: "Marcos Ribeiro",  cpf: "111.222.333-44", email: "marcos.ribeiro@email.com",  telefone: "(11) 98877-1122", cidade: "Sao Paulo", estado: "SP" },
   { id: "seed-cli-2", tenantSlug: "imobiliaria-centro", nome: "Juliana Castro",  cpf: "222.333.444-55", email: "juliana.castro@email.com",  telefone: "(11) 97766-2233", cidade: "Sao Paulo", estado: "SP" },
   { id: "seed-cli-3", tenantSlug: "casa-nobre",         nome: "Fernanda Alves",  cpf: "333.444.555-66", email: "fernanda.alves@email.com",  telefone: "(11) 96655-3344", cidade: "Sao Paulo", estado: "SP" },
 ];
 
-const VENDAS_DEV = [
+export const VENDAS_DEV = [
   { id: "seed-venda-1", tenantSlug: "imobiliaria-centro", propertyId: "seed-prop-9",  clienteId: "seed-cli-1", usuarioLogin: "corretor1",  tipo: "VENDA", valor: 765000,  data: "2026-04-18", comissao: 38250 },
   { id: "seed-venda-2", tenantSlug: "casa-nobre",         propertyId: "seed-prop-14", clienteId: "seed-cli-3", usuarioLogin: "admin-casa", tipo: "VENDA", valor: 1720000, data: "2026-05-05", comissao: 86000 },
 ];
@@ -318,7 +319,13 @@ function fakePhone(i) {
    Antes ele rodava antes de existir tenant e criava um conjunto único, global.
    Era esse conjunto que todas as imobiliárias dividiam — inclusive as criadas
    em produção pelo provisionamento, que ia buscar o "Administrador" do seed. */
-async function seedCargos(tenants) {
+/* ── AS FUNÇÕES SÃO EXPORTADAS, E OS DADOS ENTRAM POR PARÂMETRO ─────────────
+   `scripts/demonstracao.js` monta a imobiliária de demonstração com as MESMAS
+   funções deste seed, derivando os dados da `imobiliaria-centro` — uma segunda
+   cópia da lógica de imóveis, leads e métricas divergiria no primeiro campo
+   novo. Os parâmetros têm como padrão as constantes de dev, então o `npm run
+   prisma:seed:dev` continua fazendo exatamente o que fazia. */
+export async function seedCargos(tenants) {
   console.log("→ Cargos (um conjunto por imobiliária)...");
   const map = {};
   for (const [slug, tenant] of Object.entries(tenants)) {
@@ -346,7 +353,7 @@ async function seedCargos(tenants) {
    A criação em si mora em `criarTiposPadrao` — o mesmo caminho que o
    provisionamento usa. Aqui fica só a releitura, porque o seed de imóveis de
    exemplo precisa dos ids para amarrar imóvel a tipo e a atributo. */
-async function seedTipos(tenants) {
+export async function seedTipos(tenants) {
   console.log("→ Tipos de imóvel e atributos (um catálogo por imobiliária)...");
   const tiposMap = {};
   const atributosMap = {};
@@ -371,10 +378,10 @@ async function seedTipos(tenants) {
   return { tiposMap, atributosMap };
 }
 
-async function seedTenants() {
+export async function seedTenants(defs = TENANTS_DEV) {
   console.log("→ [dev] Tenants...");
   const map = {};
-  for (const t of TENANTS_DEV) {
+  for (const t of defs) {
     const tenant = await prisma.tenant.upsert({
       where: { slug: t.slug },
       update: {},
@@ -386,10 +393,10 @@ async function seedTenants() {
   return map;
 }
 
-async function seedUsuarios(tenants, cargos) {
-  console.log("→ [dev] Usuários (senha: admin)...");
-  const senha = await hashPassword("admin");
-  for (const u of USUARIOS_DEV) {
+export async function seedUsuarios(tenants, cargos, defs = USUARIOS_DEV, senhaHash = null) {
+  console.log(senhaHash ? "→ Usuários..." : "→ [dev] Usuários (senha: admin)...");
+  const senha = senhaHash || (await hashPassword("admin"));
+  for (const u of defs) {
     const tenantId = tenants[u.tenantSlug].id;
     // O cargo agora vem do conjunto DA imobiliária do usuário.
     const cargoCodigo = cargos[u.tenantSlug][u.cargo].id;
@@ -402,9 +409,9 @@ async function seedUsuarios(tenants, cargos) {
   }
 }
 
-async function seedClientes(tenants) {
+export async function seedClientes(tenants, defs = CLIENTES_DEV) {
   console.log("→ [dev] Clientes...");
-  for (const c of CLIENTES_DEV) {
+  for (const c of defs) {
     const { id, tenantSlug, ...rest } = c;
     const tenantId = tenants[tenantSlug].id;
     await prisma.cliente.upsert({
@@ -416,15 +423,20 @@ async function seedClientes(tenants) {
   }
 }
 
-async function seedImoveis(tenants, tiposMap, atributosMap) {
+/* `fotoDe(imovel, k)` devolve a URL da k-ésima foto. O padrão são os
+   placeholders do picsum — imagens aleatórias, estáveis por semente, que
+   servem ao dev e a mais nada. A demonstração passa as suas. */
+const fotoPlaceholder = (im, k) => `https://picsum.photos/seed/${im.id}-${k}/1024/768`;
+
+export async function seedImoveis(tenants, tiposMap, atributosMap, defs = IMOVEIS_DEV, fotoDe = fotoPlaceholder) {
   console.log("→ [dev] Imóveis, atributos, imagens, publicações, leads e métricas...");
-  const ids = IMOVEIS_DEV.map((i) => i.id);
+  const ids = defs.map((i) => i.id);
 
   // Limpa filhos sem chave natural para evitar duplicação ao re-rodar.
   await prisma.propertyLead.deleteMany({ where: { propertyId: { in: ids } } });
   await prisma.propertyMetricEvent.deleteMany({ where: { propertyId: { in: ids } } });
 
-  for (const im of IMOVEIS_DEV) {
+  for (const im of defs) {
     const tenant = tenants[im.tenantSlug];
     // O tipo agora vem do catálogo DA imobiliária do imóvel.
     const tipo = tiposMap[im.tenantSlug]?.[im.tipo];
@@ -473,11 +485,11 @@ async function seedImoveis(tenants, tiposMap, atributosMap) {
       });
     }
 
-    // Imagens (placeholders estáveis)
+    // Imagens (placeholders estáveis, ou as que `fotoDe` disser)
     const numFotos = im.status === "ACTIVE" ? 4 : 2;
     for (let k = 0; k < numFotos; k++) {
       const imgId = `seed-img-${property.id}-${k}`;
-      const url = `https://picsum.photos/seed/${property.id}-${k}/1024/768`;
+      const url = fotoDe(im, k);
       await prisma.propertyImage.upsert({
         where: { id: imgId },
         update: { url, position: k, tenantId: tenant.id },
@@ -544,9 +556,9 @@ async function seedImoveis(tenants, tiposMap, atributosMap) {
   }
 }
 
-async function seedVendas(tenants) {
+export async function seedVendas(tenants, defs = VENDAS_DEV) {
   console.log("→ [dev] Vendas...");
-  for (const v of VENDAS_DEV) {
+  for (const v of defs) {
     const tenantId = tenants[v.tenantSlug].id;
     const usuario = await prisma.usuario.findUnique({ where: { login: v.usuarioLogin } });
     if (!usuario) {
@@ -646,13 +658,20 @@ async function main() {
   console.log("\n✅ Seed (dev) concluído com sucesso!");
 }
 
-main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (error) => {
-    console.error("\n❌ Seed falhou:", error.message);
-    console.error(error);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+/* Só roda quando este arquivo É o programa (`node prisma/seed.js`). Importado
+   por `scripts/demonstracao.js`, ele só empresta as funções e os dados. */
+const executadoDiretamente =
+  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (executadoDiretamente) {
+  main()
+    .then(async () => {
+      await prisma.$disconnect();
+    })
+    .catch(async (error) => {
+      console.error("\n❌ Seed falhou:", error.message);
+      console.error(error);
+      await prisma.$disconnect();
+      process.exit(1);
+    });
+}

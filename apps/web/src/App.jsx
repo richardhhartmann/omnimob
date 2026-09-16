@@ -113,6 +113,10 @@ const VitrinesPage = telaTardia(() =>
   import("./pages/publicas/VitrinesPage.jsx").then((m) => ({ default: m.VitrinesPage })));
 const NaoEncontradaPage = telaTardia(() =>
   import("./pages/publicas/NaoEncontradaPage.jsx").then((m) => ({ default: m.NaoEncontradaPage })));
+/* A porta da demonstração da landing. Sob demanda como as institucionais:
+   quem faz login normal nunca passa por ela. */
+const DemoPage = telaTardia(() =>
+  import("./pages/DemoPage.jsx").then((m) => ({ default: m.DemoPage })));
 
 /* Enquanto o pedaço desce. Fundo sólido e nada mais: a landing tem tela de
    abertura própria (`OmnimobSplash`), e um segundo indicador antes dela seria
@@ -500,6 +504,9 @@ export default function App() {
       />
       {/* Destino do link mágico do teste grátis: público e sem sessão. */}
       <Route path="/comecar" element={<TrialConfirmarPage />} />
+      {/* O "ver por dentro" da landing: abre a sessão de demonstração (somente
+          leitura, com tour obrigatório) e entra no painel. Ver DemoPage. */}
+      <Route path="/demo" element={<DemoPage onLogin={handleLogin} />} />
 
       {/* Recuperação de senha. Dois caminhos para a MESMA página: `/recuperar-
           senha` pede o link, `/redefinir-senha?token=…` é para onde o e-mail

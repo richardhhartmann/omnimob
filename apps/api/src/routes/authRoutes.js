@@ -6,12 +6,12 @@ import crypto from "node:crypto";
 import { prisma } from "../db.js";
 import { sendEmail } from "../services/notificationService.js";
 import { emailRecuperarSenha } from "../services/emailTemplates.js";
-import { requireAuth, ESCOPO_REATIVACAO } from "../middlewares/authMiddleware.js";
+import { requireAuth, ESCOPO_REATIVACAO, ESCOPO_DEMO } from "../middlewares/authMiddleware.js";
 import { googleConfigurado, verificarTokenDoGoogle } from "../services/google.js";
 import { situacaoDeGraca } from "../services/trialService.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { loginSchema } from "../validators/authValidators.js";
-import { PERMISSOES } from "../services/cargosPadrao.js";
+import { PERMISSOES, CARGO_ADMIN } from "../services/cargosPadrao.js";
 import { modulosDoTenant } from "../services/modulos.js";
 import { normalizarAtalhos } from "../services/atalhos.js";
 
@@ -667,6 +667,40 @@ const MINUTOS_BLOQUEADO = 15;
    um hash bcrypt de custo 10 de uma senha que ninguém conhece; ele nunca casa
    com nada, só gasta o mesmo tempo. */
 const HASH_FANTASMA = "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+
+/* ── ENTRAR NA DEMONSTRAÇÃO ─────────────────────────────────────────────────
+   Sem senha, sem cadastro: devolve uma sessão do Administrador da imobiliária
+   de demonstração (`DEMO_TENANT_SLUG`), com o escopo que trava toda escrita
+   (ver `ESCOPO_DEMO` no middleware) e validade curta — 45 minutos dão para o
+   tour e para uma volta pelo painel; um token de sete dias para uma conta
+   compartilhada seria um convite a ficar morando nela.
+
+   Sem imobiliária configurada, ou sem Administrador ativo nela, a resposta é
+   404 e a landing esconde o convite — melhor que abrir um painel vazio.
+
+   A MESMA `montarSessao` do login, pelo mesmo motivo do acesso do super-admin:
+   a sessão é o objeto de que a interface inteira depende, e uma segunda
+   montagem divergiria dela na primeira coisa nova que a tela passasse a ler.
+   `demo: true` na saída é o que o painel usa para trocar o convite do tour pelo
+   tour obrigatório e mostrar a faixa "nada é salvo". */
+authRouter.post("/demo", async (_req, res) => {
+  const slug = (process.env.DEMO_TENANT_SLUG || "").trim();
+  if (!slug) return res.status(404).json({ error: "A demonstração não está disponível." });
+
+  try {
+    const usuario = await prisma.usuario.findFirst({
+      where: { ativo: true, tenant: { slug, ativo: true }, cargo: { descricao: CARGO_ADMIN } },
+      orderBy: { createdAt: "asc" },
+      include: { tenant: true, cargo: true },
+    });
+    if (!usuario) return res.status(404).json({ error: "A demonstração não está disponível." });
+
+    return res.json({ ...montarSessao(usuario, { escopo: ESCOPO_DEMO, validade: "45m" }), demo: true });
+  } catch (erro) {
+    console.error("[POST /auth/demo]", erro);
+    return res.status(500).json({ error: "Erro ao abrir a demonstração." });
+  }
+});
 
 authRouter.post("/logout", async (req, res) => {
   const token = req.headers.authorization?.replace("Bearer ", "");

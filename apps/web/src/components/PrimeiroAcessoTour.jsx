@@ -24,7 +24,11 @@ import { IconeChapeuFormatura } from "./Icones.jsx";
 // deixamos pendente — ele abre inteiro no primeiro acesso pelo desktop.
 const LARGURA_MINIMA = 900;
 
-export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
+/* `demo`: a sessão de demonstração da landing. O tour entra DIRETO, sem
+   convite e sem saída, e nada é gravado — a conta é compartilhada e o servidor
+   recusa toda escrita (gravar "FINALIZADO" nela apagaria o tour para o próximo
+   visitante). Ao terminar, a tela de conclusão oferece criar a conta. */
+export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado, demo = false, aoSairDaDemo }) {
   const tenantSlug = session?.tenant?.slug || "";
   const tenantId = session?.tenant?.id || "";
   const tenantName = session?.tenant?.name || "";
@@ -34,8 +38,8 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   const navegar = useNavigate();
 
   const fluxo = useMemo(
-    () => montarFluxoTour({ cargo, tenantSlug }),
-    [cargo, tenantSlug],
+    () => montarFluxoTour({ cargo, tenantSlug, demo }),
+    [cargo, tenantSlug, demo],
   );
 
   // carregando · oculto · convite · tour · concluido
@@ -107,6 +111,9 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   useEffect(() => {
     if (!tenantSlug || !fluxo.length) return undefined;
     if (window.innerWidth < LARGURA_MINIMA) { setDecidido("oculto"); return undefined; }
+    /* Na demonstração não se pergunta ao banco: o progresso lá é de todo
+       mundo e de ninguém. O tour é o motivo de a pessoa estar aqui. */
+    if (demo) { setDecidido("tour"); return undefined; }
 
     let vivo = true;
     api.getTutorial(tenantSlug)
@@ -127,7 +134,7 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
       .catch(() => { if (vivo) setDecidido("oculto"); });
 
     return () => { vivo = false; };
-  }, [tenantSlug, tenantId, usuarioId, fluxo.length]);
+  }, [tenantSlug, tenantId, usuarioId, fluxo.length, demo]);
 
   /* A decisão só vira estado visível quando a fila libera. Separado do efeito
      acima de propósito: um é sobre SABER, o outro sobre MOSTRAR. */
@@ -147,7 +154,7 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   // Progresso que não gravou não pode derrubar o tour na cara do usuário: a
   // falha vai para o console e a navegação continua.
   const registrar = useCallback((etapa, status, passoParou, totalDaEtapa) => {
-    if (!tenantSlug) return Promise.resolve();
+    if (!tenantSlug || demo) return Promise.resolve();
     return api.marcarTutorial(tenantSlug, {
       etapa,
       status,
@@ -156,7 +163,7 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
     }).catch((erro) => {
       console.warn("[tour] não consegui gravar o progresso:", erro?.message || erro);
     });
-  }, [tenantSlug]);
+  }, [tenantSlug, demo]);
 
   /* Só é chamado onde o desfecho JÁ FOI comunicado ao servidor. Marcar em
      `fase === "oculto"` seria mais curto e estaria errado: a tela estreita
@@ -164,18 +171,19 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
      silenciaria o tour naquele navegador para sempre, e a pessoa nunca mais
      veria o primeiro acesso ao abrir no desktop. */
   const marcarResolvido = useCallback(() => {
+    if (demo) return; // a marca local também não: o próximo visitante deste navegador vê o tour
     gravarNoUsuario(CHAVES.tourResolvido, tenantId, usuarioId, "1");
-  }, [tenantId, usuarioId]);
+  }, [tenantId, usuarioId, demo]);
 
   const pularTudo = useCallback((chaves, passoParou) => {
-    if (!tenantSlug || !chaves.length) return Promise.resolve();
+    if (!tenantSlug || !chaves.length || demo) return Promise.resolve();
     return api.pularTutorialTodo(tenantSlug, {
       etapas: chaves,
       passoParou: passoParou ?? null,
     }).catch((erro) => {
       console.warn("[tour] não consegui registrar o abandono:", erro?.message || erro);
     });
-  }, [tenantSlug]);
+  }, [tenantSlug, demo]);
 
   /* ── Desfechos ──────────────────────────────────────────────────────────── */
 
@@ -261,10 +269,20 @@ export function PrimeiroAcessoTour({ session, pronto = true, aoMudarEstado }) {
   }
 
   if (fase === "tour") {
-    return <TourGuiado fluxo={fluxo} aoRegistrar={registrar} aoTerminar={terminarTour} />;
+    return (
+      <TourGuiado
+        fluxo={fluxo}
+        aoRegistrar={registrar}
+        aoTerminar={terminarTour}
+        obrigatorio={demo}
+        /* A única saída do tour obrigatório: não é "pular", é ir embora da
+           demonstração — de volta à landing, sem sessão. */
+        aoSair={demo ? aoSairDaDemo : undefined}
+      />
+    );
   }
 
-  return <TourConcluido nome={nome} aoFechar={() => setFase("oculto")} />;
+  return <TourConcluido nome={nome} demo={demo} aoFechar={() => setFase("oculto")} aoSairDaDemo={aoSairDaDemo} />;
 }
 
 /* O véu de espera. Mesmo peso do véu do modal de boas-vindas, para a transição
@@ -293,22 +311,44 @@ const CSS_ESPERA = `
    Quem chegou ao fim do tour merece o aplauso; quem pulou não vê esta tela.
    ────────────────────────────────────────────────────────────────────────── */
 
-function TourConcluido({ nome, aoFechar }) {
+function TourConcluido({ nome, aoFechar, demo = false, aoSairDaDemo }) {
   const primeiroNome = (nome || "").split(" ")[0];
   return (
     <div className="tc-veu">
       <style>{CSS_CONCLUIDO}</style>
       <div className="tc-caixa" role="dialog" aria-modal="true" aria-labelledby="tc-titulo">
         <span className="tc-icone" aria-hidden="true"><IconeChapeuFormatura size={26} /></span>
-        <h2 id="tc-titulo" className="tc-titulo">
-          {primeiroNome ? `Pronto, ${primeiroNome}!` : "Pronto!"}
-        </h2>
-        <p className="tc-texto">
-          Você já sabe onde fica cada coisa. Um bom primeiro passo é cadastrar um imóvel e
-          abrir a vitrine para ver como ele aparece para o cliente.
-        </p>
-        <p className="tc-nota">Precisar rever, o tour continua disponível em Configurações.</p>
-        <button type="button" className="tc-botao" onClick={aoFechar}>Começar a usar</button>
+        {demo ? (
+          /* O fim da demonstração — e o fim da sessão. A demo É o tour: não
+             há "continuar explorando", porque explorar de verdade é o teste
+             grátis. As duas saídas encerram a sessão e levam à landing; a
+             primeira já abre o teste. */
+          <>
+            <h2 id="tc-titulo" className="tc-titulo">Esse foi o tour</h2>
+            <p className="tc-texto">
+              Você viu onde fica cada coisa. Para usar de verdade — com os seus imóveis, a sua
+              equipe e a sua vitrine —, o teste grátis leva um minuto e não pede cartão.
+            </p>
+            <button type="button" className="tc-botao" onClick={() => aoSairDaDemo?.("/?teste=1")}>
+              Criar meu teste grátis
+            </button>
+            <button type="button" className="tc-secundario" onClick={() => aoSairDaDemo?.("/")}>
+              Voltar à página inicial
+            </button>
+          </>
+        ) : (
+          <>
+            <h2 id="tc-titulo" className="tc-titulo">
+              {primeiroNome ? `Pronto, ${primeiroNome}!` : "Pronto!"}
+            </h2>
+            <p className="tc-texto">
+              Você já sabe onde fica cada coisa. Um bom primeiro passo é cadastrar um imóvel e
+              abrir a vitrine para ver como ele aparece para o cliente.
+            </p>
+            <p className="tc-nota">Precisar rever, o tour continua disponível em Configurações.</p>
+            <button type="button" className="tc-botao" onClick={aoFechar}>Começar a usar</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -357,6 +397,16 @@ const CSS_CONCLUIDO = `
   box-shadow: none; transform: none; transition: background 0.18s ease;
 }
 .tc-caixa .tc-botao:hover { background: #818cf8; border-color: #818cf8; color: #fff; box-shadow: none; transform: none; }
+/* O principal como link (a demonstracao manda para o teste gratis): mesma
+   pilula, sem sublinhado. O secundario e o "continuar explorando", discreto. */
+.tc-caixa a.tc-botao { text-decoration: none; display: inline-flex; align-items: center; }
+.tc-caixa .tc-secundario {
+  width: auto; margin-top: 10px; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  background: transparent; border: 1px solid transparent; color: #94a3b8;
+  box-shadow: none; transform: none; transition: color 0.18s ease;
+}
+.tc-caixa .tc-secundario:hover { color: #e2e8f0; background: transparent; box-shadow: none; transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .tc-veu, .tc-caixa, .tc-icone { animation: none; }

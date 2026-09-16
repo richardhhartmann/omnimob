@@ -94,6 +94,21 @@ omnimob/
 
 **Rotas:**
 - `POST /api/auth/login`
+- `POST /api/auth/demo` — **o "ver por dentro" da landing**. Sem senha: devolve
+  a sessão do Administrador da imobiliária `DEMO_TENANT_SLUG`, com escopo
+  `demo` no token (45 min) e `demo: true` no corpo. O `requireAuth` recusa
+  **qualquer método que não seja leitura** para esse escopo (403
+  `SOMENTE_DEMO`) — a conta é compartilhada por todo visitante, e é o
+  servidor que garante que ninguém a altera; esconder botão seria vitrine. No
+  painel, `session.demo` troca o convite do tour pelo tour **obrigatório**
+  (sem "×", sem Esc), não monta o assistente de boas-vindas nem os tours de
+  tela, e mostra a faixa "nada é salvo". Página: `/demo` (`DemoPage`); só
+  desktop, porque o tour não roda abaixo de 900px. Teste em `test/demo.test.js`.
+  **A demo É o tour**: a sessão vive no `sessionStorage` (morre com a aba), o
+  fim do tour só oferece "criar o teste grátis" ou "voltar à página inicial",
+  e os dois encerram a sessão — não existe passeio livre pela conta de exemplo.
+  O tour bloqueia a interação por ouvinte de CAPTURA no documento, não só pela
+  lâmina: apagar a div pelo DevTools não libera a tela
 - `/api/tenants/*` — perfil, configuração do tenant
 - `/api/properties/*` — CRUD de imóveis, imagens, métricas (inclui `POST /:id/ai/gerar`)
 - `/api/leads/*` — leads do tenant (dono, estágio do funil, histórico e notas).
@@ -192,6 +207,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/mercadoPago.test.js` | a tradução plano → cobrança e a **assinatura do webhook** — um defeito ali vale um ano de plano de graça para quem achar a URL. Não toca no banco |
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
 | `test/suporteChamados.test.js` | a conversa do chamado: B não lê nem escreve no chamado da A pelo número real (404); o ciclo ABERTO → AGUARDANDO_CLIENTE → EM_ATENDIMENTO → RESOLVIDO → reaberto pelos dois lados; anotação de sistema; a conversa some com a imobiliária |
+| `test/demo.test.js` | a sessão de demonstração lê tudo e não escreve nada — imóvel, cargo e o próprio progresso do tour recebem 403 `SOMENTE_DEMO`; o token normal da mesma pessoa continua escrevendo. Sem `DEMO_TENANT_SLUG`, 404 |
 | `test/superAdminPermissoes.test.js` | cargo "Suporte" recebe 403 no `entrar`/`editar`/`excluir` mesmo chamando a URL; rebaixar vale na requisição seguinte; Administrador não perde as chaves da casa; convite é de uso único; a escrita entra na `Auditoria` com `tenantId` nulo |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
@@ -389,6 +405,7 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_UPLOAD_PRESET` | — | `dpwuxmbli` / `domus-app` | idem — **os mesmos valores dos `VITE_`** |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
+| `DEMO_TENANT_SLUG` | — | `demonstracao` (`npm run demonstracao` cria) | idem — o mesmo script, rodado contra produção; vazia = demonstração indisponível |
 
 **Sobre o banco da PLATAFORMA (`PLATAFORMA_DATABASE_URL`):** `SuperAdmin` e
 `CargoSuperAdmin` são as mesmas pessoas em dev e em produção, e por isso vivem
@@ -1036,6 +1053,7 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 | `npm run relatorio` | Relatório mensal por e-mail aos clientes Profissional/Premium. Ensaio por padrão; `--aplicar` envia. `--mes=7 --ano=2026` escolhe o período |
 | `npm run stripe:limpar -- --slug=…` | Cancela assinaturas do slug no Stripe |
 | `npm run prisma:seed:dev` | Imobiliárias de exemplo + catálogos |
+| `npm run demonstracao` | A imobiliária `demonstracao` do "Ver por dentro": a `imobiliaria-centro` do seed com outro slug, logins `demo-*`, **fotos de imóvel de verdade** (Unsplash, escolhidas por tipo), Premium com os dois módulos, EM_DIA e sem vencimento (não cai na faxina). Idempotente; a senha do `demo-admin` é aleatória e sai UMA vez (`-- --senha-nova` gera outra). `INFISICAL_ENV=prod` para produção. O seed exporta as funções e aceita os dados por parâmetro justamente para este script não duplicá-lo |
 
 > O subdomínio de cada imobiliária é cadastrado **individualmente** na Vercel no
 > provisionamento — não existe wildcard `*.omnimob.app`. Se aquela chamada

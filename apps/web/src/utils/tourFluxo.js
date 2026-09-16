@@ -25,7 +25,10 @@ export const ETAPA_BOAS_VINDAS = "boas-vindas";
  * @param {string} tenantSlug
  * @returns {Array<{chave, titulo, rota, passos: Array}>}
  */
-export function montarFluxoTour({ cargo, tenantSlug }) {
+/* `demo`: o tour da DEMONSTRAÇÃO da landing. Mesmo roteiro; só o fecho muda —
+   "cadastre o seu primeiro imóvel" não faz sentido numa conta compartilhada
+   em que nada é salvo. */
+export function montarFluxoTour({ cargo, tenantSlug, demo = false }) {
   const podeImoveis  = Boolean(cargo?.gerenciarImoveis);
   const podeLeads    = Boolean(cargo?.verRelatorios);
   const podeClientes = Boolean(cargo?.gerenciarClientes);
@@ -403,9 +406,12 @@ export function montarFluxoTour({ cargo, tenantSlug }) {
       {
         alvo: '[data-tour="perfil"]',
         titulo: "É isso!",
-        texto:
-          "Você pode rever este tour quando quiser, em <strong>Configurações</strong>. " +
-          "Agora é sua vez: cadastre o primeiro imóvel e veja ele aparecer na vitrine.",
+        texto: demo
+          ? "Esse foi o painel por dentro, numa imobiliária de exemplo. Nada aqui é salvo — " +
+            "para ter o seu, com os seus imóveis e a sua equipe, o <strong>teste grátis</strong> " +
+            "leva um minuto e não pede cartão."
+          : "Você pode rever este tour quando quiser, em <strong>Configurações</strong>. " +
+            "Agora é sua vez: cadastre o primeiro imóvel e veja ele aparecer na vitrine.",
         lado: ["right", "top"],
       },
     ];
