@@ -44,6 +44,50 @@ function ehSobreposicao(el) {
   );
 }
 
+/* ── CORES QUE O html2canvas NÃO ENTENDE ─────────────────────────────────────
+
+   O painel usa `color-mix()` em dezenas de lugares (o seletor de módulo, a
+   pílula do plano, o cabeçalho com a página rolada). O navegador resolve isso
+   no estilo computado para `color(srgb r g b / a)` — e o html2canvas 1.4, de
+   2022, não conhece nem uma função nem a outra: ele lança "unsupported color
+   function" e o print inteiro vai embora por causa de uma borda.
+
+   O conserto é feito no CLONE que a biblioteca lê (`onclone`), nunca na
+   página: cada elemento recebe, em linha, a mesma cor traduzida para `rgba()`.
+   Só as propriedades de cor que a biblioteca desenha; o resto passa direto.
+
+   `color(srgb …)` traz canais de 0 a 1; `rgba()` quer 0 a 255. Degradê com
+   essas cores dentro (`background-image`) passa pela mesma troca, ocorrência
+   a ocorrência. */
+const PROPRIEDADES_DE_COR = [
+  "color", "background-color", "background-image",
+  "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+  "outline-color", "text-decoration-color", "box-shadow", "fill", "stroke",
+];
+const COR_SRGB = /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\)/g;
+
+function paraRgba(valor) {
+  return valor.replace(COR_SRGB, (_, r, g, b, a) => {
+    const canal = (x) => Math.round(Math.min(1, Math.max(0, Number(x))) * 255);
+    const alfa = a === undefined ? 1 : a.endsWith("%") ? Number(a.slice(0, -1)) / 100 : Number(a);
+    return `rgba(${canal(r)}, ${canal(g)}, ${canal(b)}, ${alfa})`;
+  });
+}
+
+function traduzirCoresModernas(docClonado) {
+  const janela = docClonado.defaultView;
+  if (!janela) return;
+  for (const el of docClonado.querySelectorAll("*")) {
+    let computado = null;
+    for (const prop of PROPRIEDADES_DE_COR) {
+      computado ||= janela.getComputedStyle(el);
+      const valor = computado.getPropertyValue(prop);
+      if (!valor || !valor.includes("color(")) continue;
+      el.style.setProperty(prop, paraRgba(valor), "important");
+    }
+  }
+}
+
 /**
  * Captura o que está visível na janela.
  *
@@ -65,6 +109,7 @@ export async function capturarTela() {
 
     const canvas = await html2canvas(document.body, {
       ignoreElements: ehSobreposicao,
+      onclone: traduzirCoresModernas,
       useCORS: true,          // Cloudinary responde com CORS; sem isto, foto vira buraco
       logging: false,
       backgroundColor: "#0a0a0b",
