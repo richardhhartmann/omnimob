@@ -8822,9 +8822,9 @@ html[data-tema-painel="claro"] .aj-caixa textarea::placeholder { color: #9b95ab;
    "há algo aqui sobre a sua conta". O número volta quando a barra abre.
 
    Fora do `main`, então quem o alcança é a barra, não o tema. */
-.ds-side:not(.is-aberta) .tv-rotulo { display: none; }
-.ds-side:not(.is-aberta) .ds-shell .tv-botao,
-.ds-side:not(.is-aberta) .tv-botao {
+.ds-side:not(.is-aberta):not(.is-fechando) .tv-rotulo { display: none; }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-shell .tv-botao,
+.ds-side:not(.is-aberta):not(.is-fechando) .tv-botao {
   justify-content: center; padding: 9px 0; gap: 0;
 }
 

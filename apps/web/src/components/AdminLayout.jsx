@@ -369,13 +369,33 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
        e com os rótulos embaixo dos ícones ele não esconde mais nada. */
     return guardado === "1";
   });
+  /* ── O FECHAMENTO TAMBÉM ANIMA ──────────────────────────────────────────────
+     A largura da barra leva 0,2s nos dois sentidos, mas só a abertura parecia
+     animada. Ao abrir, os rótulos já nascem ao lado dos ícones e o
+     `overflow: hidden` os revela conforme a borda anda. Ao recolher, a classe
+     saía na hora: os rótulos sumiam no mesmo quadro e, como a barra não tem
+     fundo, não sobrava nada visível para encolher — o recolhimento era um
+     corte seco com uma transição rodando à toa por baixo.
+
+     `barraFechando` segura a forma ABERTA (`.is-fechando`, tratada como
+     `.is-aberta` em toda regra de recolhimento) durante a transição: a borda
+     anda para a esquerda recortando os rótulos, que é exatamente o filme da
+     abertura ao contrário. Só depois a barra assume a forma de tira. */
+  const [barraFechando, setBarraFechando] = useState(false);
   const alternarBarra = useCallback(() => {
     setBarraAberta((v) => {
       const proximo = !v;
       gravarNoUsuario(CHAVES.barraAberta, tenantId, session?.usuario?.id, proximo ? "1" : "0");
+      setBarraFechando(!proximo);
       return proximo;
     });
   }, [tenantId, session?.usuario?.id]);
+  useEffect(() => {
+    if (!barraFechando) return undefined;
+    // A MESMA duração da transição de largura de .ds-side__interno.
+    const id = setTimeout(() => setBarraFechando(false), 200);
+    return () => clearTimeout(id);
+  }, [barraFechando]);
 
   // ── Fila de modais de entrada ─────────────────────────────────────────────────
   /* O tour só entra depois que o aviso de conta se resolve (ver o JSX abaixo).
@@ -1155,7 +1175,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             por cima do conteúdo. Fosse a própria `aside` a crescer, abrir o menu
             refluiria a página inteira em vez de passar por cima dela. */}
         <aside
-          className={`ds-side${barraAberta ? " is-aberta" : ""}`}
+          className={`ds-side${barraAberta ? " is-aberta" : ""}${!barraAberta && barraFechando ? " is-fechando" : ""}`}
           data-tour="sidebar"
         >
           <div className="ds-side__interno">
@@ -2058,6 +2078,10 @@ const CSS = `
 .ds-side.is-aberta .ds-side__interno {
   width: var(--s-aberta);
 }
+/* Enquanto FECHA, a barra continua vestida de aberta (rotulos ao lado dos
+   icones) e so a largura anda — ver barraFechando no JSX. Por isso toda regra
+   de recolhimento abaixo exclui .is-fechando junto com .is-aberta: a tira so
+   assume a forma dela quando a borda ja chegou. */
 
 /* ── O que some ao recolher ──────────────────────────────────────────────────
    display: none, e NAO opacity. Elemento invisivel por opacidade continua
@@ -2070,13 +2094,13 @@ const CSS = `
    destino, so que embaixo do icone e em 9px. Era o unico servico que a
    expansao por hover prestava, e agora ele nao custa gesto nenhum.
    (Sem crases nestes comentarios: template literal.) */
-.ds-side:not(.is-aberta) .ds-profile__text,
-.ds-side:not(.is-aberta) .ds-group__label,
-.ds-side:not(.is-aberta) .ds-item__badge,
-.ds-side:not(.is-aberta) .ds-item__cadeado,
-.ds-side:not(.is-aberta) .selo-beta,
-.ds-side:not(.is-aberta) .mkb-caixa,
-.ds-side:not(.is-aberta) .ds-sub { display: none; }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-profile__text,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-group__label,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-item__badge,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-item__cadeado,
+.ds-side:not(.is-aberta):not(.is-fechando) .selo-beta,
+.ds-side:not(.is-aberta):not(.is-fechando) .mkb-caixa,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-sub { display: none; }
 
 /* E o que some ao ABRIR: as formas recolhidas dos mesmos elementos. O pip e o
    contador de leads em ponto vermelho, que substitui o numero quando ele nao
@@ -2093,8 +2117,8 @@ const CSS = `
    JSX) e na tinta forte do tema, contra o contorno em tinta fraca dos outros.
    E a mesma distincao que a barra do YouTube usa recolhida, e ela basta.
    (Sem crases nestes comentarios: template literal.) */
-.ds-side:not(.is-aberta) .ds-shell .ds-item.is-active,
-.ds-side:not(.is-aberta) .ds-item.is-active {
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-shell .ds-item.is-active,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-item.is-active {
   background: transparent; border-color: transparent;
 }
 
@@ -2120,13 +2144,13 @@ const CSS = `
    deslizava de x = 134 ate x = 46 acompanhando a borda. Com a largura da tira
    cravada, o icone ja nasce onde vai ficar e a borda encolhe sozinha.
    (Sem crases nestes comentarios: template literal.) */
-.ds-side:not(.is-aberta) .ds-shell .ds-item,
-.ds-side:not(.is-aberta) .ds-item {
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-shell .ds-item,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-item {
   flex-direction: column; justify-content: center; align-items: center;
   gap: 6px; padding: 10px 3px 8px; white-space: normal;
   width: calc(var(--s-rail) - 16px);
 }
-.ds-side:not(.is-aberta) .ds-item__label {
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-item__label {
   flex: none; width: 100%; text-align: center;
   font-size: 9px; font-weight: 600; line-height: 1.25; letter-spacing: 0.01em;
   /* O clamp de duas linhas. -webkit-box e o unico jeito que funciona em todos
@@ -2138,8 +2162,8 @@ const CSS = `
 /* O perfil nao ganha legenda: o avatar E o rotulo dele, e "Voce" embaixo de
    uma foto da propria pessoa seria a unica linha da barra que nao informa
    nada. */
-.ds-side:not(.is-aberta) .ds-shell button.ds-profile,
-.ds-side:not(.is-aberta) button.ds-profile {
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-shell button.ds-profile,
+.ds-side:not(.is-aberta):not(.is-fechando) button.ds-profile {
   justify-content: center; padding: 10px 8px; gap: 0;
   width: calc(var(--s-rail) - 16px);
 }
@@ -2216,7 +2240,7 @@ const CSS = `
   display: none; align-items: center; justify-content: center;
 }
 .ds-mod__marca img { width: 68%; height: 68%; object-fit: contain; }
-.ds-side:not(.is-aberta) .ds-mod__marca { display: flex; }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-mod__marca { display: flex; }
 
 /* ── O WORDMARK DO MODULO ───────────────────────────────────────────────────
 
@@ -2249,8 +2273,8 @@ const CSS = `
 .ds-mod__tipo {
   height: calc(var(--tinta) * 2.913); width: auto; flex: none; display: block;
 }
-.ds-side:not(.is-aberta) .ds-mod__atual,
-.ds-side:not(.is-aberta) .ds-mod.is-solo { justify-content: center; padding: 0; gap: 0; }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-mod__atual,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-mod.is-solo { justify-content: center; padding: 0; gap: 0; }
 
 /* O gatilho (.ds-mod__gatilho), o chevron e o balao de modulos sairam daqui
    junto com o dropdown. A troca de modulo virou um item da navegacao — ver
@@ -2367,8 +2391,8 @@ const CSS = `
    (Sem crases nestes comentarios: template literal.) */
 .ds-nav { flex: 1; overflow-y: auto; padding: 12px 0px 0px 0px; display: flex; flex-direction: column; gap: 14px; }
 .ds-group { display: flex; flex-direction: column; gap: 6px; }
-.ds-side:not(.is-aberta) .ds-group { gap: 10px; }
-.ds-side:not(.is-aberta) .ds-nav { padding: 10px 3px; gap: 12px; }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-group { gap: 10px; }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-nav { padding: 10px 3px; gap: 12px; }
 .ds-group__label {
   font-family: var(--s-mono); font-size: 8.5px; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--s-rotulo); font-weight: 600;
@@ -2401,7 +2425,7 @@ const CSS = `
   margin-top: 6px; padding-top: 12px;
   border-top: 1px solid var(--s-sep);
 }
-.ds-side:not(.is-aberta) .ds-modulos { display: none; }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-modulos { display: none; }
 
 /* ── O ITEM E A ARTE, E MAIS NADA ──────────────────────────────────────────
 
