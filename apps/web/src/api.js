@@ -524,6 +524,11 @@ export const api = {
   createUsuario: (tenantSlug, payload) =>
     request("/api/usuarios", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
 
+  /* Reenvia o e-mail de ativação de quem ainda não criou a senha. Sem
+     transporte (dev) a resposta traz o link. */
+  reenviarConviteUsuario: (tenantSlug, id) =>
+    request(`/api/usuarios/${id}/convite`, { method: "POST", headers: { "x-tenant-slug": tenantSlug } }),
+
   updateUsuario: (tenantSlug, id, payload) =>
     request(`/api/usuarios/${id}`, { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
 

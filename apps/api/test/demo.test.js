@@ -99,3 +99,54 @@ test("demo: sem imobiliária configurada, não há demonstração", async () => 
     process.env.DEMO_TENANT_SLUG = A.tenant.slug;
   }
 });
+
+/* ── A imobiliária de demonstração não se apaga ─────────────────────────────
+   Nem pelo super-admin com a permissão certa (a URL chamada direto recebe
+   403 e o Stripe nem é consultado), nem pela faxina de trials — mesmo que
+   alguém a tenha posto em TRIAL vencido à mão. A tela esconde o botão; isto é
+   o que vale quando o botão não está lá. */
+test("demo: a imobiliária de demonstração não pode ser excluída", async (t) => {
+  const { adminRouter } = await import("../src/routes/adminRoutes.js");
+  const { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } = await import("../src/services/permissoesSuperAdmin.js");
+  const { limparTrials } = await import("../src/services/trialService.js");
+  const jwt = (await import("jsonwebtoken")).default;
+
+  const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
+    where: { nome: CARGO_ADMIN_PLATAFORMA },
+    update: {},
+    create: { nome: CARGO_ADMIN_PLATAFORMA, ...permissoesCompletas() },
+  });
+  const chefe = await prisma.superAdmin.create({
+    data: { nome: `${A.slug}-chefe`, email: `${A.slug}-chefe@exemplo.test`, senha: "hash", ativo: true, cargoId: cargoAdmin.id },
+  });
+  const admin = await subirApi({ "/api/admin": adminRouter });
+  const token = jwt.sign(
+    { role: "SUPERADMIN", superAdminId: chefe.id, email: chefe.email },
+    process.env.JWT_SECRET || "omnimob-dev-secret",
+    { expiresIn: "10m" },
+  );
+  t.after(async () => {
+    await admin.fechar();
+    await prisma.superAdmin.delete({ where: { id: chefe.id } }).catch(() => {});
+  });
+
+  // A é a demonstração deste teste (DEMO_TENANT_SLUG aponta para ela).
+  const r = await admin.comoTenant({ token, slug: "" }).del(`/api/admin/tenants/${A.tenant.id}`);
+  assert.equal(r.status, 403);
+  assert.equal(r.json?.code, "TENANT_PROTEGIDO");
+  assert.ok(await prisma.tenant.findUnique({ where: { id: A.tenant.id } }), "a imobiliária tem que continuar lá");
+
+  // A lista diz à tela que ela é protegida.
+  const lista = await admin.comoTenant({ token, slug: "" }).get("/api/admin/tenants");
+  assert.equal(lista.status, 200);
+  assert.equal(lista.json.find((x) => x.id === A.tenant.id)?.protegido, true);
+
+  // A faxina: posta em TRIAL vencido e desativada há muito, ainda assim fica.
+  await prisma.tenant.update({
+    where: { id: A.tenant.id },
+    data: { statusPagamento: "TRIAL", ativo: false, suspensoEm: new Date(Date.now() - 400 * 86400000), proximoVencimento: new Date(Date.now() - 401 * 86400000) },
+  });
+  const faxina = await limparTrials({ aplicar: true, somenteIds: [A.tenant.id] }).catch((e) => ({ erro: e.message }));
+  assert.ok(await prisma.tenant.findUnique({ where: { id: A.tenant.id } }), `a faxina não pode removê-la (${JSON.stringify(faxina)})`);
+  await prisma.tenant.update({ where: { id: A.tenant.id }, data: { statusPagamento: "EM_DIA", ativo: true, suspensoEm: null, proximoVencimento: null } });
+});

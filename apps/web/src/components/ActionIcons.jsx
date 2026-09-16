@@ -46,6 +46,18 @@ export function BtnEditar({ onClick, disabled }) {
   );
 }
 
+/* Reenviar o e-mail de ativação de quem ainda não criou a senha. */
+export function BtnReenviarConvite({ onClick, disabled }) {
+  return (
+    <IconBtn title="Reenviar convite de acesso" onClick={onClick} disabled={disabled} style={{ color: "#f59e0b" }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 2 11 13" />
+        <path d="M22 2 15 22l-4-9-9-4 20-7z" />
+      </svg>
+    </IconBtn>
+  );
+}
+
 export function BtnExcluir({ onClick, disabled }) {
   return (
     <IconBtn

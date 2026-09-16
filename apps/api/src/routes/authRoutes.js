@@ -187,14 +187,46 @@ authRouter.post("/login", async (req, res) => {
        Agora o caminho de RECUSA é idêntico nos dois casos: uma consulta e um
        bcrypt. As relações só são buscadas depois de a senha conferir — quando
        já não há o que esconder de quem perguntou. */
-    const usuario = await prisma.usuario.findUnique({
-      where: { login: parsed.data.login },
-      select: {
-        id: true, nome: true, login: true, senha: true, ativo: true,
-        tenantId: true, cargoCodigo: true, forcaAlterarSenha: true,
-        tentativasFalhas: true, bloqueadoAte: true,
-      },
-    });
+    /* ── LOGIN OU E-MAIL ─────────────────────────────────────────────────────
+       O identificador pode ser o login ("joao-imobiliaria-centro") ou o
+       e-mail da pessoa. O e-mail NÃO é único no sistema — o dono que
+       administra duas imobiliárias tem o mesmo e-mail nas duas —, então com
+       "@" a busca devolve candidatos, e quem decide qual é a SENHA: a conta
+       cuja senha confere é a conta. Com um candidato só, o caminho é o de
+       sempre (trava de tentativas inclusive). Com vários e nenhum conferindo,
+       a recusa é genérica e ninguém é penalizado — contar a falha numa conta
+       escolhida ao acaso trancaria a pessoa errada. */
+    const SELECAO = {
+      id: true, nome: true, login: true, senha: true, ativo: true,
+      tenantId: true, cargoCodigo: true, forcaAlterarSenha: true,
+      tentativasFalhas: true, bloqueadoAte: true,
+    };
+    const identificador = parsed.data.login.trim();
+    let usuario = null;
+    let senhaJaConferida = false;
+    if (identificador.includes("@")) {
+      const candidatos = await prisma.usuario.findMany({
+        where: { ativo: true, email: { equals: identificador, mode: "insensitive" } },
+        select: SELECAO,
+        orderBy: { createdAt: "asc" },
+        take: 5,
+      });
+      if (candidatos.length === 1) {
+        usuario = candidatos[0];
+      } else if (candidatos.length > 1) {
+        for (const c of candidatos) {
+          if (c.senha && (await bcrypt.compare(parsed.data.senha, c.senha))) { usuario = c; senhaJaConferida = true; break; }
+        }
+        if (!usuario) {
+          /* Existe mais de uma conta e a senha não abriu nenhuma. Sem contar
+             tentativa em conta nenhuma — e sem a compensação de tempo: aqui
+             já foram gastos N bcrypts, mais que o caminho de sucesso. */
+          return res.status(401).json({ error: "Usuario ou senha invalidos." });
+        }
+      }
+    } else {
+      usuario = await prisma.usuario.findUnique({ where: { login: identificador }, select: SELECAO });
+    }
 
     if (!usuario || !usuario.ativo) {
       /* Gasta o tempo do bcrypt mesmo sem ter contra o que comparar. Ver
@@ -238,10 +270,22 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
-    // Usuário recém-criado ainda pode não ter senha definida. Nesse caso o
-    // primeiro acesso não valida senha: cai direto na tela de definir senha.
+    /* ── CONTA AINDA NÃO ATIVADA ────────────────────────────────────────────
+       Usuário criado pelo painel nasce SEM senha, e a senha só nasce pelo
+       link do e-mail de convite (ver `POST /api/usuarios`). Antes, uma conta
+       sem senha entrava aqui e caía na tela de "defina sua senha" — o que
+       significava que QUALQUER PESSOA que soubesse o login definia a senha e
+       entrava. O convite por e-mail fecha essa porta: sem o link, não há
+       ativação. A mensagem diz o caminho, e o administrador pode reenviar. */
     const temSenha = Boolean(usuario.senha);
-    if (temSenha) {
+    if (!temSenha) {
+      return res.status(403).json({
+        error: "Sua conta ainda não foi ativada. Use o link do e-mail de convite — ou peça ao administrador da sua imobiliária para reenviá-lo.",
+        precisaAtivar: true,
+        login: usuario.login,
+      });
+    }
+    if (!senhaJaConferida) {
       const passwordMatch = await bcrypt.compare(parsed.data.senha, usuario.senha);
       if (!passwordMatch) {
         /* A tentativa é contada NA CONTA. `increment` e não ler-somar-gravar:
@@ -341,8 +385,8 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
-    // Sem senha (ativação) OU marcado para trocar → exige definir nova senha.
-    if (!temSenha || usuario.forcaAlterarSenha) {
+    // Marcado para trocar → exige definir nova senha (com a atual conferida).
+    if (usuario.forcaAlterarSenha) {
       return res.status(403).json({
         error: "Defina sua senha para continuar.",
         forcaAlterarSenha: true,
@@ -540,11 +584,19 @@ authRouter.post("/definir-senha", async (req, res) => {
       return res.status(401).json({ error: "Usuário inválido." });
     }
 
-    // Se já existe senha, a senha atual precisa conferir (evita troca por terceiros).
-    if (usuario.senha) {
-      const ok = await bcrypt.compare(String(senhaAtual || ""), usuario.senha);
-      if (!ok) return res.status(401).json({ error: "Senha atual incorreta." });
+    /* Conta sem senha NÃO se ativa por aqui: era o buraco — bastava saber o
+       login. A ativação é pelo link do e-mail (`/redefinir-senha`), que só
+       chega a quem é dono do endereço. Ver `POST /api/usuarios`. */
+    if (!usuario.senha) {
+      return res.status(403).json({
+        error: "Esta conta ainda não foi ativada. Use o link do e-mail de convite.",
+        precisaAtivar: true,
+      });
     }
+
+    // A senha atual precisa conferir (evita troca por terceiros).
+    const ok = await bcrypt.compare(String(senhaAtual || ""), usuario.senha);
+    if (!ok) return res.status(401).json({ error: "Senha atual incorreta." });
 
     const senhaHash = await bcrypt.hash(String(novaSenha), 10);
     const atualizado = await prisma.usuario.update({
@@ -816,11 +868,15 @@ export function impressaoDaSenha(senhaHash) {
   return crypto.createHash("sha256").update(String(senhaHash || "")).digest("hex").slice(0, 16);
 }
 
-function assinarTokenRecuperacao(usuario) {
+/* Exportada: o CONVITE de usuário (`POST /api/usuarios`) é o mesmo link de
+   uso único — a impressão digital de uma senha vazia também muda quando a
+   senha nasce. Só a validade é outra: 24 h, porque quem foi convidado pode
+   abrir o e-mail no dia seguinte, e não está no meio de nada. */
+export function assinarTokenRecuperacao(usuario, { validade = VALIDADE_RECUPERACAO } = {}) {
   return jwt.sign(
     { userId: usuario.id, proposito: PROPOSITO_RECUPERACAO, fp: impressaoDaSenha(usuario.senha) },
     JWT_SECRET,
-    { expiresIn: VALIDADE_RECUPERACAO },
+    { expiresIn: validade },
   );
 }
 
