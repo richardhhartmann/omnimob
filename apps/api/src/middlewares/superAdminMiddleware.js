@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { prisma } from "../db.js";
+import { plataforma } from "../db.js";
 import { preencherContexto } from "../services/auditoria.js";
 import { permissoesVazias, PERMISSOES_SUPER_ADMIN } from "../services/permissoesSuperAdmin.js";
 
@@ -32,7 +32,7 @@ export async function requireSuperAdmin(req, res, next) {
   }
 
   try {
-    const admin = await prisma.superAdmin.findUnique({
+    const admin = await plataforma.superAdmin.findUnique({
       where: { id: String(payload.superAdminId || "") },
       select: { id: true, nome: true, email: true, ativo: true, cargoId: true, cargo: true },
     });

@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { prisma } from "../db.js";
+import { prisma, plataforma, plataformaExterna } from "../db.js";
 import {
   requireSuperAdmin,
   requirePermissaoAdmin,
@@ -140,7 +140,7 @@ async function superAdminDoConvite(token) {
     e.code = "TOKEN_INVALIDO";
     throw e;
   }
-  const admin = await prisma.superAdmin.findUnique({
+  const admin = await plataforma.superAdmin.findUnique({
     where: { id: String(dados.superAdminId || "") },
     include: { cargo: true },
   });
@@ -170,6 +170,24 @@ async function enviarConvite(admin, { convidadoPor }) {
   if (!isEmailEnabled()) {
     console.warn(`[admin/convite] sem transporte de e-mail; link para ${admin.email}: ${link}`);
     return { enviado: false, link };
+  }
+
+  /* Super-admin compartilhado com outro banco (dev apontando para a produção,
+     ver `db.js`): a CONTA nasce no lugar certo, mas o link não — ele aponta
+     para o `APP_URL` daqui e vai assinado com o `JWT_SECRET` daqui, e só abre
+     nesta máquina. Foi assim que um convite mandado do localhost chegou na
+     caixa de um colega apontando para `localhost:5173`. O link volta para quem
+     convidou (vale para testar aqui); o convite de verdade sai do painel de
+     produção, por "Reenviar convite". */
+  if (plataformaExterna) {
+    console.warn(`[admin/convite] super-admin em banco externo; e-mail NÃO enviado para ${admin.email}. Link local: ${link}`);
+    return {
+      enviado: false,
+      link,
+      motivo:
+        "este ambiente compartilha os super-admins com outro banco, e o link só abre aqui — " +
+        "para a pessoa definir a senha, use \"Reenviar convite\" no painel de produção",
+    };
   }
 
   const modelo = emailConviteSuperAdmin({
@@ -212,7 +230,7 @@ adminRouter.post("/login", loginLimiter, async (req, res) => {
     const { email, senha } = req.body || {};
     if (!email || !senha) return res.status(400).json({ error: "Email e senha sao obrigatorios." });
 
-    const admin = await prisma.superAdmin.findUnique({ where: { email }, include: { cargo: true } });
+    const admin = await plataforma.superAdmin.findUnique({ where: { email }, include: { cargo: true } });
     if (!admin || !admin.ativo) return res.status(401).json({ error: "Credenciais invalidas." });
 
     /* Conta convidada que ainda não definiu senha tem `senha` vazia. O
@@ -253,13 +271,13 @@ adminRouter.post("/login/totp", loginLimiter, async (req, res) => {
       return res.status(401).json({ error: "Desafio invalido.", code: "DESAFIO_EXPIRADO" });
     }
 
-    const admin = await prisma.superAdmin.findUnique({ where: { id: payload.superAdminId }, include: { cargo: true } });
+    const admin = await plataforma.superAdmin.findUnique({ where: { id: payload.superAdminId }, include: { cargo: true } });
     if (!admin || !admin.ativo || !admin.totpAtivadoEm) return res.status(401).json({ error: "Credenciais invalidas." });
 
     const conferido = conferirSegundoFator(admin, codigo);
     if (!conferido.ok) return res.status(401).json({ error: "Codigo invalido ou ja usado." });
 
-    await prisma.superAdmin.update({ where: { id: admin.id }, data: conferido.dados });
+    await plataforma.superAdmin.update({ where: { id: admin.id }, data: conferido.dados });
 
     const sessao = sessaoDoSuperAdmin(admin);
     /* Quem entrou com código de recuperação precisa saber quantos sobraram — é
@@ -298,7 +316,7 @@ adminRouter.post("/convite", loginLimiter, async (req, res) => {
       return res.status(400).json({ error: "A senha deve ter ao menos 8 caracteres." });
     }
     const admin = await superAdminDoConvite(token);
-    const atualizado = await prisma.superAdmin.update({
+    const atualizado = await plataforma.superAdmin.update({
       where: { id: admin.id },
       data: { senha: await bcrypt.hash(String(novaSenha), 10) },
       include: { cargo: true },
@@ -331,7 +349,7 @@ adminRouter.get("/eu", (req, res) => {
    ────────────────────────────────────────────────────────────────────────── */
 
 async function superAdminDaSessao(req) {
-  return prisma.superAdmin.findUnique({ where: { id: req.superAdmin.id } });
+  return plataforma.superAdmin.findUnique({ where: { id: req.superAdmin.id } });
 }
 
 function situacaoDoSegundoFator(admin) {
@@ -369,7 +387,7 @@ adminRouter.post("/totp/iniciar", requirePermissaoAdmin("verSeguranca"), async (
     }
 
     const segredo = gerarSegredo();
-    await prisma.superAdmin.update({
+    await plataforma.superAdmin.update({
       where: { id: admin.id },
       data: { totpSegredo: cifrar(segredo), totpUltimoPasso: null },
     });
@@ -403,7 +421,7 @@ adminRouter.post("/totp/confirmar", requirePermissaoAdmin("verSeguranca"), async
     if (!ok) return res.status(400).json({ error: "Codigo invalido. Confira o relogio do celular e tente o proximo." });
 
     const { textos, hashes } = gerarCodigosDeRecuperacao();
-    await prisma.superAdmin.update({
+    await plataforma.superAdmin.update({
       where: { id: admin.id },
       data: { totpAtivadoEm: new Date(), totpUltimoPasso: passo, totpRecuperacao: JSON.stringify(hashes) },
     });
@@ -434,7 +452,7 @@ adminRouter.delete("/totp", requirePermissaoAdmin("verSeguranca"), async (req, r
       return res.status(401).json({ error: "Codigo invalido ou ja usado." });
     }
 
-    await prisma.superAdmin.update({
+    await plataforma.superAdmin.update({
       where: { id: admin.id },
       data: { totpSegredo: null, totpAtivadoEm: null, totpUltimoPasso: null, totpRecuperacao: null },
     });
@@ -1258,7 +1276,7 @@ function serializarSuperAdmin(u) {
 /* Quantos Administradores ATIVOS com senha sobram além deste. Serve às duas
    travas — desativar e rebaixar — e por isso mora numa função só. */
 async function outrosAdministradoresAtivos(excetoId) {
-  return prisma.superAdmin.count({
+  return plataforma.superAdmin.count({
     where: { id: { not: excetoId }, ativo: true, senha: { not: "" }, cargo: { nome: CARGO_ADMIN_PLATAFORMA } },
   });
 }
@@ -1266,14 +1284,14 @@ async function outrosAdministradoresAtivos(excetoId) {
 async function cargoExiste(cargoId) {
   const id = Number(cargoId);
   if (!Number.isInteger(id)) return null;
-  return prisma.cargoSuperAdmin.findUnique({ where: { id }, select: { id: true, nome: true } });
+  return plataforma.cargoSuperAdmin.findUnique({ where: { id }, select: { id: true, nome: true } });
 }
 
 const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 adminRouter.get("/usuarios", requirePermissaoAdmin("verUsuarios"), async (_req, res) => {
   try {
-    const lista = await prisma.superAdmin.findMany({
+    const lista = await plataforma.superAdmin.findMany({
       orderBy: [{ ativo: "desc" }, { nome: "asc" }],
       select: { ...SUPER_ADMIN_VISIVEL, senha: true },
     });
@@ -1298,7 +1316,7 @@ adminRouter.post("/usuarios", requirePermissaoAdmin("gerenciarUsuarios"), async 
     const cargo = await cargoExiste(req.body?.cargoId);
     if (!cargo) return res.status(400).json({ error: "Escolha um cargo." });
 
-    const criado = await prisma.superAdmin.create({
+    const criado = await plataforma.superAdmin.create({
       data: { nome, email, senha: "", ativo: true, cargoId: cargo.id },
       include: { cargo: true },
     });
@@ -1314,7 +1332,7 @@ adminRouter.post("/usuarios", requirePermissaoAdmin("gerenciarUsuarios"), async 
 
 adminRouter.put("/usuarios/:id", requirePermissaoAdmin("gerenciarUsuarios"), async (req, res) => {
   try {
-    const atual = await prisma.superAdmin.findUnique({ where: { id: req.params.id }, include: { cargo: true } });
+    const atual = await plataforma.superAdmin.findUnique({ where: { id: req.params.id }, include: { cargo: true } });
     if (!atual) return res.status(404).json({ error: "Usuário não encontrado." });
 
     const b = req.body || {};
@@ -1349,7 +1367,7 @@ adminRouter.put("/usuarios/:id", requirePermissaoAdmin("gerenciarUsuarios"), asy
       });
     }
 
-    const atualizado = await prisma.superAdmin.update({
+    const atualizado = await plataforma.superAdmin.update({
       where: { id: atual.id },
       data,
       select: { ...SUPER_ADMIN_VISIVEL, senha: true },
@@ -1367,7 +1385,7 @@ adminRouter.put("/usuarios/:id", requirePermissaoAdmin("gerenciarUsuarios"), asy
    mesmo seria um e-mail que confunde. */
 adminRouter.post("/usuarios/:id/convite", requirePermissaoAdmin("gerenciarUsuarios"), async (req, res) => {
   try {
-    const admin = await prisma.superAdmin.findUnique({ where: { id: req.params.id }, include: { cargo: true } });
+    const admin = await plataforma.superAdmin.findUnique({ where: { id: req.params.id }, include: { cargo: true } });
     if (!admin) return res.status(404).json({ error: "Usuário não encontrado." });
     if (!admin.ativo) return res.status(400).json({ error: "Reative o usuário antes de reenviar o convite." });
     if (admin.senha) return res.status(400).json({ error: "Este usuário já definiu a senha." });
@@ -1394,7 +1412,7 @@ const COM_CONTAGEM = { _count: { select: { superAdmins: true } } };
    reescrever permissões. */
 adminRouter.get("/cargos", requirePermissaoAdmin("verCargos", "verUsuarios"), async (_req, res) => {
   try {
-    const cargos = await prisma.cargoSuperAdmin.findMany({ orderBy: { id: "asc" }, include: COM_CONTAGEM });
+    const cargos = await plataforma.cargoSuperAdmin.findMany({ orderBy: { id: "asc" }, include: COM_CONTAGEM });
     /* `ehAdministrador` e as chaves travadas vão CALCULADOS: a tela que
        desenha a caixa travada precisa concordar com quem recusa o PUT. */
     return res.json({ cargos: cargos.map(serializarCargo), catalogo: catalogoDePermissoes(), travadas: CHAVES_DA_PLATAFORMA });
@@ -1409,7 +1427,7 @@ adminRouter.post("/cargos", requirePermissaoAdmin("verCargos"), async (req, res)
     const nome = String(req.body?.nome || "").trim();
     if (!nome) return res.status(400).json({ error: "Nome é obrigatório." });
     const data = { nome, ...normalizarPermissoes(req.body, { nome }) };
-    const cargo = await prisma.cargoSuperAdmin.create({ data, include: COM_CONTAGEM });
+    const cargo = await plataforma.cargoSuperAdmin.create({ data, include: COM_CONTAGEM });
     return res.status(201).json(serializarCargo(cargo));
   } catch (err) {
     if (err.code === "P2002") return res.status(409).json({ error: "Já existe um cargo com este nome." });
@@ -1421,7 +1439,7 @@ adminRouter.post("/cargos", requirePermissaoAdmin("verCargos"), async (req, res)
 adminRouter.put("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const cargo = Number.isInteger(id) ? await prisma.cargoSuperAdmin.findUnique({ where: { id } }) : null;
+    const cargo = Number.isInteger(id) ? await plataforma.cargoSuperAdmin.findUnique({ where: { id } }) : null;
     if (!cargo) return res.status(404).json({ error: "Cargo não encontrado." });
 
     const data = {};
@@ -1443,7 +1461,7 @@ adminRouter.put("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req, r
       return res.status(400).json({ error: "Você não pode remover 'Cargos' do seu próprio cargo." });
     }
 
-    const atualizado = await prisma.cargoSuperAdmin.update({ where: { id }, data, include: COM_CONTAGEM });
+    const atualizado = await plataforma.cargoSuperAdmin.update({ where: { id }, data, include: COM_CONTAGEM });
     return res.json(serializarCargo(atualizado));
   } catch (err) {
     if (err.code === "P2002") return res.status(409).json({ error: "Já existe um cargo com este nome." });
@@ -1456,7 +1474,7 @@ adminRouter.delete("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req
   try {
     const id = Number(req.params.id);
     const cargo = Number.isInteger(id)
-      ? await prisma.cargoSuperAdmin.findUnique({ where: { id }, include: COM_CONTAGEM })
+      ? await plataforma.cargoSuperAdmin.findUnique({ where: { id }, include: COM_CONTAGEM })
       : null;
     if (!cargo) return res.status(404).json({ error: "Cargo não encontrado." });
     if (ehAdministradorDaPlataforma(cargo)) {
@@ -1467,7 +1485,7 @@ adminRouter.delete("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req
         error: `Cargo está vinculado a ${cargo._count.superAdmins} usuário(s). Reatribua-os antes de excluir.`,
       });
     }
-    await prisma.cargoSuperAdmin.delete({ where: { id } });
+    await plataforma.cargoSuperAdmin.delete({ where: { id } });
     return res.status(204).send();
   } catch (err) {
     console.error("[DELETE /admin/cargos/:id]", err);

@@ -8147,7 +8147,7 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
    seletor global de button reescreveria largura, padding e fundo — é mais curto
    reafirmar que travar cada um com !important. */
 .ds-shell button.ds-profile {
-  width: 100%; padding: 10px; border-radius: 10px;
+  width: 100%; padding: 10px 10px 10px 24px; border-radius: 10px;
   background: transparent; border: 1px solid transparent;
   box-shadow: none; transform: none; cursor: pointer;
   justify-content: flex-start; text-align: left;
@@ -8305,7 +8305,11 @@ main[data-tema="claro"] [style*="#818cf8"] { color: #4338ca !important; }
   --text-muted: #64748b;
   --bg-gradient-1: #f6f7f9;
   color: var(--text-main);
-  border-bottom-color: rgba(15, 23, 42, 0.1);
+  /* A linha de baixo saiu daqui: ela só existe com a página rolada
+     (`data-rolou` no shell, ver AdminLayout) e já lê `--s-border`, que o
+     `.ds-shell[data-tema="claro"]` redefine. Escrita aqui, a especificidade
+     desta regra vencia o "transparente" do repouso e o claro ficava com a
+     linha sempre. */
 }
 .ds-coluna[data-tema="claro"] .ds-busca {
   background: #ffffff; border-color: rgba(15, 23, 42, 0.12);

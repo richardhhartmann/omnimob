@@ -105,9 +105,21 @@ export function ModeloDaVitrinePasso({ tenantSlug, configAtual, aoConcluir, aoAt
 
       {erro ? <p className="mod-erro">{erro}</p> : null}
 
-      <button type="button" className="bv-botao" onClick={aplicar} disabled={!escolhido || salvando}>
-        {salvando ? "Aplicando…" : escolhido ? "Usar este modelo" : "Escolha um modelo para continuar"}
-      </button>
+      {/* O rodapé é o do assistente (`.bv-acoes` + `.bv-botao`, em
+          BoasVindasModal). Sem cartão marcado o botão fica desligado, com o
+          motivo no `title`; o rótulo não muda, para ser o mesmo dos outros
+          passos. */}
+      <div className="bv-acoes">
+        <button
+          type="button"
+          className="bv-botao"
+          onClick={aplicar}
+          disabled={!escolhido || salvando}
+          title={escolhido ? undefined : "Escolha um modelo para continuar"}
+        >
+          {salvando ? "Aplicando…" : "Continuar"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -125,7 +137,9 @@ export const MODELO_CSS = `
 .mod-cartao.is-ativo { border-color: #a78bfa; background: rgba(167,139,250,0.12); box-shadow: 0 0 0 2px rgba(167,139,250,0.35); }
 .mod-cartao strong { font-size: 13px; }
 .mod-cartao em { font-size: 11px; font-style: normal; color: var(--text-muted, #94a3b8); line-height: 1.4; }
-.mod-vazio { height: 170px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--text-muted, #94a3b8); }
+/* A mesma altura e a mesma largura da prévia dos outros cartões: o quadro
+   tracejado ocupa o cartão inteiro, e não só o "+" do meio. */
+.mod-vazio { width: 100%; height: 170px; box-sizing: border-box; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--text-muted, #94a3b8); }
 .mod-caminho { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-muted, #94a3b8); }
 .mod-erro { margin: 0; font-size: 12.5px; color: #fca5a5; }
 @media (max-width: 560px) { .mod-grade { grid-template-columns: 1fr; } }

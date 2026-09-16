@@ -316,6 +316,36 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const shellRef = useRef(null);
   useBrilhoDeBorda(shellRef);
 
+  /* ── A MOLDURA GANHA FUNDO QUANDO A PÁGINA ROLA ────────────────────────────
+     A faixa do topo e o cabeçalho da tela não têm fundo de propósito: parados
+     no alto de uma página que cabe na janela, eles são só texto sobre o fundo
+     do painel. Mas os dois são presos ao topo (fixed e sticky), e no `/inicio`
+     — a primeira tela com rolagem de verdade — o conteúdo passava por baixo
+     deles e o título virava texto sobre texto.
+
+     A marca é um atributo no shell, e não estado do React: rolagem dispara
+     dezenas de vezes por segundo, e cada uma re-renderizando o layout inteiro
+     (barra, cabeçalho, conteúdo) por causa de uma cor de fundo seria pagar
+     caro por um sim/não. O DOM muda só quando a resposta muda.
+
+     Refeito a cada troca de rota, porque a rolagem volta a zero e o ouvinte
+     não é avisado disso. */
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el) return undefined;
+    let rolou = null;
+    function medir() {
+      const agora = window.scrollY > 4;
+      if (agora === rolou) return;
+      rolou = agora;
+      if (agora) el.setAttribute("data-rolou", "");
+      else el.removeAttribute("data-rolou");
+    }
+    medir();
+    window.addEventListener("scroll", medir, { passive: true });
+    return () => window.removeEventListener("scroll", medir);
+  }, [location.pathname]);
+
   /* ── A BARRA ABRE POR CLIQUE, E NÃO MAIS POR HOVER ─────────────────────────
 
      Ela já viveu recolhida abrindo no `:hover`, e o argumento era que o gesto
@@ -1540,10 +1570,18 @@ const CSS = `
   /* O desfoque e o que permite a faixa ser translucida sem o texto de baixo
      atravessar. O prefixo -webkit- junto porque o Safari ainda o exige. */
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  /* Sem fundo no topo da pagina; com a pagina rolada, o fundo do CONTEUDO
+     (--bg-gradient-1, que o tema claro redefine logo abaixo) a 88% — o
+     desfoque acima faz o resto. Ver data-rolou no JSX. */
+  background: transparent; border-bottom: 1px solid transparent;
   /* A MESMA curva e a mesma duracao da barra (ver .ds-side__interno): com
      tempos diferentes, o titulo chegava no lugar antes ou depois da barra e o
      gesto lia como dois movimentos em vez de um. */
-  transition: padding-left 0.2s cubic-bezier(0.4,0,0.2,1);
+  transition: padding-left 0.2s cubic-bezier(0.4,0,0.2,1), background-color 0.2s ease, border-color 0.2s ease;
+}
+.ds-shell[data-rolou] .ds-topo {
+  background: color-mix(in srgb, var(--bg-gradient-1) 88%, transparent);
+  border-bottom-color: var(--s-border);
 }
 /* ── COM A FAIXA, O CABECALHO PERDE A PROPRIA LINHA ─────────────────────────
 
@@ -1734,11 +1772,24 @@ const CSS = `
      do outro lado — a busca desceu de altura, nao de coluna, e continua na
      mesma vertical em que a mao ja a procurava. */
   padding-right: 28px;
+  /* Sem fundo enquanto a pagina esta no topo; ganha o da MOLDURA (--s-bg, a
+     familia da barra, que ja e o tom certo em cada tema) quando ela rola —
+     ver data-rolou no JSX. A transicao e para a cor nao aparecer de estalo no
+     primeiro pixel de rolagem. */
+  background: transparent; border-bottom: 1px solid transparent;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
+.ds-shell[data-rolou] .ds-topbar {
+  background: var(--s-bg); border-bottom-color: var(--s-border);
+}
+/* A faixa e o cabecalho colam no topo, um sobre o outro; a linha que fecha o
+   conjunto e a de baixo, entao a da faixa some quando os dois estao pintados.
+   Vale so no caso em que ha cabecalho abaixo dela (nao ha no editor). */
+.ds-shell[data-rolou]:has(.ds-topo) .ds-topbar { border-bottom-color: transparent; }
 .ds-topbar__grupo {
   width: var(--s-aberta); flex: none; box-sizing: border-box;
   display: flex; align-items: center; gap: 8px;
-  padding: 0 0 0 25px;
+  padding: 0 0 0 20px;
 }
 
 /* ── A PILULA DA CONTA, NO CENTRO DA FAIXA ────────────────────────────────
@@ -2056,10 +2107,24 @@ const CSS = `
    text-align center e nao left: em 84px o bloco de texto e quase tao largo
    quanto a caixa, e o eixo do icone e o unico alinhamento que sobra.
    (Sem crases nestes comentarios: template literal.) */
+/* ── O ICONE NAO ANDA ENTRE OS DOIS ESTADOS ─────────────────────────────────
+   Recolhida, a tira tem 92px e o icone senta no eixo dela (x = 46). Aberta, o
+   item era uma linha com 12px de recuo, e o icone caia em x = 31 — um passo
+   para a ESQUERDA a cada abertura, e o passo de volta ao fechar. O recuo da
+   barra aberta e calculado para o icone ficar no MESMO eixo: metade da tira
+   menos metade do icone, descontado o padding da nav. E o mesmo eixo do
+   hamburguer la em cima.
+
+   E a LARGURA da forma recolhida e FIXA, e nao 100%: a classe sai na hora e
+   a largura da barra leva 0,2s para encolher; com 100%, o icone centrado
+   deslizava de x = 134 ate x = 46 acompanhando a borda. Com a largura da tira
+   cravada, o icone ja nasce onde vai ficar e a borda encolhe sozinha.
+   (Sem crases nestes comentarios: template literal.) */
 .ds-side:not(.is-aberta) .ds-shell .ds-item,
 .ds-side:not(.is-aberta) .ds-item {
   flex-direction: column; justify-content: center; align-items: center;
   gap: 6px; padding: 10px 3px 8px; white-space: normal;
+  width: calc(var(--s-rail) - 16px);
 }
 .ds-side:not(.is-aberta) .ds-item__label {
   flex: none; width: 100%; text-align: center;
@@ -2074,7 +2139,10 @@ const CSS = `
    uma foto da propria pessoa seria a unica linha da barra que nao informa
    nada. */
 .ds-side:not(.is-aberta) .ds-shell button.ds-profile,
-.ds-side:not(.is-aberta) button.ds-profile { justify-content: center; padding: 10px 8px; gap: 0; }
+.ds-side:not(.is-aberta) button.ds-profile {
+  justify-content: center; padding: 10px 8px; gap: 0;
+  width: calc(var(--s-rail) - 16px);
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    O HAMBURGUER — o unico controle do tamanho da barra
@@ -2297,14 +2365,14 @@ const CSS = `
    cada item tem DUAS linhas de altura (icone + nome), e sem a folga extra o
    nome de um encostava no icone do seguinte.
    (Sem crases nestes comentarios: template literal.) */
-.ds-nav { flex: 1; overflow-y: auto; padding: 12px 8px; display: flex; flex-direction: column; gap: 14px; }
+.ds-nav { flex: 1; overflow-y: auto; padding: 12px 0px 0px 0px; display: flex; flex-direction: column; gap: 14px; }
 .ds-group { display: flex; flex-direction: column; gap: 6px; }
 .ds-side:not(.is-aberta) .ds-group { gap: 10px; }
 .ds-side:not(.is-aberta) .ds-nav { padding: 10px 3px; gap: 12px; }
 .ds-group__label {
   font-family: var(--s-mono); font-size: 8.5px; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--s-rotulo); font-weight: 600;
-  padding: 4px 10px 5px;
+  padding: 4px 25px 5px;
 }
 /* O .ds-group__rule foi embora. Ver o comentario no JSX: com o nome de cada
    destino desenhado embaixo do icone, o fio passou a ser uma terceira linha
@@ -2399,7 +2467,9 @@ const CSS = `
 
 .ds-shell .ds-item {
   display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 10px 12px; border-radius: 10px;
+  /* Recuo a esquerda = (tira - icone) / 2 - padding da nav = (92 - 22) / 2 - 8.
+     Ver o bloco "O icone nao anda" acima. */
+  width: 100%; padding: 10px 12px 10px 27px; border-radius: 10px;
   font-family: inherit; font-size: 13.5px; font-weight: 500; text-align: left;
   color: var(--s-text); background: transparent;
   border: 1px solid transparent; box-shadow: none; transform: none;
@@ -2582,7 +2652,8 @@ const CSS = `
 }
 .ds-profile {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px; margin-top: 4px;
+  /* Mesma conta dos itens, com o avatar de 28px: (92 - 28) / 2 - 8 = 24. */
+  padding: 10px 10px 10px 24px; margin-top: 4px;
   border-top: 1px solid var(--s-sep);
 }
 /* 28px e nao 24: o avatar e o unico desenho do rodape, e ele precisa ficar do

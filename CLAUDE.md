@@ -357,6 +357,7 @@ invisíveis porque com um cliente só o sintoma não aparece.
 |---|---|---|---|
 | `DATABASE_URL` | — | pooler Supabase `:6543` (`pgbouncer=true`) | **outro projeto Supabase** |
 | `DIRECT_URL` | — | Supabase `:5432` (migrations) | idem, do projeto de produção |
+| `PLATAFORMA_DATABASE_URL` | — | **a `DATABASE_URL` de produção** (pooler) | vazia — é o próprio banco |
 | `PORT` | — | `4000` | `4000` |
 | `JWT_SECRET` | — | qualquer string | segredo forte e distinto do de dev |
 | `CRYPTO_SECRET` | — | opcional (cai no `JWT_SECRET`) | **distinto do `JWT_SECRET`** — cifra o token da página do Meta |
@@ -378,6 +379,35 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_UPLOAD_PRESET` | — | `dpwuxmbli` / `domus-app` | idem — **os mesmos valores dos `VITE_`** |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
+
+**Sobre o banco da PLATAFORMA (`PLATAFORMA_DATABASE_URL`):** `SuperAdmin` e
+`CargoSuperAdmin` são as mesmas pessoas em dev e em produção, e por isso vivem
+num banco só. `src/db.js` exporta um segundo cliente, `plataforma`, que aponta
+para essa URL quando ela existe e é o próprio `prisma` quando não — produção
+não define nada. As duas tabelas **só** são lidas e escritas pelo `plataforma`
+(`superAdminMiddleware`, `adminRoutes`, `scripts/super-admin-senha.js`); nada
+mais muda, porque nenhuma delas tem chave estrangeira para fora. A trilha das
+escritas de super-admin (`Auditoria` com `tenantId` nulo) vai junto para lá.
+
+Três consequências que vale saber:
+- **`npm test` nunca encosta no banco externo**: `test/helpers.js` iguala a
+  variável à `DATABASE_URL`, e `db.js` ignora a variável debaixo do
+  `node --test` (`NODE_TEST_CONTEXT`) — a suíte desativa todos os super-admins
+  por alguns segundos, e contra a produção isso derrubaria a equipe.
+- **O seed pula o super-admin** quando o banco é externo (senão criaria
+  `super@omnimob.app` com senha `superadmin` na produção). Conta nova ou senha
+  esquecida é pelo `scripts/super-admin-senha.js`, que aponta para o mesmo
+  banco e inaugura o cargo Administrador se preciso.
+- **Convite mandado do dev não vai por e-mail**: a conta nasce no lugar certo,
+  mas o link aponta para o `APP_URL` local e é assinado com o `JWT_SECRET`
+  local — foi assim que um colega recebeu um link para `localhost:5173`. A
+  resposta traz o link (para testar aqui) e o `motivo`; o convite de verdade
+  sai do painel de produção, por "Reenviar convite".
+
+Migração que toque nessas duas tabelas precisa subir em produção **antes** de o
+dev funcionar contra ela — o Prisma seleciona todas as colunas do modelo e a
+coluna que só existe no dev quebra a consulta. Enquanto isso, esvazie a
+variável localmente.
 
 **Sobre o ajuste de fatura em assinatura viva:** trocar de plano
 (`POST /me/plano`) ou contratar o Flow (`POST /me/modulos`) aponta a assinatura
@@ -458,7 +488,7 @@ Modelos principais:
 | `PropertyLead` | Leads da vitrine — com `responsavelId`, `estagio`, `primeiroContatoEm`, `motivoPerda` (obrigatório ao perder, limpo ao voltar) e `avisoParadoEm` |
 | `LeadEvento` | Histórico do lead (mudou de estágio, trocou de dono, nota) |
 | `Auditoria` | Quem criou/alterou/excluiu o quê. Sem FK para `Usuario` — o registro sobrevive à remoção de quem o gerou. `tenantId` nulo = escrita da plataforma (super-admin) |
-| `SuperAdmin` / `CargoSuperAdmin` | Quem opera a Omnimob e o que alcança. Sem `tenantId` de propósito — é a única tabela editável pela tela que não pertence a imobiliária nenhuma. `cargoId` nulo = sem permissão nenhuma |
+| `SuperAdmin` / `CargoSuperAdmin` | Quem opera a Omnimob e o que alcança. Sem `tenantId` de propósito — é a única tabela editável pela tela que não pertence a imobiliária nenhuma. `cargoId` nulo = sem permissão nenhuma. **Vivem no banco da plataforma** (`PLATAFORMA_DATABASE_URL`, cliente `plataforma` em `db.js`): as pessoas são as mesmas em dev e em produção |
 | `PerfilBusca` | O que um cliente procura; base do cruzamento com o acervo |
 | `ChaveApi` | Crachá de integração de terceiro. Hash, prefixo visível, escopos, revogação por marcação |
 | `FonteImportacao` | Endereço de feed guardado, para reler. `desativarAusentes` é a política de ausência |

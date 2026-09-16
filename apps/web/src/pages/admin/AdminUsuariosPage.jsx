@@ -285,7 +285,13 @@ export function AdminUsuariosPage({ podeGerenciar = false, euId }) {
                   </p>
                 ) : (
                   <div className="sa-credenciais">
-                    <span className="dl-mono sa-modal__extra-label">// sem e-mail configurado — passe o link à pessoa</span>
+                    {/* `motivo` vem do servidor quando o e-mail foi SEGURADO de
+                        propósito — super-admin em banco compartilhado, link
+                        que só abre neste ambiente. Sem ele, é o caso de sempre:
+                        dev sem transporte de e-mail. */}
+                    <span className="dl-mono sa-modal__extra-label">
+                      // {convite.motivo || "sem e-mail configurado — passe o link à pessoa"}
+                    </span>
                     <dl className="sa-credenciais__lista">
                       <div>
                         <dt className="dl-mono">LINK DE ACESSO</dt>
