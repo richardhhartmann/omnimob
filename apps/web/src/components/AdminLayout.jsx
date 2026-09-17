@@ -25,7 +25,7 @@ import { SeloBeta } from "./SeloBeta.jsx";
 import { MenuDoPerfil } from "./MenuDoPerfil.jsx";
 import { MenuDeCanto } from "./MenuDeCanto.jsx";
 import { CabecalhoDoPainel } from "./CabecalhoDoPainel.jsx";
-import { TrilhaDoConteudo } from "./TrilhaDoConteudo.jsx";
+import { TrilhaDaFaixa } from "./TrilhaDaFaixa.jsx";
 import { lerHistorico, registrarTela } from "../utils/historicoDeTelas";
 import { BuscaDeAtalhos } from "./BuscaDeAtalhos.jsx";
 import { ProvedorDeCabecalho } from "../utils/contextoDeCabecalho.jsx";
@@ -1131,6 +1131,12 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
             Clicar no wordmark abre o Painel do Gestor; o chevron ao lado troca
             de módulo. Ver `SeletorDeModulo`. */}
+        {/* O provedor do cabeçalho abre AQUI, e não na coluna do conteúdo:
+            a trilha mora na faixa e lê os degraus do mesmo contexto em que a
+            tela grava o próprio título. Abrisse na coluna, a faixa ficaria
+            fora dele e a trilha voltaria a nascer só da rota — a tela de
+            detalhe ("Negócio #412") perderia o último degrau. */}
+        <ProvedorDeCabecalho>
         <header className="ds-topbar">
           <div className="ds-topbar__grupo">
             {/* O ÚNICO jeito de a barra mudar de tamanho: sem ele, ela fica
@@ -1162,6 +1168,14 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
               aoAbrirPainel={() => navigate("/inicio")}
             />
           </div>
+
+          {/* ── A TRILHA, LOGO DEPOIS DO GRUPO ──────────────────────────────
+              Ela começa onde o grupo termina — a mesma vertical em que o
+              conteúdo começa lá embaixo, então o caminho se lê alinhado com a
+              página que ele descreve. Ver `TrilhaDaFaixa` para o histórico dos
+              lugares por onde ela passou. O editor de vitrine não a desenha: a
+              barra de ferramentas dele já diz o nome do documento. */}
+          {isShowcaseEditor ? null : <TrilhaDaFaixa />}
 
           {/* ── A SITUAÇÃO DA CONTA, NO MEIO DA FAIXA ──────────────────────
               Ela era uma tarja de largura inteira logo abaixo do cabeçalho, e
@@ -1468,7 +1482,6 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             o `<main>` do editor de vitrine ocupa a tela inteira, e um cabeçalho
             dentro dele roubaria altura da prancheta. Ver `data-sem-topo`. */}
         <div className="ds-coluna" data-tema={efetivo}>
-        <ProvedorDeCabecalho>
         {/* O editor de vitrine é a única tela sem a faixa: ele tem a própria
             barra de ferramentas, com o nome do documento e o estado do
             salvamento, e dois cabeçalhos empilhados comeriam um terço da
@@ -1485,14 +1498,9 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
           data-tema={efetivo}
           style={{ flex: 1, minWidth: 0 }}
         >
-          {/* A trilha abre o CONTEÚDO, e não o cabeçalho. Dentro do bloco
-              animado de propósito: ela é a primeira linha da página e entra
-              junto com ela — fora dele, ficaria parada enquanto o resto desliza,
-              e o degrau que muda de tela seria o único elemento sem transição.
-              O editor de vitrine não a desenha porque não tem cabeçalho nem
-              trilha: `main-content--editor-vitrine` é outra casca. */}
+          {/* A trilha não abre mais o conteúdo: subiu para a `.ds-topbar`,
+              ao lado do wordmark. Ver `TrilhaDaFaixa`. */}
           <div key={location.pathname} style={{ animation: "chicEntrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}>
-            {isShowcaseEditor ? null : <TrilhaDoConteudo />}
             {/* O provedor envolve só o CONTEÚDO, e não a barra: os selos de
                 tecla vivem nos botões das telas, e a barra tem os próprios
                 rótulos. Envolver tudo obrigaria a barra a re-renderizar a cada
@@ -1508,8 +1516,8 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
             </ProvedorDeAtalhos>
           </div>
         </main>
-        </ProvedorDeCabecalho>
         </div>
+        </ProvedorDeCabecalho>
 
         {/* ── Toasts ───────────────────────────────────────────────────────────── */}
         <div className="ds-toasts">
@@ -1680,11 +1688,6 @@ const CSS = `
 @media (max-width: 560px) {
   .ds-topo__icone { display: none; }
 }
-/* A trilha vive no conteudo, nao mais no cabecalho. A margem embaixo e maior
-   que os 4px de antes: ali ela colava no titulo logo abaixo; aqui ela precisa
-   se separar do primeiro bloco da pagina.
-   (Sem crases neste comentario: template literal.) */
-.ds-trilha-conteudo { margin: 0 0 14px; }
 .ds-topo__titulo {
   margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.3px;
   color: var(--text-main); line-height: 1.2;
@@ -1850,6 +1853,42 @@ const CSS = `
   width: var(--s-aberta); flex: none; box-sizing: border-box;
   display: flex; align-items: center; gap: 8px;
   padding: 0 0 0 20px;
+}
+
+/* ── A TRILHA DENTRO DA FAIXA ──────────────────────────────────────────────
+   Ela e um item do flex logo depois do grupo, e por isso comeca onde a barra
+   aberta termina — a mesma vertical do conteudo la embaixo. flex: 0 1 auto
+   com min-width: 0 e o que a deixa ENCOLHER quando a tela aperta: sem o
+   min-width, o nowrap dos degraus a faria empurrar a busca para fora da
+   tela em vez de reticenciar o texto (o .trilha__texto ja tem ellipsis).
+
+   nowrap e margin zero desfazem o que a folha base da trilha assume — la
+   ela era uma linha do conteudo, com respiro embaixo e quebra livre; aqui
+   ela tem a altura da faixa e uma linha so.
+
+   As cores sao da familia --s-*, pelo mesmo motivo da busca logo abaixo: os
+   tokens de conteudo (--text-muted, --text-main) so trocam de valor dentro
+   do <main> no tema claro, e fora dali a trilha ficaria cinza-claro sobre
+   fundo claro. Moldura le os tokens da moldura.
+
+   O respiro a esquerda e menor que o vao do grupo: o ultimo elemento do
+   grupo e o chevron do seletor de modulo, e a trilha colada nele leria como
+   parte dele. Abaixo de 900px a faixa ja esta apertada entre hamburguer e
+   busca, e a trilha sai — e a mesma regra da pilula da conta; o cabecalho da
+   tela continua dizendo onde a pessoa esta.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-topbar__trilha {
+  flex: 0 1 auto; min-width: 0;
+  padding-left: 10px;
+  --trilha-hover: var(--s-hover);
+}
+.ds-topbar__trilha .trilha { flex-wrap: nowrap; margin: 0; }
+.ds-topbar__trilha .trilha__degrau,
+.ds-topbar__trilha .trilha__seta { color: var(--s-text); }
+.ds-topbar__trilha .trilha__degrau:hover:not(:disabled),
+.ds-topbar__trilha .trilha__degrau.is-atual { color: var(--s-strong); }
+@media (max-width: 900px) {
+  .ds-topbar__trilha { display: none; }
 }
 
 /* ── A PILULA DA CONTA, NO CENTRO DA FAIXA ────────────────────────────────

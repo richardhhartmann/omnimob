@@ -47,7 +47,7 @@ export function CabecalhoDoPainel({ Icone = null }) {
   const daTela = useCabecalho();
 
   /* Os degraus continuam sendo lidos aqui, mas não são mais DESENHADOS aqui: a
-     trilha desceu para dentro do conteúdo (ver `TrilhaDoConteudo`). O que sobra
+     trilha subiu para a faixa do topo (ver `TrilhaDaFaixa`). O que sobra
      desta lista no cabeçalho é o título de reserva — o último degrau é o nome
      da tela quando ela não define um próprio. */
   const degraus = useDegrausDoPainel();
