@@ -1200,8 +1200,16 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  listarChamados: (tenantSlug) =>
-    request("/api/chamados", { headers: { "x-tenant-slug": tenantSlug } }),
+  /* `{ chamados, podeVerTodos, aguardando }`. Cada um vê os seus; o
+     Administrador da imobiliária vê os de todos com `todos: true`. */
+  listarChamados: (tenantSlug, { todos = false } = {}) =>
+    request(`/api/chamados${todos ? "?todos=1" : ""}`, { headers: { "x-tenant-slug": tenantSlug } }),
+  /* Os dois números do menu: `{ aguardando, novidades }`. */
+  chamadosPendentes: (tenantSlug) =>
+    request("/api/chamados/pendentes", { headers: { "x-tenant-slug": tenantSlug } }),
+  /* O que mudou e a pessoa ainda não viu, com a última fala de cada um. */
+  chamadosNovidades: (tenantSlug) =>
+    request("/api/chamados/novidades", { headers: { "x-tenant-slug": tenantSlug } }),
 
   /* A conversa de um chamado desta imobiliária. Número de outra → 404. */
   lerChamado: (tenantSlug, numero) =>
@@ -1215,6 +1223,13 @@ export const api = {
     }),
   reabrirChamado: (tenantSlug, numero) =>
     request(`/api/chamados/${numero}/reabrir`, { method: "POST", headers: { "x-tenant-slug": tenantSlug } }),
+  /* "Já resolvi" (RESOLVIDO) ou reabrir (ABERTO). */
+  mudarStatusChamado: (tenantSlug, numero, status) =>
+    request(`/api/chamados/${numero}/status`, {
+      method: "POST",
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify({ status }),
+    }),
 
   // Teste grátis, etapa 2: o token do e-mail vira um tenant de verdade.
   confirmarTrialOmnimob: (payload = {}) =>
@@ -1283,7 +1298,8 @@ export const adminApi = {
      volta uma vez só — como na criação. Ver `adminRoutes`. */
   reemitirSenhaAdmin: (id) => adminRequest(`/api/admin/tenants/${id}/senha-admin`, { method: "POST" }),
 
-  // Caixa de entrada do suporte — todos os tenants.
+  // Caixa de entrada do suporte — todos os tenants. Devolve
+  // `{ chamados, porStatus, internosAbertos, eu }`; a ordem é a do servidor.
   listChamados: (filtros = {}) => {
     const q = new URLSearchParams();
     if (filtros.resolvido != null) q.set("resolvido", String(filtros.resolvido));
@@ -1295,8 +1311,8 @@ export const adminApi = {
     adminRequest(`/api/admin/chamados/${numero}`, { method: "PATCH", body: JSON.stringify(payload) }),
   // A conversa de um chamado, e a resposta do suporte (que avisa o cliente).
   lerChamado: (numero) => adminRequest(`/api/admin/chamados/${numero}`),
-  responderChamado: (numero, texto) =>
-    adminRequest(`/api/admin/chamados/${numero}/mensagens`, { method: "POST", body: JSON.stringify({ texto }) }),
+  responderChamado: (numero, texto, prints = []) =>
+    adminRequest(`/api/admin/chamados/${numero}/mensagens`, { method: "POST", body: JSON.stringify({ texto, prints }) }),
 
   // Progresso bruto dos tutoriais por tenant e usuário; a porcentagem é
   // calculada na tela, que é quem conhece o fluxo.

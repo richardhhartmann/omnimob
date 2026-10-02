@@ -5106,82 +5106,119 @@ html[data-tema-painel="claro"] .sel-menu {
 
 .aud-vazio { padding: 44px 20px; text-align: center; color: var(--text-muted); font-size: 14px; }
 
-/* ── Suporte (a conversa do chamado, lado do cliente) ─────────────────────────
-   Reaproveita `.glass-panel`, `.chip`, `.aud-vazio` e o botão padrão; o que é
-   próprio aqui é o balão. Dois lados: o cliente à direita, o suporte à
-   esquerda — a convenção de qualquer conversa. Anotação de sistema é uma linha
-   discreta no meio, não um balão: ela não é fala de ninguém. */
+/* ── Suporte: Meus chamados (lado do cliente) ─────────────────────────────────
+   Porte da tela do VYA. Lista e conversa na mesma página. Na conversa, o
+   cliente à esquerda e o suporte à direita, cada fala com o NOME de quem
+   escreveu; anotação de sistema ("Resolvido por …") é uma linha no meio, não
+   um balão — ela não é fala de ninguém. Os fundos neutros saem de
+   `currentColor`, para valer nos dois temas do painel sem regra duplicada. */
+.sup { display: flex; flex-direction: column; gap: 16px; }
 .sup-cabeca { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.sup-dica { margin: 4px 0 0; font-size: 12.5px; color: var(--text-muted); max-width: 320px; line-height: 1.5; }
-.sup-dica strong { color: var(--text-main); }
-.sup-voltar {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12.5px; color: var(--text-muted); text-decoration: none;
+.sup-cabeca__titulo { margin: 0 0 4px; font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.sup-cabeca__sub { margin: 0; font-size: 14px; color: var(--text-muted); }
+.sup-cabeca__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+.sup-botao {
+  width: auto; display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; font-size: 12.5px; font-weight: 600; border-radius: 10px; text-decoration: none;
 }
-.sup-voltar:hover { color: var(--text-main); }
-.sup-atualizar { width: auto; padding: 8px 14px; font-size: 12.5px; gap: 6px; flex-shrink: 0; }
+.sup-botao--primario { background: var(--accent, #6366f1); color: #fff; border: none; }
+.sup-botao:disabled { opacity: 0.55; cursor: default; }
 
-.sup-filtros { display: flex; gap: 4px; padding: 6px; }
-.sup-filtro {
-  width: auto; padding: 8px 14px; border-radius: 9px; font-size: 12.5px; font-weight: 600;
-  background: transparent; color: var(--text-muted);
+.sup-aviso { margin: 0; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 11px; font-size: 13px; line-height: 1.5; }
+.sup-aviso--alerta { background: rgba(236,72,153,0.10); border: 1px solid rgba(236,72,153,0.30); color: #ec4899; }
+.sup-aviso--ok { background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.28); color: #10b981; }
+.sup-aviso--erro { background: rgba(239,68,68,0.10); border: 1px solid rgba(239,68,68,0.28); color: #ef4444; }
+
+.sup-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sup-segmento {
+  display: inline-flex; gap: 3px; padding: 3px; border-radius: 11px;
+  background: color-mix(in srgb, currentColor 5%, transparent); border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
 }
-.sup-filtro:hover { background: rgba(255,255,255,0.05); color: var(--text-main); transform: none; scale: 1; }
-.sup-filtro.is-on { background: rgba(99,102,241,0.16); color: var(--text-main); }
+.sup-segmento__botao {
+  width: auto; padding: 7px 14px; border-radius: 8px; border: none; font-size: 12.5px; font-weight: 600;
+  background: transparent; color: var(--text-muted); box-shadow: none;
+}
+.sup-segmento__botao:hover { color: var(--text-main); background: color-mix(in srgb, currentColor 6%, transparent); transform: none; scale: 1; }
+.sup-segmento__botao.is-on { background: rgba(99,102,241,0.18); color: var(--text-main); }
+.sup-marcar { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; }
+.sup-marcar input { width: 15px; height: 15px; accent-color: var(--accent, #6366f1); }
 
-.sup-status { text-transform: none; letter-spacing: 0.2px; font-size: 11.5px; white-space: nowrap; }
+.sup-selo {
+  flex-shrink: 0; display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  color: var(--cor); background: color-mix(in srgb, var(--cor) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cor) 32%, transparent);
+}
 
-.sup-lista { list-style: none; margin: 0; padding: 0; }
+.sup-esqueletos { display: grid; gap: 10px; }
+.sup-esqueleto {
+  display: block; height: 62px; border-radius: 12px;
+  background: color-mix(in srgb, currentColor 6%, transparent); animation: supPulsa 1.3s ease-in-out infinite;
+}
+@keyframes supPulsa { 50% { opacity: 0.5; } }
+
+.sup-vazio { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 24px; text-align: center; color: var(--text-muted); }
+.sup-vazio h3 { margin: 4px 0 0; font-size: 17px; color: var(--text-main); }
+.sup-vazio p { margin: 0 0 6px; max-width: 420px; font-size: 13.5px; line-height: 1.6; }
+
+.sup-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .sup-item {
-  display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 12px;
-  text-decoration: none; color: inherit; transition: background 0.15s ease;
+  display: flex; flex-direction: column; gap: 5px; padding: 13px 16px; border-radius: 12px;
+  text-decoration: none; color: inherit; transition: border-color 0.15s ease, transform 0.15s ease;
 }
-.sup-item:hover { background: rgba(255,255,255,0.035); }
-.sup-item.is-sua-vez { box-shadow: inset 3px 0 0 #f472b6; }
-.sup-item__numero {
-  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--accent);
-  flex-shrink: 0; letter-spacing: 0.04em;
-}
-.sup-item__meio { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.sup-item__meio strong { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sup-item__meio small { font-size: 12px; color: var(--text-muted); }
+.sup-item:hover { transform: translateY(-1px); }
+.sup-item.is-esperando { box-shadow: inset 3px 0 0 #ec4899; }
+.sup-item__topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sup-item__topo strong { font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sup-item__selos { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sup-item__meta { font-size: 12px; color: var(--text-muted); }
 
-.sup-fio { display: flex; flex-direction: column; gap: 12px; padding: 18px; }
-.sup-balao {
-  max-width: min(78%, 640px); padding: 12px 14px; border-radius: 14px;
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.06);
+.sup-ficha { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 12px 16px; }
+.sup-ficha small { font-size: 12.5px; color: var(--text-muted); }
+.sup-ficha__rota { margin: 0; width: 100%; font-size: 12px; color: var(--text-muted); }
+.sup-ficha__rota code, .sup-fala code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px;
+  padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, currentColor 8%, transparent);
 }
-.sup-balao.is-cliente { align-self: flex-end; background: rgba(99,102,241,0.14); border-color: rgba(99,102,241,0.22); border-bottom-right-radius: 4px; }
-.sup-balao.is-suporte { align-self: flex-start; border-bottom-left-radius: 4px; }
-.sup-balao header { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 4px; font-size: 11.5px; }
-.sup-balao header strong { color: var(--text-main); font-weight: 600; }
-.sup-balao header time { color: var(--text-muted); white-space: nowrap; }
-.sup-balao p { margin: 0; font-size: 13.5px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
-.sup-rota { display: block; margin-top: 6px; font-size: 11px; color: var(--text-muted); }
-.sup-prints { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.sup-prints a { width: 96px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); display: block; }
-.sup-prints img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sup-sistema {
-  align-self: center; margin: 2px 0; display: flex; gap: 10px; align-items: baseline;
-  font-size: 12px; color: var(--text-muted);
+
+.sup-fio { display: flex; flex-direction: column; gap: 10px; }
+.sup-fala {
+  align-self: flex-start; max-width: min(78%, 680px); padding: 11px 14px; border-radius: 14px; border-top-left-radius: 4px;
+  background: color-mix(in srgb, currentColor 5%, transparent); border: 1px solid color-mix(in srgb, currentColor 9%, transparent);
 }
-.sup-sistema time { font-size: 11px; opacity: 0.8; }
+.sup-fala.is-suporte {
+  align-self: flex-end; border-top-left-radius: 14px; border-top-right-radius: 4px;
+  background: rgba(99,102,241,0.13); border-color: rgba(99,102,241,0.26);
+}
+.sup-fala header { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; margin-bottom: 4px; font-size: 12px; }
+.sup-fala header strong { color: var(--text-main); font-weight: 650; }
+.sup-fala__casa { font-weight: 500; color: var(--text-muted); }
+.sup-fala header small { color: var(--text-muted); white-space: nowrap; font-size: 11px; }
+.sup-fala p { margin: 0; font-size: 13.5px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+.sup-fala p a { color: var(--accent, #6366f1); }
+/* A tela citada pelo suporte com "@": um selo que leva até ela. */
+.sup-fala p a.sup-tela {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0 1px; padding: 1px 9px 1px 8px; vertical-align: 1px;
+  border-radius: 999px; font-size: 12.5px; font-weight: 600; text-decoration: none;
+  color: #6366f1; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.32);
+}
+.sup-fala p a.sup-tela:hover { background: rgba(99,102,241,0.22); }
+.sup-anexos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.sup-anexos a { width: 110px; height: 74px; border-radius: 8px; overflow: hidden; display: block; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.sup-anexos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sup-nota {
+  align-self: center; margin: 4px 0; padding: 4px 12px; border-radius: 8px; font-size: 12px; text-align: center;
+  color: #b8962e; background: rgba(212,175,55,0.10); border: 1px solid rgba(212,175,55,0.22);
+}
 
 .sup-responder { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
 .sup-responder textarea { resize: vertical; min-height: 72px; }
 .sup-responder__acoes { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sup-responder__acoes small { color: var(--text-muted); font-size: 11.5px; }
-.sup-responder__acoes button { gap: 8px; }
-.sup-resolvido-aviso { margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
-.sup-link {
-  width: auto; padding: 0; background: none; color: var(--accent); font-size: inherit; font-weight: 600;
-  text-decoration: underline; display: inline;
-}
-.sup-link:hover { transform: none; scale: 1; background: none; }
 
 @media (max-width: 640px) {
-  .sup-balao { max-width: 92%; }
-  .sup-item { flex-wrap: wrap; }
+  .sup-fala { max-width: 92%; }
+  .sup-item__topo { flex-wrap: wrap; }
 }
 
 .aud-paginacao {
@@ -8527,6 +8564,16 @@ html[data-tema-painel="claro"] .mkb-linha__texto small { color: #7c8797; }
 .mp-linha__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .mp-linha__texto small { font-size: 11px; color: #64748b; }
 .mp-linha__seta { flex-shrink: 0; opacity: 0.5; }
+/* O selo vermelho das novidades dos chamados (o mesmo da foto do perfil). */
+.mp-linha__aviso {
+  flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 1;
+}
+/* Cada novidade, como um aviso do sino: ponto, o que houve e o trecho. */
+.mp-novidade { padding-left: 14px; }
+.mp-novidade .mp-linha__texto { font-size: 12.5px; }
+.mp-novidade__ponto { flex-shrink: 0; width: 7px; height: 7px; margin: 0 6px 0 4px; border-radius: 999px; background: #ef4444; align-self: flex-start; margin-top: 6px; }
 .mp-risco { display: block; height: 1px; margin: 5px 8px; background: rgba(255, 255, 255, 0.08); }
 
 /* ── A primeira linha: foto e nome ── */

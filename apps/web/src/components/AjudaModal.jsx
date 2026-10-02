@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { abrirChamado, CATEGORIAS_CHAMADO, EMAIL_SUPORTE } from "../utils/suporte";
+import {
+  ArrowsClockwise, CreditCard, Image as ImagemIcone, Lifebuoy, Lightbulb, Question, WarningCircle, X,
+} from "@phosphor-icons/react";
+import { abrirChamado, avisarQueChamadosMudaram, CATEGORIAS_CHAMADO, EMAIL_SUPORTE } from "../utils/suporte";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary";
 import { capturarTela, printComoArquivo } from "../utils/capturarTela";
+import { comprimirImagem, imagensDaAreaDeTransferencia } from "../utils/imagemDoChamado";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Modal do botão de Ajuda — duas saídas, nesta ordem.
@@ -19,21 +23,75 @@ import { capturarTela, printComoArquivo } from "../utils/capturarTela";
    super-admin em Administração › Chamados. Se a requisição falhar, o texto não
    se perde — ver a rede de proteção em `utils/suporte.js` —, e a confirmação
    diz qual dos dois aconteceu, sem prometer o que não houve.
+
+   ── O FORMULÁRIO TEM DOIS PASSOS, E A ORDEM IMPORTA ──
+
+   Primeiro QUE TIPO de coisa é (cartões), depois o texto. Perguntar a
+   categoria antes do assunto faz a pessoa já escrever no registro certo — e é
+   o que permite ao suporte triar a fila sem ler tudo.
+
+   ── O QUE VIAJA JUNTO ──
+
+   A ROTA em que a pessoa estava, o PRINT tirado sozinho na abertura (marcado
+   para ir, desmarcável, descartável, e refazível) e até três IMAGENS anexadas
+   — pelo botão ou colando com Ctrl+V, que no Windows é o caminho mais curto de
+   um Win+Shift+S até o chamado. Tudo sobe para o Cloudinary só no envio.
+
+   ── O RASCUNHO ──
+
+   O texto fica no localStorage enquanto está sendo escrito. Quem abre um
+   chamado costuma estar no meio de um problema; perder o que escreveu porque
+   fechou o modal sem querer seria o segundo problema. As imagens ficam de
+   fora: são grandes, e o localStorage cheio derrubaria o texto junto.
+
+   ── O CHAMADO INTERNO ──
+
+   Quando quem está logado é a equipe da Omnimob dentro da conta do cliente
+   (`contexto.suporte`, vindo do "Entrar" do super-admin), o chamado é o
+   suporte pedindo algo ao desenvolvimento. Quem decide é o SERVIDOR, pelo
+   token; aqui só se troca o texto para ninguém achar que está escrevendo ao
+   suporte em nome do cliente.
    ──────────────────────────────────────────────────────────────────────────── */
 
+const RASCUNHO = "omnimob:chamado:rascunho";
+const MAXIMO_DE_IMAGENS = 3;
+
+const ICONE_DA_CATEGORIA = {
+  duvida: Question,
+  problema: WarningCircle,
+  cobranca: CreditCard,
+  sugestao: Lightbulb,
+  outro: Lifebuoy,
+};
+
+const FORM_VAZIO = { assunto: "", categoria: null, descricao: "" };
+
+function lerRascunho() {
+  try {
+    const d = JSON.parse(localStorage.getItem(RASCUNHO) || "null");
+    return d && typeof d === "object" ? { ...FORM_VAZIO, ...d } : FORM_VAZIO;
+  } catch {
+    return FORM_VAZIO;
+  }
+}
+
 export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, aoReverTour, contexto }) {
+  const interno = Boolean(contexto?.suporte);
   // "menu" → "chamado" → "feito"
   const [vista, setVista] = useState("menu");
-  const [form, setForm] = useState({ assunto: "", categoria: "duvida", descricao: "" });
+  const [form, setForm] = useState(FORM_VAZIO);
   /* Um print só, tirado automaticamente: `{ blob, dataUrl }` enquanto vive no
      navegador. A URL do Cloudinary só existe depois do envio — não faz sentido
      subir imagem de chamado que talvez nunca seja mandado. */
   const [print, setPrint] = useState(null);
   const [capturando, setCapturando] = useState(false);
   const [incluirPrint, setIncluirPrint] = useState(true);
+  /* As imagens que a pessoa anexou, também `{ blob, dataUrl }`. */
+  const [imagens, setImagens] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
   const [recibo, setRecibo] = useState(null);
+  const arquivoRef = useRef(null);
 
   /* Abrir JÁ NO CHAMADO quando quem chamou pediu isso.
 
@@ -44,15 +102,26 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
     if (open && passoInicial === "chamado") setVista("chamado");
   }, [open, passoInicial]);
 
+  /* O rascunho volta ao reabrir. */
+  useEffect(() => {
+    if (open) setForm(lerRascunho());
+  }, [open]);
+
+  /* E é regravado a cada tecla, enquanto não virou chamado. */
+  useEffect(() => {
+    if (!open || vista === "feito") return;
+    try { localStorage.setItem(RASCUNHO, JSON.stringify(form)); } catch { /* cheio ou bloqueado */ }
+  }, [open, vista, form]);
+
   /* Reabrir tem que reabrir do começo: sem isto, quem mandou um chamado e
      voltou depois encontraria a tela de recibo do chamado anterior. */
   useEffect(() => {
     if (open) return;
     const t = setTimeout(() => {
       setVista("menu");
-      setForm({ assunto: "", categoria: "duvida", descricao: "" });
       setPrint(null);
       setIncluirPrint(true);
+      setImagens([]);
       setErro("");
       setRecibo(null);
     }, 220); // depois da animação de saída
@@ -67,15 +136,15 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
      primeiro quadro em que o modal existe e ignora os nós dele (ver
      `ehSobreposicao`), então o que sai é a tela como ela estava um instante
      antes de a pessoa pedir ajuda. */
-  useEffect(() => {
-    if (!open) return undefined;
+  function capturar() {
     let vivo = true;
     setCapturando(true);
     capturarTela()
-      .then((r) => { if (vivo) setPrint(r); })
+      .then((r) => { if (vivo) { setPrint(r); setIncluirPrint(true); } })
       .finally(() => { if (vivo) setCapturando(false); });
     return () => { vivo = false; };
-  }, [open]);
+  }
+  useEffect(() => (open ? capturar() : undefined), [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return undefined;
@@ -88,28 +157,62 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
     };
   }, [open, onClose]);
 
+  async function receber(lista) {
+    const arquivos = [...(lista || [])].filter(Boolean);
+    if (!arquivos.length) return;
+    setErro("");
+    const espaco = MAXIMO_DE_IMAGENS - imagens.length;
+    if (espaco <= 0) { setErro(`Até ${MAXIMO_DE_IMAGENS} imagens por chamado.`); return; }
+    const novas = [];
+    for (const f of arquivos.slice(0, espaco)) {
+      if (!String(f.type).startsWith("image/")) { setErro("Só dá para anexar imagens."); continue; }
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        novas.push(await comprimirImagem(f));
+      } catch (e) {
+        setErro(e.message);
+      }
+    }
+    if (arquivos.length > espaco) setErro(`Até ${MAXIMO_DE_IMAGENS} imagens por chamado.`);
+    if (novas.length) setImagens((x) => [...x, ...novas].slice(0, MAXIMO_DE_IMAGENS));
+    if (arquivoRef.current) arquivoRef.current.value = "";
+  }
+
+  /* Ctrl+V com uma imagem na área de transferência, no passo do texto. */
+  useEffect(() => {
+    if (!open || vista !== "chamado" || !form.categoria) return undefined;
+    function aoColar(e) {
+      const arquivos = imagensDaAreaDeTransferencia(e);
+      if (!arquivos.length) return;
+      e.preventDefault();
+      receber(arquivos);
+    }
+    window.addEventListener("paste", aoColar);
+    return () => window.removeEventListener("paste", aoColar);
+  });
+
   async function enviar(e) {
     e.preventDefault();
     setErro("");
+    if (!form.categoria) { setErro("Escolha o tipo do chamado."); return; }
     if (form.assunto.trim().length < 4) { setErro("Escreva um assunto de pelo menos 4 caracteres."); return; }
     if (form.descricao.trim().length < 15) { setErro("Conte um pouco mais — o que aconteceu, e o que você esperava que acontecesse."); return; }
     setEnviando(true);
     try {
-      /* O print sobe para o Cloudinary direto do navegador, como as fotos de
-         imóvel: o binário não passa pela nossa API, e o chamado guarda a URL.
-         Só agora, no envio — subir na captura encheria a conta de imagens de
-         chamados que a pessoa desistiu de mandar. */
-      let prints = [];
-      if (incluirPrint && print?.blob) {
+      /* As imagens sobem para o Cloudinary direto do navegador, como as fotos
+         de imóvel: o binário não passa pela nossa API, e o chamado guarda a
+         URL. O print vem primeiro — é a primeira coisa que o suporte abre. */
+      const blobs = [...(incluirPrint && print?.blob ? [print.blob] : []), ...imagens.map((i) => i.blob)];
+      const prints = [];
+      for (const blob of blobs) {
         try {
-          const enviado = await uploadToCloudinary(printComoArquivo(print.blob));
-          // `uploadToCloudinary` devolve { url, publicId }; o chamado guarda só
-          // o endereço.
-          if (enviado?.url) prints = [enviado.url];
+          // eslint-disable-next-line no-await-in-loop
+          const enviado = await uploadToCloudinary(printComoArquivo(blob));
+          if (enviado?.url) prints.push(enviado.url);
         } catch (falhaUpload) {
-          // Print é acessório. Perder o chamado inteiro porque a imagem não
-          // subiu seria trocar o essencial pelo enfeite.
-          console.warn("[ajuda] print não subiu:", falhaUpload?.message || falhaUpload);
+          // Imagem é acessório. Perder o chamado inteiro porque ela não subiu
+          // seria trocar o essencial pelo enfeite.
+          console.warn("[ajuda] imagem não subiu:", falhaUpload?.message || falhaUpload);
         }
       }
 
@@ -120,6 +223,11 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
         prints,
         rota: contexto?.rota,
       });
+      if (r.enviado) {
+        try { localStorage.removeItem(RASCUNHO); } catch { /* nada */ }
+        setForm(FORM_VAZIO);
+        avisarQueChamadosMudaram();
+      }
       setRecibo(r);
       setVista("feito");
     } catch (err) {
@@ -138,6 +246,9 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
     setTimeout(() => aoReverTour?.(), 240);
   }
 
+  const escolhida = CATEGORIAS_CHAMADO.find((c) => c.valor === form.categoria) || null;
+  const IconeEscolhido = escolhida ? ICONE_DA_CATEGORIA[escolhida.valor] || Lifebuoy : null;
+
   return createPortal(
     <>
       <style>{CSS}</style>
@@ -149,20 +260,27 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
       />
 
       <div className={`aj-palco${open ? " is-aberto" : ""}`} role="presentation">
-        <div className="aj-caixa" role="dialog" aria-modal="true" aria-label="Ajuda">
+        <div className={`aj-caixa${vista === "chamado" ? " is-larga" : ""}`} role="dialog" aria-modal="true" aria-label="Ajuda">
           <div className="aj-topo">
             <span className="aj-selo" aria-hidden="true">
               <img src="/logo_alt.webp" alt="" />
             </span>
             <div className="aj-topo__texto">
-              <span className="aj-eyebrow">AJUDA</span>
+              <span className="aj-eyebrow">{interno ? "CHAMADO INTERNO" : "AJUDA"}</span>
               <p className="aj-titulo">
                 {vista === "chamado"
-                  ? "Abrir um chamado"
+                  ? (interno ? "Abrir um chamado interno" : "Abrir um chamado")
                   : vista === "feito"
-                    ? (recibo?.enviado ? "Chamado registrado" : "Guardamos o seu texto")
+                    ? (recibo?.enviado ? `Chamado ${interno ? "interno " : ""}#${recibo.numero} aberto` : "Guardamos o seu texto")
                     : "Como podemos ajudar?"}
               </p>
+              {vista === "chamado" ? (
+                <span className="aj-subtitulo">
+                  {interno
+                    ? `Do suporte para o desenvolvimento, aberto por ${contexto.suporte.nome || "você"}: cai na fila do super-admin e chega por e-mail.`
+                    : "Conte o que aconteceu. O suporte responde por aqui mesmo."}
+                </span>
+              ) : null}
             </div>
             <button type="button" className="aj-fechar" onClick={onClose} aria-label="Fechar">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
@@ -206,122 +324,185 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
                 </span>
                 <span className="aj-opcao__seta" aria-hidden="true">→</span>
               </button>
+
+              <Link to="/suporte" className="aj-opcao" onClick={onClose}>
+                <span className="aj-opcao__icone" aria-hidden="true"><Lifebuoy size={17} /></span>
+                <span className="aj-opcao__texto">
+                  <strong>Meus chamados</strong>
+                  <small>O que você já abriu, as respostas do suporte e o que espera por você.</small>
+                </span>
+                <span className="aj-opcao__seta" aria-hidden="true">→</span>
+              </Link>
             </div>
           ) : null}
 
           {/* ── Formulário do chamado ─────────────────────────────────────── */}
           {vista === "chamado" ? (
             <form className="aj-form" onSubmit={enviar}>
-              <div className="aj-campo">
-                <span className="aj-rotulo">Sobre o quê?</span>
-                <div className="aj-categorias">
-                  {CATEGORIAS_CHAMADO.map((cat) => (
-                    <button
-                      key={cat.valor}
-                      type="button"
-                      title={cat.dica}
-                      className={`aj-cat${form.categoria === cat.valor ? " is-ativa" : ""}`}
-                      onClick={() => setForm((p) => ({ ...p, categoria: cat.valor }))}
-                    >
-                      {cat.rotulo}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="aj-campo">
-                <span className="aj-rotulo">Assunto</span>
-                <input
-                  className="aj-input"
-                  placeholder="Em uma linha: o que aconteceu"
-                  value={form.assunto}
-                  maxLength={120}
-                  disabled={enviando}
-                  onChange={(e) => setForm((p) => ({ ...p, assunto: e.target.value }))}
-                  autoFocus
-                />
-              </div>
-
-              <div className="aj-campo">
-                <span className="aj-rotulo">O que aconteceu</span>
-                <textarea
-                  className="aj-input aj-area"
-                  rows={5}
-                  maxLength={2000}
-                  placeholder="Descreva o passo a passo: o que você fez, o que apareceu e o que você esperava que acontecesse."
-                  value={form.descricao}
-                  disabled={enviando}
-                  onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))}
-                />
-              </div>
-
-              {/* Print da tela — já capturado, nada para a pessoa fazer além
-                  de decidir se manda. O clique na miniatura abre em tamanho
-                  real, para ela conferir o que está enviando antes de enviar. */}
-              <div className="aj-campo">
-                <span className="aj-rotulo">Print da tela</span>
-
-                {capturando ? (
-                  <div className="aj-print-caixa is-esperando">
-                    <span className="aj-print__girando" aria-hidden="true" />
-                    <span className="aj-print-caixa__texto">
-                      <strong>Capturando a sua tela…</strong>
-                    </span>
-                  </div>
-                ) : print ? (
-                  <>
-                    <label className={`aj-print-caixa${incluirPrint ? " is-on" : ""}`}>
-                      <input
-                        type="checkbox"
-                        checked={incluirPrint}
-                        onChange={(e) => setIncluirPrint(e.target.checked)}
-                        disabled={enviando}
-                      />
-                      <a
-                        href={print.dataUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="aj-print-mini"
-                        title="Abrir o print em tamanho real"
-                        onClick={(e) => e.stopPropagation()}
+              {!escolhida ? (
+                /* ── Passo 1: que tipo de coisa é ── */
+                <div className="aj-tipos">
+                  {CATEGORIAS_CHAMADO.map((cat) => {
+                    const Icone = ICONE_DA_CATEGORIA[cat.valor] || Lifebuoy;
+                    return (
+                      <button
+                        key={cat.valor}
+                        type="button"
+                        className="aj-tipo"
+                        style={{ "--cor": cat.cor }}
+                        onClick={() => setForm((p) => ({ ...p, categoria: cat.valor }))}
                       >
-                        <img src={print.dataUrl} alt="Print da tela capturado automaticamente" />
-                      </a>
-                      <span className="aj-print-caixa__texto">
-                        <strong>Anexar esta imagem</strong>
-                        <small>
-                          Tiramos sozinhos, da tela em que você estava. Clique na miniatura para
-                          ver em tamanho real.
-                        </small>
-                      </span>
-                    </label>
-                    <span className="aj-dica">
-                      Uma imagem do problema poupa várias mensagens de ida e volta. Desmarque se
-                      houver algo na tela que você prefere não enviar.
-                    </span>
-                  </>
-                ) : (
-                  <span className="aj-dica">
-                    Não consegui capturar a tela neste navegador — descreva o problema abaixo com o
-                    máximo de detalhe que puder.
-                  </span>
-                )}
-              </div>
+                        <span className="aj-tipo__icone"><Icone size={20} weight="duotone" /></span>
+                        <span className="aj-tipo__texto"><strong>{cat.rotulo}</strong><small>{cat.dica}</small></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* ── Passo 2: o texto ── */
+                <>
+                  <p className="aj-escolhido" style={{ "--cor": escolhida.cor }}>
+                    <IconeEscolhido size={15} weight="duotone" /> {escolhida.rotulo}
+                  </p>
 
-              <p className="aj-nota">
-                Enviamos junto a tela em que você está e o seu login,
-                para o suporte não precisar perguntar.
-              </p>
+                  <div className="aj-campo">
+                    <span className="aj-rotulo">Assunto</span>
+                    <input
+                      className="aj-input"
+                      placeholder={escolhida.valor === "problema" ? "Ex.: a foto do imóvel não sobe" : "Resuma em uma linha"}
+                      value={form.assunto}
+                      maxLength={120}
+                      disabled={enviando}
+                      onChange={(e) => setForm((p) => ({ ...p, assunto: e.target.value }))}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="aj-campo">
+                    <span className="aj-rotulo">O que aconteceu</span>
+                    <textarea
+                      className="aj-input aj-area"
+                      rows={5}
+                      maxLength={2000}
+                      placeholder={escolhida.valor === "problema"
+                        ? "O que você fez, o que esperava e o que apareceu. Se der, diga o código do imóvel ou o nome do cliente."
+                        : "Escreva com as suas palavras — o suporte pergunta o resto."}
+                      value={form.descricao}
+                      disabled={enviando}
+                      onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Print da tela — já capturado, nada para a pessoa fazer além
+                      de decidir se manda. O clique na miniatura abre em tamanho
+                      real, para ela conferir o que está enviando antes. */}
+                  <div className="aj-campo">
+                    <span className="aj-rotulo">Print da tela</span>
+
+                    {capturando ? (
+                      <div className="aj-print-caixa is-esperando">
+                        <span className="aj-print__girando" aria-hidden="true" />
+                        <span className="aj-print-caixa__texto">
+                          <strong>Capturando a sua tela…</strong>
+                        </span>
+                      </div>
+                    ) : print ? (
+                      <>
+                        <label className={`aj-print-caixa${incluirPrint ? " is-on" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={incluirPrint}
+                            onChange={(e) => setIncluirPrint(e.target.checked)}
+                            disabled={enviando}
+                          />
+                          <a
+                            href={print.dataUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="aj-print-mini"
+                            title="Abrir o print em tamanho real"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <img src={print.dataUrl} alt="Print da tela capturado automaticamente" />
+                          </a>
+                          <span className="aj-print-caixa__texto">
+                            <strong>Enviar o print da tela</strong>
+                            <small>Tirado no momento em que você pediu ajuda. Clique na miniatura para ver em tamanho real.</small>
+                          </span>
+                        </label>
+                        <span className="aj-print-acoes">
+                          <button type="button" className="aj-link" onClick={capturar} disabled={enviando}>
+                            <ArrowsClockwise size={12} /> Tirar de novo
+                          </button>
+                          <button type="button" className="aj-link" onClick={() => setPrint(null)} disabled={enviando}>
+                            Descartar
+                          </button>
+                        </span>
+                      </>
+                    ) : (
+                      <button type="button" className="aj-print-pedir" onClick={capturar} disabled={enviando}>
+                        <ArrowsClockwise size={15} />
+                        <span>
+                          <strong>Anexar um print da tela</strong>
+                          <small>Tira de novo a imagem da tela que está atrás deste modal</small>
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="aj-anexos">
+                    <button
+                      type="button"
+                      className="aj-btn aj-btn--fantasma aj-btn--p"
+                      disabled={enviando || imagens.length >= MAXIMO_DE_IMAGENS}
+                      onClick={() => arquivoRef.current?.click()}
+                    >
+                      <ImagemIcone size={13} /> Anexar imagem
+                    </button>
+                    <input ref={arquivoRef} type="file" accept="image/*" multiple hidden onChange={(e) => receber(e.target.files)} />
+                    <small>
+                      {imagens.length
+                        ? `${imagens.length} de ${MAXIMO_DE_IMAGENS}`
+                        : `Opcional — até ${MAXIMO_DE_IMAGENS} imagens, ou cole com Ctrl+V`}
+                    </small>
+                    {imagens.map((img, i) => (
+                      <span key={img.dataUrl.slice(-24) + i} className="aj-miniatura">
+                        <img src={img.dataUrl} alt="" />
+                        <button type="button" title="Tirar esta imagem" onClick={() => setImagens((x) => x.filter((_, j) => j !== i))}>
+                          <X size={10} weight="bold" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  <p className="aj-nota">
+                    Vamos mandar junto a tela em que você está (<code>{contexto?.rota || "/"}</code>) e o seu
+                    login — é o que o suporte perguntaria primeiro.
+                  </p>
+                </>
+              )}
 
               {erro ? <p className="aj-erro">{erro}</p> : null}
 
               <div className="aj-acoes">
+                {escolhida ? (
+                  <button
+                    type="button"
+                    className="aj-link aj-link--esquerda"
+                    onClick={() => setForm((p) => ({ ...p, categoria: null }))}
+                    disabled={enviando}
+                  >
+                    Trocar o tipo
+                  </button>
+                ) : null}
                 <button type="button" className="aj-btn aj-btn--fantasma" onClick={() => setVista("menu")} disabled={enviando}>
                   Voltar
                 </button>
-                <button type="submit" className="aj-btn aj-btn--primario" disabled={enviando}>
-                  {enviando ? "Registrando…" : "Enviar chamado"}
-                </button>
+                {escolhida ? (
+                  <button type="submit" className="aj-btn aj-btn--primario" disabled={enviando}>
+                    {enviando ? "Enviando…" : "Enviar chamado"}
+                  </button>
+                ) : null}
               </div>
             </form>
           ) : null}
@@ -336,9 +517,12 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
                     <code>#{recibo.numero}</code>
                   </p>
                   <p className="aj-feito__texto">
-                    Recebemos. A resposta chega por e-mail e fica em{" "}
-                    <Link to={`/suporte/${recibo.numero}`} onClick={onClose}>Meus chamados</Link>,
-                    onde você também pode responder.
+                    {interno
+                      ? "O desenvolvimento foi avisado na fila do super-admin e por e-mail. "
+                      : "Guardamos a tela em que você estava e o que escreveu. "}
+                    Enquanto o suporte não responde, o chamado fica como <strong>Aberto</strong>; quando houver
+                    resposta, ele aparece como <strong>Aguardando você</strong> — e um aviso acende na sua foto
+                    do perfil.
                   </p>
                 </>
               ) : (
@@ -360,9 +544,14 @@ export function AjudaModal({ open, passoInicial = "menu", onClose, tourDaTela, a
                 </>
               )}
               <div className="aj-acoes">
-                <button type="button" className="aj-btn aj-btn--primario" onClick={onClose}>
-                  Entendi
+                <button type="button" className="aj-btn aj-btn--fantasma" onClick={onClose}>
+                  Fechar
                 </button>
+                {recibo?.enviado ? (
+                  <Link to={`/suporte/${recibo.numero}`} className="aj-btn aj-btn--primario" onClick={onClose}>
+                    Ver meus chamados
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -598,6 +787,70 @@ const CSS = `
 }
 .aj-caixa .aj-btn--fantasma:hover { background: rgba(139,92,246,0.16); color: #ede9f6; box-shadow: none; transform: none; }
 .aj-caixa .aj-btn:disabled { opacity: 0.55; cursor: default; filter: none; }
+
+/* ── O formulário em dois passos (o tipo, depois o texto) ── */
+.aj-caixa.is-larga { max-width: 560px; }
+.aj-subtitulo { font-size: 12px; line-height: 1.5; color: #a9a3ba; }
+.aj-caixa a.aj-opcao { text-decoration: none; }
+.aj-tipos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.aj-caixa .aj-tipo {
+  display: flex; align-items: flex-start; gap: 11px; width: 100%; text-align: left;
+  padding: 13px; border-radius: 13px; cursor: pointer;
+  background: color-mix(in srgb, var(--cor) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cor) 26%, transparent);
+  color: inherit; font-family: inherit; box-shadow: none; transform: none;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.aj-caixa .aj-tipo:hover {
+  background: color-mix(in srgb, var(--cor) 15%, transparent);
+  border-color: color-mix(in srgb, var(--cor) 55%, transparent);
+  box-shadow: none; transform: none;
+}
+.aj-tipo__icone {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--cor) 22%, transparent); color: var(--cor);
+}
+.aj-tipo__texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.aj-tipo__texto strong { font-size: 13px; font-weight: 650; color: #f1edf9; }
+.aj-tipo__texto small { font-size: 11.5px; line-height: 1.5; color: #a9a3ba; }
+.aj-escolhido {
+  margin: 0; align-self: flex-start; display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  color: var(--cor); background: color-mix(in srgb, var(--cor) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cor) 34%, transparent);
+}
+.aj-nota code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px;
+  padding: 1px 6px; border-radius: 5px; background: rgba(255,255,255,0.06); color: #c4b5fd;
+}
+.aj-print-acoes { display: flex; gap: 14px; }
+.aj-caixa .aj-link {
+  width: auto; padding: 0; border: none; background: none; cursor: pointer; box-shadow: none; transform: none;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: inherit; font-size: 11.5px; color: #a9a3ba; text-decoration: underline; text-underline-offset: 2px;
+}
+.aj-caixa .aj-link:hover { color: #d4af37; background: none; box-shadow: none; transform: none; }
+.aj-caixa .aj-link--esquerda { margin-right: auto; }
+.aj-caixa .aj-print-pedir {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 11px 13px; border-radius: 12px; cursor: pointer; box-shadow: none; transform: none;
+  background: transparent; border: 1px dashed rgba(167,139,250,0.28); color: #c4b5fd; font-family: inherit;
+}
+.aj-caixa .aj-print-pedir:hover { background: rgba(139,92,246,0.10); box-shadow: none; transform: none; }
+.aj-print-pedir span { display: grid; gap: 2px; }
+.aj-print-pedir strong { font-size: 12.8px; color: #f1edf9; }
+.aj-print-pedir small { font-size: 11.5px; color: #a9a3ba; }
+.aj-anexos { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.aj-anexos > small { font-size: 11px; color: #6f6883; }
+.aj-caixa .aj-btn--p { padding: 6px 11px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px; }
+.aj-miniatura { position: relative; width: 52px; height: 52px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(167,139,250,0.22); }
+.aj-miniatura img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.aj-caixa .aj-miniatura button {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border-radius: 999px; border: none;
+  display: grid; place-items: center; background: rgba(0,0,0,0.72); color: #fff; cursor: pointer; box-shadow: none; transform: none;
+}
+.aj-caixa a.aj-btn { text-decoration: none; display: inline-flex; align-items: center; }
+@media (max-width: 520px) { .aj-tipos { grid-template-columns: 1fr; } }
 
 @media (prefers-reduced-motion: reduce) {
   .aj-fundo, .aj-caixa { transition: none; }

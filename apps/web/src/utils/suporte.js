@@ -20,12 +20,47 @@ const LIMITE_FILA = 20;
 /** E-mail de escape, oferecido quando nem a fila local funciona. */
 export const EMAIL_SUPORTE = "suporte@omnimob.app";
 
+/* A cor é a do cartão no primeiro passo do formulário e do selo depois de
+   escolhido — a mesma em todo lugar, para o tipo ser reconhecido de relance. */
 export const CATEGORIAS_CHAMADO = [
-  { valor: "duvida",   rotulo: "Dúvida de uso",     dica: "Não sei como fazer alguma coisa", prioridade: "BAIXA" },
-  { valor: "problema", rotulo: "Algo não funciona", dica: "Erro, tela travada, botão sem efeito", prioridade: "ALTA" },
-  { valor: "cobranca", rotulo: "Plano e cobrança",  dica: "Assinatura, nota fiscal, upgrade", prioridade: "MEDIA" },
-  { valor: "sugestao", rotulo: "Sugestão",          dica: "Uma ideia do que faltou", prioridade: "BAIXA" },
+  { valor: "duvida",   rotulo: "Dúvida de uso",     dica: "Não sei como fazer alguma coisa", prioridade: "BAIXA", cor: "#3b82f6" },
+  { valor: "problema", rotulo: "Algo não funciona", dica: "Erro, tela travada, botão sem efeito", prioridade: "ALTA", cor: "#ef4444" },
+  { valor: "cobranca", rotulo: "Plano e cobrança",  dica: "Assinatura, nota fiscal, upgrade", prioridade: "MEDIA", cor: "#10b981" },
+  { valor: "sugestao", rotulo: "Sugestão",          dica: "Uma ideia do que faltou", prioridade: "BAIXA", cor: "#f59e0b" },
+  { valor: "outro",    rotulo: "Outro",             dica: "Não se encaixa nos anteriores", prioridade: "MEDIA", cor: "#8b5cf6" },
 ];
+
+/** "Dúvida de uso" a partir de "duvida" — para listas e fichas. */
+export const ROTULO_CATEGORIA = Object.fromEntries(CATEGORIAS_CHAMADO.map((c) => [c.valor, c.rotulo]));
+
+/* O status do chamado, como o CLIENTE o lê. A cor diz de quem é a vez: rosa é
+   "o suporte espera você", âmbar é "estão com ele", e o verde fecha. */
+export const STATUS_CHAMADO = {
+  ABERTO:             { rotulo: "Aberto",          cor: "#818cf8", dica: "Recebido. O suporte ainda vai responder." },
+  EM_ATENDIMENTO:     { rotulo: "Em atendimento",  cor: "#f59e0b", dica: "Alguém do suporte está com o seu chamado." },
+  AGUARDANDO_CLIENTE: { rotulo: "Aguardando você", cor: "#ec4899", dica: "O suporte respondeu e espera a sua resposta." },
+  RESOLVIDO:          { rotulo: "Resolvido",       cor: "#10b981", dica: "Fechado. Se voltou a acontecer, é só reabrir." },
+};
+
+/* Avisa o resto do painel que algo mudou nos chamados (abrir marca o visto,
+   responder, encerrar): o selo do avatar desce AGORA, e não na próxima volta
+   do relógio. */
+export const EVENTO_CHAMADOS = "omnimob:chamados-mudaram";
+export const avisarQueChamadosMudaram = () => {
+  try { window.dispatchEvent(new CustomEvent(EVENTO_CHAMADOS)); } catch { /* fora do navegador */ }
+};
+
+/** "hoje, 14:32" para o recente; a data cheia para o resto. */
+export function quandoChamado(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (dias <= 0) return `hoje, ${hora}`;
+  if (dias === 1) return `ontem, ${hora}`;
+  return `${d.toLocaleDateString("pt-BR")} ${hora}`;
+}
 
 /* A prioridade sai da categoria, não de um seletor.
 

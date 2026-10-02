@@ -257,11 +257,13 @@ export function SuperAdminPage({ session, onLogout }) {
 
   /* O contador do menu é buscado na entrada, não quando a aba de chamados
      abre: um badge que só aparece depois de você clicar no item não avisa
-     nada. É uma requisição pequena, e só conta os abertos. */
+     nada. Conta o que espera resposta NOSSA (Aberto + Em atendimento) — um
+     chamado aguardando o cliente não é trabalho parado. Sai dos contadores
+     do servidor, que não sofrem o corte da lista. */
   useEffect(() => {
     if (!permissoes.verChamados) return;
     adminApi.listChamados({ resolvido: false })
-      .then((l) => setChamadosAbertos(l.length))
+      .then((r) => setChamadosAbertos((r.porStatus?.ABERTO || 0) + (r.porStatus?.EM_ATENDIMENTO || 0)))
       .catch(() => {});
   }, [permissoes.verChamados]);
 
@@ -592,7 +594,7 @@ export function SuperAdminPage({ session, onLogout }) {
       ) : null}
 
       {aba === "chamados" ? (
-        <AdminChamadosPage aoContarAbertos={setChamadosAbertos} podeResolver={Boolean(permissoes.resolverChamado)} />
+        <AdminChamadosPage aoContar={setChamadosAbertos} />
       ) : null}
       {aba === "tutoriais" ? <AdminTutoriaisPage /> : null}
       {aba === "usuarios" ? <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} /> : null}

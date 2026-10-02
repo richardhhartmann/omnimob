@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowsClockwise, Lifebuoy, PaperPlaneRight } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useOutletContext, useParams } from "react-router-dom";
+import {
+  ArrowLeft, ArrowsClockwise, CheckCircle, Lifebuoy, PaperPlaneRight, Plus,
+} from "@phosphor-icons/react";
 import { api } from "../api";
+import { TextoDoChamado } from "../components/TextoDoChamado.jsx";
+import {
+  EVENTO_CHAMADOS, ROTULO_CATEGORIA, STATUS_CHAMADO, avisarQueChamadosMudaram, quandoChamado as quando,
+} from "../utils/suporte";
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Suporte — o lado do cliente na conversa do chamado.
+   MEUS CHAMADOS — o lado do cliente na conversa do chamado.
 
-   O chamado já nascia aqui (modal de Ajuda) e era resolvido lá (super-admin);
-   o que faltava era o meio: ver o que abriu, saber se alguém leu, ler a
-   resposta e responder. Esta tela é o meio.
+   O chamado nasce no modal de Ajuda e é resolvido pelo suporte; o que esta
+   tela dá é o MEIO: ver o que você abriu, saber se alguém leu, ler a resposta
+   e responder.
 
    Lista e conversa são a MESMA página; a rota diz qual das duas
    (`/suporte` e `/suporte/:numero`) — o mesmo arranjo de Cargos e Clientes.
@@ -17,40 +23,35 @@ import { api } from "../api";
 
    ── O QUE ESTA TELA NÃO FAZ ──
 
-   Abrir chamado. O botão leva ao modal de Ajuda, que já sabe capturar a tela
-   e guardar o texto quando a rede cai. Um segundo formulário aqui seria o
-   defeito que o editor de vitrine teve duas vezes.
+   Formulário de chamado. O botão "Abrir chamado" chama o modal de Ajuda (pelo
+   contexto do layout), que já sabe capturar a tela, anexar imagem e guardar o
+   rascunho. Um segundo formulário aqui seria a mesma regra em dois lugares —
+   o defeito que o editor de vitrine teve duas vezes.
+
+   ── AQUI TODO MUNDO É CLIENTE ──
+
+   Inclusive o Administrador da imobiliária. Esta tela nunca oferece "responder
+   ao cliente" nem "marcar resolvido pelo suporte": seria ele respondendo a si
+   mesmo. O que ele ganha a mais é VISIBILIDADE — ver os chamados dos colegas
+   (`podeVerTodos`) —, e não autoridade.
+
+   Encerrar continua sendo de quem abriu: "já resolvi sozinho" é uma resposta
+   legítima, e sem isso a lista de quem abre muito chamado nunca esvazia.
    ──────────────────────────────────────────────────────────────────────────── */
 
-const STATUS = {
-  ABERTO:             { rotulo: "Aberto",               cor: "#a5b4fc", dica: "Recebido. O suporte ainda vai responder." },
-  EM_ATENDIMENTO:     { rotulo: "Em atendimento",       cor: "#fbbf24", dica: "Alguém do suporte está com o seu chamado." },
-  AGUARDANDO_CLIENTE: { rotulo: "Aguardando você",      cor: "#f472b6", dica: "O suporte respondeu e espera a sua resposta." },
-  RESOLVIDO:          { rotulo: "Resolvido",            cor: "#86efac", dica: "Fechado. Se voltou a acontecer, é só reabrir." },
-};
-
-const CATEGORIA = {
-  duvida: "Dúvida de uso",
-  problema: "Algo não funciona",
-  cobranca: "Plano e cobrança",
-  sugestao: "Sugestão",
-};
-
-function quando(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  const dias = Math.floor((Date.now() - d.getTime()) / 86400000);
-  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  if (dias <= 0) return `hoje, ${hora}`;
-  if (dias === 1) return `ontem, ${hora}`;
-  return `${d.toLocaleDateString("pt-BR")} ${hora}`;
+function Selo({ status }) {
+  const m = STATUS_CHAMADO[status] || STATUS_CHAMADO.ABERTO;
+  return (
+    <span className="sup-selo" style={{ "--cor": m.cor }} title={m.dica}>{m.rotulo}</span>
+  );
 }
 
-function Status({ status }) {
-  const m = STATUS[status] || STATUS.ABERTO;
+/** O selo do chamado interno, com quem da equipe o abriu. */
+function SeloInterno({ c }) {
+  if (!c?.interno) return null;
   return (
-    <span className="chip sup-status" style={{ color: m.cor, background: `${m.cor}1f` }} title={m.dica}>
-      {m.rotulo}
+    <span className="sup-selo" style={{ "--cor": "#a855f7" }} title="Da equipe da Omnimob para o desenvolvimento">
+      Interno{c.abertoPor ? ` · ${c.abertoPor}` : ""}
     </span>
   );
 }
@@ -60,94 +61,131 @@ export function SuportePage({ session }) {
   return numero ? <Conversa session={session} numero={Number(numero)} /> : <Lista session={session} />;
 }
 
-/* ── A lista ───────────────────────────────────────────────────────────────── */
+/* ══ A lista ═══════════════════════════════════════════════════════════════ */
 function Lista({ session }) {
   const tenantSlug = session?.tenant?.slug || "";
-  const showToast = useOutletContext()?.showToast;
-  const [chamados, setChamados] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const contexto = useOutletContext() || {};
+  const { showToast, abrirChamado } = contexto;
+  const [chamados, setChamados] = useState(null);
+  const [podeVerTodos, setPodeVerTodos] = useState(false);
+  const [todos, setTodos] = useState(false);
   const [filtro, setFiltro] = useState("abertos");
+  const [versao, setVersao] = useState(0);
 
   useEffect(() => {
-    if (!tenantSlug) return;
+    if (!tenantSlug) return undefined;
     let vivo = true;
-    api.listarChamados(tenantSlug)
-      .then((l) => { if (vivo) setChamados(l); })
-      .catch((e) => showToast?.(e.message, "error"))
-      .finally(() => { if (vivo) setCarregando(false); });
+    setChamados(null);
+    api.listarChamados(tenantSlug, { todos })
+      .then((d) => {
+        if (!vivo) return;
+        setChamados(d?.chamados || []);
+        setPodeVerTodos(Boolean(d?.podeVerTodos));
+      })
+      .catch((e) => { if (vivo) { setChamados([]); showToast?.(e.message, "error"); } });
     return () => { vivo = false; };
-  }, [tenantSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tenantSlug, todos, versao]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* O chamado aberto pelo modal entra na lista sem a pessoa recarregar. */
+  useEffect(() => {
+    const recarregar = () => setVersao((v) => v + 1);
+    window.addEventListener(EVENTO_CHAMADOS, recarregar);
+    return () => window.removeEventListener(EVENTO_CHAMADOS, recarregar);
+  }, []);
 
   const visiveis = useMemo(
-    () => chamados.filter((c) => (filtro === "abertos" ? !c.resolvido : filtro === "resolvidos" ? c.resolvido : true)),
+    () => (chamados || []).filter((c) => (filtro === "abertos" ? !c.resolvido : filtro === "resolvidos" ? c.resolvido : true)),
     [chamados, filtro],
   );
-  const aguardando = chamados.filter((c) => c.status === "AGUARDANDO_CLIENTE").length;
+  /* "Esperando você" é dos SEUS chamados: o Administrador olhando os da
+     equipe não deve responder pelo colega. */
+  const meuId = session?.usuario?.id;
+  const aguardando = (chamados || []).filter((c) => c.status === "AGUARDANDO_CLIENTE" && (!meuId || c.usuarioId === meuId)).length;
 
   return (
-    <div style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "20px" }}>
+    <div className="sup" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       <header className="sup-cabeca">
         <div>
-          <h2 style={{ margin: "0 0 4px 0", fontSize: "24px", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px" }}>
-            <Lifebuoy size={24} weight="duotone" />
-            Suporte
-          </h2>
-          <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
-            Seus chamados com a Omnimob — o que você abriu, o que já foi respondido e o que ainda está com a gente.
-            {aguardando ? <strong style={{ color: "#f472b6" }}> {aguardando} esperando a sua resposta.</strong> : null}
-          </p>
+          <h2 className="sup-cabeca__titulo"><Lifebuoy size={24} weight="duotone" /> Meus chamados</h2>
+          <p className="sup-cabeca__sub">O que você abriu com o suporte, e as respostas.</p>
         </div>
-        {/* Abrir chamado é o modal de Ajuda, no menu do perfil (Ajuda ›
-            Abrir um chamado). A dica aponta para lá em vez de duplicar o
-            formulário — ver o cabeçalho. */}
-        <p className="sup-dica">Para abrir um chamado novo, use <strong>Ajuda › Abrir um chamado</strong> no menu do seu perfil.</p>
+        <div className="sup-cabeca__acoes">
+          <button type="button" className="button-secondary sup-botao" onClick={() => setVersao((v) => v + 1)} title="Buscar de novo">
+            <ArrowsClockwise size={14} weight="bold" /> Atualizar
+          </button>
+          {abrirChamado ? (
+            <button type="button" className="sup-botao sup-botao--primario" onClick={abrirChamado}>
+              <Plus size={14} weight="bold" /> Abrir chamado
+            </button>
+          ) : null}
+        </div>
       </header>
 
-      <div className="glass-panel sup-filtros">
-        {[["abertos", "Abertos"], ["resolvidos", "Resolvidos"], ["todos", "Todos"]].map(([chave, rotulo]) => (
-          <button key={chave} type="button" className={`sup-filtro${filtro === chave ? " is-on" : ""}`} onClick={() => setFiltro(chave)}>
-            {rotulo}
-          </button>
-        ))}
+      {aguardando ? (
+        <p className="sup-aviso sup-aviso--alerta">
+          <PaperPlaneRight size={14} weight="bold" />
+          {aguardando === 1 ? "Um chamado está esperando a sua resposta." : `${aguardando} chamados estão esperando a sua resposta.`}
+        </p>
+      ) : null}
+
+      <div className="sup-barra">
+        <div className="sup-segmento" role="group" aria-label="Filtro">
+          {[["abertos", "Em aberto"], ["resolvidos", "Resolvidos"], ["todos", "Todos"]].map(([id, rotulo]) => (
+            <button key={id} type="button" className={`sup-segmento__botao${filtro === id ? " is-on" : ""}`} onClick={() => setFiltro(id)}>
+              {rotulo}
+            </button>
+          ))}
+        </div>
+        {podeVerTodos ? (
+          <label className="sup-marcar">
+            <input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)} />
+            <span>Ver os chamados de todos os usuários</span>
+          </label>
+        ) : null}
       </div>
 
-      <div className="glass-panel" style={{ padding: "8px 4px" }}>
-        {carregando ? (
-          <p className="aud-vazio">Carregando…</p>
-        ) : visiveis.length === 0 ? (
-          <p className="aud-vazio">
-            {filtro === "abertos" && chamados.length
-              ? "Nenhum chamado aberto. Tudo respondido."
-              : "Nenhum chamado ainda. Quando você abrir um pelo menu de Ajuda, ele aparece aqui."}
-          </p>
-        ) : (
-          <ul className="sup-lista">
-            {visiveis.map((c) => (
-              <li key={c.numero}>
-                <Link to={`/suporte/${c.numero}`} className={`sup-item${c.status === "AGUARDANDO_CLIENTE" ? " is-sua-vez" : ""}`}>
-                  <span className="sup-item__numero">#{c.numero}</span>
-                  <span className="sup-item__meio">
-                    <strong>{c.titulo}</strong>
-                    <small>
-                      {CATEGORIA[c.categoria] || c.categoria} · aberto por {c.usuario} · {quando(c.criadoEm)}
-                      {c.mensagens ? ` · ${c.mensagens} ${c.mensagens === 1 ? "mensagem" : "mensagens"}` : ""}
-                    </small>
-                  </span>
-                  <Status status={c.status} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {chamados === null ? (
+        <div className="sup-esqueletos">
+          {[0, 1, 2].map((i) => <span key={i} className="sup-esqueleto" style={{ width: `${85 - i * 14}%` }} />)}
+        </div>
+      ) : !visiveis.length ? (
+        <section className="glass-panel sup-vazio">
+          <Lifebuoy size={40} weight="duotone" />
+          <h3>{filtro === "resolvidos" ? "Nenhum chamado resolvido" : filtro === "todos" ? "Nenhum chamado ainda" : "Nenhum chamado em aberto"}</h3>
+          <p>Quando algo não funcionar, ou você tiver uma dúvida, abra um chamado — o suporte responde por aqui mesmo.</p>
+          {abrirChamado ? (
+            <button type="button" className="sup-botao sup-botao--primario" onClick={abrirChamado}>
+              <Plus size={14} weight="bold" /> Abrir chamado
+            </button>
+          ) : null}
+        </section>
+      ) : (
+        <ul className="sup-lista">
+          {visiveis.map((c) => (
+            <li key={c.numero}>
+              <Link to={`/suporte/${c.numero}`} className={`glass-panel sup-item${c.status === "AGUARDANDO_CLIENTE" ? " is-esperando" : ""}`}>
+                <span className="sup-item__topo">
+                  <strong>#{c.numero} · {c.titulo}</strong>
+                  <span className="sup-item__selos"><SeloInterno c={c} /><Selo status={c.status} /></span>
+                </span>
+                <span className="sup-item__meta">
+                  {ROTULO_CATEGORIA[c.categoria] || c.categoria}
+                  {todos && c.usuario ? ` · ${c.usuario}` : ""}
+                  {` · aberto ${quando(c.criadoEm)}`}
+                  {c.mensagens ? ` · ${c.mensagens} ${c.mensagens === 1 ? "resposta" : "respostas"}` : " · sem resposta ainda"}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-/* ── A conversa ────────────────────────────────────────────────────────────── */
+/* ══ A conversa ════════════════════════════════════════════════════════════ */
 function Conversa({ session, numero }) {
   const tenantSlug = session?.tenant?.slug || "";
-  const navigate = useNavigate();
   const showToast = useOutletContext()?.showToast;
   const [chamado, setChamado] = useState(null);
   const [erro, setErro] = useState("");
@@ -155,27 +193,30 @@ function Conversa({ session, numero }) {
   const [enviando, setEnviando] = useState(false);
   const fimRef = useRef(null);
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     try {
       setChamado(await api.lerChamado(tenantSlug, numero));
       setErro("");
+      /* Abrir o chamado marca o visto no servidor: o selo da foto do perfil
+         desce agora, e não na próxima volta do relógio. */
+      avisarQueChamadosMudaram();
     } catch (e) {
       setErro(e.message || "Não foi possível abrir o chamado.");
     }
-  }
+  }, [tenantSlug, numero]);
 
   useEffect(() => {
     if (!tenantSlug || !Number.isInteger(numero)) return;
     carregar();
-  }, [tenantSlug, numero]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tenantSlug, numero, carregar]);
 
-  // A conversa abre no fim, como qualquer conversa.
-  useEffect(() => { fimRef.current?.scrollIntoView({ block: "nearest" }); }, [chamado?.conversa?.length]);
+  // A conversa cresce para baixo: a fala nova tem de estar à vista.
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [chamado?.conversa?.length]);
 
   async function responder(e) {
     e.preventDefault();
     const limpo = texto.trim();
-    if (!limpo) return;
+    if (!limpo || enviando) return;
     setEnviando(true);
     try {
       await api.responderChamado(tenantSlug, numero, { texto: limpo });
@@ -188,118 +229,117 @@ function Conversa({ session, numero }) {
     }
   }
 
-  async function reabrir() {
+  async function mudarStatus(status) {
     setEnviando(true);
     try {
-      await api.reabrirChamado(tenantSlug, numero);
+      await api.mudarStatusChamado(tenantSlug, numero, status);
       await carregar();
-      showToast?.("Chamado reaberto. O suporte foi avisado.", "success");
+      showToast?.(status === "RESOLVIDO" ? "Chamado encerrado." : "Chamado reaberto. O suporte foi avisado.", "success");
     } catch (e2) {
-      showToast?.(e2.message || "Não foi possível reabrir.", "error");
+      showToast?.(e2.message || "Não foi possível atualizar.", "error");
     } finally {
       setEnviando(false);
     }
   }
 
-  if (erro) {
-    return (
-      <div style={{ animation: "fadeIn 0.3s ease-in-out" }}>
-        <div className="glass-panel" style={{ padding: "32px", textAlign: "center" }}>
-          <p style={{ margin: "0 0 14px", color: "var(--text-muted)" }}>{erro}</p>
-          <button type="button" className="button-secondary" style={{ width: "auto" }} onClick={() => navigate("/suporte")}>
-            <ArrowLeft size={15} /> Voltar para os chamados
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (!chamado) return <p className="aud-vazio">Carregando…</p>;
-
-  const m = STATUS[chamado.status] || STATUS.ABERTO;
-  const resolvido = chamado.status === "RESOLVIDO";
+  const c = chamado;
 
   return (
-    <div style={{ animation: "fadeIn 0.3s ease-in-out", display: "flex", flexDirection: "column", gap: "16px" }}>
+    <div className="sup" style={{ animation: "fadeIn 0.3s ease-in-out" }}>
       <header className="sup-cabeca">
         <div style={{ minWidth: 0 }}>
-          <Link to="/suporte" className="sup-voltar"><ArrowLeft size={14} /> Meus chamados</Link>
-          <h2 style={{ margin: "6px 0 4px 0", fontSize: "22px", fontWeight: 700, display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-            <span className="sup-item__numero">#{chamado.numero}</span>
-            {chamado.titulo}
-            <Status status={chamado.status} />
-          </h2>
-          <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
-            {CATEGORIA[chamado.categoria] || chamado.categoria} · aberto por {chamado.usuario} · {quando(chamado.criadoEm)} · {m.dica}
-          </p>
+          <h2 className="sup-cabeca__titulo">{c ? `Chamado #${c.numero}` : "Chamado"}</h2>
+          {c ? <p className="sup-cabeca__sub">{c.titulo}</p> : null}
         </div>
-        <button type="button" className="button-secondary sup-atualizar" onClick={carregar} title="Atualizar">
-          <ArrowsClockwise size={15} /> Atualizar
-        </button>
+        <div className="sup-cabeca__acoes">
+          <Link to="/suporte" className="button-secondary sup-botao"><ArrowLeft size={14} weight="bold" /> Meus chamados</Link>
+          {c && !c.resolvido ? (
+            <button
+              type="button"
+              className="button-secondary sup-botao"
+              onClick={() => mudarStatus("RESOLVIDO")}
+              disabled={enviando}
+              title="Se você mesmo resolveu, encerre — o suporte para de acompanhar"
+            >
+              <CheckCircle size={14} weight="bold" /> Já resolvi
+            </button>
+          ) : null}
+          {c?.resolvido ? (
+            <button type="button" className="button-secondary sup-botao" onClick={() => mudarStatus("ABERTO")} disabled={enviando}>
+              Reabrir
+            </button>
+          ) : null}
+        </div>
       </header>
 
-      <div className="glass-panel sup-fio">
-        {/* A abertura: é a descrição do chamado, não uma mensagem — por isso
-            fica no cabeçalho do fio e não duplicada na tabela de mensagens. */}
-        <article className="sup-balao is-cliente">
-          <header><strong>{chamado.usuario}</strong><time>{quando(chamado.criadoEm)}</time></header>
-          <p>{chamado.descricao}</p>
-          {chamado.prints?.length ? (
-            <div className="sup-prints">
-              {chamado.prints.map((url, n) => (
-                <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt={`Print ${n + 1}`} /></a>
-              ))}
-            </div>
-          ) : null}
-          {chamado.rota ? <small className="sup-rota">na tela {chamado.rota}</small> : null}
-        </article>
-
-        {chamado.conversa.map((msg) =>
-          msg.autorTipo === "SISTEMA" ? (
-            <p key={msg.id} className="sup-sistema"><span>{msg.texto}</span><time>{quando(msg.criadoEm)}</time></p>
-          ) : (
-            <article key={msg.id} className={`sup-balao ${msg.autorTipo === "SUPORTE" ? "is-suporte" : "is-cliente"}`}>
-              <header>
-                <strong>{msg.autorTipo === "SUPORTE" ? `${msg.autorNome} · Omnimob` : msg.autorNome}</strong>
-                <time>{quando(msg.criadoEm)}</time>
-              </header>
-              <p>{msg.texto}</p>
-              {msg.prints?.length ? (
-                <div className="sup-prints">
-                  {msg.prints.map((url, n) => (
-                    <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt={`Print ${n + 1}`} /></a>
-                  ))}
-                </div>
-              ) : null}
-            </article>
-          ),
-        )}
-        <div ref={fimRef} />
-      </div>
-
-      {/* Responder num chamado resolvido o reabre; a tela avisa antes de a
-          pessoa descobrir pelo status mudando. */}
-      <form className="glass-panel sup-responder" onSubmit={responder}>
-        {resolvido ? (
-          <p className="sup-resolvido-aviso">
-            Este chamado está resolvido. Escrever aqui o reabre — ou{" "}
-            <button type="button" className="sup-link" onClick={reabrir} disabled={enviando}>reabra sem escrever</button>.
-          </p>
-        ) : null}
-        <textarea
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder={resolvido ? "Voltou a acontecer? Conte o que mudou…" : "Escreva sua resposta…"}
-          rows={3}
-          maxLength={4000}
-          disabled={enviando}
-        />
-        <div className="sup-responder__acoes">
-          <small>{texto.length}/4000</small>
-          <button type="submit" style={{ width: "auto", padding: "10px 18px" }} disabled={enviando || !texto.trim()}>
-            <PaperPlaneRight size={15} weight="bold" /> {enviando ? "Enviando…" : resolvido ? "Enviar e reabrir" : "Enviar"}
-          </button>
+      {erro ? (
+        <p className="sup-aviso sup-aviso--erro">Este chamado não existe ou não é seu.</p>
+      ) : !c ? (
+        <div className="sup-esqueletos">
+          {[0, 1, 2].map((i) => <span key={i} className="sup-esqueleto" style={{ width: `${80 - i * 15}%` }} />)}
         </div>
-      </form>
+      ) : (
+        <>
+          <section className="glass-panel sup-ficha">
+            <span className="sup-item__selos"><SeloInterno c={c} /><Selo status={c.status} /></span>
+            <small>
+              {ROTULO_CATEGORIA[c.categoria] || c.categoria} · aberto {quando(c.criadoEm)}
+              {c.interno && c.abertoPor ? ` por ${c.abertoPor}` : c.usuario ? ` por ${c.usuario}` : ""}
+            </small>
+            {c.rota ? <p className="sup-ficha__rota">Aconteceu em <code>{c.rota}</code></p> : null}
+          </section>
+
+          <div className="sup-fio">
+            {/* A descrição é a PRIMEIRA fala: separá-la da conversa faria a
+                pessoa ler o problema num lugar e a resposta em outro. */}
+            <Fala m={{ autorTipo: "CLIENTE", autorNome: c.interno ? c.abertoPor : c.usuario, texto: c.descricao, prints: c.prints, criadoEm: c.criadoEm }} />
+            {(c.conversa || []).map((m) => <Fala key={m.id} m={m} />)}
+            <div ref={fimRef} />
+          </div>
+
+          {c.resolvido ? (
+            <p className="sup-aviso sup-aviso--ok">Este chamado está resolvido. Responder aqui o reabre.</p>
+          ) : null}
+
+          <form className="glass-panel sup-responder" onSubmit={responder}>
+            <textarea
+              value={texto}
+              rows={3}
+              maxLength={4000}
+              disabled={enviando}
+              placeholder={c.interno ? "Escreva a sua resposta ao desenvolvimento…" : "Escreva a sua resposta ao suporte…"}
+              onChange={(e) => setTexto(e.target.value)}
+            />
+            <div className="sup-responder__acoes">
+              <small>{texto.length}/4000</small>
+              <button type="submit" className="sup-botao sup-botao--primario" disabled={!texto.trim() || enviando}>
+                <PaperPlaneRight size={14} weight="bold" /> {enviando ? "Enviando…" : "Enviar"}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
     </div>
+  );
+}
+
+function Fala({ m }) {
+  if (m.autorTipo === "SISTEMA") return <p className="sup-nota">{m.texto}</p>;
+  const suporte = m.autorTipo === "SUPORTE";
+  return (
+    <article className={`sup-fala${suporte ? " is-suporte" : ""}`}>
+      <header>
+        <strong>{m.autorNome || (suporte ? "Suporte" : "Você")}{suporte ? <span className="sup-fala__casa"> · Omnimob</span> : null}</strong>
+        <small>{quando(m.criadoEm)}</small>
+      </header>
+      <p><TextoDoChamado texto={m.texto || ""} className="sup-tela" /></p>
+      {m.prints?.length ? (
+        <div className="sup-anexos">
+          {m.prints.map((src, i) => (
+            <a key={src + i} href={src} target="_blank" rel="noreferrer"><img src={src} alt={`Imagem ${i + 1}`} /></a>
+          ))}
+        </div>
+      ) : null}
+    </article>
   );
 }

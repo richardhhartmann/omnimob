@@ -112,7 +112,7 @@ function LinhaDaImobiliaria({ tenant, podeVerPlano, aoIr }) {
   );
 }
 
-function Linha({ Icone, rotulo, detalhe, aoClicar, temSubmenu, submenu, aoAbrirSub, aoFecharSub, subAberto }) {
+function Linha({ Icone, rotulo, detalhe, aoClicar, temSubmenu, submenu, aoAbrirSub, aoFecharSub, subAberto, aviso = 0 }) {
   return (
     <div
       className="mp-linha-caixa"
@@ -140,6 +140,10 @@ function Linha({ Icone, rotulo, detalhe, aoClicar, temSubmenu, submenu, aoAbrirS
           {rotulo}
           {detalhe ? <small>{detalhe}</small> : null}
         </span>
+        {/* O selo vermelho no fim da linha: novidades nos chamados, no item
+            Ajuda — o mesmo número da foto do perfil, para o caminho até ele
+            ficar à vista. */}
+        {aviso ? <span className="mp-linha__aviso">{aviso > 9 ? "9+" : aviso}</span> : null}
         {temSubmenu ? <CaretRight size={13} className="mp-linha__seta" /> : null}
       </button>
       <Submenu aberto={subAberto}>{submenu}</Submenu>
@@ -147,10 +151,21 @@ function Linha({ Icone, rotulo, detalhe, aoClicar, temSubmenu, submenu, aoAbrirS
   );
 }
 
+/* O que mudou, numa linha — a mesma régua do servidor: resolvido, a fala do
+   suporte, a fala de um colega (o Administrador também escreve nos chamados
+   da equipe), ou só "atualizado". */
+function textoDaNovidade(n) {
+  const num = `#${n.numero}`;
+  if (n.status === "RESOLVIDO") return `O chamado ${num} foi resolvido`;
+  if (n.autorTipo === "SUPORTE") return `O suporte respondeu o ${num}`;
+  if (n.autorTipo === "CLIENTE") return `${String(n.autorNome || "Alguém da equipe").replace(/\s*\(.*\)$/, "")} respondeu o ${num}`;
+  return `O chamado ${num} foi atualizado`;
+}
+
 export function MenuDoPerfil({
   aberto, aoFechar, usuario, tenant, ancoraRef,
   aoAbrirAjuda, aoAbrirChamado, aoAbrirSuporte, aoAbrirPreferencias, aoAbrirPerfil, aoSair,
-  aoVincularGoogle,
+  aoVincularGoogle, chamados = { aguardando: 0, novidades: 0 },
 }) {
   const navegar = useNavigate();
   const caixaRef = useRef(null);
@@ -165,6 +180,21 @@ export function MenuDoPerfil({
     if (!aberto) return;
     api.googleDisponivel().then(setGoogle).catch(() => {});
   }, [aberto]);
+
+  /* AS NOVIDADES DOS CHAMADOS — o que o suporte respondeu ou resolveu e a
+     pessoa ainda não abriu, cada uma com a última fala. Perguntado só quando
+     o submenu de Ajuda abre e só se o contador diz que há algo: é a lista do
+     sino que o painel não tem, no lugar onde a pessoa já procura ajuda.
+     Clicar abre o chamado, e abrir marca o visto no servidor. */
+  const [novidades, setNovidades] = useState([]);
+  useEffect(() => {
+    if (!aberto || sub !== "ajuda" || !chamados.novidades || !tenant?.slug) { if (!chamados.novidades) setNovidades([]); return; }
+    let vivo = true;
+    api.chamadosNovidades(tenant.slug)
+      .then((d) => { if (vivo) setNovidades((d?.novidades || []).slice(0, 4)); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [aberto, sub, chamados.novidades, tenant?.slug]);
 
   /* Mede a âncora e prende o balão em coordenadas de tela.
      `useLayoutEffect` e não `useEffect`: com este, o menu chega a pintar na
@@ -332,6 +362,7 @@ export function MenuDoPerfil({
       <Linha
         Icone={Question}
         rotulo="Ajuda"
+        aviso={chamados.novidades}
         temSubmenu
         subAberto={sub === "ajuda"}
         aoAbrirSub={() => abrirSub("ajuda")}
@@ -347,8 +378,28 @@ export function MenuDoPerfil({
                 sumia: a pessoa só ficava sabendo pelo e-mail. */}
             <button type="button" className="mp-linha" onClick={() => { aoFechar(); aoAbrirSuporte?.(); }}>
               <span className="mp-linha__icone"><ChatsCircle size={17} /></span>
-              <span className="mp-linha__texto">Meus chamados</span>
+              <span className="mp-linha__texto">
+                Meus chamados
+                {chamados.aguardando
+                  ? <small>{chamados.aguardando === 1 ? "1 esperando você" : `${chamados.aguardando} esperando você`}</small>
+                  : null}
+              </span>
+              {chamados.novidades ? <span className="mp-linha__aviso">{chamados.novidades > 9 ? "9+" : chamados.novidades}</span> : null}
             </button>
+            {novidades.map((n) => (
+              <button
+                key={`${n.numero}-${n.atualizadoEm}`}
+                type="button"
+                className="mp-linha mp-novidade"
+                onClick={() => { aoFechar(); aoAbrirSuporte?.(n.numero); }}
+              >
+                <span className="mp-novidade__ponto" aria-hidden="true" />
+                <span className="mp-linha__texto">
+                  {textoDaNovidade(n)}
+                  {n.trecho ? <small>“{n.trecho.length > 70 ? `${n.trecho.slice(0, 70)}…` : n.trecho}”</small> : null}
+                </span>
+              </button>
+            ))}
             <button type="button" className="mp-linha" onClick={() => { aoFechar(); aoAbrirAjuda(); }}>
               <span className="mp-linha__icone"><LifebuoyIcon size={17} /></span>
               <span className="mp-linha__texto">Central de ajuda</span>
