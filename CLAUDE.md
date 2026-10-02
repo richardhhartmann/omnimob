@@ -427,6 +427,7 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_UPLOAD_PRESET` | — | `dpwuxmbli` / `domus-app` | idem — **os mesmos valores dos `VITE_`** |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
+| `CHAMADOS_INTERNOS_EMAIL` | — | opcional (cai no `CONTATO_EMAIL`) | quem recebe o chamado INTERNO — a equipe pedindo ao desenvolvimento |
 | `DEMO_TENANT_SLUG` | — | `demonstracao` (`npm run demonstracao` cria) | idem — o mesmo script, rodado contra produção; vazia = demonstração indisponível |
 
 **Sobre o banco da PLATAFORMA (`PLATAFORMA_DATABASE_URL`):** `SuperAdmin` e
