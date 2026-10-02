@@ -126,7 +126,14 @@ omnimob/
 - `/api/chamados/*` — **o suporte, do lado da imobiliária**: abrir, listar,
   ler a conversa (`GET /:numero`), responder (`POST /:numero/mensagens`) e
   reabrir. Sem `requirePermissao` de propósito — pedir ajuda é de qualquer
-  pessoa da equipe. O número do chamado é sequencial e GLOBAL, então toda
+  pessoa da equipe. **Cada um vê os seus**; o Administrador vê os da equipe
+  com `?todos=1`. `GET /pendentes` (`{ aguardando, novidades }` — o selo
+  vermelho do avatar) e `GET /novidades` (o que mudou desde que o dono abriu;
+  regra em `Chamado.vistoClienteEm`). `POST /:numero/status` é o "Já resolvi"
+  do cliente. Chamado aberto pela equipe dentro da conta (o "Entrar" do
+  super-admin, marca `suporte` no token) nasce **interno**: some para o
+  cliente e para quem não é Administrador da plataforma, e vai por e-mail para
+  `CHAMADOS_INTERNOS_EMAIL`. Porte do sistema de chamados do VYA O número do chamado é sequencial e GLOBAL, então toda
   busca é `findFirst` com o `tenantId`: o #12 de uma imobiliária é vizinho do
   #13 de outra, e o de fora responde 404. A régua de status e o e-mail moram
   em `services/chamados.js`, que o `/api/admin/chamados/*` também usa
@@ -218,7 +225,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/avisoVencimento.test.js` | quem recebe aviso de vencimento e quando — os dois lados do silêncio: avisar de menos deixa a conta cair calada, avisar demais parece defeito de cobrança. **Não toca no banco** |
 | `test/mercadoPago.test.js` | a tradução plano → cobrança e a **assinatura do webhook** — um defeito ali vale um ano de plano de graça para quem achar a URL. Não toca no banco |
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
-| `test/suporteChamados.test.js` | a conversa do chamado: B não lê nem escreve no chamado da A pelo número real (404); o ciclo ABERTO → AGUARDANDO_CLIENTE → EM_ATENDIMENTO → RESOLVIDO → reaberto pelos dois lados; anotação de sistema; a conversa some com a imobiliária |
+| `test/suporteChamados.test.js` | a conversa do chamado: B não lê nem escreve no chamado da A pelo número real (404); o corretor não lê o do colega; o ciclo ABERTO → AGUARDANDO_CLIENTE → EM_ATENDIMENTO → RESOLVIDO → reaberto pelos dois lados; novidade acende e apaga ao abrir; chamado interno só pelo token e só para a casa; a conversa some com a imobiliária |
 | `test/demo.test.js` | a sessão de demonstração lê tudo e não escreve nada — imóvel, cargo e o próprio progresso do tour recebem 403 `SOMENTE_DEMO`; o token normal da mesma pessoa continua escrevendo. Sem `DEMO_TENANT_SLUG`, 404 |
 | `test/superAdminPermissoes.test.js` | cargo "Suporte" recebe 403 no `entrar`/`editar`/`excluir` mesmo chamando a URL; rebaixar vale na requisição seguinte; Administrador não perde as chaves da casa; convite é de uso único; a escrita entra na `Auditoria` com `tenantId` nulo |
 
@@ -302,9 +309,12 @@ invisíveis porque com um cliente só o sintoma não aparece.
   (precisa agir)
 - `chamados.js` — a conversa do chamado, **regra única para os dois lados**
   (cliente em `chamadoRoutes`, suporte em `adminRoutes`). A régua:
-  cliente abre → `ABERTO`; suporte responde → `AGUARDANDO_CLIENTE`; cliente
-  responde → `EM_ATENDIMENTO`; resolver → `RESOLVIDO` + anotação de SISTEMA;
-  reabrir (ou o cliente responder a um resolvido) → `ABERTO` + anotação.
+  cliente abre → `ABERTO`; suporte responde → `AGUARDANDO_CLIENTE` (também
+  num resolvido); cliente responde → `EM_ATENDIMENTO`; resolver (suporte ou o
+  próprio cliente) → `RESOLVIDO` + anotação de SISTEMA; reabrir (ou o cliente
+  responder a um resolvido) → `ABERTO` + anotação. Toda fala regrava
+  `atualizadoEm`; quem marca o visto passa o `atualizadoEm` explícito, senão o
+  `@updatedAt` zeraria a régua das novidades.
   `Chamado.resolvido` continua gravado, DERIVADO do status. O e-mail ao
   cliente sai UMA vez por resposta do suporte (para quem abriu, senão para o
   e-mail da imobiliária), nunca por anotação de sistema; disparado e

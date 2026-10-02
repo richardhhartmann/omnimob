@@ -708,6 +708,58 @@ export function emailRespostaChamado({ nome, imobiliaria, numero, titulo: assunt
   return { subject, body, html };
 }
 
+// ─── 7b. Chamado interno — a equipe pedindo ao desenvolvimento ───────────────
+
+/* Aberto pela equipe da Omnimob de dentro da conta de um cliente. Vai para o
+   desenvolvimento, que não vive no painel de suporte. Os prints vão como LINK
+   (são URLs do Cloudinary): é a primeira coisa que quem investiga abre, e o
+   painel pode estar do outro lado de um login. */
+const CATEGORIA_CHAMADO = {
+  duvida: "Dúvida de uso",
+  problema: "Algo não funciona",
+  cobranca: "Plano e cobrança",
+  sugestao: "Sugestão",
+  outro: "Outro",
+};
+
+export function emailChamadoInterno({ numero, titulo: assunto, descricao, categoria, abertoPor, imobiliaria, rota, prints = [], link }) {
+  const subject = `[Omnimob · Chamado interno] #${numero} — ${String(assunto).slice(0, 90)} (${imobiliaria})`;
+  const linhas = [
+    { rotulo: "Aberto por", valor: abertoPor || "equipe" },
+    { rotulo: "Cliente", valor: imobiliaria },
+    { rotulo: "Tipo", valor: CATEGORIA_CHAMADO[categoria] || categoria },
+    ...(rota ? [{ rotulo: "Tela", valor: rota, mono: true }] : []),
+  ];
+
+  const body = [
+    `Chamado interno #${numero}: ${assunto}`,
+    "",
+    ...linhas.map((l) => `${l.rotulo}: ${l.valor}`),
+    "",
+    "O que aconteceu:",
+    descricao,
+    ...(prints.length ? ["", "Imagens:", ...prints] : []),
+    "",
+    `Responder no painel: ${link}`,
+  ].join("\n");
+
+  const html = layoutEmail({
+    preheader: `${abertoPor || "A equipe"} abriu um chamado interno: ${String(descricao).slice(0, 90)}`,
+    conteudo: [
+      eyebrow(`● CHAMADO INTERNO #${numero}`),
+      titulo(assunto),
+      dados(linhas),
+      `<blockquote style="margin:0 0 20px;padding:14px 18px;border-left:3px solid ${COR.acento};background:${COR.superficie2};color:${COR.forte};font-size:14px;line-height:1.7;white-space:pre-wrap;">${esc(descricao)}</blockquote>`,
+      prints.length
+        ? paragrafo(prints.map((u, i) => `<a href="${esc(u)}" style="color:${COR.acento};">Imagem ${i + 1}</a>`).join(" &middot; "))
+        : "",
+      botao("Responder no painel", link),
+    ].join(""),
+  });
+
+  return { subject, body, html };
+}
+
 // ─── 8. Relatório mensal da imobiliária ──────────────────────────────────────
 
 /* Vai para quem assina Profissional ou Premium, no começo de cada mês, com o

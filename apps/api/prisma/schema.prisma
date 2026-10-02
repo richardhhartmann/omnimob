@@ -1067,6 +1067,23 @@ model Chamado {
   prints       String[]          @map("cha_prints")
   // Em que tela a pessoa estava. Poupa a primeira pergunta de todo atendimento.
   rota         String            @default("") @map("cha_rota")
+  /**
+   * CHAMADO INTERNO: aberto pela equipe da Omnimob de dentro da conta do
+   * cliente (o "Entrar" do super-admin), pedindo algo ao desenvolvimento. Quem
+   * decide é o token da sessão, nunca o corpo — ver `chamadoRoutes`. Some da
+   * tela do cliente e da fila de quem não é Administrador da plataforma.
+   */
+  interno      Boolean           @default(false) @map("cha_interno")
+  // Quem da equipe abriu o interno. A sessão é a do Administrador do cliente,
+  // então o nome do usuário no chamado não diz quem foi.
+  abertoPor    String?           @map("cha_aberto_por")
+  /**
+   * Quando o DONO viu o chamado pela última vez. `atualizadoEm` depois disto é
+   * NOVIDADE: o suporte respondeu, resolveu, reabriu — o selo do avatar e a
+   * lista de novidades do menu de Ajuda. Quem grava esta coluna passa o
+   * `atualizadoEm` explícito, senão o `@updatedAt` zeraria a própria régua.
+   */
+  vistoClienteEm DateTime?       @map("cha_visto_cliente_em")
   criadoEm     DateTime          @default(now()) @map("created_at")
   atualizadoEm DateTime          @updatedAt @map("updated_at")
 

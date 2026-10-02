@@ -70,7 +70,7 @@ function cargoDaSessao(cargo) {
    administrador dela (ver `adminRoutes`). Uma segunda montagem de sessão lá
    divergiria desta na primeira coisa que a tela passasse a ler — e a sessão é o
    objeto de que TODA a interface depende. */
-export function montarSessao(usuario, { escopo = null, validade = null } = {}) {
+export function montarSessao(usuario, { escopo = null, validade = null, suporte = null } = {}) {
   const token = jwt.sign(
     {
       userId: usuario.id,
@@ -82,6 +82,10 @@ export function montarSessao(usuario, { escopo = null, validade = null } = {}) {
       jti: randomUUID(),
       // Só a sessão de reativação carrega escopo. Ver `authMiddleware.js`.
       ...(escopo ? { escopo } : {}),
+      /* A equipe da Omnimob dentro da conta do cliente (o "Entrar" do
+         super-admin). Assinado junto com o resto: é o que faz o chamado aberto
+         daqui nascer INTERNO, e isso não pode vir do corpo da requisição. */
+      ...(suporte ? { suporte } : {}),
     },
     JWT_SECRET,
     /* A sessão de reativação é curta de propósito: ela existe para uma compra,
@@ -118,6 +122,10 @@ export function montarSessao(usuario, { escopo = null, validade = null } = {}) {
           }
         : null,
     },
+    /* A tela usa para trocar o "abrir um chamado" pelo chamado interno. A
+       DECISÃO continua no servidor (o token); isto é só não oferecer o
+       formulário errado. */
+    suporte: suporte || null,
     tenant: {
       id: usuario.tenant.id,
       name: usuario.tenant.name,

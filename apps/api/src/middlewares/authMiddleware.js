@@ -167,6 +167,10 @@ async function autenticarBase(req, res, next) {
 
     req.authUserId = usuario.id;
     req.authUserNome = usuario.nome;
+    /* A equipe da Omnimob dentro desta conta ({ nome, email }), ou nulo. Vem
+       do token e não do banco porque é um fato da SESSÃO, não da pessoa: o
+       mesmo Administrador logado pelo próprio cliente não é suporte. */
+    req.authSuporte = payload.suporte && typeof payload.suporte === "object" ? payload.suporte : null;
     req.authTenantId = usuario.tenantId;
     // Do BANCO, não do token — é este o conserto.
     req.authCargoCodigo = usuario.cargoCodigo;

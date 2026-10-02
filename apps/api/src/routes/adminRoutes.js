@@ -46,6 +46,7 @@ import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
   COM_CONVERSA as CHAMADO_COM_CONVERSA,
   STATUS_CHAMADO,
+  VEZ_DO_SUPORTE,
   mudarStatus,
   responderComoSuporte,
   serializarChamado,
@@ -716,28 +717,104 @@ function serializarChamadoParaAdmin(c) {
   };
 }
 
+const CHAMADO_COM_TENANT = { tenant: { select: { name: true, slug: true, plano: true } } };
+
+/* Quem atende, e o que o cargo alcança. O chamado INTERNO (a equipe pedindo ao
+   desenvolvimento) é só do Administrador da plataforma: é conversa da casa, e
+   um cargo "Suporte" que atende cliente não tem o que fazer com ela. Quem não
+   o vê também não o CONTA — senão o número da aba diria que há trabalho que a
+   pessoa não consegue abrir. */
+function atendente(req) {
+  return {
+    nome: req.superAdmin?.nome || req.superAdmin?.email || "Suporte Omnimob",
+    veInternos: ehAdministradorDaPlataforma({ nome: req.superAdmin?.cargoNome }),
+  };
+}
+
+/* O chamado pelo número, se quem atende pode vê-lo. Interno de quem não o vê
+   é 404, como chamado que não existe. */
+async function chamadoParaAtender(req, include) {
+  const numero = Number(req.params.numero);
+  if (!Number.isInteger(numero)) return { erro: 400 };
+  const c = await prisma.chamado.findUnique({ where: { numero }, include });
+  if (!c || (c.interno && !atendente(req).veInternos)) return { erro: 404 };
+  return { chamado: c };
+}
+
+/* Releitura com a conversa, para devolver depois de responder ou mudar o
+   status: a tela redesenha o fio inteiro (com a anotação de sistema que a
+   mudança deixou) sem uma segunda ida. */
+async function chamadoCompleto(numero) {
+  const c = await prisma.chamado.findUnique({
+    where: { numero },
+    include: { ...CHAMADO_COM_TENANT, ...CHAMADO_COM_CONVERSA },
+  });
+  return serializarChamadoParaAdmin(c);
+}
+
+const PESO_PRIORIDADE = { URGENTE: 3, ALTA: 2, MEDIA: 1, BAIXA: 0 };
+
 /* ── Chamados ────────────────────────────────────────────────────────────────
    A caixa de entrada do suporte. Diferente do lado da imobiliária, aqui vêm
    TODOS os tenants — é a tela em que se decide o que atender primeiro.
 
-   A ordenação é por não-resolvido primeiro e depois por data: prioridade alta
-   de um chamado já fechado não pode empurrar para baixo uma dúvida aberta. */
+   A ORDEM É DAQUI, e a tela não reordena (decidir duas vezes a mesma coisa
+   diverge): não resolvido primeiro; dentro dele, o que espera resposta NOSSA
+   (ABERTO, EM_ATENDIMENTO) antes do que espera o cliente; depois a prioridade
+   — que soma a categoria e o plano do tenant, é o "suporte prioritário" que o
+   Premium compra —; e, no empate, o que mexeu por último.
+
+   Os contadores saem do banco, e não da lista: com o corte de 400 a lista pode
+   estar incompleta, e o painel mostraria menos do que há. */
 adminRouter.get("/chamados", requirePermissaoAdmin("verChamados"), async (req, res) => {
   try {
-    const { resolvido, tenantId } = req.query;
-    const where = {};
+    const eu = atendente(req);
+    const { resolvido, tenantId, status } = req.query;
+    const escopo = eu.veInternos ? {} : { interno: false };
+    const where = { ...escopo };
     if (resolvido === "true") where.resolvido = true;
     if (resolvido === "false") where.resolvido = false;
     if (tenantId) where.tenantId = String(tenantId);
+    if (status && STATUS_CHAMADO.includes(String(status).toUpperCase())) where.status = String(status).toUpperCase();
 
-    const chamados = await prisma.chamado.findMany({
-      where,
-      orderBy: [{ resolvido: "asc" }, { criadoEm: "desc" }],
-      take: 300,
-      include: { tenant: { select: { name: true, slug: true, plano: true } }, ...CHAMADO_COM_CONTAGEM },
+    const [chamados, porStatusBruto, internosAbertos] = await Promise.all([
+      prisma.chamado.findMany({
+        where,
+        orderBy: [{ resolvido: "asc" }, { atualizadoEm: "desc" }],
+        take: 400,
+        include: { ...CHAMADO_COM_TENANT, ...CHAMADO_COM_CONTAGEM },
+      }),
+      prisma.chamado.groupBy({
+        by: ["status"],
+        where: { ...escopo, ...(tenantId ? { tenantId: String(tenantId) } : {}) },
+        _count: { _all: true },
+      }),
+      eu.veInternos ? prisma.chamado.count({ where: { interno: true, resolvido: false } }) : 0,
+    ]);
+
+    const vezDoSuporte = (c) => (VEZ_DO_SUPORTE.includes(c.status) ? 0 : 1);
+    chamados.sort((a, b) =>
+      (a.resolvido === b.resolvido ? 0 : a.resolvido ? 1 : -1) ||
+      vezDoSuporte(a) - vezDoSuporte(b) ||
+      (PESO_PRIORIDADE[b.prioridade] ?? 1) - (PESO_PRIORIDADE[a.prioridade] ?? 1) ||
+      new Date(b.atualizadoEm) - new Date(a.atualizadoEm),
+    );
+
+    res.json({
+      chamados: chamados.map(serializarChamadoParaAdmin),
+      porStatus: Object.fromEntries(porStatusBruto.map((l) => [l.status, l._count._all])),
+      internosAbertos,
+      /* O que a tela não deve oferecer. As rotas conferem de novo — isto é só
+         não desenhar o botão que vai ser recusado. Responder e resolver são a
+         mesma caixa (`resolverChamado`) de propósito: uma terceira exigiria
+         coluna nova no CargoSuperAdmin, que vive no banco da PLATAFORMA. */
+      eu: {
+        nome: eu.nome,
+        podeResponder: Boolean(req.superAdmin?.permissoes?.resolverChamado),
+        podeResolver: Boolean(req.superAdmin?.permissoes?.resolverChamado),
+        veInternos: eu.veInternos,
+      },
     });
-
-    res.json(chamados.map(serializarChamadoParaAdmin));
   } catch (err) {
     console.error("[GET /admin/chamados]", err);
     res.status(500).json({ error: "Erro ao listar chamados." });
@@ -746,15 +823,11 @@ adminRouter.get("/chamados", requirePermissaoAdmin("verChamados"), async (req, r
 
 /* A conversa de um chamado, de qualquer imobiliária — é o suporte. */
 adminRouter.get("/chamados/:numero", requirePermissaoAdmin("verChamados"), async (req, res) => {
-  const numero = Number(req.params.numero);
-  if (!Number.isInteger(numero)) return res.status(400).json({ error: "Número inválido." });
   try {
-    const c = await prisma.chamado.findUnique({
-      where: { numero },
-      include: { tenant: { select: { name: true, slug: true, plano: true } }, ...CHAMADO_COM_CONVERSA },
-    });
-    if (!c) return res.status(404).json({ error: "Chamado não encontrado." });
-    return res.json(serializarChamadoParaAdmin(c));
+    const { chamado, erro } = await chamadoParaAtender(req, { ...CHAMADO_COM_TENANT, ...CHAMADO_COM_CONVERSA });
+    if (erro === 400) return res.status(400).json({ error: "Número inválido." });
+    if (erro) return res.status(404).json({ error: "Chamado não encontrado." });
+    return res.json(serializarChamadoParaAdmin(chamado));
   } catch (err) {
     console.error("[GET /admin/chamados/:numero]", err);
     return res.status(500).json({ error: "Erro ao carregar o chamado." });
@@ -763,23 +836,30 @@ adminRouter.get("/chamados/:numero", requirePermissaoAdmin("verChamados"), async
 
 /* A resposta do suporte. Vai para a conversa, passa a bola para o cliente e
    dispara o e-mail — tudo em `responderComoSuporte`, a MESMA régua que o lado
-   do cliente usa. */
+   do cliente usa. Até 3 imagens por fala, já no Cloudinary (só as URLs). */
 adminRouter.post("/chamados/:numero/mensagens", requirePermissaoAdmin("resolverChamado"), async (req, res) => {
-  const numero = Number(req.params.numero);
-  if (!Number.isInteger(numero)) return res.status(400).json({ error: "Número inválido." });
   const texto = String(req.body?.texto || "").trim();
   if (!texto) return res.status(400).json({ error: "Escreva a resposta." });
   if (texto.length > 4000) return res.status(400).json({ error: "A resposta é longa demais." });
+  const prints = (Array.isArray(req.body?.prints) ? req.body.prints : [])
+    .filter((u) => typeof u === "string" && /^https:\/\//i.test(u) && u.length <= 500)
+    .slice(0, 3);
 
   try {
-    const chamado = await prisma.chamado.findUnique({ where: { numero } });
-    if (!chamado) return res.status(404).json({ error: "Chamado não encontrado." });
+    const { chamado, erro } = await chamadoParaAtender(req);
+    if (erro === 400) return res.status(400).json({ error: "Número inválido." });
+    if (erro) return res.status(404).json({ error: "Chamado não encontrado." });
 
     const { mensagem, chamado: atualizado } = await responderComoSuporte(chamado, {
       texto,
-      autorNome: req.superAdmin?.nome || req.superAdmin?.email || "Suporte Omnimob",
+      prints,
+      autorNome: atendente(req).nome,
     });
-    return res.status(201).json({ mensagem: serializarMensagem(mensagem), status: atualizado.status });
+    return res.status(201).json({
+      mensagem: serializarMensagem(mensagem),
+      status: atualizado.status,
+      chamado: await chamadoCompleto(chamado.numero),
+    });
   } catch (err) {
     console.error("[POST /admin/chamados/:numero/mensagens]", err);
     return res.status(500).json({ error: "Erro ao responder o chamado." });
@@ -791,9 +871,6 @@ adminRouter.post("/chamados/:numero/mensagens", requirePermissaoAdmin("resolverC
    `resolvidoEm` é derivado, nunca recebido: é o servidor que sabe quando o
    clique aconteceu. Resolver e reabrir deixam anotação na conversa. */
 adminRouter.patch("/chamados/:numero", requirePermissaoAdmin("resolverChamado"), async (req, res) => {
-  const numero = Number(req.params.numero);
-  if (!Number.isInteger(numero)) return res.status(400).json({ error: "Número inválido." });
-
   try {
     const b = req.body || {};
     let status = null;
@@ -806,13 +883,19 @@ adminRouter.patch("/chamados/:numero", requirePermissaoAdmin("resolverChamado"),
     const prioridade = b.prioridade && ["BAIXA", "MEDIA", "ALTA", "URGENTE"].includes(b.prioridade) ? b.prioridade : null;
     if (!status && !prioridade) return res.status(400).json({ error: "Nada para atualizar." });
 
-    let c = await prisma.chamado.findUnique({ where: { numero } });
-    if (!c) return res.status(404).json({ error: "Chamado não encontrado." });
+    let { chamado: c, erro } = await chamadoParaAtender(req);
+    if (erro === 400) return res.status(400).json({ error: "Número inválido." });
+    if (erro) return res.status(404).json({ error: "Chamado não encontrado." });
 
-    if (prioridade) c = await prisma.chamado.update({ where: { numero }, data: { prioridade } });
-    if (status) c = await mudarStatus(c, status, { autorNome: req.superAdmin?.nome || req.superAdmin?.email || "Suporte Omnimob" });
+    /* Repriorizar é arrumação da fila, não novidade para o cliente:
+       `atualizadoEm` explícito para o selo dele não acender por isso. */
+    if (prioridade) c = await prisma.chamado.update({ where: { numero: c.numero }, data: { prioridade, atualizadoEm: c.atualizadoEm } });
+    if (status) c = await mudarStatus(c, status, { autorNome: atendente(req).nome });
 
-    res.json({ numero: c.numero, status: c.status, resolvido: c.resolvido, prioridade: c.prioridade, resolvidoEm: c.resolvidoEm });
+    res.json({
+      numero: c.numero, status: c.status, resolvido: c.resolvido, prioridade: c.prioridade, resolvidoEm: c.resolvidoEm,
+      chamado: await chamadoCompleto(c.numero),
+    });
   } catch (err) {
     console.error("[PATCH /admin/chamados/:numero]", err);
     res.status(500).json({ error: "Erro ao atualizar o chamado." });
@@ -999,7 +1082,10 @@ adminRouter.post("/tenants/:id/entrar", requirePermissaoAdmin("entrarNoTenant"),
     /* A MESMA `montarSessao` do login. Uma segunda montagem aqui divergiria da
        de lá na primeira coisa que a tela passasse a ler. */
     return res.json({
-      ...montarSessao(usuario, { validade: "2h" }),
+      ...montarSessao(usuario, {
+        validade: "2h",
+        suporte: { nome: req.superAdmin?.nome || quem, email: req.superAdmin?.email || null },
+      }),
       /* A tela usa para avisar quem está dentro. Ver `SuperAdminPage`. */
       acessoDeSuporte: { por: quem, imobiliaria: tenant.name },
     });

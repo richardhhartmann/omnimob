@@ -16,6 +16,7 @@ import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
 import { PrimeiroAcessoFlow } from "./PrimeiroAcessoFlow.jsx";
 import { TourDeTela } from "./TourDeTela";
 import { AjudaModal } from "./AjudaModal";
+import { EVENTO_CHAMADOS } from "../utils/suporte";
 import { corDeTextoPara } from "./adminUi";
 import { montarTourDeTela, telaDaRota } from "../utils/tourTelas";
 import { IconeRelatorios, ICONES_RELATORIOS } from "../utils/iconesRelatorios";
@@ -440,6 +441,38 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const perfilRef = useRef(null);
 
   const [pedidoTour, setPedidoTour] = useState(0);
+
+  /* ── OS NÚMEROS DOS CHAMADOS ──────────────────────────────────────────────
+     `novidades` (o que a pessoa ainda não viu: o suporte respondeu, resolveu…)
+     vira o selo vermelho na foto do perfil e no item Ajuda do menu;
+     `aguardando` é o "N esperando você" de Meus chamados. Uma ida pequena, na
+     abertura, a cada 90 s com a aba à vista, ao voltar para a aba, ao abrir o
+     menu e quando uma tela avisa que algo mudou (`EVENTO_CHAMADOS` — abrir o
+     chamado marca o visto, e o selo tem de descer na hora). A demonstração não
+     pergunta: a conta é de todo visitante, e ninguém ali abre chamado. */
+  const [chamados, setChamados] = useState({ aguardando: 0, novidades: 0 });
+  const lerChamados = useCallback(() => {
+    if (demo || !tenantSlug) return;
+    api.chamadosPendentes(tenantSlug)
+      .then((d) => setChamados({ aguardando: Number(d?.aguardando) || 0, novidades: Number(d?.novidades) || 0 }))
+      .catch(() => { /* o menu funciona sem o selo */ });
+  }, [demo, tenantSlug]);
+  useEffect(() => {
+    lerChamados();
+    const relogio = setInterval(() => { if (document.visibilityState === "visible") lerChamados(); }, 90000);
+    const aoVoltar = () => { if (document.visibilityState === "visible") lerChamados(); };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener(EVENTO_CHAMADOS, lerChamados);
+    return () => {
+      clearInterval(relogio);
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener(EVENTO_CHAMADOS, lerChamados);
+    };
+  }, [lerChamados]);
+  useEffect(() => { if (menuPerfil) lerChamados(); }, [menuPerfil, lerChamados]);
+  /* "Abrir chamado" de dentro de uma tela (Meus chamados) cai no MESMO modal
+     do menu — um segundo formulário seria a mesma regra em dois lugares. */
+  const abrirChamadoNoModal = useCallback(() => { setAjudaEm("chamado"); setAjudaAberta(true); }, []);
 
   // ── Toast ─────────────────────────────────────────────────────────────────────
   const [toasts, setToasts] = useState([]);
@@ -1077,7 +1110,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         onClose={() => setAjudaAberta(false)}
         tourDaTela={tourDaTela}
         aoReverTour={() => setPedidoTour((n) => n + 1)}
-        contexto={{ rota: p, tenantSlug, usuario: session?.usuario?.login || userName }}
+        contexto={{ rota: p, tenantSlug, usuario: session?.usuario?.login || userName, suporte: session?.suporte || null }}
       />
 
       {/* `data-tema` no SHELL, e não só no `<main>`.
@@ -1418,8 +1451,9 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 tenant={session?.tenant}
                 ancoraRef={perfilRef}
                 aoAbrirAjuda={() => { setAjudaEm("menu"); setAjudaAberta(true); }}
-                aoAbrirChamado={() => { setAjudaEm("chamado"); setAjudaAberta(true); }}
-                aoAbrirSuporte={() => navigate("/suporte")}
+                aoAbrirChamado={abrirChamadoNoModal}
+                aoAbrirSuporte={(numero) => navigate(numero ? `/suporte/${numero}` : "/suporte")}
+                chamados={chamados}
                 aoAbrirPreferencias={() => setPreferenciasAbertas(true)}
                 aoAbrirPerfil={() => setMeusDadosAbertos(true)}
                 aoVincularGoogle={vincularGoogle}
@@ -1432,16 +1466,26 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 onClick={() => setMenuPerfil((v) => !v)}
                 aria-haspopup="menu"
                 aria-expanded={menuPerfil}
-                title="Sua conta"
+                title={chamados.novidades
+                  ? `Sua conta · ${chamados.novidades === 1 ? "1 novidade" : `${chamados.novidades} novidades`} nos seus chamados`
+                  : "Sua conta"}
               >
               {/* A inicial some quando há foto; a foto some se falhar ao
                   carregar (URL do Google expira) — e aí a inicial volta, em vez
-                  de sobrar um quadrado quebrado. */}
-              <div className={`ds-avatar${userFoto ? " tem-foto" : ""}`}>
-                {userFoto
-                  ? <img src={userFoto} alt="" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.remove(); }} />
-                  : userInitial}
-              </div>
+                  de sobrar um quadrado quebrado. O selo vermelho: chamado
+                  respondido (ou resolvido) que a pessoa ainda não abriu. */}
+              <span className="ds-avatar-caixa">
+                <div className={`ds-avatar${userFoto ? " tem-foto" : ""}`}>
+                  {userFoto
+                    ? <img src={userFoto} alt="" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.remove(); }} />
+                    : userInitial}
+                </div>
+                {chamados.novidades ? (
+                  <span className="ds-avatar__aviso" aria-label={`${chamados.novidades} novidades nos seus chamados`}>
+                    {chamados.novidades > 9 ? "9+" : chamados.novidades}
+                  </span>
+                ) : null}
+              </span>
               {!c ? (
                 <>
                   <div className="ds-profile__text">
@@ -1512,7 +1556,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                   o mesmo item, e elas divergiriam na primeira opção nova.
                   `aoMudarRascunhos` é como o formulário avisa que gravou ou
                   descartou um, sem esperar o próximo foco na janela. */}
-              <Outlet context={{ showToast, menuDeImoveis, aoMudarRascunhos: lerRascunhos }} />
+              <Outlet context={{ showToast, menuDeImoveis, aoMudarRascunhos: lerRascunhos, abrirChamado: abrirChamadoNoModal }} />
             </ProvedorDeAtalhos>
           </div>
         </main>
@@ -2770,6 +2814,15 @@ const CSS = `
 }
 /* Com foto, o disco colorido vira moldura e some por baixo da imagem. */
 .ds-avatar.tem-foto { background: transparent; }
+/* A caixa do avatar existe para o selo de novidades dos chamados poder
+   sobrar para fora do círculo sem ser cortado pelo overflow dele. */
+.ds-avatar-caixa { position: relative; display: inline-flex; flex-shrink: 0; }
+.ds-avatar__aviso {
+  position: absolute; top: -4px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 1;
+  box-shadow: 0 0 0 2px var(--s-bg, #0a0a0b);
+}
 .ds-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ds-profile__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 
