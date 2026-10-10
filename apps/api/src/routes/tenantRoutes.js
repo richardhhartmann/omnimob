@@ -5,6 +5,7 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant, requireTenantMesmoSuspenso } from "../middlewares/tenantMiddleware.js";
 import { createTenantSchema, updateTenantProfileSchema, updateTenantConfiguracaoSchema } from "../validators/propertyValidators.js";
 import { historicoDoTenant, ultimoPagamento, renovaSozinho } from "../services/pagamentos.js";
+import { saldoDoTenant } from "../services/impulsos.js";
 import { catalogosPadraoDoTenant } from "../services/cargosPadrao.js";
 import {
   criarCobrancaPix,
@@ -1483,6 +1484,33 @@ tenantRouter.get(
     } catch (err) {
       console.error("[GET /tenants/me/pagamentos]", err);
       return res.status(500).json({ error: "Não foi possível ler o histórico de cobrança." });
+    }
+  },
+);
+
+/* ─── O saldo de impulsos (Meta Ads) ─────────────────────────────────────────
+
+   Quanto sobra do plano, quanto foi comprado à parte, e o extrato — numa
+   chamada, pelo mesmo motivo do extrato de pagamentos.
+
+   Duas permissões abrem: `publicarRedes` (quem vai impulsionar precisa ver se
+   ainda pode) e `verCobranca` (quem paga precisa ver o que comprou). Nenhuma das
+   duas escreve nada aqui — a rota é só de leitura.
+
+   ISOLAMENTO: o `tenantId` sai de `req.tenant`, nunca do cliente. */
+tenantRouter.get(
+  "/me/impulsos",
+  requireAuth,
+  requireTenant,
+  requirePermissao("publicarRedes", "verCobranca"),
+  async (req, res) => {
+    try {
+      const saldo = await saldoDoTenant(req.tenant.id);
+      if (!saldo) return res.status(404).json({ error: "Tenant não encontrado." });
+      return res.json(saldo);
+    } catch (err) {
+      console.error("[GET /tenants/me/impulsos]", err);
+      return res.status(500).json({ error: "Não foi possível ler o saldo de impulsos." });
     }
   },
 );

@@ -466,6 +466,26 @@ model Tenant {
   assinaturaConta    String? @map("tnt_assinatura_conta")
   assinaturaSandbox  Boolean @default(true) @map("tnt_assinatura_sandbox")
 
+  /**
+   * ─── O saldo de impulsos (Meta Ads) ────────────────────────────────────────
+   *
+   * Quantas vezes esta imobiliária ainda pode impulsionar um imóvel. Do
+   * TENANT, e não da pessoa: quem paga o plano é a imobiliária.
+   *
+   * DOIS campos e não um, porque os dois saldos têm regras opostas na virada:
+   *   · `impulsosDoPlano` VOLTA ao limite do plano quando o pagamento cai — o
+   *     que sobrou do ciclo anterior não acumula;
+   *   · `impulsosAvulsos` é o que a imobiliária comprou à parte, e NÃO zera.
+   * Um campo só obrigaria a adivinhar, na virada, quanto do saldo era de cada
+   * origem. O exemplo da tarefa: 20 do plano + 100 avulsos, paga a mensalidade
+   * do Profissional → 50 + 100, e não 70 + 100.
+   *
+   * São o saldo de AGORA; a história mora em `ImpulsoMovimento`, e a regra em
+   * `services/impulsos.js` — que é o único que escreve aqui.
+   */
+  impulsosDoPlano Int @default(0) @map("tnt_impulsos_plano")
+  impulsosAvulsos Int @default(0) @map("tnt_impulsos_avulsos")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -484,6 +504,7 @@ model Tenant {
   leadEventos LeadEvento[]
   perfisBusca PerfilBusca[]
   pagamentos  Pagamento[]
+  impulsoMovimentos ImpulsoMovimento[]
 
   // ─── Omnimob Flow ───
   negocios        Negocio[]
@@ -2350,7 +2371,67 @@ model Pagamento {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  /// O crédito de impulsos que este pagamento gerou, se gerou.
+  impulsoMovimento ImpulsoMovimento?
+
   @@unique([provedor, externoId])
   @@index([tenantId, pagoEm])
   @@map("tb_pagamento")
+}
+
+/// ─── O extrato de impulsos ──────────────────────────────────────────────────
+///
+/// Cada linha é uma mudança no saldo de `Tenant.impulsosDoPlano` /
+/// `impulsosAvulsos`: o plano recarregou, a imobiliária comprou, alguém
+/// impulsionou, um impulsionamento foi devolvido. Sem ela, o suporte não teria
+/// como responder "para onde foram os meus 50?".
+///
+/// Os DELTAS e o saldo DEPOIS ficam na linha. O delta conta o que aconteceu; o
+/// saldo congelado é o que permite ler o extrato sem refazer a soma desde o
+/// primeiro dia — e é o que denuncia uma escrita que passou por fora do serviço.
+///
+/// ── IDEMPOTÊNCIA ──
+/// `pagamentoId` é ÚNICO: o webhook reenvia, a tela do Pix consulta em paralelo,
+/// e um mesmo pagamento chegando três vezes recarrega UMA. É a mesma chave que
+/// já impede o pagamento de virar três linhas em `Pagamento`, levada um passo
+/// adiante. `estornoDeId` é único pelo mesmo motivo: devolver duas vezes o
+/// mesmo consumo daria um impulso de graça.
+model ImpulsoMovimento {
+  id       String @id @default(cuid()) @map("imv_id")
+  tenantId String @map("tenant_id")
+
+  /// CREDITO_PLANO | COMPRA | CONSUMO | ESTORNO. Texto e não enum, pelo mesmo
+  /// motivo de `Pagamento.provedor`: a lista cresce sem migração.
+  tipo String @map("imv_tipo")
+
+  /// Quanto mudou em cada saldo (negativo no consumo). No crédito do plano é
+  /// a DIFERENÇA até o limite — pode ser negativa, quando a imobiliária tinha
+  /// mais do que o limite (trocou para um plano menor).
+  deltaPlano   Int @default(0) @map("imv_delta_plano")
+  deltaAvulsos Int @default(0) @map("imv_delta_avulsos")
+
+  /// O saldo de cada origem DEPOIS desta linha.
+  saldoPlano   Int @map("imv_saldo_plano")
+  saldoAvulsos Int @map("imv_saldo_avulsos")
+
+  /// O pagamento que recarregou (CREDITO_PLANO) ou comprou (COMPRA).
+  pagamentoId String?    @unique @map("pgt_id")
+  pagamento   Pagamento? @relation(fields: [pagamentoId], references: [id], onDelete: SetNull)
+
+  /// Em ESTORNO, o CONSUMO devolvido.
+  estornoDeId String? @unique @map("imv_estorno_de_id")
+
+  /// O que gastou o impulso (o id do impulsionamento, quando ele existir).
+  referencia String? @map("imv_referencia")
+  /// Quem fez. Sem FK, como em `Auditoria`: o extrato sobrevive à remoção da
+  /// pessoa.
+  usuarioId  String? @map("usuario_id")
+  descricao  String? @map("imv_descricao")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("tb_impulso_movimento")
 }
