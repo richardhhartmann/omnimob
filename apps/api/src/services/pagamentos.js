@@ -1,4 +1,5 @@
 import { prisma } from "../db.js";
+import { creditarPlanoDoPagamento } from "./impulsos.js";
 
 /**
  * ─── O histórico de pagamento ────────────────────────────────────────────────
@@ -26,9 +27,10 @@ import { prisma } from "../db.js";
  *
  * ── O QUE ESTA CAMADA NÃO FAZ ──
  * Não libera acesso. Quem vira a chave da conta continua sendo `fidelizarTrial`,
- * e quem decide o vencimento continua sendo quem chama. Aqui só se ANOTA — e a
- * anotação nunca pode derrubar o pagamento: por isso `registrarPagamento` engole
- * o próprio erro e devolve `null`. Um histórico incompleto é um problema de
+ * e quem decide o vencimento continua sendo quem chama. Aqui se ANOTA — e, por
+ * ser a porta única de pagamento, se recarrega o saldo de impulsos do plano
+ * (`services/impulsos.js`). Nenhuma das duas coisas pode derrubar o pagamento:
+ * por isso `registrarPagamento` engole o próprio erro e devolve `null`. Um histórico incompleto é um problema de
  * relatório; uma exceção aqui seria um pagamento aprovado que não libera a
  * conta.
  */
@@ -72,25 +74,18 @@ export async function registrarPagamento(dados) {
     /* Sem id externo não há o que casar: `create` direto. Um `upsert` com
        `externoId: null` recairia na mesma linha para sempre, e a segunda
        cortesia sobrescreveria a primeira. */
-    if (!dados.externoId) {
-      return await prisma.pagamento.create({
+    const pagamento = !dados.externoId
+      ? await prisma.pagamento.create({
         data: { tenantId: dados.tenantId, provedor: dados.provedor, externoId: null, ...comum },
-      });
-    }
+      })
+      : await gravarComIdExterno(dados, comum);
 
-    return await prisma.pagamento.upsert({
-      where: { provedor_externoId: { provedor: dados.provedor, externoId: String(dados.externoId) } },
-      /* O reenvio ATUALIZA em vez de ignorar: um pagamento pode mudar de estado
-         depois (estorno, contestação), e a linha precisa acompanhar. O que não
-         pode é virar uma segunda linha. */
-      update: comum,
-      create: {
-        tenantId: dados.tenantId,
-        provedor: dados.provedor,
-        externoId: String(dados.externoId),
-        ...comum,
-      },
-    });
+    /* O pagamento caiu: o saldo de impulsos do plano volta ao limite. Aqui, e
+       não em cada um dos três chamadores, pelo mesmo motivo de esta função
+       existir — três recargas diferentes divergiriam. A recarga é idempotente
+       por pagamento e nunca lança (ver `services/impulsos.js`). */
+    await creditarPlanoDoPagamento(pagamento);
+    return pagamento;
   } catch (erro) {
     /* Ver o cabeçalho: anotar não pode derrubar o pagamento. Fica o rastro no
        log, que é onde alguém procura quando o histórico está com um buraco. */
@@ -100,6 +95,22 @@ export async function registrarPagamento(dados) {
     );
     return null;
   }
+}
+
+function gravarComIdExterno(dados, comum) {
+  return prisma.pagamento.upsert({
+    where: { provedor_externoId: { provedor: dados.provedor, externoId: String(dados.externoId) } },
+    /* O reenvio ATUALIZA em vez de ignorar: um pagamento pode mudar de estado
+       depois (estorno, contestação), e a linha precisa acompanhar. O que não
+       pode é virar uma segunda linha. */
+    update: comum,
+    create: {
+      tenantId: dados.tenantId,
+      provedor: dados.provedor,
+      externoId: String(dados.externoId),
+      ...comum,
+    },
+  });
 }
 
 /**
