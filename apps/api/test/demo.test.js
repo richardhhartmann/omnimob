@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { prisma, limparRestos, criarImobiliariaDeTeste, apagarImobiliaria, subirApi } from "./helpers.js";
+import {
+  prisma, limparRestos, criarImobiliariaDeTeste, apagarImobiliaria, subirApi, travarAdminDaPlataforma,
+} from "./helpers.js";
 import { authRouter } from "../src/routes/authRoutes.js";
 import { propertyRouter } from "../src/routes/propertyRoutes.js";
 import { cargoRouter } from "../src/routes/cargoRoutes.js";
@@ -111,6 +113,10 @@ test("demo: a imobiliária de demonstração não pode ser excluída", async (t)
   const { limparTrials } = await import("../src/services/trialService.js");
   const jwt = (await import("jsonwebtoken")).default;
 
+  /* Compartilhada até o fim do teste: o teste do "último Administrador" não
+     desativa o `chefe` daqui no meio (ver `travarAdminDaPlataforma`). */
+  const soltarTrava = await travarAdminDaPlataforma();
+  t.after(soltarTrava);
   const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
     where: { nome: CARGO_ADMIN_PLATAFORMA },
     update: {},

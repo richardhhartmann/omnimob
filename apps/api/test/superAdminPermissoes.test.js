@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
-import { prisma, PREFIXO, criarImobiliariaDeTeste, apagarImobiliaria, subirApi } from "./helpers.js";
+import {
+  prisma, PREFIXO, criarImobiliariaDeTeste, apagarImobiliaria, subirApi, travarAdminDaPlataforma,
+} from "./helpers.js";
 import { adminRouter } from "../src/routes/adminRoutes.js";
 import { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } from "../src/services/permissoesSuperAdmin.js";
 
@@ -169,7 +171,15 @@ test("cargos do super-admin", async (t) => {
   await t.test("o último Administrador ativo não é rebaixado nem desativado", async () => {
     /* Só o `chefe` é Administrador ativo COM SENHA entre os do teste — mas o
        banco pode ter outros (o seed). Para a trava valer, o teste desativa os
-       demais temporariamente e os devolve no fim. */
+       demais temporariamente e os devolve no fim.
+
+       Com a trava EXCLUSIVA: os outros arquivos que usam um Administrador
+       descartável seguram a compartilhada, e desativá-los no meio do teste
+       deles era o que fazia a suíte de chamados receber 401 (ver
+       `travarAdminDaPlataforma`, em `helpers.js`). A lista dos "outros" é lida
+       DEPOIS de tomar a trava, senão um Administrador criado no intervalo
+       ficaria de fora e a contagem da rota mentiria. */
+    const soltar = await travarAdminDaPlataforma({ exclusiva: true });
     const outros = await prisma.superAdmin.findMany({
       where: { id: { not: chefe.id }, ativo: true, cargoId: cargoAdmin.id },
       select: { id: true },
@@ -193,6 +203,7 @@ test("cargos do super-admin", async (t) => {
       await prisma.superAdmin.update({ where: { id: chefe.id }, data: { cargoId: cargoAdmin.id } });
     } finally {
       await prisma.superAdmin.updateMany({ where: { id: { in: outros.map((o) => o.id) } }, data: { ativo: true } });
+      await soltar();
     }
   });
 
