@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
-import { prisma, criarImobiliariaDeTeste, apagarImobiliaria, subirApi } from "./helpers.js";
+import { prisma, criarImobiliariaDeTeste, apagarImobiliaria, subirApi, travarAdminDaPlataforma } from "./helpers.js";
 import { chamadoRouter } from "../src/routes/chamadoRoutes.js";
 import { adminRouter } from "../src/routes/adminRoutes.js";
 import { CARGO_ADMIN_PLATAFORMA, permissoesCompletas } from "../src/services/permissoesSuperAdmin.js";
@@ -41,7 +41,15 @@ test("conversa do chamado", async (t) => {
   const comoA = api.comoTenant(a);
   const comoB = api.comoTenant(b);
   /* Um super-admin DE VERDADE, no cargo Administrador: o token só prova
-     identidade, e é o banco que diz o que a pessoa alcança. */
+     identidade, e é o banco que diz o que a pessoa alcança.
+
+     A trava compartilhada vai até o fim do teste: enquanto ela estiver aqui, o
+     teste do "último Administrador" (outro arquivo, rodando em paralelo) não
+     desativa este atendente no meio da conversa. A liberação é registrada
+     JÁ, e não no `t.after` da limpeza: se a preparação abaixo falhar, a trava
+     não fica presa até o prazo. */
+  const soltarTrava = await travarAdminDaPlataforma();
+  t.after(soltarTrava);
   const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
     where: { nome: CARGO_ADMIN_PLATAFORMA },
     update: {},

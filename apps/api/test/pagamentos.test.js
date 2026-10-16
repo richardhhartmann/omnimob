@@ -1,7 +1,7 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
-import { subirApi, criarImobiliariaDeTeste, apagarImobiliaria } from "./helpers.js";
+import { subirApi, criarImobiliariaDeTeste, apagarImobiliaria, travarAdminDaPlataforma } from "./helpers.js";
 import { prisma } from "../src/db.js";
 import { adminRouter } from "../src/routes/adminRoutes.js";
 import { tenantRouter } from "../src/routes/tenantRoutes.js";
@@ -226,11 +226,16 @@ test("apagar a imobiliária leva o histórico junto", async () => {
    É a mesma razão de as suítes deste projeto serem de integração — os defeitos
    moram na junção rota + query.
    ────────────────────────────────────────────────────────────────────────── */
-test("ativar à mão grava o pagamento, com quem liberou e o período coberto", async () => {
+test("ativar à mão grava o pagamento, com quem liberou e o período coberto", async (ctx) => {
   const t = await criarTenant("rota");
   /* Um super-admin DE VERDADE, no cargo Administrador: o token só prova
      identidade, e é o banco que diz se a pessoa existe e o que alcança
-     (`requireSuperAdmin`). Um token assinado para ninguém recebe 401. */
+     (`requireSuperAdmin`). Um token assinado para ninguém recebe 401.
+
+     Com a trava compartilhada até o fim do teste: o do "último
+     Administrador", em outro arquivo, não o desativa no meio (ver
+     `travarAdminDaPlataforma`). */
+  ctx.after(await travarAdminDaPlataforma());
   const cargoAdmin = await prisma.cargoSuperAdmin.upsert({
     where: { nome: CARGO_ADMIN_PLATAFORMA },
     update: {},

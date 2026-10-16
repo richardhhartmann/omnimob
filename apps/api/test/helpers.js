@@ -86,6 +86,64 @@ const slugUnico = () => `${PREFIXO}${(contador += 1)}`;
    que a suíte inteira leva, então nada em voo é alcançado por engano. */
 const RESTO_VELHO_MS = 60 * 60 * 1000;
 
+/* ── A trava do cargo Administrador da plataforma ────────────────────────────
+
+   `SuperAdmin` não tem imobiliária, então o isolamento por prefixo de slug não
+   o alcança: é uma tabela só, dividida por todos os arquivos que rodam ao
+   mesmo tempo. E um deles PRECISA mexer em todo mundo — o teste da trava do
+   "último Administrador" desativa os outros Administradores por alguns
+   segundos. Rodando em paralelo, isso derrubava o super-admin descartável que
+   a suíte de chamados acabara de criar, e ela recebia 401 no meio da conversa.
+
+   Uma trava consultiva do Postgres, nos dois sabores:
+     · COMPARTILHADA — quem só USA um Administrador descartável. Vários
+       arquivos seguram juntos, e o paralelismo continua;
+     · EXCLUSIVA — quem desativa os outros. Espera os compartilhados soltarem,
+       e ninguém novo entra enquanto ela está com ele.
+
+   No banco e não num arquivo de trava porque é o banco o recurso disputado —
+   e porque o processo que morre no meio solta a trava sozinho: ela vive numa
+   transação, que o Postgres desfaz quando a conexão cai. Transação, e não a
+   trava de sessão, porque o Prisma reparte as consultas entre conexões do
+   pool: a trava de sessão seria tomada numa conexão e soltada em outra. */
+const TRAVA_ADMIN_PLATAFORMA = 7_310_001;
+
+/**
+ * Segura a trava do cargo Administrador da plataforma até `soltar()`.
+ *
+ * Ela fica numa transação aberta, ocupando uma conexão do pool enquanto
+ * durar — por isso o prazo de 5 minutos, folgado para a suíte e curto para
+ * uma execução travada não prender o banco.
+ *
+ * @param {{ exclusiva?: boolean }} [opcoes]
+ * @returns {Promise<() => Promise<void>>} a função que solta a trava.
+ */
+export async function travarAdminDaPlataforma({ exclusiva = false } = {}) {
+  let soltar;
+  const solta = new Promise((r) => { soltar = r; });
+  let avisar;
+  const tomada = new Promise((r) => { avisar = r; });
+
+  const transacao = prisma.$transaction(
+    async (tx) => {
+      /* `::text` porque a função devolve `void`, que o Prisma não sabe ler. */
+      if (exclusiva) await tx.$queryRaw`SELECT pg_advisory_xact_lock(${TRAVA_ADMIN_PLATAFORMA}::bigint)::text`;
+      else await tx.$queryRaw`SELECT pg_advisory_xact_lock_shared(${TRAVA_ADMIN_PLATAFORMA}::bigint)::text`;
+      avisar();
+      await solta;
+    },
+    { maxWait: 60_000, timeout: 5 * 60_000 },
+  );
+
+  /* Se a transação falhar antes de tomar a trava, o erro sobe aqui em vez de
+     o teste esperar para sempre por um aviso que não vem. */
+  await Promise.race([tomada, transacao]);
+  return async () => {
+    soltar();
+    await transacao;
+  };
+}
+
 /**
  * Apaga o que este processo criou, e restos antigos de execuções que morreram
  * no meio. Sem o corte por idade, seria impossível limpar lixo de um processo
