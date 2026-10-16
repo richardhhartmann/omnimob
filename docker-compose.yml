@@ -1,0 +1,50 @@
+name: omnimob
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: omnimob
+      POSTGRES_PASSWORD: omnimob
+      POSTGRES_DB: omnimob
+    # Para Prisma Studio / psql da sua máquina. 5434 porque 5432 e 5433 já são
+    # dos outros projetos daqui (OMNIMOB_DB_PORTA troca); 127.0.0.1 para não
+    # abrir o banco para a rede.
+    ports:
+      - "127.0.0.1:${OMNIMOB_DB_PORTA:-5434}:5432"
+    volumes:
+      - banco:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnimob -d omnimob"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
+    image: omnimob-api
+    env_file:
+      - path: apps/api/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://omnimob:omnimob@db:5432/omnimob
+      DIRECT_URL: postgresql://omnimob:omnimob@db:5432/omnimob
+      # Vazia = super-admin no banco local. No .env de dev ela aponta para a
+      # PRODUÇÃO (ver CLAUDE.md), e o seed criaria conta lá.
+      PLATAFORMA_DATABASE_URL: ""
+      # A imagem vem com `production`, que fecha o CORS para localhost; aqui o
+      # front roda no `npm run dev:web`, em qualquer porta que o Vite escolher.
+      NODE_ENV: development
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  banco:
