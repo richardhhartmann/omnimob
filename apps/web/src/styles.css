@@ -13226,6 +13226,51 @@ button.mpx-acao-texto:focus-visible {
   margin-left: calc(50% - 50vw);
   width: 100vw;
 }
+
+/* ─── Cabeçalho fixo ao rolar (`campoCabecalhoFixo`, ligado por padrão) ──────
+
+   O "sticky" acima nunca grudou de verdade. Um elemento sticky só se move
+   DENTRO do próprio pai, e o pai do cabeçalho é o `.puck-envolucro` da peça —
+   que tem exatamente a altura dele. Sem espaço para andar, ele subia junto
+   com a página no primeiro pixel de rolagem.
+
+   Quem gruda, então, é a PEÇA inteira: o filho da raiz que contém o
+   cabeçalho, cujo pai é o dropzone, da altura da página. Pelo `:has` e não
+   pelo `:first-child`, porque o cabeçalho pode ser arrastado para qualquer
+   posição. O mesmo seletor vale no editor e na vitrine — o dropzone é o único
+   intermediário nas duas (ver as seções zebradas).
+
+   O `.showcase-body` no seletor não é enfeite: é o que faz esta regra VENCER a
+   da zebra (quatro classes contra três). Numa posição par, a zebra põe na peça
+   `position: relative` e um respiro de 24px; sem a vantagem, as duas empatam e
+   a zebra, que vem depois no arquivo, ganha — o cabeçalho voltava a rolar só
+   quando caía numa faixa par. O respiro sai pelo mesmo motivo: grudado no
+   topo, ele vira duas faixas quase transparentes por onde a página aparece
+   acima e abaixo do cabeçalho. O `z-index` põe a peça acima das seguintes, que
+   a zebra transforma em contextos de empilhamento próprios. */
+.vitrine-puck.showcase-body.is-cabecalho-fixo > div > :has(.luxury-header-wrapper) {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding-block: 0;
+}
+
+/* No EDITOR, o Puck escreve `position: relative` no `style` de cada peça
+   arrastável — é a âncora do contorno e das alças que ele desenha dentro dela.
+   Estilo inline vence qualquer seletor, e a prévia mostrava o cabeçalho
+   subindo com a página enquanto a vitrine publicada o mantinha fixo. Daí o
+   `!important`, preso ao atributo que só a peça do editor tem. Sticky também
+   é posicionado, então o contorno e as alças continuam ancorados na peça. */
+.vitrine-puck.is-cabecalho-fixo > div > [data-puck-component]:has(.luxury-header-wrapper) {
+  position: sticky !important;
+}
+
+/* Desligado, o cabeçalho é só mais uma peça no fluxo. Explícito, e não
+   herdado do sticky inerte acima: se o invólucro um dia ganhar altura, a
+   escolha "rola junto" continua valendo. */
+.vitrine-puck:not(.is-cabecalho-fixo) .luxury-header-wrapper {
+  position: relative;
+}
 /* === PROVA DE CONCEITO DO PUCK :: FIM === */
 
 /* === A IDENTIDADE DO EDITOR, APLICADA NO PUCK :: INÍCIO ====================

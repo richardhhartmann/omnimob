@@ -418,6 +418,8 @@ export function normalizeShowcaseConfig(raw) {
     /* Seções zebradas (ver `campoZebrado`). Só `false` desliga; ausência e
        qualquer outra coisa é ligado — o padrão do produto. */
     zebrado: cfg.zebrado !== false,
+    /* Cabeçalho fixo ao rolar (ver `campoCabecalhoFixo`). Só `false` solta. */
+    cabecalhoFixo: cfg.cabecalhoFixo !== false,
     /* Largura livre (a página usa a tela inteira). Só `true` liga. */
     larguraLivre: cfg.larguraLivre === true,
     /* Largura global das peças (%), só com a página livre. 100 = como sempre. */

@@ -85,6 +85,8 @@ function opcoesDaPagina(root) {
   if (typeof p.globalFont === "string" && p.globalFont) saida.globalFont = p.globalFont;
   /* Seções zebradas: booleano no config, e a página do imóvel lê de lá também. */
   if (p.zebrado === "sim" || p.zebrado === "nao") saida.zebrado = p.zebrado === "sim";
+  /* Cabeçalho fixo ao rolar: booleano, ligado por padrão (ver `campoCabecalhoFixo`). */
+  if (p.cabecalhoFixo === "sim" || p.cabecalhoFixo === "nao") saida.cabecalhoFixo = p.cabecalhoFixo === "sim";
   if (p.larguraDaPagina === "livre" || p.larguraDaPagina === "travada") saida.larguraLivre = p.larguraDaPagina === "livre";
   saida.espacamento = { interno: Number(p.espacoInterno) || 0, externo: Number(p.espacoExterno) || 0 };
   saida.larguraDasPecas = Number(p.larguraDasPecas) || 100;

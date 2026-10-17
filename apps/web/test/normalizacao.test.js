@@ -136,3 +136,11 @@ test("ligar o Puck NÃO mexe no formato antigo", () => {
   const { puck: _b, ...semPuckDepois } = depois;
   assert.deepEqual(semPuckDepois, semPuckAntes);
 });
+
+test("cabeçalho fixo: ligado por padrão, e só `false` desliga", () => {
+  /* Ausente é o caso de toda vitrine gravada antes da opção existir — e o
+     cabeçalho delas sempre foi fixo. Lixo também cai no padrão. */
+  assert.equal(normalizeShowcaseConfig(null).cabecalhoFixo, true);
+  assert.equal(normalizeShowcaseConfig({ cabecalhoFixo: "nao" }).cabecalhoFixo, true);
+  assert.equal(normalizeShowcaseConfig({ cabecalhoFixo: false }).cabecalhoFixo, false);
+});

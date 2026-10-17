@@ -228,6 +228,8 @@ export function traduzirParaPuck(showcaseConfig) {
       appearanceMode: config.appearanceMode,
       // Ausente no config = ligado. É o padrão do produto, e vale para toda página antiga.
       zebrado: config.zebrado === false ? "nao" : "sim",
+      // Mesma regra: só `false` solta o cabeçalho; o motor antigo sempre o fixava.
+      cabecalhoFixo: config.cabecalhoFixo === false ? "nao" : "sim",
       larguraDaPagina: config.larguraLivre === true ? "livre" : "travada",
       larguraDasPecas: Number(config.larguraDasPecas) || 100,
       espacoInterno: Number(config.espacamento?.interno) || 0,

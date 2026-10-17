@@ -157,3 +157,12 @@ test("tipo de widget desconhecido cai no genérico em vez de sumir", () => {
   assert.equal(item.type, "Widget");
   assert.equal(item.props.widget.title, "Antiga");
 });
+
+test("cabeçalho fixo: vitrine antiga chega fixa, e só `false` a solta", () => {
+  /* O motor antigo sempre fixava o cabeçalho (`position: fixed`). Uma vitrine
+     que nunca viu a opção e é aberta no Puck pela primeira vez não pode
+     perder a barra no topo só por ter migrado. */
+  assert.equal(traduzirParaPuck({}).data.root.props.cabecalhoFixo, "sim");
+  assert.equal(traduzirParaPuck({ cabecalhoFixo: true }).data.root.props.cabecalhoFixo, "sim");
+  assert.equal(traduzirParaPuck({ cabecalhoFixo: false }).data.root.props.cabecalhoFixo, "nao");
+});
