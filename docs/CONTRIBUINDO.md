@@ -170,8 +170,9 @@ infisical login                     # abre o navegador; o convite ao projeto vem
 ```
 
 E pronto: `npm run dev`, `npm test`, `npm run faxina` etc. já passam por
-`scripts/com-env.mjs`, que detecta o `.infisical.json` da raiz (o id do
-projeto — não é segredo, e está no repositório) mais o CLI no PATH, e roda o
+`scripts/com-env.mjs`, que detecta o `.infisical.yaml` da raiz (o id do
+projeto — não é segredo, e está no repositório; o `.infisical.json` das
+versões antigas do CLI também vale) mais o CLI no PATH, e roda o
 comando dentro de `infisical run`. Sem o CLI, o mesmo script segue direto e o
 `.env` local vale, como sempre — o CI e o Render nunca passam pelo cofre.
 

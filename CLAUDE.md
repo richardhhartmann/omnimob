@@ -390,7 +390,8 @@ invisíveis porque com um cliente só o sintoma não aparece.
 > diz o que houve: o app quebra no CORS, ou o link do e-mail cai num 404.
 
 > **Os scripts do `package.json` passam por `scripts/com-env.mjs`**: com o
-> `.infisical.json` na raiz e o CLI `infisical` no PATH, as variáveis vêm do
+> `.infisical.yaml` na raiz (ou o `.infisical.json` do CLI antigo) e o CLI
+> `infisical` no PATH, as variáveis vêm do
 > cofre (`infisical run`); sem eles, o `.env` local vale como sempre. `COFRE=0`
 > desliga; ver "Variáveis de ambiente: o cofre" em `docs/CONTRIBUINDO.md`.
 >
