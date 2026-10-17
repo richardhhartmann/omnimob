@@ -12,16 +12,23 @@
    têm nunca (eles injetam as variáveis do jeito deles). Escrito direto no
    script, `npm run dev` quebraria para quem ainda usa `.env` — e "instale o
    Infisical" não é uma mensagem de erro que o `vite` sabe dar. Aqui a decisão
-   é uma só e mora num lugar: tem `.infisical.json` na raiz E o CLI está no
-   PATH → o cofre injeta; senão → segue como sempre.
+   é uma só e mora num lugar: tem a configuração do Infisical na raiz E o CLI
+   está no PATH → o cofre injeta; senão → segue como sempre.
 
    ── O QUE DECIDE ──
 
-   `.infisical.json` é o arquivo que o `infisical init` cria na raiz do repo
-   (id do projeto e ambiente padrão). Ele entra no repositório: não é segredo,
-   é endereço. O `--projectId` é lido dele e passado explicitamente porque o
-   CLI procura o arquivo no diretório ATUAL, e os scripts dos apps rodam de
-   `apps/api` e `apps/web`.
+   O arquivo que o `infisical init` cria na raiz do repo (id do projeto e
+   ambiente padrão). Ele entra no repositório: não é segredo, é endereço. O
+   `--projectId` é lido dele e passado explicitamente porque o CLI procura o
+   arquivo no diretório ATUAL, e os scripts dos apps rodam de `apps/api` e
+   `apps/web`.
+
+   DOIS formatos, porque o CLI mudou de um para o outro: as versões antigas
+   gravam `.infisical.json` (`workspaceId`), as atuais `.infisical.yaml`
+   (`secrets-management.project-id`). Ler só o JSON fazia o cofre sumir em
+   SILÊNCIO para quem rodou o `init` numa versão nova — o comando seguia com o
+   `.env` local, que é exatamente o que este invólucro existe para evitar. O
+   YAML é lido à mão (duas chaves de uma linha), sem dependência nova.
 
    `COFRE=0` desliga na hora (`COFRE=0 npm run dev`), para testar um `.env`
    local sem sair do cofre. `INFISICAL_ENV` troca o ambiente (`dev` é o
@@ -42,7 +49,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CONFIG = path.join(RAIZ, ".infisical.json");
+/* O YAML primeiro: é o que o CLI atual grava. Os dois juntos é transição, e
+   aí vale o mais novo. */
+const CONFIGS = [".infisical.yaml", ".infisical.yml", ".infisical.json"].map((n) => path.join(RAIZ, n));
+
+/** `{ projectId, defaultEnvironment }` do arquivo de configuração, ou `null`. */
+function lerConfig(arquivo) {
+  const texto = readFileSync(arquivo, "utf8");
+  if (arquivo.endsWith(".json")) {
+    const cfg = JSON.parse(texto);
+    return { projectId: cfg.workspaceId || cfg.projectId || "", defaultEnvironment: cfg.defaultEnvironment || "" };
+  }
+  /* Só as duas chaves de que precisamos, cada uma numa linha. Aspas opcionais. */
+  const valor = (chave) => {
+    const m = texto.match(new RegExp(`^\\s*${chave}:\\s*["']?([^"'\\s#]*)["']?`, "m"));
+    return m ? m[1] : "";
+  };
+  return { projectId: valor("project-id"), defaultEnvironment: valor("default-environment") };
+}
 
 const argv = process.argv.slice(2);
 const separador = argv.indexOf("--");
@@ -67,21 +91,23 @@ function pastaDoApp() {
 
 function cofreDisponivel() {
   if (process.env.COFRE === "0") return null;
-  if (!existsSync(CONFIG)) return null;
+  const arquivo = CONFIGS.find((c) => existsSync(c));
+  if (!arquivo) return null;
+  const nome = path.basename(arquivo);
   let cfg;
   try {
-    cfg = JSON.parse(readFileSync(CONFIG, "utf8"));
+    cfg = lerConfig(arquivo);
   } catch {
-    console.warn("[com-env] .infisical.json ilegível; seguindo com o .env local.");
+    console.warn(`[com-env] ${nome} ilegível; seguindo com o .env local.`);
     return null;
   }
   const versao = spawnSync("infisical", ["--version"], { shell: true, stdio: "ignore" });
   if (versao.status !== 0) {
-    console.warn("[com-env] .infisical.json existe mas o CLI `infisical` não está no PATH; seguindo com o .env local.");
+    console.warn(`[com-env] ${nome} existe mas o CLI \`infisical\` não está no PATH; seguindo com o .env local.`);
     return null;
   }
   return {
-    projectId: cfg.workspaceId || cfg.projectId || "",
+    projectId: cfg.projectId,
     ambiente: process.env.INFISICAL_ENV || cfg.defaultEnvironment || "dev",
     pasta: pastaDoApp(),
   };
