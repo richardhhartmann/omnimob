@@ -11,6 +11,8 @@ import {
   Square,
   ArrowsInLineHorizontal,
   ArrowsOutLineHorizontal,
+  PushPin,
+  ArrowLineDown,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -155,6 +157,23 @@ export const campoZebrado = campo(
   (v) => (v === "nao"
     ? "Todas as seções no mesmo fundo."
     : "Uma seção sim, outra não, com fundo levemente diferente — vale também na página do imóvel."),
+  "sim",
+);
+
+/* O cabeçalho que acompanha a rolagem: grudado no topo enquanto a pessoa desce
+   pela página, com o menu e o botão de contato sempre à mão. É o que a vitrine
+   sempre quis ser — o motor antigo já o fixava —, por isso ligado por padrão;
+   desligado, ele sobe junto com o resto e devolve a tela inteira ao conteúdo.
+   A regra mora em `.is-cabecalho-fixo`, em styles.css. */
+export const campoCabecalhoFixo = campo(
+  "Cabeçalho ao rolar",
+  [
+    { valor: "sim", rotulo: "Fixo", Icone: PushPin },
+    { valor: "nao", rotulo: "Rola junto", Icone: ArrowLineDown },
+  ],
+  (v) => (v === "nao"
+    ? "O cabeçalho sobe junto com a página."
+    : "O cabeçalho fica grudado no topo enquanto a pessoa rola a página."),
   "sim",
 );
 

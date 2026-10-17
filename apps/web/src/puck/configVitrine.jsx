@@ -13,7 +13,7 @@ import { classeDeAparencia, estiloDoTema } from "../components/showcase/tema.js"
 import { ProvedorDaPagina, usarPagina } from "./contextoDaPagina.jsx";
 import { PonteDeEdicao } from "./PonteDeEdicao.jsx";
 import { campoDeCor } from "./CampoDeCor.jsx";
-import { campoFonteDoConteudo, campoLarguraDaPagina, campoLarguraDaPeca, campoOculto, campoTema, campoTravado, campoZebrado } from "./CampoDeAlternar.jsx";
+import { campoCabecalhoFixo, campoFonteDoConteudo, campoLarguraDaPagina, campoLarguraDaPeca, campoOculto, campoTema, campoTravado, campoZebrado } from "./CampoDeAlternar.jsx";
 import { campoBrilho, campoEscurecer, campoEspacoExterno, campoEspacoInterno, campoLargura, campoLarguraGlobal } from "./CampoDeslizante.jsx";
 import { ComBanner, useSobBanner } from "./ComBanner.jsx";
 
@@ -506,6 +506,7 @@ export const configVitrine = {
     fields: {
       appearanceMode: campoTema,
       zebrado: campoZebrado,
+      cabecalhoFixo: campoCabecalhoFixo,
       larguraDaPagina: campoLarguraDaPagina,
       /* Largura de TODAS as peças — só aparece com a página livre (ver o
          `resolveFields` da raiz). A peça com largura própria vence. */
@@ -541,7 +542,7 @@ export const configVitrine = {
       const { larguraDasPecas, ...resto } = fields;
       return resto;
     },
-    render: ({ children, puck, appearanceMode, zebrado, larguraDaPagina, larguraDasPecas, espacoInterno, espacoExterno, globalFont, corPrimaria, corSecundaria,
+    render: ({ children, puck, appearanceMode, zebrado, cabecalhoFixo, larguraDaPagina, larguraDasPecas, espacoInterno, espacoExterno, globalFont, corPrimaria, corSecundaria,
                logoUrl, slogan, description, whatsapp, email }) => {
       const meta = puck?.metadata || {};
       /* O provedor da fase 3: a imobiliária, o acervo e o link do WhatsApp. Ele
@@ -594,12 +595,12 @@ export const configVitrine = {
         corSecundaria,
         herdarCoresDoPainel: !(corPrimaria || corSecundaria),
       };
-      /* Zebra ligada por omissão: documento antigo não tem a chave, e a
-         ausência conta como "sim" — a mesma regra do inspetor e de
-         `opcoesDaPagina`, na página. */
+      /* Zebra e cabeçalho fixo ligados por omissão: documento antigo não tem
+         a chave, e a ausência conta como "sim" — a mesma regra do inspetor e
+         de `opcoesDaPagina`, na página. */
       const miolo = (
         <div
-          className={`vitrine-puck showcase-body ${classeDeAparencia(pagina)}${zebrado === "nao" ? "" : " is-zebrada"}${larguraDaPagina === "livre" ? " is-larga" : ""}`}
+          className={`vitrine-puck showcase-body ${classeDeAparencia(pagina)}${zebrado === "nao" ? "" : " is-zebrada"}${cabecalhoFixo === "nao" ? "" : " is-cabecalho-fixo"}${larguraDaPagina === "livre" ? " is-larga" : ""}`}
           style={{
             ...estiloDoTema(tenantVivo, pagina),
             /* O espaçamento global viaja em variável: cada peça o lê quando
