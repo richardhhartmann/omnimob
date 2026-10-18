@@ -253,6 +253,22 @@ export function withWidgetRect(widget, mode, rect) {
   };
 }
 
+/* Os estilos da divisória das seções zebradas (`campoEstiloDaZebra`). A lista
+   mora aqui, e não no campo, porque três lugares a leem: a raiz do Puck, a
+   normalização e a página do imóvel. "chapada" é o de sempre. */
+export const ESTILOS_DA_ZEBRA = ["chapada", "suave", "linhas", "ondas"];
+
+/**
+ * As classes da zebra, para as duas páginas que a desenham (vitrine e imóvel).
+ * Estilo desconhecido cai na chapada, que não tem classe própria.
+ */
+export function classesDaZebra(ligada, estilo) {
+  if (!ligada) return "";
+  return ESTILOS_DA_ZEBRA.includes(estilo) && estilo !== "chapada"
+    ? ` is-zebrada zebra--${estilo}`
+    : " is-zebrada";
+}
+
 /**
  * Config JSON salvo no tenant.showcaseConfig
  */
@@ -418,6 +434,8 @@ export function normalizeShowcaseConfig(raw) {
     /* Seções zebradas (ver `campoZebrado`). Só `false` desliga; ausência e
        qualquer outra coisa é ligado — o padrão do produto. */
     zebrado: cfg.zebrado !== false,
+    /* Como a faixa da zebra se separa das vizinhas. Fora da lista, a chapada. */
+    zebraEstilo: ESTILOS_DA_ZEBRA.includes(cfg.zebraEstilo) ? cfg.zebraEstilo : "chapada",
     /* Cabeçalho fixo ao rolar (ver `campoCabecalhoFixo`). Só `false` solta. */
     cabecalhoFixo: cfg.cabecalhoFixo !== false,
     /* Largura livre (a página usa a tela inteira). Só `true` liga. */

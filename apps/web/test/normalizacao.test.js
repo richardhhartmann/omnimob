@@ -144,3 +144,17 @@ test("cabeçalho fixo: ligado por padrão, e só `false` desliga", () => {
   assert.equal(normalizeShowcaseConfig({ cabecalhoFixo: "nao" }).cabecalhoFixo, true);
   assert.equal(normalizeShowcaseConfig({ cabecalhoFixo: false }).cabecalhoFixo, false);
 });
+
+test("divisória da zebra: só os quatro estilos, e lixo vira a chapada", async () => {
+  const { classesDaZebra } = await import("../src/utils/showcaseConfig.js");
+  assert.equal(normalizeShowcaseConfig(null).zebraEstilo, "chapada");
+  assert.equal(normalizeShowcaseConfig({ zebraEstilo: "ondas" }).zebraEstilo, "ondas");
+  assert.equal(normalizeShowcaseConfig({ zebraEstilo: "<script>" }).zebraEstilo, "chapada");
+
+  /* A classe é o que as duas páginas (vitrine e imóvel) desenham. Desligada,
+     nenhuma; chapada, só a de sempre; as outras ganham a própria. */
+  assert.equal(classesDaZebra(false, "ondas"), "");
+  assert.equal(classesDaZebra(true, "chapada"), " is-zebrada");
+  assert.equal(classesDaZebra(true, "linhas"), " is-zebrada zebra--linhas");
+  assert.equal(classesDaZebra(true, "inventado"), " is-zebrada");
+});

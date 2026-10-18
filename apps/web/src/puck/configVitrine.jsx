@@ -10,11 +10,12 @@ import { WIDGET_LIBRARY } from "../components/builder/data/biblioteca.jsx";
 import { FONTES_REAIS } from "../components/builder/data/fontesReais.js";
 import { FONT_OPTIONS } from "../components/builder/data/temas";
 import { classeDeAparencia, estiloDoTema } from "../components/showcase/tema.js";
+import { classesDaZebra } from "../utils/showcaseConfig.js";
 import { ProvedorDaPagina, usarPagina } from "./contextoDaPagina.jsx";
 import { PonteDeEdicao } from "./PonteDeEdicao.jsx";
 import { campoDeCor } from "./CampoDeCor.jsx";
-import { campoCabecalhoFixo, campoFonteDoConteudo, campoLarguraDaPagina, campoLarguraDaPeca, campoOculto, campoTema, campoTravado, campoZebrado } from "./CampoDeAlternar.jsx";
-import { campoBrilho, campoEscurecer, campoEspacoExterno, campoEspacoInterno, campoLargura, campoLarguraGlobal } from "./CampoDeslizante.jsx";
+import { campoCabecalhoFixo, campoEstiloDaZebra, campoFonteDoConteudo, campoLarguraDaPagina, campoLarguraDaPeca, campoOculto, campoTema, campoTravado, campoZebrado } from "./CampoDeAlternar.jsx";
+import { campoArredondamento, campoBrilho, campoEscurecer, campoEspacoExterno, campoEspacoInterno, campoLargura, campoLarguraGlobal } from "./CampoDeslizante.jsx";
 import { ComBanner, useSobBanner } from "./ComBanner.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -333,6 +334,18 @@ function PecaDaVitrine({ desenhar, rotulo, props }) {
   const sangria = livre
     ? { width: `${pct}vw`, marginLeft: `calc(50% - ${pct / 2}vw)`, marginRight: 0 }
     : { width: estreita ? `${largura}%` : "var(--peca-largura, 100%)", marginInline: "auto" };
+  /* Arredondamento: viaja em variável, e quem a lê é o elemento que DESENHA o
+     fundo de cada peça (cartão do widget, título, grade, rodapé… — ver
+     `--peca-raio` em styles.css). O invólucro só repassa e arredonda a si
+     mesmo, que é o que o banner (`border-radius: inherit`) herda.
+
+     Sem valor, a variável é `initial` — e não ausente — de propósito: variável
+     CSS herda, e uma seção arredondada passaria o raio dela a todo widget de
+     dentro que não escolheu o seu. `initial` corta a herança e devolve cada
+     peça ao padrão do CSS. */
+  const raio = typeof props.arredondamento === "number" && props.arredondamento >= 0
+    ? `${props.arredondamento}px`
+    : "initial";
   return (
     <div
       className={`puck-envolucro${livre ? " puck-envolucro--livre" : ""}`}
@@ -341,6 +354,8 @@ function PecaDaVitrine({ desenhar, rotulo, props }) {
         ...sangria,
         padding: interno > 0 ? `${interno}px` : "var(--peca-interno, 0px)",
         marginBlock: externo > 0 ? `${externo}px` : "var(--peca-externo, 0px)",
+        "--peca-raio": raio,
+        borderRadius: "var(--peca-raio, 0px)",
       }}
     >
       {miolo}
@@ -369,11 +384,13 @@ function semAjustesDeBannerVazio(campos, dados) {
   return resto;
 }
 
-/** Acrescenta ocultar/travar a uma peça — e a trava de exclusão, quando pedida. */
-function comAfordancias(config, { rotulo, naoApagar = false } = {}) {
+/** Acrescenta ocultar/travar a uma peça — e a trava de exclusão, quando pedida.
+ *  `raioPadrao` é o arredondamento que a peça já tem pelo CSS (cartões, 20px;
+ *  blocos de página, 0) — é o que o deslizante mostra antes de alguém mexer. */
+function comAfordancias(config, { rotulo, naoApagar = false, raioPadrao = 0 } = {}) {
   return {
     ...config,
-    fields: { ...CAMPOS_DA_PECA, ...(config.fields || {}) },
+    fields: { ...CAMPOS_DA_PECA, arredondamento: campoArredondamento(raioPadrao), ...(config.fields || {}) },
     /* Encadeado, e não substituído: se um dia uma peça trouxer o próprio
        `resolveFields`, ele continua valendo e o banner entra por cima. */
     resolveFields: async (dados, params) => {
@@ -474,7 +491,7 @@ function widgetsDaBiblioteca() {
         }, [widget, backgroundColor, color, usarDadosReais, ctaUrl]);
         return peca ? <ShowcaseWidget widget={peca} /> : null;
       },
-    }, { rotulo: modelo.nome });
+    }, { rotulo: modelo.nome, raioPadrao: 20 });
   }
   return saida;
 }
@@ -506,6 +523,8 @@ export const configVitrine = {
     fields: {
       appearanceMode: campoTema,
       zebrado: campoZebrado,
+      /* Só com a zebra ligada — ver o `resolveFields` abaixo. */
+      zebraEstilo: campoEstiloDaZebra,
       cabecalhoFixo: campoCabecalhoFixo,
       larguraDaPagina: campoLarguraDaPagina,
       /* Largura de TODAS as peças — só aparece com a página livre (ver o
@@ -538,11 +557,15 @@ export const configVitrine = {
       email: { type: "text", label: "E-mail" },
     },
     resolveFields: (dados, { fields }) => {
-      if (dados?.props?.larguraDaPagina === "livre") return fields;
-      const { larguraDasPecas, ...resto } = fields;
-      return resto;
+      const props = dados?.props || {};
+      const campos = { ...fields };
+      if (props.larguraDaPagina !== "livre") delete campos.larguraDasPecas;
+      /* O estilo da divisória é da zebra: com ela desligada não há faixa para
+         dividir, e o controle seria um ajuste que não faz nada. */
+      if (props.zebrado === "nao") delete campos.zebraEstilo;
+      return campos;
     },
-    render: ({ children, puck, appearanceMode, zebrado, cabecalhoFixo, larguraDaPagina, larguraDasPecas, espacoInterno, espacoExterno, globalFont, corPrimaria, corSecundaria,
+    render: ({ children, puck, appearanceMode, zebrado, zebraEstilo, cabecalhoFixo, larguraDaPagina, larguraDasPecas, espacoInterno, espacoExterno, globalFont, corPrimaria, corSecundaria,
                logoUrl, slogan, description, whatsapp, email }) => {
       const meta = puck?.metadata || {};
       /* O provedor da fase 3: a imobiliária, o acervo e o link do WhatsApp. Ele
@@ -600,7 +623,7 @@ export const configVitrine = {
          de `opcoesDaPagina`, na página. */
       const miolo = (
         <div
-          className={`vitrine-puck showcase-body ${classeDeAparencia(pagina)}${zebrado === "nao" ? "" : " is-zebrada"}${cabecalhoFixo === "nao" ? "" : " is-cabecalho-fixo"}${larguraDaPagina === "livre" ? " is-larga" : ""}`}
+          className={`vitrine-puck showcase-body ${classeDeAparencia(pagina)}${classesDaZebra(zebrado !== "nao", zebraEstilo)}${cabecalhoFixo === "nao" ? "" : " is-cabecalho-fixo"}${larguraDaPagina === "livre" ? " is-larga" : ""}`}
           style={{
             ...estiloDoTema(tenantVivo, pagina),
             /* O espaçamento global viaja em variável: cada peça o lê quando
@@ -667,7 +690,7 @@ export const configVitrine = {
       label: "Peça da vitrine",
       fields: { ...CAMPOS_DE_BANNER },
       render: ({ widget }) => (widget ? <ShowcaseWidget widget={widget} /> : null),
-    }, { rotulo: "Peça da vitrine" }),
+    }, { rotulo: "Peça da vitrine", raioPadrao: 20 }),
 
     /* ── Os cinco blocos fixos, todos desenhando de verdade ───────────────── */
 
@@ -716,7 +739,7 @@ export const configVitrine = {
         );
         return <ShowcaseHighlights config={config} blockStyles={blockStyles} />;
       },
-    }, { rotulo: "Destaques" }),
+    }, { rotulo: "Destaques", raioPadrao: 20 }),
 
     BlocoImoveis: comAfordancias({
       label: "Grade de imóveis",

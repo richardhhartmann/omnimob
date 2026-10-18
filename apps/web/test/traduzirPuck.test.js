@@ -166,3 +166,8 @@ test("cabeçalho fixo: vitrine antiga chega fixa, e só `false` a solta", () => 
   assert.equal(traduzirParaPuck({ cabecalhoFixo: true }).data.root.props.cabecalhoFixo, "sim");
   assert.equal(traduzirParaPuck({ cabecalhoFixo: false }).data.root.props.cabecalhoFixo, "nao");
 });
+
+test("divisória da zebra: vitrine antiga chega chapada, e o estilo gravado volta", () => {
+  assert.equal(traduzirParaPuck({}).data.root.props.zebraEstilo, "chapada");
+  assert.equal(traduzirParaPuck({ zebraEstilo: "suave" }).data.root.props.zebraEstilo, "suave");
+});
