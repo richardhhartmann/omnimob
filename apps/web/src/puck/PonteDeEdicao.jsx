@@ -357,6 +357,21 @@ function useSelecionarAoClicar(raiz, pegarPuck) {
    ───────────────────────────────────────────────────────────────────────── */
 const DISTANCIA_MINIMA = 12;
 
+/* Até quantos pixels FORA de uma peça o ponteiro ainda mira a borda dela. O
+   respiro entre peças é de 28px (`--vitrine-espaco`); com folga para a
+   margem própria de cada uma, sem chegar a "puxar" de longe. */
+const FRESTA_MAXIMA = 48;
+
+/** A peça imediatamente acima ou abaixo, pulando o que não é peça (o marcador
+ *  do dnd-kit, a linha do Puck). */
+function pecaVizinha(el, posicao) {
+  let atual = el;
+  do {
+    atual = posicao === "antes" ? atual.previousElementSibling : atual.nextElementSibling;
+  } while (atual && (!atual.hasAttribute("data-puck-component") || atual.hasAttribute("data-dnd-placeholder")));
+  return atual;
+}
+
 function useArrastarAoLado(raiz, pegarPuck) {
   useEffect(() => {
     const alvo = raiz.current;
@@ -582,7 +597,12 @@ function useArrastarAoLado(raiz, pegarPuck) {
          `mira`, acima: refazer o teste de acerto aqui é o laço. */
       if (mira) {
         const r = mira.rect;
-        const dentro = ponto.x >= r.left && ponto.x <= r.right && ponto.y >= r.top && ponto.y <= r.bottom;
+        /* Empilhando, a vaga que a prévia ABRIU também conta como "sobre o
+           alvo". Sem esta folga, o ponteiro que acompanha a cópia para dentro
+           da vaga saía da caixa congelada, a prévia fechava, o alvo voltava
+           para o lugar e a vaga reabria — piscando a cada movimento. */
+        const folga = mira.modo === "empilhar" ? Math.max(48, mira.altura || 0) : 0;
+        const dentro = ponto.x >= r.left && ponto.x <= r.right && ponto.y >= r.top - folga && ponto.y <= r.bottom + folga;
         if (dentro) {
           const ladoAgora = ladoDoPonteiro(r, ponto.x);
           if (mira.modo === "empilhar") {
@@ -631,21 +651,49 @@ function useArrastarAoLado(raiz, pegarPuck) {
 
          A arrastada fica de fora — o Puck a leva junto do ponteiro, e ela seria
          sempre a resposta. */
+      /* ── O MARCADOR DO DND-KIT NÃO É PEÇA ──
+         Durante o arrasto o dnd-kit insere, logo depois da original, uma cópia
+         dela que guarda o lugar — com o mesmo `data-puck-component`. O próprio
+         Puck a filtra por `data-dnd-placeholder`; aqui ela entrava como alvo
+         e como "vizinho", e a conferência de vizinho imediato (abaixo)
+         comparava com a cópia em vez da peça, recusando a vaga errada. */
+      const PECA = "[data-puck-component]:not([data-dnd-placeholder])";
       let peca = null;
       let menorArea = Infinity;
-      for (const el of doc.querySelectorAll("[data-puck-component]")) {
+      const caixas = [];
+      for (const el of doc.querySelectorAll(PECA)) {
         if (el.getAttribute("data-puck-component") === gesto.id) continue;
         const r = el.getBoundingClientRect();
         if (!r.width || !r.height) continue;
+        caixas.push({ el, r });
         if (ponto.x < r.left || ponto.x > r.right || ponto.y < r.top || ponto.y > r.bottom) continue;
         const area = r.width * r.height;
         if (area < menorArea) { menorArea = area; peca = el; }
+      }
+
+      /* ── NA FRESTA ENTRE DUAS PEÇAS ──
+         Entre uma peça e a próxima há o respiro da página (28px), e ali
+         nenhuma caixa contém o ponteiro. A prévia de empilhar se apagava em
+         cada fresta — justamente onde a pessoa solta quando quer pôr a peça
+         ENTRE as duas. A fresta passa a mirar a borda mais próxima, da peça
+         que está na mesma coluna do ponteiro: é a vaga que ela está pedindo. */
+      let naFresta = false;
+      if (!peca) {
+        let menorDistancia = FRESTA_MAXIMA;
+        for (const { el, r } of caixas) {
+          if (ponto.x < r.left || ponto.x > r.right) continue;
+          const distancia = ponto.y < r.top ? r.top - ponto.y : ponto.y - r.bottom;
+          if (distancia >= 0 && distancia < menorDistancia) { menorDistancia = distancia; peca = el; }
+        }
+        naFresta = Boolean(peca);
       }
       const alvoId = peca?.getAttribute("data-puck-component");
       if (!alvoId) { esconder(); return; }
 
       const rect = peca.getBoundingClientRect();
-      const lado = ladoDoPonteiro(rect, ponto.x);
+      /* Na fresta não há lado: o ponteiro está acima ou abaixo da peça, e o
+         que se pede é a vaga entre as duas. */
+      const lado = naFresta ? null : ladoDoPonteiro(rect, ponto.x);
 
       /* Fora da faixa lateral: vai EMPILHAR. A prévia abre a vaga acima ou
          abaixo do alvo e põe a cópia da arrastada nela — a ordem nova, antes
@@ -658,9 +706,14 @@ function useArrastarAoLado(raiz, pegarPuck) {
       if (!lado) {
         limparIntencao();
         const posicao = ponto.y < rect.top + rect.height / 2 ? "antes" : "depois";
-        const arrastadaEl = gesto.origem === "gaveta" ? null : doc.querySelector(`[data-puck-component="${gesto.id}"]`);
-        const vizinho = arrastadaEl && (posicao === "antes" ? peca.previousElementSibling : peca.nextElementSibling);
-        if (vizinho === arrastadaEl) { desistir(); return; }
+        const arrastadaEl = gesto.origem === "gaveta" ? null : doc.querySelector(`[data-puck-component="${gesto.id}"]:not([data-dnd-placeholder])`);
+        /* O vizinho é a PEÇA ao lado, pulando o marcador do dnd-kit e a linha
+           que o Puck desenha. E só existe vizinho para conferir quando a
+           arrastada já está na página: vinda da gaveta, `arrastadaEl` é nulo,
+           e a comparação antiga (`null === null`) dava verdadeiro — a peça
+           nova NUNCA ganhava a prévia de empilhar, só a de colunas. */
+        const vizinho = arrastadaEl && pecaVizinha(peca, posicao);
+        if (arrastadaEl && vizinho === arrastadaEl) { desistir(); return; }
         const nome = gesto.origem === "gaveta" ? gesto.rotulo : nomeDaPeca(gesto.id);
         const altura = gesto.altura || 120;
         mira = { modo: "empilhar", alvoId, posicao, rect, el: peca, arrastadaEl, nome, copia: gesto.copia, altura };
@@ -688,7 +741,7 @@ function useArrastarAoLado(raiz, pegarPuck) {
          `previaDeSecao`. */
       const arrastadaEl = gesto.origem === "gaveta"
         ? null
-        : doc.querySelector(`[data-puck-component="${gesto.id}"]`);
+        : doc.querySelector(`[data-puck-component="${gesto.id}"]:not([data-dnd-placeholder])`);
       const nome = gesto.origem === "gaveta" ? gesto.rotulo : nomeDaPeca(gesto.id);
 
       /* A caixa é guardada AGORA, antes de encolher: é ela que vai responder

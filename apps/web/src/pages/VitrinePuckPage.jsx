@@ -12,6 +12,7 @@ import { loadShowcaseFonts } from "../utils/showcaseFonts";
 import { configVitrine } from "../puck/configVitrine.jsx";
 import { DICIONARIO_PT } from "../puck/idioma.js";
 import { BarraDaPeca } from "../puck/AcoesDaPeca.jsx";
+import { NomesDasSecoes } from "../puck/NomesDasSecoes.jsx";
 import { traduzirParaPuck } from "../puck/traduzirConfig";
 import { marcarAlvosDoTour } from "../puck/alvosDoTour.js";
 import { ICONES, MenuDoEditor } from "../puck/MenuDoEditor.jsx";
@@ -119,7 +120,19 @@ function doCadastro(root) {
    editor clássico usa, lida do mesmo catálogo. O fantasma do arrasto é um clone
    do cartão, então ele acompanha sem um segundo lugar para manter. Ver
    `puck/PreviaDaPeca`. */
-const SOBRESCRITAS = { actionBar: BarraDaPeca, drawerItem: CartaoDaGaveta };
+/* `puck` envolve a interface inteira, e é só para pôr `NomesDasSecoes` DENTRO
+   da árvore do Puck — é lá que o estado dele pode ser assinado. Não desenha
+   nada. */
+const SOBRESCRITAS = {
+  actionBar: BarraDaPeca,
+  drawerItem: CartaoDaGaveta,
+  puck: ({ children }) => (
+    <>
+      {children}
+      <NomesDasSecoes />
+    </>
+  ),
+};
 
 export function VitrinePuckPage() {
   const { tenantSlug } = useParams();

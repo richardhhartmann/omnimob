@@ -788,6 +788,11 @@ export const configVitrine = {
          recurso — a mesma frase que trouxe o banner de volta, aplicada ao
          contrário. Quem quer três colunas põe três peças. */
       fields: {
+        /* O nome que a pessoa dá à seção ("Depoimentos", "Contato"). Não
+           aparece na página publicada — é para ela se achar na Estrutura e no
+           título do inspetor, onde três seções eram três "Seção (colunas)".
+           Quem o desenha lá é `NomesDasSecoes`. */
+        nome: { type: "text", label: "Nome da seção" },
         /* O banner da seção cobre a área INTEIRA, colunas e frestas — e as
            peças de dentro abrem mão do próprio fundo enquanto ele existe (ver
            `PecaDaVitrine`). Sem isso, a foto apareceria só entre os widgets. */

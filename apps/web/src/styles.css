@@ -14407,3 +14407,19 @@ html[data-tema-painel="claro"] .puck-menu__lista {
 .puck-gaveta__item--modelo { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .puck-gaveta__item--modelo .previa-modelo { width: 100%; }
 .previa-modelo__pagina > * { flex-shrink: 0; }
+
+/* ─── O nome próprio da seção (`NomesDasSecoes`) ──────────────────────────────
+   O Puck só sabe o rótulo do TIPO ("Seção (colunas)"). Onde a seção tem nome,
+   o texto dele some (tamanho zero, mas continua no nó — é o React que o
+   gerencia) e o nome é desenhado no `::after`, no tamanho medido antes. Vale
+   na linha da Estrutura e no título do inspetor. */
+.puck-nome-proprio {
+  font-size: 0 !important;
+}
+.puck-nome-proprio::after {
+  content: attr(data-nome);
+  font-size: var(--nome-tamanho, 13px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
