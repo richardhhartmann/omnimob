@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ShowcaseLink, ShowcaseLinkExterno, useVitrine } from "./contexto.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -14,23 +14,33 @@ import { ShowcaseLink, ShowcaseLinkExterno, useVitrine } from "./contexto.jsx";
 
    ── A ÚNICA DIFERENÇA, E POR QUE ELA É INEVITÁVEL ──
 
-   Na vitrine o cabeçalho é `position: fixed` e encolhe ao rolar a página. Dentro
-   do editor não existe "rolar a página": a prancheta é um retângulo estático, e
-   um elemento fixo escaparia dela para a janela do navegador. Então no editor
+   Na vitrine o cabeçalho é `position: fixed` e encolhe ao rolar a página. No
+   editor CLÁSSICO não existe "rolar a página": a prancheta é um retângulo
+   estático, e um elemento fixo escaparia dela para a janela do navegador. Lá
    ele fica no fluxo (regra em `styles.css`) e sempre no estado NÃO rolado — que
    é exatamente o estado em que o visitante encontra a página ao chegar.
+
+   No editor do Puck é diferente: a prévia mora num iframe, que ROLA como a
+   página publicada, e o cabeçalho fixo gruda no topo dela. Sem o estado rolado
+   ele grudava transparente, com os cartões de imóvel passando por trás do
+   menu. Por isso a escuta é na janela do PRÓPRIO documento do cabeçalho —
+   `ownerDocument.defaultView`, que no iframe é a janela da prévia, e não a do
+   editor —, e só fica de fora quando essa janela é a do editor (o clássico).
    ──────────────────────────────────────────────────────────────────────────── */
 
 export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewport, whatsappHref }) {
   const { modo } = useVitrine();
   const noEditor = modo === "editor";
   const [rolado, setRolado] = useState(false);
+  const raiz = useRef(null);
 
   useEffect(() => {
-    if (noEditor) return undefined;
-    const aoRolar = () => setRolado(window.scrollY > 50);
-    window.addEventListener("scroll", aoRolar);
-    return () => window.removeEventListener("scroll", aoRolar);
+    const janela = raiz.current?.ownerDocument?.defaultView || window;
+    if (noEditor && janela === window) return undefined;
+    const aoRolar = () => setRolado(janela.scrollY > 50);
+    aoRolar();
+    janela.addEventListener("scroll", aoRolar);
+    return () => janela.removeEventListener("scroll", aoRolar);
   }, [noEditor]);
 
   const bs = blockStyles?.header || {};
@@ -66,7 +76,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
 
   if (isMobileViewport) {
     return (
-      <div className={classe}>
+      <div ref={raiz} className={classe}>
         <div style={{ padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "70px" }}>
           <ShowcaseLink para={`/vitrine/${tenantSlug}`} style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none" }}>
             {marca(rolado ? "36px" : "44px")}
@@ -90,7 +100,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
   }
 
   return (
-    <div className={classe}>
+    <div ref={raiz} className={classe}>
       <div style={{ padding: "0 48px", maxWidth: "1400px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <ShowcaseLink para={`/vitrine/${tenantSlug}`} style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "16px" }}>
           {marca(rolado ? "46px" : "60px")}

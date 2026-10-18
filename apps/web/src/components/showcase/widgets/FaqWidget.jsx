@@ -31,29 +31,39 @@ export function FaqWidget({ widget }) {
                 html={item.pergunta || `Pergunta ${i + 1}`}
               />
               <span className="widget-faq__plus" aria-hidden>+</span>
+              {/* No editor, o lugar do "+" é do "×" que REMOVE a pergunta.
+
+                  O "+" da vitrine gira 45° quando a pergunta abre e vira um
+                  "×" — e no editor quem o via esperava que ele apagasse algo,
+                  enquanto ele só fechava a pergunta. Aqui o × passa a fazer o
+                  que parece, e o "+" sai de cena pelo CSS (`:has`). Botão à
+                  parte, e não o mesmo `<span>` com outro papel, porque a
+                  vitrine publicada precisa sair com o HTML de sempre — e
+                  `widget-editor-apenas` é a marca que o teste de paridade
+                  descarta. `preventDefault` porque o clique está dentro do
+                  `<summary>`, que senão abriria e fecharia a pergunta enquanto
+                  ela some. */}
+              {ehEditor ? (
+                <button
+                  type="button"
+                  className="widget-editor-apenas widget-faq__remover"
+                  title="Remover esta pergunta"
+                  aria-label="Remover esta pergunta"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    aoEditar(`widget|${widget.id}|dados|itens`, itens.filter((_, j) => j !== i));
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
             </summary>
             <ShowcaseTexto
               as="p"
               campo={`widget|${widget.id}|dados|itens|${i}|resposta`}
               html={item.resposta || "Resposta ainda não preenchida."}
             />
-            {ehEditor ? (
-              <button
-                type="button"
-                className="widget-editor-apenas widget-faq__tirar"
-                title="Remover esta pergunta"
-                /* O × mora dentro do `<summary>`? Não: ali o clique alternaria
-                   o `<details>` junto, e a pergunta abriria e fecharia enquanto
-                   some. Fica no corpo, e o `stopPropagation` protege do resto. */
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  aoEditar(`widget|${widget.id}|dados|itens`, itens.filter((_, j) => j !== i));
-                }}
-              >
-                × Remover pergunta
-              </button>
-            ) : null}
           </details>
         ))}
 

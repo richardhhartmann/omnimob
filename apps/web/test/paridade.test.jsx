@@ -341,3 +341,30 @@ test("cartão de imóvel desenha igual; só a navegação muda", () => {
   };
   assert.equal(miolo(desenhar(no, "editor")), miolo(desenhar(no, "public")), "cartão de imóvel divergiu");
 });
+
+test("FAQ: no editor, o × de cada pergunta a remove — e a vitrine sai igual", () => {
+  /* O "+" da vitrine gira e vira um "×" quando a pergunta abre, e no editor
+     quem o via esperava que ele apagasse a pergunta. Agora existe um × de
+     verdade em cada pergunta, só no editor, e o antigo "× Remover pergunta"
+     do corpo saiu. A vitrine publicada não pode ganhar nem perder nada. */
+  const widget = {
+    id: "faq1",
+    type: "faq",
+    title: "Dúvidas",
+    content: JSON.stringify({ itens: [
+      { pergunta: "Aceita financiamento?", resposta: "Sim." },
+      { pergunta: "Tem vaga?", resposta: "Uma." },
+    ] }),
+  };
+  const no = <ShowcaseWidget widget={widget} />;
+
+  const editor = desenhar(no, "editor");
+  assert.equal((editor.match(/widget-faq__remover/g) || []).length, 2, "um × por pergunta");
+  assert.ok(!editor.includes("Remover pergunta"), "o botão antigo do corpo da pergunta saiu");
+
+  const publico = desenhar(no, "public");
+  assert.ok(!publico.includes("widget-faq__remover"), "a vitrine publicada não tem o ×");
+  assert.equal((publico.match(/widget-faq__plus/g) || []).length, 2, "e mantém o + de cada pergunta");
+
+  exigirParidade(no, "FAQ com perguntas");
+});

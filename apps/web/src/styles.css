@@ -1400,15 +1400,21 @@ html[data-tema-painel="claro"] .seq-marca { background: rgba(15,23,42,0.08); }
 .editor-shell .showcase-theme-light .lista-editavel button.lista-editavel__tirar { color: rgba(15,23,42,0.5); }
 .editor-shell .showcase-theme-light .lista-editavel button.lista-editavel__mais { border-color: rgba(15,23,42,0.24); color: rgba(15,23,42,0.6); }
 
-/* ── Perguntas: remover uma, acrescentar a proxima ── */
-.widget-faq__tirar {
-  margin-top: 8px; padding: 4px 10px; border-radius: 999px;
-  border: 1px solid currentColor; background: transparent;
-  color: currentColor; opacity: 0.4;
-  font-size: 11px; font-weight: 600; cursor: pointer;
-  box-shadow: none; transform: none; width: auto;
+/* ── Perguntas: remover uma, acrescentar a proxima ──
+   O "×" do editor ocupa o lugar e o tamanho do "+" da vitrine (ver
+   `FaqWidget`): o mesmo círculo, no mesmo canto da pergunta. O "+" sai só
+   onde o "×" existe, então a vitrine publicada não muda nada. */
+.widget-faq__item summary:has(.widget-faq__remover) .widget-faq__plus { display: none; }
+.widget-faq__remover {
+  display: inline-grid; place-items: center;
+  width: 24px; height: 24px; flex: 0 0 24px; padding: 0;
+  border: 0; border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 16px; line-height: 1; cursor: pointer;
+  box-shadow: none; transform: none;
 }
-.widget-faq__tirar:hover { opacity: 1; color: #fca5a5; border-color: #fca5a5; background: transparent; }
+.widget-faq__remover:hover { background: rgba(248, 113, 113, 0.16); color: #f87171; }
 .widget-faq__mais {
   width: 100%; margin-top: 6px; padding: 9px 12px; border-radius: 12px;
   border: 1px dashed currentColor; background: transparent;
@@ -13182,9 +13188,12 @@ button.mpx-acao-texto:focus-visible {
    usou. O padding lateral fica aqui também, para o editor mostrar o mesmo
    respiro que o ar tem. */
 .vitrine-puck {
+  /* O respiro lateral da folha. Variável porque a faixa da zebra e o
+     cabeçalho, com a largura travada, se estendem exatamente até ele. */
+  --folha-respiro: 20px;
   max-width: 1400px;
   margin-inline: auto;
-  padding: 0 20px 40px;
+  padding: 0 var(--folha-respiro) 40px;
 }
 
 .showcase-puck {
@@ -14199,7 +14208,10 @@ html[data-tema-painel="claro"] .puck-menu__lista {
    Na vitrine do Puck, "seção" é cada filho da raiz (o div do dropzone é o
    único intermediário, no editor e na página). Na página do imóvel são os
    `.prop-secao`. A cor vem do tema: uma variável, dois valores. */
-.showcase-body { --zebra: rgba(255, 255, 255, 0.035); }
+/* No escuro, metade do que era (0.035): sobre o fundo quase preto da vitrine,
+   3,5% de branco já lia como uma faixa de outra cor, e não como respiro. O
+   claro ficou como estava — ali a mesma conta sai discreta. */
+.showcase-body { --zebra: rgba(255, 255, 255, 0.018); }
 .showcase-body.showcase-theme-light { --zebra: rgba(15, 23, 42, 0.045); }
 
 .vitrine-puck.is-zebrada > div > :nth-child(even),
@@ -14223,6 +14235,26 @@ html[data-tema-painel="claro"] .puck-menu__lista {
    o `.showcase-body` de fora, o da página. No editor a prévia mora num iframe
    sem esse invólucro, e o recorte fica: lá a faixa para na moldura de 20px. */
 .showcase-puck > .vitrine-puck { overflow-x: visible; }
+
+/* ── Com a largura TRAVADA, a página também PARECE travada ──
+   O conteúdo já parava em 1400px, mas a faixa da zebra e o cabeçalho seguiam
+   atravessando o monitor de ponta a ponta — e a página publicada lia como
+   "livre" enquanto o editor, que recorta na moldura, mostrava a folha
+   centrada. Travada, os dois param na borda da FOLHA (o conteúdo mais o
+   respiro lateral), que é exatamente o que a prévia mostra. Livre, seguem de
+   ponta a ponta como sempre.
+
+   A peça marcada como livre (`larguraDaPeca`) continua sangrando mesmo na
+   página travada — é o recurso do banner de ponta a ponta —, então a faixa
+   dela também. No celular a folha já é a tela inteira, e nada muda. */
+.vitrine-puck:not(.is-larga).is-zebrada > div > :nth-child(even):not(:has(.puck-envolucro--livre))::before {
+  left: calc(-1 * var(--folha-respiro, 20px));
+  right: calc(-1 * var(--folha-respiro, 20px));
+}
+.vitrine-puck:not(.is-larga) .puck-envolucro:not(.puck-envolucro--livre) .luxury-header-wrapper {
+  margin-left: calc(-1 * var(--folha-respiro, 20px));
+  width: calc(100% + 2 * var(--folha-respiro, 20px));
+}
 
 
 /* Respiro para a faixa ter corpo: sem ele, uma seção de um widget só vira uma
