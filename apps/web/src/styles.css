@@ -13155,21 +13155,6 @@ button.mpx-acao-texto:focus-visible {
   opacity: 0.75;
 }
 
-.puck-situacao .puck-situacao__voltar {
-  padding: 4px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: transparent;
-  color: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.puck-situacao .puck-situacao__voltar:hover:not(:disabled) {
-  background: rgba(148, 163, 184, 0.16);
-}
-
 /* A vitrine desenhada pelo Puck: sem palco absoluto e sem altura calculada. A
    arvore empilha sozinha, que era o ponto da migracao. */
 /* ── A FOLHA É A RAIZ DA CONFIG, NAS DUAS TELAS ────────────────────────────
