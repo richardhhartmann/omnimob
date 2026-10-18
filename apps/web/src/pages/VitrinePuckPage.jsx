@@ -6,7 +6,7 @@ import { Puck } from "@puckeditor/core";
    Ficou aqui na primeira tentativa porque é o que a documentação antiga manda —
    foi o console da biblioteca que corrigiu. */
 import { api } from "../api";
-import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
+import { ESTILOS_DA_ZEBRA, normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { linkWhatsApp } from "../components/showcase/tema.js";
 import { loadShowcaseFonts } from "../utils/showcaseFonts";
 import { configVitrine } from "../puck/configVitrine.jsx";
@@ -85,6 +85,8 @@ function opcoesDaPagina(root) {
   if (typeof p.globalFont === "string" && p.globalFont) saida.globalFont = p.globalFont;
   /* Seções zebradas: booleano no config, e a página do imóvel lê de lá também. */
   if (p.zebrado === "sim" || p.zebrado === "nao") saida.zebrado = p.zebrado === "sim";
+  /* O estilo da divisória da zebra (ver `campoEstiloDaZebra`). */
+  if (ESTILOS_DA_ZEBRA.includes(p.zebraEstilo)) saida.zebraEstilo = p.zebraEstilo;
   /* Cabeçalho fixo ao rolar: booleano, ligado por padrão (ver `campoCabecalhoFixo`). */
   if (p.cabecalhoFixo === "sim" || p.cabecalhoFixo === "nao") saida.cabecalhoFixo = p.cabecalhoFixo === "sim";
   if (p.larguraDaPagina === "livre" || p.larguraDaPagina === "travada") saida.larguraLivre = p.larguraDaPagina === "livre";

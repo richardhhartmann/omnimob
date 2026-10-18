@@ -13556,6 +13556,16 @@ button.mpx-acao-texto:focus-visible {
   width: 100%;
 }
 
+/* Mais de três opções: ícone em cima, palavra embaixo — lado a lado, quatro
+   rótulos numa coluna de 300px viravam reticências. */
+.puck-alternador .editor-segmented.is-varios button {
+  flex-direction: column;
+  height: auto;
+  gap: 3px;
+  padding: 6px 4px;
+  font-size: 11px;
+}
+
 .puck-alternador .editor-segmented button {
   min-width: 0;
   padding: 0 8px;
@@ -14254,6 +14264,71 @@ html[data-tema-painel="claro"] .puck-menu__lista {
 .vitrine-puck:not(.is-larga) .puck-envolucro:not(.puck-envolucro--livre) .luxury-header-wrapper {
   margin-left: calc(-1 * var(--folha-respiro, 20px));
   width: calc(100% + 2 * var(--folha-respiro, 20px));
+}
+
+/* ── A divisória das seções zebradas (`campoEstiloDaZebra`) ──
+   Os quatro estilos da landing da Omnimob, aplicados à MESMA faixa (o
+   `::before` acima): só muda como ela é pintada, nunca a caixa da seção nem o
+   arrasto do editor. "Chapada" não tem classe — é a regra de sempre. Valem
+   na vitrine e na página do imóvel, que recebem a mesma classe. */
+.showcase-body {
+  --zebra-linha: rgba(255, 255, 255, 0.14);
+  --zebra-onda: rgba(255, 255, 255, 0.03);
+}
+.showcase-body.showcase-theme-light {
+  --zebra-linha: rgba(15, 23, 42, 0.14);
+  --zebra-onda: rgba(15, 23, 42, 0.06);
+}
+
+/* Suave: a faixa se dissolve em cima e embaixo, sem borda marcada. */
+.zebra--suave.vitrine-puck.is-zebrada > div > :nth-child(even)::before,
+.zebra--suave.is-zebrada .prop-secoes > .prop-secao:nth-of-type(even)::before {
+  background: linear-gradient(to bottom, transparent, var(--zebra) 28%, var(--zebra) 72%, transparent);
+}
+
+/* Linhas: sem cor de fundo — um fio fino em cima e embaixo, mais forte no
+   meio e sumindo nas pontas, com o brilho difuso do acento por trás, como as
+   seções da landing. */
+.zebra--linhas.vitrine-puck.is-zebrada > div > :nth-child(even)::before,
+.zebra--linhas.is-zebrada .prop-secoes > .prop-secao:nth-of-type(even)::before {
+  background:
+    linear-gradient(90deg, transparent, var(--zebra-linha) 50%, transparent) top / 100% 1px no-repeat,
+    linear-gradient(90deg, transparent, var(--zebra-linha) 50%, transparent) bottom / 100% 1px no-repeat,
+    radial-gradient(60% 70% at 50% 50%, color-mix(in srgb, var(--accent, #6366f1) 7%, transparent), transparent 75%);
+}
+
+/* Ondas: a faixa ganha bordas em onda — a mesma curva do divisor da landing,
+   recortada por máscara, para a faixa continuar sendo um fundo só. Um pouco
+   mais de tinta que a chapada: sem ela a onda some e sobra a cor lisa. */
+.zebra--ondas.vitrine-puck.is-zebrada > div > :nth-child(even)::before,
+.zebra--ondas.is-zebrada .prop-secoes > .prop-secao:nth-of-type(even)::before {
+  background: var(--zebra-onda);
+  --onda-topo: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 40' preserveAspectRatio='none'><path d='M0 22 C200 2 400 40 600 20 S1000 2 1200 22 V40 H0Z' fill='black'/></svg>");
+  --onda-base: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 40' preserveAspectRatio='none'><path d='M0 18 C200 38 400 0 600 20 S1000 38 1200 18 V0 H0Z' fill='black'/></svg>");
+  -webkit-mask:
+    var(--onda-topo) top / 100% 28px no-repeat,
+    linear-gradient(#000, #000) center / 100% calc(100% - 54px) no-repeat,
+    var(--onda-base) bottom / 100% 28px no-repeat;
+  mask:
+    var(--onda-topo) top / 100% 28px no-repeat,
+    linear-gradient(#000, #000) center / 100% calc(100% - 54px) no-repeat,
+    var(--onda-base) bottom / 100% 28px no-repeat;
+}
+
+/* ── O arredondamento de cada peça (`arredondamento`, por peça) ──
+   O invólucro da peça grava `--peca-raio` (ver `PecaDaVitrine`); quem lê é o
+   elemento que DESENHA o fundo de cada uma. Sem valor escolhido a variável é
+   `initial`, e cada um cai no seu padrão de sempre: 20px nos cartões, canto
+   reto nos blocos de página — nada muda para quem nunca mexeu. */
+.vitrine-puck .widget-card,
+.vitrine-puck .highlight-box {
+  border-radius: var(--peca-raio, 20px);
+}
+.vitrine-puck .showcase-title-section,
+.vitrine-puck .showcase-footer,
+.vitrine-puck .property-grid,
+.vitrine-puck .luxury-header-wrapper {
+  border-radius: var(--peca-raio, 0px);
 }
 
 

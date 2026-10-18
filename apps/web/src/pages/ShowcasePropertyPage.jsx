@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
-import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
+import { classesDaZebra, normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { ShowcaseHeader } from "../components/showcase/ShowcaseHeader.jsx";
 import { ShowcaseFooter } from "../components/showcase/ShowcaseFooter.jsx";
 import { CreditoOmnimob } from "../components/showcase/CreditoOmnimob.jsx";
@@ -358,7 +358,7 @@ export function ShowcasePropertyPage({ slugFixo, isolada = false }) {
      como ser corrigido por folha de estilo. */
 
   return (
-    <div className={`showcase-body ${classeDeAparencia(showcaseConfig)}${showcaseConfig.zebrado ? " is-zebrada" : ""}`} style={themeStyle}>
+    <div className={`showcase-body ${classeDeAparencia(showcaseConfig)}${classesDaZebra(showcaseConfig.zebrado, showcaseConfig.zebraEstilo)}`} style={themeStyle}>
       <style>{`
         .showcase-body span[style*="color"], .showcase-body font[color] { -webkit-text-fill-color: currentcolor !important; -webkit-background-clip: initial !important; background: none !important; }
         .prop-thumb { transition: opacity 0.2s, border-color 0.2s; }

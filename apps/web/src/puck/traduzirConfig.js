@@ -1,4 +1,4 @@
-import { normalizeShowcaseConfig } from "../utils/showcaseConfig";
+import { ESTILOS_DA_ZEBRA, normalizeShowcaseConfig } from "../utils/showcaseConfig";
 import { toPieces } from "../components/showcase/engine/pieces";
 import { WIDGET_LIBRARY } from "../components/builder/data/biblioteca.jsx";
 
@@ -228,6 +228,7 @@ export function traduzirParaPuck(showcaseConfig) {
       appearanceMode: config.appearanceMode,
       // Ausente no config = ligado. É o padrão do produto, e vale para toda página antiga.
       zebrado: config.zebrado === false ? "nao" : "sim",
+      zebraEstilo: ESTILOS_DA_ZEBRA.includes(config.zebraEstilo) ? config.zebraEstilo : "chapada",
       // Mesma regra: só `false` solta o cabeçalho; o motor antigo sempre o fixava.
       cabecalhoFixo: config.cabecalhoFixo === false ? "nao" : "sim",
       larguraDaPagina: config.larguraLivre === true ? "livre" : "travada",

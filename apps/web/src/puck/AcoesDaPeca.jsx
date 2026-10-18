@@ -1,7 +1,8 @@
 import { ActionBar, useGetPuck } from "@puckeditor/core";
 import { ColumnsPlusRight, Rows, Copy, ClipboardText } from "@phosphor-icons/react";
 import { agruparComAnterior, comProps, desagrupar, estaAgrupada, temAnterior } from "./agrupar.js";
-import { colarEstilo, copiarEstilo, temEstiloCopiado } from "./estiloCopiado.js";
+import { useSyncExternalStore } from "react";
+import { assinarEstiloCopiado, colarEstilo, copiarEstilo, temEstiloCopiado } from "./estiloCopiado.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    LADO A LADO, NA BARRA DA PEÇA.
@@ -28,7 +29,13 @@ import { colarEstilo, copiarEstilo, temEstiloCopiado } from "./estiloCopiado.js"
 
 export function BarraDaPeca({ label, children, parentAction }) {
   const pegarPuck = useGetPuck();
-  const { selectedItem, appState, dispatch } = pegarPuck();
+  const { selectedItem, appState, dispatch, config } = pegarPuck();
+  /* Assinatura da área de transferência: o "colar" aparece no MESMO clique do
+     "copiar", e não só quando a barra se redesenha por outro motivo. */
+  const haEstiloCopiado = useSyncExternalStore(assinarEstiloCopiado, temEstiloCopiado);
+  /* Os campos que o componente aceita, lidos da config — é por eles que o
+     copiar e o colar peneiram (ver o cabeçalho de `estiloCopiado.js`). */
+  const camposDe = (item) => Object.keys(config?.components?.[item?.type]?.fields || {});
 
   const selecionado = selectedItem;
   const id = selectedItem?.props?.id;
@@ -95,15 +102,15 @@ export function BarraDaPeca({ label, children, parentAction }) {
       ) : null}
       <ActionBar.Action
         label="Copiar a aparência desta peça"
-        onClick={() => copiarEstilo(selecionado?.props)}
+        onClick={() => copiarEstilo(selecionado?.props, camposDe(selecionado))}
       >
         <Copy size={16} />
       </ActionBar.Action>
-      {temEstiloCopiado() ? (
+      {haEstiloCopiado ? (
         <ActionBar.Action
           label="Colar a aparência copiada"
           onClick={() => {
-            const novas = colarEstilo(selecionado?.props);
+            const novas = colarEstilo(camposDe(selecionado));
             if (novas) trocarProps(novas);
           }}
         >

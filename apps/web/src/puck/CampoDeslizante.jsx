@@ -86,6 +86,20 @@ export const campoEspacoExterno = campo("Espaçamento externo", {
   min: 0, max: 120, paraTela: (v) => (typeof v === "number" ? v : 0), paraDoc: (v) => v, formatar: (v) => `${v}px`,
 });
 
+/* O arredondamento das bordas da peça, em pixels.
+
+   Uma FÁBRICA, e não um campo só, porque o padrão muda de peça para peça: os
+   cartões (widgets, destaques) nascem com 20px, os blocos de página (cabeçalho,
+   título, grade, rodapé) com cantos retos. Sem valor gravado o deslizante
+   mostra o padrão DAQUELA peça — mostrar 0 num cartão que está visivelmente
+   arredondado seria o controle mentindo sobre a tela. E sem valor gravado nada
+   muda na página: quem nunca mexeu continua vendo o que via. */
+export function campoArredondamento(padrao) {
+  return campo("Arredondamento das bordas", {
+    min: 0, max: 60, paraTela: (v) => (typeof v === "number" ? v : padrao), paraDoc: (v) => v, formatar: (v) => `${v}px`,
+  });
+}
+
 /** Largura de TODAS as peças, na página em largura livre. A peça com valor próprio vence. */
 export const campoLarguraGlobal = campo("Largura das peças", {
   min: 40, max: 100, paraTela: (v) => (typeof v === "number" ? v : 100), paraDoc: (v) => v, formatar: (v) => `${v}%`,

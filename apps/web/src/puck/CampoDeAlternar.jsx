@@ -13,6 +13,10 @@ import {
   ArrowsOutLineHorizontal,
   PushPin,
   ArrowLineDown,
+  Rectangle,
+  Gradient,
+  LineSegment,
+  WaveSine,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -54,7 +58,9 @@ function Alternador({ rotulo, valor, onChange, readOnly, opcoes, apoio, padrao }
           alternadores empilhados sem nome viravam uma adivinhação: "Ligadas"
           de quê? */}
       {rotulo ? <span className="puck-alternador__rotulo">{rotulo}</span> : null}
-      <div className="editor-segmented is-compact" role="group" aria-label={rotulo}>
+      {/* Mais de três opções não cabem lado a lado na coluna do inspetor com
+          ícone e palavra na mesma linha: `is-varios` empilha os dois. */}
+      <div className={`editor-segmented is-compact${opcoes.length > 3 ? " is-varios" : ""}`} role="group" aria-label={rotulo}>
         {opcoes.map((o) => {
           const ativo = atual === o.valor;
           return (
@@ -158,6 +164,28 @@ export const campoZebrado = campo(
     ? "Todas as seções no mesmo fundo."
     : "Uma seção sim, outra não, com fundo levemente diferente — vale também na página do imóvel."),
   "sim",
+);
+
+/* COMO a faixa da zebra se separa das vizinhas — só aparece com as seções
+   zebradas ligadas (ver o `resolveFields` da raiz). Os quatro vêm da landing
+   da Omnimob, que usa cada um entre as próprias seções: a faixa chapada (o
+   que a vitrine sempre teve), a que se dissolve nas bordas, o fio fino com
+   brilho e a borda em ondas. A regra de cada um mora em `.zebra--<estilo>`,
+   em styles.css; "chapada" não tem classe, é a regra de sempre. */
+export const campoEstiloDaZebra = campo(
+  "Divisória das seções",
+  [
+    { valor: "chapada", rotulo: "Chapada", Icone: Rectangle },
+    { valor: "suave", rotulo: "Suave", Icone: Gradient },
+    { valor: "linhas", rotulo: "Linhas", Icone: LineSegment },
+    { valor: "ondas", rotulo: "Ondas", Icone: WaveSine },
+  ],
+  (v) => ({
+    suave: "A faixa se dissolve em cima e embaixo, sem borda marcada.",
+    linhas: "Sem faixa de cor: um fio fino com brilho no meio marca o início e o fim da seção.",
+    ondas: "A faixa ganha bordas em onda, como o divisor da página da Omnimob.",
+  }[v] || "Faixa de cor sólida, de borda reta — o padrão."),
+  "chapada",
 );
 
 /* O cabeçalho que acompanha a rolagem: grudado no topo enquanto a pessoa desce
