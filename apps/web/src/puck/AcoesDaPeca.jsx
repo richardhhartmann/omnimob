@@ -82,7 +82,9 @@ export function BarraDaPeca({ label, children, parentAction }) {
   };
 
   return (
-    <ActionBar label={label}>
+    /* A seção com nome mostra o nome também na etiqueta sobre ela — é o
+       terceiro lugar onde a pessoa lê "que peça é esta". */
+    <ActionBar label={(selecionado?.type === "Secao" && selecionado.props?.nome?.trim()) || label}>
       {parentAction}
       {podeAgrupar ? (
         <ActionBar.Action
