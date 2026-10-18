@@ -58,8 +58,8 @@ const ShowcaseEditorPage = telaTardia(() =>
    inteira, aberta de propósito, e o Puck é uma dependência grande.
 
    O `ShowcaseEditorPage` acima virou o CLÁSSICO — segue carregado sob demanda
-   e segue com rota própria, porque é para onde "Voltar ao editor antigo" leva
-   enquanto houver imobiliária no formato de coordenadas. */
+   e segue com rota própria enquanto houver imobiliária no formato de
+   coordenadas. Nenhum botão leva até ele: a rota é a volta do SUPORTE. */
 const VitrinePuckPage = telaTardia(() =>
   import("./pages/VitrinePuckPage").then((m) => ({ default: m.VitrinePuckPage })));
 const SuperAdminPage = telaTardia(() =>
@@ -774,11 +774,13 @@ export default function App() {
             o documento gravado. A tradução acontece na abertura e não grava
             nada sozinha — ver `VitrinePuckPage`.
 
-            O editor antigo não sumiu: ele ficou em `/editar/classico`, e é para
-            lá que "Voltar ao editor antigo" leva depois de apagar o documento
-            do Puck. Enquanto houver imobiliária no formato de coordenadas essa
-            volta precisa existir de verdade — uma migração sem porta de saída,
-            no meio de um beta, é uma aposta e não um lançamento. */}
+            O editor antigo não sumiu: ele ficou em `/editar/classico`.
+            Enquanto houver imobiliária no formato de coordenadas essa volta
+            precisa existir de verdade — uma migração sem porta de saída é uma
+            aposta. Mas ela é do SUPORTE: o botão "Voltar ao editor antigo" saiu
+            do editor (OMNI-15), porque no uso de todo dia ele era um clique que
+            apagava o documento. Voltar é apagar a chave `puck` do
+            `showcaseConfig` e abrir esta rota. */}
         <Route path="/vitrine/:tenantSlug/editar" element={
           cargo?.editarPagina
             ? <VitrinePuckPage />

@@ -855,6 +855,13 @@ vence o da página. Os modelos (`BUILDER_TEMPLATES`) trazem esses valores como
 identidade própria (o "Luxo" é largo e arejado; o "Compacta", justo e sem
 zebra).
 
+**Publicação e editor antigo:** o editor do Puck não tem botão "Publicar" —
+um segundo depois de cada ação o autosave grava o documento que a vitrine
+desenha (não há rascunho separado), e a vitrine ainda no formato antigo migra
+na primeira alteração. O editor clássico segue em `/editar/classico`, mas
+nenhum botão leva até ele: a volta (apagar a chave `puck` do `showcaseConfig`)
+é operação do suporte, não do uso de todo dia.
+
 **A gaveta do editor** tem categorias (`categories` em `configVitrine`) e a
 `other` é invisível: a `Secao` (colunas) e a peça genérica `Widget` seguem na
 config — documentos antigos e o agrupar-ao-lado precisam delas — mas não são

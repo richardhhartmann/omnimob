@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Puck } from "@puckeditor/core";
 /* Sem `import "@puckeditor/core/puck.css"`: da versão 0.22 em diante o Puck
    injeta o próprio estilo, e o import faz ele avisar no console que o pulou.
@@ -31,7 +31,8 @@ import { EditorEsqueleto } from "../components/builder/EditorEsqueleto.jsx";
    É esta a tela de "editar página", para todo mundo — não há mais dois editores
    a escolher. Quem nunca migrou entra e vê a própria vitrine já TRADUZIDA de
    coordenadas para árvore, pronta para editar; quem já migrou vê o documento
-   gravado. O clássico continua existindo em `/editar/classico`, como volta.
+   gravado. O clássico continua existindo em `/editar/classico` para o suporte, sem
+   botão que leve até ele daqui.
 
    ── A ABERTURA NÃO GRAVA ──
 
@@ -53,8 +54,9 @@ import { EditorEsqueleto } from "../components/builder/EditorEsqueleto.jsx";
    ── A VOLTA É REAL ──
 
    O formato antigo (`layout`, `mobileLayout`, `widgets`) fica gravado, intocado,
-   ao lado do novo. "Voltar ao editor antigo" apaga UMA chave e leva para o
-   clássico — e a página de antes volta inteira, porque nunca chegou a sair.
+   ao lado do novo. Voltar ao editor antigo é apagar UMA chave (`puck`) — e a
+   página de antes volta inteira, porque nunca chegou a sair. O botão que fazia
+   isso saiu desta tela; a operação continua possível para o suporte.
 
    Não há tradução de volta, e não vai haver: árvore não tem coordenada, e
    inventar posições para o caminho inverso produziria uma terceira página, que
@@ -136,10 +138,8 @@ const SOBRESCRITAS = {
 
 export function VitrinePuckPage() {
   const { tenantSlug } = useParams();
-  const navegar = useNavigate();
   const [carga, setCarga] = useState({ estado: "carregando" });
   const [avisosAbertos, setAvisosAbertos] = useState(true);
-  const [salvando, setSalvando] = useState(false);
   const [recado, setRecado] = useState("");
   /* Qual gaveta está aberta: "modelos", "historico" ou nenhuma. Uma variável
      em vez de dois booleanos porque as duas nunca convivem — e dois
@@ -204,7 +204,7 @@ export function VitrinePuckPage() {
   const aoMudar = useCallback((dados) => {
     if (!armado.current) return;
     if (temporizador.current) clearTimeout(temporizador.current);
-    temporizador.current = setTimeout(() => publicarRef.current?.(dados, { silencioso: true }), 1000);
+    temporizador.current = setTimeout(() => publicarRef.current?.(dados), 1000);
   }, []);
 
   useEffect(() => () => { if (temporizador.current) clearTimeout(temporizador.current); }, []);
@@ -358,15 +358,14 @@ export function VitrinePuckPage() {
   /* ── PUBLICAR ─────────────────────────────────────────────────────────────
      Grava o documento do Puck DENTRO do `showcaseConfig`, ao lado do formato
      antigo — que não é tocado. É o que torna a migração reversível: enquanto
-     `layout`, `mobileLayout` e `widgets` seguirem gravados, "Voltar ao editor
-     antigo" é apagar uma chave, e a página de antes volta inteira.
+     `layout`, `mobileLayout` e `widgets` seguirem gravados, voltar ao editor
+     antigo é apagar uma chave, e a página de antes volta inteira.
 
      Espalha o config CRU, e não o normalizado: normalizar aqui reescreveria o
-     documento de quem só quis apertar Publish — e uma migração que muda o que
+     documento de quem só fez uma alteração — e uma migração que muda o que
      não foi pedido é como se perde a confiança num beta. */
-  async function publicar(dados, { silencioso = false } = {}) {
-    if (!silencioso) setSalvando(true);
-    setRecado(silencioso ? "Salvando…" : "");
+  async function publicar(dados) {
+    setRecado("Salvando…");
     try {
       await api.updateTenantProfile(tenantSlug, {
         /* O cadastro vai JUNTO, na mesma chamada. Manchete, e-mail e WhatsApp
@@ -395,34 +394,9 @@ export function VitrinePuckPage() {
       /* Um instantâneo por publicação. O desfazer do Puck só alcança a sessão
          aberta; isto é o que permite voltar a algo de ontem. */
       setVersoes(guardarVersao(carga.tenant?.id, dados));
-      setRecado(silencioso ? "Salvo." : "Publicado. A vitrine pública já desenha por este documento.");
+      setRecado("Salvo.");
     } catch (erro) {
       setRecado(erro?.message || "Não consegui salvar.");
-    } finally {
-      if (!silencioso) setSalvando(false);
-    }
-  }
-
-  async function voltarAoAntigo() {
-    setSalvando(true);
-    setRecado("");
-    try {
-      /* A chave é REMOVIDA, não zerada. Mandar `puck: null` não apagou o
-         documento numa verificação contra o banco de dev — e o botão que
-         promete devolver a página antiga falhando em silêncio é pior que não
-         existir. Ausência é o que a normalização já entende como "não migrada",
-         então é ela que se manda. */
-      const { puck, ...semPuck } = carga.configCru;
-      await api.updateTenantProfile(tenantSlug, { showcaseConfig: semPuck });
-      setCarga((antes) => ({ ...antes, noAr: false, configCru: semPuck }));
-      setRecado("A vitrine voltou ao editor antigo. Nada do que estava lá foi perdido.");
-      /* E leva junto: apagar o documento sem mostrar onde editar agora deixaria
-         a pessoa numa tela que acabou de deixar de valer. */
-      navegar("/vitrine/" + tenantSlug + "/editar/classico", { replace: true });
-    } catch (erro) {
-      setRecado(erro?.message || "Não consegui voltar.");
-    } finally {
-      setSalvando(false);
     }
   }
 
@@ -542,7 +516,13 @@ export function VitrinePuckPage() {
         overrides={SOBRESCRITAS}
         headerTitle="Editar Página"
         metadata={metadata}
-        renderHeaderActions={({ children }) => (
+        /* SEM o botão "Publicar". O `children` que o Puck entrega aqui é só
+           ele — e a página já se publica sozinha: um segundo depois de cada
+           ação, o autosave grava o documento que a vitrine desenha (não existe
+           rascunho separado, ver AUTOSAVE). O botão sobrava como uma promessa
+           de "agora vai para o ar" que não acrescentava nada, e fazia a pessoa
+           achar que o que editou ainda não estava publicado. */
+        renderHeaderActions={() => (
           <>
             {/* Não desenha nada: é o vigia que apaga seção que ficou sem peça
                 dentro. Mora aqui porque precisa do `dispatch`, que só existe
@@ -552,12 +532,10 @@ export function VitrinePuckPage() {
                 Também não desenha nada no cabeçalho: ela é fixa na tela. */}
             <BarraDaSelecao />
             <MenuDoEditor itens={ACOES} />
-            {children}
           </>
         )}
         onAction={armar}
         onChange={aoMudar}
-        onPublish={publicar}
       />
 
       {gaveta ? (
@@ -594,22 +572,20 @@ export function VitrinePuckPage() {
       ) : null}
 
       {/* A barra de situação. Diz o que está NO AR, que é a única pergunta que
-          importa quando existem dois renderizadores para a mesma página — e
-          oferece a volta no mesmo lugar, porque quem precisa dela já está
-          insatisfeito e não deve ter de procurar. */}
+          importa quando existem dois renderizadores para a mesma página.
+
+          Ela oferecia "Voltar ao editor antigo", e deixou de oferecer: era a
+          porta de saída do beta, e no editor de todo dia virou um botão que
+          apaga o documento com um clique. A volta continua existindo para o
+          suporte — `/editar/classico` segue no ar —, só não mora mais aqui. */}
       <div className={`puck-situacao${carga.noAr ? " puck-situacao--no-ar" : ""}`}>
         <span className="puck-situacao__ponto" aria-hidden />
         <span>
           {carga.noAr
             ? "A vitrine pública está desenhando por este documento."
-            : "Rascunho. A vitrine pública ainda desenha pelo editor antigo."}
+            : "Rascunho. A vitrine pública passa a desenhar por este documento na sua primeira alteração."}
         </span>
         {recado ? <em className="puck-situacao__recado">{recado}</em> : null}
-        {carga.noAr ? (
-          <button type="button" className="puck-situacao__voltar" onClick={voltarAoAntigo} disabled={salvando}>
-            {salvando ? "Aguarde…" : "Voltar ao editor antigo"}
-          </button>
-        ) : null}
       </div>
 
     </div>
