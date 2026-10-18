@@ -48,9 +48,57 @@ export function useSobBanner() {
   return useContext(ContextoDeBanner);
 }
 
+/* ── O ENQUADRAMENTO DA IMAGEM ───────────────────────────────────────────────
+
+   Zoom, giro e posição da foto DENTRO do banner — o que se faz arrastando a
+   imagem no editor de enquadramento do inspetor (`CampoImagemDoBanner`).
+
+   Tudo vira variável CSS no próprio invólucro, lida pelo `::before` que já
+   desenha a imagem (`.puck-banner::before`, styles.css): posição pelo
+   `background-position`, zoom e giro por `transform`. Nenhum elemento novo
+   — a marcação da peça continua a mesma com e sem enquadramento, e o corte do
+   que sobra é o `overflow: hidden` que o banner já tinha.
+
+   Ausente ou ilegível, cada eixo cai no neutro: centralizada, 100%, sem giro
+   — exatamente o banner de antes. */
+export const ENQUADRAMENTO_NEUTRO = { zoom: 100, giro: 0, x: 50, y: 50 };
+
+const entre = (v, min, max, padrao) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
+};
+
+/** O enquadramento dentro dos limites que o editor oferece. */
+export function normalizarEnquadramento(e) {
+  const fonte = e && typeof e === "object" ? e : {};
+  return {
+    zoom: entre(fonte.zoom, 100, 300, ENQUADRAMENTO_NEUTRO.zoom),
+    giro: entre(fonte.giro, -180, 180, ENQUADRAMENTO_NEUTRO.giro),
+    x: entre(fonte.x, 0, 100, ENQUADRAMENTO_NEUTRO.x),
+    y: entre(fonte.y, 0, 100, ENQUADRAMENTO_NEUTRO.y),
+  };
+}
+
+/** As variáveis CSS do enquadramento — vazias quando ele é o neutro. */
+export function variaveisDoEnquadramento(e) {
+  const n = normalizarEnquadramento(e);
+  const neutro = n.zoom === 100 && n.giro === 0 && n.x === 50 && n.y === 50;
+  if (neutro) return {};
+  return {
+    "--banner-x": `${n.x}%`,
+    "--banner-y": `${n.y}%`,
+    "--banner-escala": String(n.zoom / 100),
+    "--banner-giro": `${n.giro}deg`,
+  };
+}
+
 export function ComBanner({ estilo, children }) {
   const temImagem = blockHasBackgroundImage(estilo);
-  const superficie = useMemo(() => (temImagem ? sectionSurfaceStyle(estilo) : null), [temImagem, estilo]);
+  const enquadramento = estilo?.enquadramento;
+  const superficie = useMemo(
+    () => (temImagem ? { ...sectionSurfaceStyle(estilo), ...variaveisDoEnquadramento(enquadramento) } : null),
+    [temImagem, estilo, enquadramento],
+  );
 
   if (!temImagem) return children;
 

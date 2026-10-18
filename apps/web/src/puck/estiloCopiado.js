@@ -6,8 +6,9 @@
 
    ── O QUE É "ESTILO" AQUI ──
 
-   Tudo que a pessoa ajusta na APARÊNCIA da peça: as duas cores, os três campos
-   do banner, a largura, os dois espaçamentos e o arredondamento. Conteúdo NÃO
+   Tudo que a pessoa ajusta na APARÊNCIA da peça: as duas cores, o banner (a
+   imagem, o enquadramento dela, o escurecimento e o brilho), a largura, os
+   dois espaçamentos e o arredondamento. Conteúdo NÃO
    viaja: colar o estilo de um Rodapé num Cabeçalho não pode trazer o texto do
    rodapé junto, e a fronteira entre as duas coisas é o que impede a ação de
    virar "duplicar por engano". `oculto` e `travado` também ficam: são estado
@@ -46,6 +47,7 @@ export const CAMPOS_DE_ESTILO = [
   "backgroundImage",
   "backgroundOverlay",
   "backgroundBrightness",
+  "enquadramento",
   "larguraDaPeca",
   "largura",
   "espacoInterno",
