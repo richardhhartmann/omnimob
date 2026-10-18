@@ -13,6 +13,7 @@ import { configVitrine } from "../puck/configVitrine.jsx";
 import { DICIONARIO_PT } from "../puck/idioma.js";
 import { BarraDaPeca } from "../puck/AcoesDaPeca.jsx";
 import { NomesDasSecoes } from "../puck/NomesDasSecoes.jsx";
+import { FotosDoAcervo } from "../puck/CampoImagemDoBanner.jsx";
 import { traduzirParaPuck } from "../puck/traduzirConfig";
 import { marcarAlvosDoTour } from "../puck/alvosDoTour.js";
 import { ICONES, MenuDoEditor } from "../puck/MenuDoEditor.jsx";
@@ -490,6 +491,9 @@ export function VitrinePuckPage() {
 
   return (
     <div ref={caixa} className="puck-caixa" style={{ height: altura }}>
+      {/* As fotos dos imóveis chegam ao campo de imagem do banner por aqui —
+          os mesmos imóveis que a prancheta já desenha. Ver `CampoImagemDoBanner`. */}
+      <FotosDoAcervo imoveis={carga.properties}>
       <Puck
         config={configVitrine}
         data={carga.data}
@@ -537,6 +541,7 @@ export function VitrinePuckPage() {
         onAction={armar}
         onChange={aoMudar}
       />
+      </FotosDoAcervo>
 
       {gaveta ? (
         <div className="puck-gaveta" role="dialog" aria-label={gaveta === "modelos" ? "Modelos de página" : "Histórico de versões"}>

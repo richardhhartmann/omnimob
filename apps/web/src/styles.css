@@ -14091,6 +14091,92 @@ html[data-tema-painel="claro"] .puck-menu__lista {
   overflow: hidden;
   border-radius: inherit;
 }
+
+/* O enquadramento da foto (`ComBanner`): posição, zoom e giro aplicados no
+   MESMO pseudo-elemento que desenha a imagem. O que sobra fica do lado de
+   fora do `overflow: hidden` acima. Sem as variáveis, centralizada, 100% e
+   reta — o banner de sempre. */
+.puck-banner::before {
+  background-position: var(--banner-x, 50%) var(--banner-y, 50%);
+  transform: rotate(var(--banner-giro, 0deg)) scale(var(--banner-escala, 1));
+  transform-origin: center;
+}
+
+/* ── O campo da imagem do banner (`CampoImagemDoBanner`) ── */
+.banner-origem__url { width: 100%; margin-top: 8px; }
+.banner-fotos__grupo { margin-top: 10px; }
+.banner-fotos__titulo {
+  display: block; margin-bottom: 6px;
+  font-size: 11px; font-weight: 600; color: var(--ed-muted, #94a3b8);
+}
+.banner-fotos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.banner-fotos__grupo .banner-fotos { margin-top: 0; max-height: none; }
+/* `.banner-fotos` na frente: a regra geral `.editor-shell button` é mais
+   específica que uma classe só, e trocava o bloco por flex e o tamanho da letra. */
+.banner-fotos .banner-fotos__item {
+  display: block;
+  position: relative;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--ed-fill-sutil, rgba(255, 255, 255, 0.04));
+  cursor: pointer;
+}
+.banner-fotos .banner-fotos__item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.banner-fotos .banner-fotos__item:hover { border-color: var(--ed-line, rgba(255, 255, 255, 0.24)); }
+.banner-fotos .banner-fotos__item.is-ativo { border-color: var(--ed-accent, #818cf8); }
+.banner-origem .banner-origem__tirar,
+.banner-quadro .banner-origem__tirar {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 10px; padding: 0;
+  border: 0; background: transparent;
+  font-size: 12px; color: var(--ed-muted, #94a3b8);
+  cursor: pointer;
+}
+.banner-origem .banner-origem__tirar:hover,
+.banner-quadro .banner-origem__tirar:hover { color: var(--ed-text, #e6e8ee); }
+
+/* A prévia do enquadramento: a foto recortada por uma moldura 16:9, com a grade
+   de terços por cima. Arrasta-se a FOTO; a moldura fica. */
+.banner-quadro__previa {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin: 6px 0 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b0d12;
+  cursor: grab;
+  touch-action: none;
+}
+.banner-quadro__previa:active { cursor: grabbing; }
+.banner-quadro__foto {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-repeat: no-repeat;
+  transform-origin: center;
+  pointer-events: none;
+}
+.banner-quadro__grade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent calc(33.33% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.33% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)),
+    linear-gradient(90deg, transparent calc(66.66% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.66% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)),
+    linear-gradient(0deg, transparent calc(33.33% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.33% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)),
+    linear-gradient(0deg, transparent calc(66.66% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.66% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
 /* === O INVÓLUCRO DO BANNER :: FIM === */
 /* === O TERCEIRO PONTILHADO :: INICIO =======================================
 

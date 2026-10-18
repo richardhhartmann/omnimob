@@ -17,6 +17,7 @@ import { campoDeCor } from "./CampoDeCor.jsx";
 import { campoCabecalhoFixo, campoEstiloDaZebra, campoFonteDoConteudo, campoLarguraDaPagina, campoLarguraDaPeca, campoOculto, campoTema, campoTravado, campoZebrado } from "./CampoDeAlternar.jsx";
 import { campoArredondamento, campoBrilho, campoEscurecer, campoEspacoExterno, campoEspacoInterno, campoLargura, campoLarguraGlobal } from "./CampoDeslizante.jsx";
 import { ComBanner, useSobBanner } from "./ComBanner.jsx";
+import { campoEnquadramento, campoImagemDoBanner } from "./CampoImagemDoBanner.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
    PROVA DE CONCEITO — a vitrine no Puck.
@@ -183,7 +184,11 @@ const CAMPOS_DE_COR = {
    `mergeBlockWrapperStyle` é função de bloco, e o argumento era sobre a função
    errada: quem desenha o banner é o invólucro do `ComBanner`. */
 const CAMPOS_DE_BANNER = {
-  backgroundImage: { type: "text", label: "Banner (URL da imagem)" },
+  /* Origem em três abas (endereço, banco de fotos, fotos dos imóveis) e, com
+     a foto escolhida, o editor de enquadramento — ver `CampoImagemDoBanner`.
+     As três abas gravam a mesma URL de sempre em `backgroundImage`. */
+  backgroundImage: campoImagemDoBanner,
+  enquadramento: campoEnquadramento,
   backgroundOverlay: campoEscurecer,
   backgroundBrightness: campoBrilho,
 };
@@ -251,6 +256,8 @@ function bannerDe(props) {
     backgroundImage: props.backgroundImage,
     backgroundOverlay: props.backgroundOverlay,
     backgroundBrightness: props.backgroundBrightness,
+    /* Zoom, giro e posição da foto — ver `ComBanner`. */
+    enquadramento: props.enquadramento,
     color: props.color,
   };
 }
@@ -380,7 +387,7 @@ function PecaDaVitrine({ desenhar, rotulo, props }) {
    gesto em que a URL é colada. */
 function semAjustesDeBannerVazio(campos, dados) {
   if (dados?.props?.backgroundImage) return campos;
-  const { backgroundOverlay, backgroundBrightness, ...resto } = campos;
+  const { backgroundOverlay, backgroundBrightness, enquadramento, ...resto } = campos;
   return resto;
 }
 
