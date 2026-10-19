@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { agruparCom, agruparComAnterior, arrumarColunas, comPropsNasPecasDaSecao, desagrupar, levarParaOFim, pecasDaSecao, estaAgrupada, motivoParaNaoAgrupar, moverJunto, ordemDasPecas, podarSecoesVazias, removerPeca, temAnterior } from "../src/puck/agrupar.js";
+import { agruparCom, agruparComAnterior, arrumarColunas, cabeAoLado, comPropsNasPecasDaSecao, desagrupar, levarParaOFim, pecasDaSecao, estaAgrupada, motivoParaNaoAgrupar, moverJunto, ordemDasPecas, podarSecoesVazias, removerPeca, temAnterior } from "../src/puck/agrupar.js";
 
 /* ── O que esta suíte guarda ─────────────────────────────────────────────────
 
@@ -343,4 +343,17 @@ test("levarParaOFim: tira de onde estiver e põe por último, sem perder nada", 
   assert.deepEqual(ids(deDentro[2].props.conteudo), ["a"]);
   assert.equal(levarParaOFim(doc, "s1"), null, "já é a última");
   assert.equal(levarParaOFim(doc, "nao-existe"), null);
+});
+
+/* ── A peça nova, colocada com um clique, ao lado de outra ──
+   Ela ainda não tem id, então a pergunta é só de capacidade: a seção do alvo
+   (ou o alvo, sendo seção) tem lugar para mais uma coluna? */
+test("cabeAoLado: recusa só a seção cheia", () => {
+  const doc = [p("a"), secao("s", [p("b"), p("c")]), secao("cheia", [p("d"), p("e"), p("f"), p("g")])];
+  assert.equal(cabeAoLado(doc, "a"), true, "peça solta vira seção nova");
+  assert.equal(cabeAoLado(doc, "b"), true, "seção de duas recebe a terceira");
+  assert.equal(cabeAoLado(doc, "s"), true);
+  assert.equal(cabeAoLado(doc, "d"), false, "seção de quatro não recebe a quinta");
+  assert.equal(cabeAoLado(doc, "cheia"), false);
+  assert.equal(cabeAoLado(doc, "nao-existe"), false);
 });

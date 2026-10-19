@@ -217,7 +217,11 @@ export const HORARIO_ATENDIMENTO_CSS = `
 .hat__dia.is-ativo { background: rgba(129,140,248,0.16); border-color: rgba(129,140,248,0.55); color: var(--text-main, #f1f5f9); }
 .hat__vazio { margin: 0; font-size: 12.5px; color: var(--text-muted, #94a3b8); }
 .hat__modo { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted, #94a3b8); cursor: pointer; }
-.hat__modo input { width: auto; margin: 0; }
+/* Medida explícita, e não width auto: o checkbox do painel é desenhado (sem
+   aparência nativa), e auto o achatava num fio de 2px. Os 18px são os do
+   checkbox padrão (styles.css); o seletor só precisa vencer o width 100% dos
+   campos do modal. */
+.hat__modo input[type="checkbox"] { width: 18px; min-width: 18px; height: 18px; margin: 0; padding: 0; flex: none; }
 .hat__linha { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hat__linha em { font-size: 12px; font-style: normal; color: var(--text-muted, #94a3b8); }
 .hat__linha input[type="time"] { width: auto; }

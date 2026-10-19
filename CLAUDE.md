@@ -876,6 +876,21 @@ evento e adia a seleção — era o `stopPropagation` ali que deixava "+ Etapa",
 vaga acima/abaixo do alvo (margem animada, `--abre`) e põe a cópia da
 arrastada nela. Quem grava a ordem continua sendo o Puck.
 
+**Estrutura: juntar e "fim da página"** (`puck/ArrastoNaEstrutura.jsx`): a
+linha arrastada sobre o MEIO de outra linha acende o alvo com um selo
+("Criar seção", "Entrar na seção", "Pôr ao lado", ou o motivo da recusa) e, ao
+soltar, vira colunas pela MESMA `agruparCom` do arrasto lateral no canvas; as
+bordas da linha continuam sendo o antes/depois do Puck. Abaixo da última linha,
+quando ela é de dentro de uma seção, é "fim da página". Nos dois casos o vigia
+cancela a soltura do Puck com um Esc sintético (`cancelable`, senão o
+`useSaidaDaTela` tira a pessoa do editor) e muda a árvore num despacho só.
+
+**Colocar com um clique** (`puck/pecaArmada.js` + `useColocarAoClicar` na
+ponte): clicar no cartão da gaveta arma a peça; o próximo clique na prancheta a
+põe ali, com a mesma prévia e as mesmas regras do arrasto (meio = acima/abaixo,
+lateral = colunas, fora de peça = fim da página). Esc ou o mesmo cartão
+desarmam. Arrastar continua igual.
+
 **Prévia dos modelos:** `builder/data/PreviaDoModelo.jsx` desenha a página em
 miniatura a partir do `config` (widgets com glifo por tipo, zebra e respiro do
 modelo), desktop por padrão e alternando com o celular com o mouse em cima. É

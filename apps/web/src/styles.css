@@ -13248,7 +13248,7 @@ button.mpx-acao-texto:focus-visible {
    topo, ele vira duas faixas quase transparentes por onde a página aparece
    acima e abaixo do cabeçalho. O `z-index` põe a peça acima das seguintes, que
    a zebra transforma em contextos de empilhamento próprios. */
-.vitrine-puck.showcase-body.is-cabecalho-fixo > div > :has(.luxury-header-wrapper) {
+.vitrine-puck.showcase-body.is-cabecalho-fixo > div > :has(.luxury-header-wrapper):not([data-dnd-dragging]) {
   position: sticky;
   top: 0;
   z-index: 50;
@@ -13261,9 +13261,18 @@ button.mpx-acao-texto:focus-visible {
    subindo com a página enquanto a vitrine publicada o mantinha fixo. Daí o
    `!important`, preso ao atributo que só a peça do editor tem. Sticky também
    é posicionado, então o contorno e as alças continuam ancorados na peça. */
-.vitrine-puck.is-cabecalho-fixo > div > [data-puck-component]:has(.luxury-header-wrapper) {
+.vitrine-puck.is-cabecalho-fixo > div > [data-puck-component]:has(.luxury-header-wrapper):not([data-dnd-dragging]) {
   position: sticky !important;
 }
+
+/* ── MAS NÃO A PEÇA QUE ESTÁ NA MÃO ──
+   Arrastando, o dnd-kit levanta a peça com `position: fixed !important` (e
+   `[data-dnd-dragging]`). As duas regras acima tinham especificidade maior e
+   venciam: o cabeçalho arrastado ficava sticky — que, na camada de topo
+   (`popover`), o navegador calcula como absolute. Absoluto e seguindo o
+   ponteiro, ele alargava a página (2024px numa folha de 1280, medido), a
+   prancheta rolava de lado sozinha e a prévia de colunas saía de baixo do
+   ponteiro. Era só com o cabeçalho porque só ele tem esta regra. */
 
 /* A peça gruda em 0, mas o cabeçalho ficava ALGUNS PIXELS abaixo dela: o
    espaçamento interno (o da página, que os modelos arejados trazem, ou o da
@@ -13765,6 +13774,21 @@ button.mpx-acao-texto:focus-visible {
 .puck-clone > * {
   pointer-events: none;
   width: 100%;
+}
+/* O cabecalho copiado fica DENTRO da copia. A copia mora no body do quadro,
+   fora de .vitrine-puck, e ali vale a regra base do cabecalho: position fixed
+   no topo e largura da janela. Enquanto a copia entrava (com transform, que
+   prende os filhos fixed nela) ele aparecia ao lado do alvo; ao pousar o
+   transform sai, e o cabecalho escapava para o topo da prancheta — parecia
+   que a previa tinha voltado para o lugar de origem. Era so com o cabecalho
+   porque ele e a unica peca com position fixed/sticky e sangria de 100vw. */
+.puck-clone .luxury-header-wrapper {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  z-index: auto !important;
 }
 /* Vinda da gaveta nao ha o que copiar — o nome dela e o que se sabe dizer. */
 .puck-clone__nome {
@@ -14553,7 +14577,54 @@ ul:has(> [data-puck-layer-tree-id]):not([data-puck-layer-tree-id] ul) {
   position: relative;
   padding-bottom: 40px;
 }
-.puck-estrutura--no-fim [class*="_DropLine_"] { display: none; }
+.puck-estrutura--no-fim [class*="_DropLine_"],
+.puck-estrutura--agrupando [class*="_DropLine_"] { display: none; }
+
+/* ─── "Junto desta", na Estrutura (`ArrastoNaEstrutura`) ─────────────────────
+   A linha arrastada sobre o MEIO de outra: a alvo acende, pulsando, com o selo
+   do que vai acontecer ao soltar ("Criar seção", "Entrar na seção", "Pôr ao
+   lado") — ou, em vermelho, por que não dá. O pulso é o que diz "isto é um
+   destino", diferente da linha fina do antes/depois. */
+.puck-estrutura__alvo {
+  position: relative;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--_puck-outline-color-drop-indicator, #818cf8) 16%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--_puck-outline-color-drop-indicator, #818cf8);
+  animation: puck-estrutura-pulso 1.1s ease-in-out infinite;
+}
+.puck-estrutura__alvo::after {
+  content: attr(data-agrupar);
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--_puck-outline-color-drop-indicator, #818cf8);
+  color: #0b0b12;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: puck-estrutura-selo 0.18s ease-out;
+}
+.puck-estrutura__alvo.is-recusa {
+  background: color-mix(in srgb, #f87171 12%, transparent);
+  box-shadow: inset 0 0 0 1.5px #f87171;
+  animation: none;
+}
+.puck-estrutura__alvo.is-recusa::after { background: #f87171; }
+@keyframes puck-estrutura-pulso {
+  0%, 100% { box-shadow: inset 0 0 0 1.5px var(--_puck-outline-color-drop-indicator, #818cf8); }
+  50% { box-shadow: inset 0 0 0 1.5px var(--_puck-outline-color-drop-indicator, #818cf8), 0 0 0 4px color-mix(in srgb, var(--_puck-outline-color-drop-indicator, #818cf8) 22%, transparent); }
+}
+@keyframes puck-estrutura-selo {
+  from { opacity: 0; transform: translate(6px, -50%); }
+  to { opacity: 1; transform: translate(0, -50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .puck-estrutura__alvo, .puck-estrutura__alvo::after { animation: none; }
+}
 .puck-estrutura--no-fim::after {
   content: "";
   position: absolute;
@@ -14593,3 +14664,30 @@ ul:has(> [data-puck-layer-tree-id]):not([data-puck-layer-tree-id] ul) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+/* ─── Colocar com um clique (`pecaArmada`, `useColocarAoClicar`) ─────────────
+   O cartão armado acende e diz o que fazer; a prancheta troca o cursor
+   enquanto há peça na mão. A prévia de onde ela entra é a mesma do arrasto
+   (`.puck-previa`, `.puck-clone`). */
+.puck-cartao.is-armada {
+  background: rgba(129, 140, 248, 0.14);
+  border-color: var(--ed-accent, #818cf8);
+  color: var(--ed-text);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.22);
+  animation: puck-cartao-armado 1.2s ease-in-out infinite;
+}
+.puck-cartao__dica {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ed-accent, #818cf8);
+}
+@keyframes puck-cartao-armado {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.22); }
+  50% { box-shadow: 0 0 0 5px rgba(129, 140, 248, 0.10); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .puck-cartao.is-armada { animation: none; }
+}
+.puck-ponte.puck-colocando,
+.puck-ponte.puck-colocando * { cursor: copy !important; }

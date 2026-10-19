@@ -1,4 +1,7 @@
+import { useRef, useSyncExternalStore } from "react";
+import { useGetPuck } from "@puckeditor/core";
 import { WIDGET_LIBRARY } from "../components/builder/data/biblioteca.jsx";
+import { alternarPecaArmada, assinarPecaArmada, pecaArmada } from "./pecaArmada.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    OS CARTÕES DA GAVETA MOSTRAM A PEÇA, E NÃO SÓ O NOME DELA.
@@ -120,13 +123,44 @@ export function previaDoComponente(nome) {
  * comportamento de arrasto, e substituí-lo por marcação nossa tiraria o gesto
  * junto.
  */
+/* Quanto o ponteiro pode andar entre apertar e soltar para ainda ser CLIQUE.
+   É o limiar de arrasto do próprio Puck: abaixo dele não houve arrasto. */
+const FOLGA_DO_CLIQUE = 5;
+
 export function CartaoDaGaveta({ children, name }) {
   const previa = previaDoComponente(name);
+  const pegarPuck = useGetPuck();
+  /* Assinatura da peça armada: o cartão acende no MESMO clique que o armou, e
+     apaga quando a peça é colocada na prancheta (ou desarmada com Esc). */
+  const armada = useSyncExternalStore(assinarPecaArmada, pecaArmada)?.tipo === name;
+  const apertou = useRef(null);
   if (!previa) return children;
+
+  /* ── UM CLIQUE ARMA, O ARRASTO CONTINUA SENDO ARRASTO ──
+     O cartão é também a alça de arrasto do Puck (o `children`). O clique só
+     arma quando NÃO houve arrasto: o ponteiro ficou parado entre apertar e
+     soltar, e o dnd-kit não marcou o clique como consumido (ele faz isso ao
+     fim de um arrasto). */
+  const aoApertar = (e) => { apertou.current = { x: e.clientX, y: e.clientY }; };
+  const aoClicar = (e) => {
+    const inicio = apertou.current;
+    apertou.current = null;
+    if (e.defaultPrevented || !inicio) return;
+    if (Math.hypot(e.clientX - inicio.x, e.clientY - inicio.y) > FOLGA_DO_CLIQUE) return;
+    const rotulo = pegarPuck().config?.components?.[name]?.label;
+    alternarPecaArmada(name, rotulo);
+  };
+
   return (
-    <div className="puck-cartao">
+    <div
+      className={`puck-cartao${armada ? " is-armada" : ""}`}
+      onPointerDown={aoApertar}
+      onClick={aoClicar}
+      title={armada ? "Clique na página para colocar — Esc cancela" : "Clique para colocar com um clique, ou arraste até a página"}
+    >
       <span className="puck-cartao__previa" aria-hidden="true">{previa}</span>
       {children}
+      {armada ? <em className="puck-cartao__dica">Clique na página para colocar · Esc cancela</em> : null}
     </div>
   );
 }

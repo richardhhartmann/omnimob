@@ -590,3 +590,28 @@ export function levarParaOFim(conteudo, id) {
   const sem = removerPeca(lista, id);
   return sem ? [...sem, peca] : null;
 }
+
+/**
+ * Cabe mais uma peça AO LADO deste alvo? Não cabe quando a seção em que ele
+ * mora — ou ele mesmo, sendo seção — já tem o máximo de colunas.
+ *
+ * É a pergunta que `motivoParaNaoAgrupar` faz para uma peça que já existe,
+ * feita para a peça NOVA da gaveta (colocada com um clique), que ainda não
+ * tem id para conferir.
+ */
+export function cabeAoLado(conteudo, alvoId) {
+  const alvo = acharPeca(conteudo, alvoId);
+  if (!alvo) return false;
+  const casaDoAlvo = (lista) => {
+    for (const item of lista || []) {
+      if (item.type === "Secao" && (item.props?.conteudo || []).some((x) => x?.props?.id === alvoId)) return item;
+      for (const [, dentro] of listasDe(item)) {
+        const achado = casaDoAlvo(dentro);
+        if (achado) return achado;
+      }
+    }
+    return null;
+  };
+  const casa = casaDoAlvo(conteudo) || (alvo.type === "Secao" ? alvo : null);
+  return !casa || (casa.props?.conteudo || []).length < MAXIMO_DE_COLUNAS;
+}
