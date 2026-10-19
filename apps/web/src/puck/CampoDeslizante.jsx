@@ -1,3 +1,6 @@
+import { createUsePuck } from "@puckeditor/core";
+import { comPropsNasPecasDaSecao, pecasDaSecao } from "./agrupar.js";
+
 /* ────────────────────────────────────────────────────────────────────────────
    OS DOIS AJUSTES DO BANNER, COM DESLIZANTE.
 
@@ -95,10 +98,68 @@ export const campoEspacoExterno = campo("Espaçamento externo", {
    arredondado seria o controle mentindo sobre a tela. E sem valor gravado nada
    muda na página: quem nunca mexeu continua vendo o que via. */
 export function campoArredondamento(padrao) {
-  return campo("Arredondamento das bordas", {
-    min: 0, max: 60, paraTela: (v) => (typeof v === "number" ? v : padrao), paraDoc: (v) => v, formatar: (v) => `${v}px`,
-  });
+  return {
+    ...campo("Arredondamento das bordas", {
+      min: 0, max: 60, paraTela: (v) => (typeof v === "number" ? v : padrao), paraDoc: (v) => v, formatar: (v) => `${v}px`,
+    }),
+    /* Lido pelo campo da SEÇÃO, que mostra o raio das peças de dentro. */
+    raioPadrao: padrao,
+  };
 }
+
+/* ── O ARREDONDAMENTO DA SEÇÃO É O DAS PEÇAS DE DENTRO ──────────────────────
+
+   A seção não tem borda: ela só agrupa. O deslizante dela escreve em cada
+   peça que ela contém (ver `comPropsNasPecasDaSecao`) e nada na seção — o
+   `onChange` do Puck, que gravaria na seção, não é chamado.
+
+   O valor mostrado é o da primeira peça (ou o padrão dela): é o que a pessoa
+   vê na prancheta. Peças com raios diferentes passam a ter o mesmo no
+   primeiro movimento, que é o pedido. */
+const usarPuck = createUsePuck();
+
+function ArredondamentoDaSecao({ readOnly }) {
+  const secaoId = usarPuck((s) => s.selectedItem?.props?.id);
+  const conteudo = usarPuck((s) => s.appState.data.content) || [];
+  const config = usarPuck((s) => s.config);
+  const despachar = usarPuck((s) => s.dispatch);
+  const raioDe = (peca) => config?.components?.[peca.type]?.fields?.arredondamento;
+  const pecas = pecasDaSecao(conteudo, secaoId).filter(raioDe);
+  const primeira = pecas[0];
+  const valor = primeira
+    ? (typeof primeira.props.arredondamento === "number" ? primeira.props.arredondamento : raioDe(primeira).raioPadrao ?? 0)
+    : 0;
+
+  const aplicar = (raio) => {
+    despachar({
+      type: "setData",
+      data: (anterior) => {
+        const novo = comPropsNasPecasDaSecao(anterior.content, secaoId, (peca) => (raioDe(peca) ? { arredondamento: raio } : null));
+        return novo ? { ...anterior, content: novo } : anterior;
+      },
+    });
+  };
+
+  return (
+    <Deslizante
+      rotulo="Arredondamento das peças"
+      valor={valor}
+      onChange={aplicar}
+      readOnly={readOnly || !pecas.length}
+      min={0}
+      max={60}
+      paraTela={(v) => v}
+      paraDoc={(v) => v}
+      formatar={(v) => `${v}px`}
+    />
+  );
+}
+
+export const campoArredondamentoDaSecao = {
+  type: "custom",
+  label: "Arredondamento das peças",
+  render: ({ readOnly }) => <ArredondamentoDaSecao readOnly={readOnly} />,
+};
 
 /** Largura de TODAS as peças, na página em largura livre. A peça com valor próprio vence. */
 export const campoLarguraGlobal = campo("Largura das peças", {

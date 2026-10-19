@@ -15,7 +15,7 @@ import { ProvedorDaPagina, usarPagina } from "./contextoDaPagina.jsx";
 import { PonteDeEdicao } from "./PonteDeEdicao.jsx";
 import { campoDeCor } from "./CampoDeCor.jsx";
 import { campoCabecalhoFixo, campoEstiloDaZebra, campoFonteDoConteudo, campoLarguraDaPagina, campoLarguraDaPeca, campoOculto, campoTema, campoTravado, campoZebrado } from "./CampoDeAlternar.jsx";
-import { campoArredondamento, campoBrilho, campoEscurecer, campoEspacoExterno, campoEspacoInterno, campoLargura, campoLarguraGlobal } from "./CampoDeslizante.jsx";
+import { campoArredondamento, campoArredondamentoDaSecao, campoBrilho, campoEscurecer, campoEspacoExterno, campoEspacoInterno, campoLargura, campoLarguraGlobal } from "./CampoDeslizante.jsx";
 import { ComBanner, useSobBanner } from "./ComBanner.jsx";
 import { campoEnquadramento, campoImagemDoBanner } from "./CampoImagemDoBanner.jsx";
 
@@ -299,7 +299,7 @@ function MioloDaPeca({ render, props }) {
   return render(props);
 }
 
-function PecaDaVitrine({ desenhar, rotulo, props }) {
+function PecaDaVitrine({ desenhar, rotulo, props, semRaio = false }) {
   const sobBanner = useSobBanner();
   const { estilo } = props;
 
@@ -350,7 +350,9 @@ function PecaDaVitrine({ desenhar, rotulo, props }) {
      CSS herda, e uma seção arredondada passaria o raio dela a todo widget de
      dentro que não escolheu o seu. `initial` corta a herança e devolve cada
      peça ao padrão do CSS. */
-  const raio = typeof props.arredondamento === "number" && props.arredondamento >= 0
+  /* `semRaio`: a seção. O arredondamento dela é o das peças de dentro, e um
+     valor que tenha ficado gravado nela (de antes) não arredonda a casca. */
+  const raio = !semRaio && typeof props.arredondamento === "number" && props.arredondamento >= 0
     ? `${props.arredondamento}px`
     : "initial";
   return (
@@ -394,7 +396,7 @@ function semAjustesDeBannerVazio(campos, dados) {
 /** Acrescenta ocultar/travar a uma peça — e a trava de exclusão, quando pedida.
  *  `raioPadrao` é o arredondamento que a peça já tem pelo CSS (cartões, 20px;
  *  blocos de página, 0) — é o que o deslizante mostra antes de alguém mexer. */
-function comAfordancias(config, { rotulo, naoApagar = false, raioPadrao = 0 } = {}) {
+function comAfordancias(config, { rotulo, naoApagar = false, raioPadrao = 0, semRaio = false } = {}) {
   return {
     ...config,
     fields: { ...CAMPOS_DA_PECA, arredondamento: campoArredondamento(raioPadrao), ...(config.fields || {}) },
@@ -416,7 +418,7 @@ function comAfordancias(config, { rotulo, naoApagar = false, raioPadrao = 0 } = 
       };
     },
     render: (props) => (
-      <PecaDaVitrine desenhar={config.render} rotulo={rotulo || "Peça"} props={props} />
+      <PecaDaVitrine desenhar={config.render} rotulo={rotulo || "Peça"} props={props} semRaio={semRaio} />
     ),
   };
 }
@@ -795,11 +797,13 @@ export const configVitrine = {
          recurso — a mesma frase que trouxe o banner de volta, aplicada ao
          contrário. Quem quer três colunas põe três peças. */
       fields: {
-        /* O nome que a pessoa dá à seção ("Depoimentos", "Contato"). Não
-           aparece na página publicada — é para ela se achar na Estrutura e no
-           título do inspetor, onde três seções eram três "Seção (colunas)".
-           Quem o desenha lá é `NomesDasSecoes`. */
-        nome: { type: "text", label: "Nome da seção" },
+        /* SEM campo de nome. A seção continua tendo `nome` no documento, mas
+           ele se edita onde ele aparece: na própria linha da ESTRUTURA, com
+           duplo clique (ver `NomesDasSecoes`). No inspetor ele era mais um
+           campo entre os de aparência, longe do lugar em que a pessoa o lê. */
+        /* O arredondamento da seção é o das peças de DENTRO — a seção não tem
+           borda. Ver `campoArredondamentoDaSecao`. */
+        arredondamento: campoArredondamentoDaSecao,
         /* O banner da seção cobre a área INTEIRA, colunas e frestas — e as
            peças de dentro abrem mão do próprio fundo enquanto ele existe (ver
            `PecaDaVitrine`). Sem isso, a foto apareceria só entre os widgets. */
@@ -808,6 +812,6 @@ export const configVitrine = {
       },
       defaultProps: { colunas: 2, conteudo: [] },
       render: (props) => <SecaoEmColunas {...props} />,
-    }, { rotulo: "Seção (colunas)" }),
+    }, { rotulo: "Seção (colunas)", semRaio: true }),
   },
 };
