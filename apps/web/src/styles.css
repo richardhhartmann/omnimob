@@ -13259,6 +13259,19 @@ button.mpx-acao-texto:focus-visible {
   position: sticky !important;
 }
 
+/* A peça gruda em 0, mas o cabeçalho ficava ALGUNS PIXELS abaixo dela: o
+   espaçamento interno (o da página, que os modelos arejados trazem, ou o da
+   própria peça) vira `padding` no invólucro, e esse padding é uma faixa
+   transparente entre o topo da tela e a barra. MEDIDO: com 20px de
+   espaçamento, o cabeçalho grudava em y = 20. O espaçamento externo fazia o
+   mesmo antes da primeira rolagem. Fixo, o cabeçalho encosta no topo; o
+   respiro abaixo dele (margem de baixo) continua valendo. `!important` porque
+   os dois chegam no `style` do invólucro (ver `PecaDaVitrine`). */
+.vitrine-puck.is-cabecalho-fixo .puck-envolucro:has(.luxury-header-wrapper) {
+  padding-block: 0 !important;
+  margin-top: 0 !important;
+}
+
 /* Desligado, o cabeçalho é só mais uma peça no fluxo. Explícito, e não
    herdado do sticky inerte acima: se o invólucro um dia ganhar altura, a
    escolha "rola junto" continua valendo. */
@@ -13914,9 +13927,12 @@ html[data-tema-painel="claro"] .puck-menu__lista {
   --ed-danger: #dc2626;
 }
 
+/* `justify-content` explícito: a regra global de `button` centraliza o
+   conteúdo, e cada item ficava deslocado conforme o tamanho do próprio texto. */
 .puck-menu__lista button {
   display: flex;
   align-items: flex-start;
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
   padding: 9px 10px;
@@ -13936,9 +13952,12 @@ html[data-tema-painel="claro"] .puck-menu__lista {
 
 .puck-menu__lista span {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
   min-width: 0;
+  text-align: left;
 }
 
 .puck-menu__lista strong { font-size: 13px; font-weight: 600; }
@@ -14493,4 +14512,52 @@ html[data-tema-painel="claro"] .puck-menu__lista {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ─── Renomear a seção na Estrutura (`NomesDasSecoes`) ────────────────────────
+   Duplo clique no nome da seção abre esta caixa por cima dele, no lugar e no
+   tamanho medidos. Vive no `body` (portal), então traz os tokens consigo,
+   como o `.puck-menu__lista`. */
+.puck-renomear {
+  position: fixed;
+  z-index: 400;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--ed-accent, #6366f1);
+  border-radius: 6px;
+  background: var(--ed-panel, #0e0e14);
+  color: var(--ed-text, #e6e8ee);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ed-accent, #6366f1) 25%, transparent);
+}
+html[data-tema-painel="claro"] .puck-renomear {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+/* ─── "No fim da página", na Estrutura (`ArrastoNaEstrutura`) ─────────────────
+   Respiro abaixo da última linha, para haver onde soltar "depois de tudo"
+   mesmo com a lista cheia; e, com o ponteiro ali, a linha de soltura do Puck
+   (que diria "dentro da seção") dá lugar à nossa, rente à lista inteira. */
+/* A lista de FORA: a que contém linhas e não está dentro de uma linha. */
+ul:has(> [data-puck-layer-tree-id]):not([data-puck-layer-tree-id] ul) {
+  position: relative;
+  padding-bottom: 40px;
+}
+.puck-estrutura--no-fim [class*="_DropLine_"] { display: none; }
+.puck-estrutura--no-fim::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 38px;
+  /* As medidas e a cor da linha do PRÓPRIO Puck: as duas opções têm de
+     parecer o mesmo tipo de coisa, só em profundidades diferentes. */
+  height: var(--_puck-outline-drop-indicator-size, 2px);
+  border-radius: 2px;
+  background: var(--_puck-outline-color-drop-indicator, var(--ed-accent, #6366f1));
+  pointer-events: none;
 }

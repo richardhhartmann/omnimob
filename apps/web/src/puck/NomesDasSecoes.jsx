@@ -1,5 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createUsePuck } from "@puckeditor/core";
+import { comProps } from "./agrupar.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O NOME PRÓPRIO DE CADA SEÇÃO.
@@ -26,9 +28,30 @@ import { createUsePuck } from "@puckeditor/core";
 
    O Puck redesenha esses nós a cada seleção e a cada arrasto, por isso um
    `MutationObserver` reaplica — em um quadro, para não rodar a cada nó.
+
+   ── RENOMEIA-SE ONDE SE LÊ ──
+
+   O nome era um campo do inspetor, entre os de aparência — longe da linha da
+   Estrutura, que é onde a pessoa o procura. Agora é o DUPLO CLIQUE no nome da
+   seção, na própria Estrutura: uma caixa de texto abre por cima dele (portal,
+   posição medida), Enter ou clicar fora grava, Esc desiste, e apagar o texto
+   devolve a seção a "Seção (colunas)". O duplo clique e não o clique simples
+   porque o simples já é do Puck: seleciona a peça e rola a prancheta até ela.
    ──────────────────────────────────────────────────────────────────────────── */
 
 const usarPuck = createUsePuck();
+
+/** Os ids de toda Secao, com nome ou sem, inclusive as aninhadas. */
+export function idsDasSecoes(itens, saida = new Set()) {
+  for (const item of itens || []) {
+    if (!item?.props) continue;
+    if (item.type === "Secao") saida.add(item.props.id);
+    for (const valor of Object.values(item.props)) {
+      if (Array.isArray(valor) && valor.some((v) => v && v.type && v.props)) idsDasSecoes(valor, saida);
+    }
+  }
+  return saida;
+}
 
 /** id → nome, de toda Secao com nome, inclusive as aninhadas em slots. */
 export function nomesDasSecoes(itens, saida = new Map()) {
@@ -44,8 +67,16 @@ export function nomesDasSecoes(itens, saida = new Map()) {
   return saida;
 }
 
-function nomear(el, nome) {
+const DICA_DE_RENOMEAR = "Clique duas vezes para renomear";
+
+function nomear(el, nome, renomeavel = false) {
   if (!el) return;
+  const dica = renomeavel ? `${nome ? `${nome} — ` : ""}${DICA_DE_RENOMEAR}` : nome;
+  if (dica) {
+    if (el.getAttribute("title") !== dica) el.setAttribute("title", dica);
+  } else if (el.hasAttribute("title")) {
+    el.removeAttribute("title");
+  }
   if (nome) {
     if (el.getAttribute("data-nome") === nome) return;
     /* O tamanho da letra é medido ANTES de esconder o texto do Puck: o
@@ -54,21 +85,116 @@ function nomear(el, nome) {
       el.style.setProperty("--nome-tamanho", getComputedStyle(el).fontSize);
     }
     el.setAttribute("data-nome", nome);
-    el.setAttribute("title", nome);
     el.classList.add("puck-nome-proprio");
   } else if (el.classList.contains("puck-nome-proprio")) {
     el.removeAttribute("data-nome");
-    el.removeAttribute("title");
     el.classList.remove("puck-nome-proprio");
     el.style.removeProperty("--nome-tamanho");
   }
+}
+
+/* O elemento do nome na linha da Estrutura — o da PRÓPRIA linha: a seção
+   contém outras linhas, e o primeiro "nome" lá dentro pode ser o de um filho. */
+const nomeDaLinha = (linha) =>
+  [...linha.querySelectorAll("[class*='Layer-name']")].find((el) => el.closest("[data-puck-layer-tree-id]") === linha);
+
+/* Onde desenhar a caixa: em cima do nome, um pouco maior que ele. */
+function caixaSobre(id) {
+  const linha = document.querySelector(`[data-puck-layer-tree-id="${CSS.escape(id)}"]`);
+  const alvo = linha && nomeDaLinha(linha);
+  if (!alvo) return null;
+  const r = alvo.getBoundingClientRect();
+  return { left: r.left - 7, top: r.top - 3, width: r.width + 14, height: r.height + 6 };
+}
+
+/* A caixa de renomear. Grava uma vez só: Enter e o `blur` que vem logo depois
+   chegariam os dois aqui.
+
+   Ela ACOMPANHA a linha em vez de fechar quando algo rola: o clique que
+   seleciona a seção faz o Puck rolar a Estrutura e a prancheta até ela, e a
+   primeira versão (fechar ao rolar) fechava a caixa no instante em que abria. */
+function CaixaDeRenomear({ edicao, aoTerminar }) {
+  const [texto, setTexto] = useState(edicao.nome);
+  const [caixa, setCaixa] = useState(edicao.caixa);
+  useEffect(() => {
+    let quadro = 0;
+    const seguir = () => {
+      if (quadro) return;
+      quadro = requestAnimationFrame(() => { quadro = 0; const nova = caixaSobre(edicao.id); if (nova) setCaixa(nova); });
+    };
+    window.addEventListener("scroll", seguir, true);
+    window.addEventListener("resize", seguir);
+    return () => {
+      window.removeEventListener("scroll", seguir, true);
+      window.removeEventListener("resize", seguir);
+      if (quadro) cancelAnimationFrame(quadro);
+    };
+  }, [edicao.id]);
+  const { left, top, width, height } = caixa;
+  const encerrada = useRef(false);
+  const encerrar = (gravar) => {
+    if (encerrada.current) return;
+    encerrada.current = true;
+    aoTerminar(gravar ? texto.trim() : null);
+  };
+  return createPortal(
+    <input
+      className="puck-renomear"
+      aria-label="Nome da seção"
+      placeholder="Seção (colunas)"
+      style={{ left, top, width: Math.max(width, 140), height: Math.max(height, 24) }}
+      value={texto}
+      autoFocus
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => setTexto(e.target.value)}
+      /* As teclas ficam aqui: os atalhos do editor (desfazer, apagar a peça
+         selecionada) não podem disparar enquanto se digita um nome. */
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") encerrar(true);
+        if (e.key === "Escape") { e.preventDefault(); encerrar(false); }
+      }}
+      onBlur={() => encerrar(true)}
+    />,
+    document.body,
+  );
 }
 
 export function NomesDasSecoes() {
   const conteudo = usarPuck((s) => s.appState.data.content);
   const selecionado = usarPuck((s) => s.selectedItem);
   const rotuloDaSecao = usarPuck((s) => s.config.components?.Secao?.label);
+  const despachar = usarPuck((s) => s.dispatch);
   const nomes = useMemo(() => nomesDasSecoes(conteudo), [conteudo]);
+  const secoes = useMemo(() => idsDasSecoes(conteudo), [conteudo]);
+  /* A seção sendo renomeada: id, nome atual e onde desenhar a caixa. */
+  const [edicao, setEdicao] = useState(null);
+
+  useEffect(() => {
+    const aoDuploClique = (e) => {
+      const linha = e.target.closest?.("[data-puck-layer-tree-id]");
+      const id = linha?.getAttribute("data-puck-layer-tree-id");
+      if (!id || !secoes.has(id)) return;
+      /* Só o duplo clique no título da PRÓPRIA linha; o de uma linha filha é
+         dela (e o `closest` acima já teria achado a filha). */
+      const alvo = nomeDaLinha(linha);
+      if (!alvo) return;
+      e.preventDefault();
+      setEdicao({ id, nome: nomes.get(id) || "", caixa: caixaSobre(id) });
+    };
+    document.addEventListener("dblclick", aoDuploClique);
+    return () => document.removeEventListener("dblclick", aoDuploClique);
+  }, [secoes, nomes]);
+
+  const terminar = (nome) => {
+    const id = edicao?.id;
+    setEdicao(null);
+    if (nome === null || !id || nome === (nomes.get(id) || "")) return;
+    despachar({
+      type: "setData",
+      data: (anterior) => ({ ...anterior, content: comProps(anterior.content, id, { nome }) }),
+    });
+  };
 
   useEffect(() => {
     const doc = document;
@@ -80,8 +206,7 @@ export function NomesDasSecoes() {
          primeiro "nome" lá dentro pode ser o de um filho. */
       for (const linha of doc.querySelectorAll("[data-puck-layer-tree-id]")) {
         const id = linha.getAttribute("data-puck-layer-tree-id");
-        const alvo = [...linha.querySelectorAll("[class*='Layer-name']")].find((el) => el.closest("[data-puck-layer-tree-id]") === linha);
-        nomear(alvo, nomes.get(id) || null);
+        nomear(nomeDaLinha(linha), nomes.get(id) || null, secoes.has(id));
       }
       /* O título do inspetor: o cabeçalho que mostra o rótulo do TIPO. */
       for (const titulo of doc.querySelectorAll("[class*='SidebarSection-heading'] h2")) {
@@ -102,7 +227,7 @@ export function NomesDasSecoes() {
       observador.disconnect();
       if (quadro) cancelAnimationFrame(quadro);
     };
-  }, [nomes, selecionado, rotuloDaSecao]);
+  }, [nomes, secoes, selecionado, rotuloDaSecao]);
 
-  return null;
+  return edicao ? <CaixaDeRenomear key={edicao.id} edicao={edicao} aoTerminar={terminar} /> : null;
 }

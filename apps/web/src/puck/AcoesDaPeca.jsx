@@ -1,6 +1,6 @@
 import { ActionBar, useGetPuck } from "@puckeditor/core";
 import { ColumnsPlusRight, Rows, Copy, ClipboardText } from "@phosphor-icons/react";
-import { agruparComAnterior, comProps, desagrupar, estaAgrupada, temAnterior } from "./agrupar.js";
+import { agruparComAnterior, comProps, comPropsNasPecasDaSecao, desagrupar, estaAgrupada, temAnterior } from "./agrupar.js";
 import { useSyncExternalStore } from "react";
 import { assinarEstiloCopiado, colarEstilo, copiarEstilo, temEstiloCopiado } from "./estiloCopiado.js";
 
@@ -81,6 +81,24 @@ export function BarraDaPeca({ label, children, parentAction }) {
     });
   };
 
+  /* Colar numa SEÇÃO é colar em cada peça de dentro, cada uma peneirada pelos
+     próprios campos: a seção só agrupa, e a aparência copiada (cor, cantos,
+     banner de um cartão) é dos widgets. Ver `pecasDaSecao` em `agrupar.js`. */
+  const colar = () => {
+    if (selecionado?.type !== "Secao") {
+      const novas = colarEstilo(camposDe(selecionado));
+      if (novas) trocarProps(novas);
+      return;
+    }
+    dispatch({
+      type: "setData",
+      data: (anterior) => {
+        const novo = comPropsNasPecasDaSecao(anterior.content, id, (peca) => colarEstilo(camposDe(peca)));
+        return novo ? { ...anterior, content: novo } : anterior;
+      },
+    });
+  };
+
   return (
     /* A seção com nome mostra o nome também na etiqueta sobre ela — é o
        terceiro lugar onde a pessoa lê "que peça é esta". */
@@ -110,11 +128,8 @@ export function BarraDaPeca({ label, children, parentAction }) {
       </ActionBar.Action>
       {haEstiloCopiado ? (
         <ActionBar.Action
-          label="Colar a aparência copiada"
-          onClick={() => {
-            const novas = colarEstilo(camposDe(selecionado));
-            if (novas) trocarProps(novas);
-          }}
+          label={selecionado?.type === "Secao" ? "Colar a aparência copiada nas peças da seção" : "Colar a aparência copiada"}
+          onClick={colar}
         >
           <ClipboardText size={16} />
         </ActionBar.Action>

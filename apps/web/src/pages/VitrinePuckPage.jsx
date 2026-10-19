@@ -13,6 +13,7 @@ import { configVitrine } from "../puck/configVitrine.jsx";
 import { DICIONARIO_PT } from "../puck/idioma.js";
 import { BarraDaPeca } from "../puck/AcoesDaPeca.jsx";
 import { NomesDasSecoes } from "../puck/NomesDasSecoes.jsx";
+import { ArrastoNaEstrutura } from "../puck/ArrastoNaEstrutura.jsx";
 import { FotosDoAcervo } from "../puck/CampoImagemDoBanner.jsx";
 import { traduzirParaPuck } from "../puck/traduzirConfig";
 import { marcarAlvosDoTour } from "../puck/alvosDoTour.js";
@@ -123,9 +124,10 @@ function doCadastro(root) {
    editor clássico usa, lida do mesmo catálogo. O fantasma do arrasto é um clone
    do cartão, então ele acompanha sem um segundo lugar para manter. Ver
    `puck/PreviaDaPeca`. */
-/* `puck` envolve a interface inteira, e é só para pôr `NomesDasSecoes` DENTRO
-   da árvore do Puck — é lá que o estado dele pode ser assinado. Não desenha
-   nada. */
+/* `puck` envolve a interface inteira, e é só para pôr `NomesDasSecoes` e
+   `ArrastoNaEstrutura` DENTRO da árvore do Puck — é lá que o estado dele pode
+   ser assinado e o `dispatch` existe. Não desenham nada na página (o
+   renomear da Estrutura abre por portal). */
 const SOBRESCRITAS = {
   actionBar: BarraDaPeca,
   drawerItem: CartaoDaGaveta,
@@ -133,6 +135,7 @@ const SOBRESCRITAS = {
     <>
       {children}
       <NomesDasSecoes />
+      <ArrastoNaEstrutura />
     </>
   ),
 };

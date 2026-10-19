@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { agruparCom, agruparComAnterior, arrumarColunas, desagrupar, estaAgrupada, motivoParaNaoAgrupar, moverJunto, ordemDasPecas, podarSecoesVazias, removerPeca, temAnterior } from "../src/puck/agrupar.js";
+import { agruparCom, agruparComAnterior, arrumarColunas, comPropsNasPecasDaSecao, desagrupar, levarParaOFim, pecasDaSecao, estaAgrupada, motivoParaNaoAgrupar, moverJunto, ordemDasPecas, podarSecoesVazias, removerPeca, temAnterior } from "../src/puck/agrupar.js";
 
 /* ── O que esta suíte guarda ─────────────────────────────────────────────────
 
@@ -311,4 +311,36 @@ test("a seção em uso não é podada, mesmo vazia", () => {
   const doc = [p("a"), secao("nova", [])];
   assert.equal(podarSecoesVazias(doc, "nova"), null);
   assert.deepEqual(ids(podarSecoesVazias(doc)), ["a"]);
+});
+
+/* ── A seção repassa às peças de dentro ─────────────────────────────────────
+   Arredondar ou colar estilo numa seção vale para os widgets que ela contém,
+   inclusive os de uma seção aninhada — e nunca para a própria seção. */
+test("pecasDaSecao: as folhas, descendo pelas seções aninhadas", () => {
+  const doc = [p("cab"), secao("s1", [p("a"), secao("s2", [p("b"), p("c")])]), p("fora")];
+  assert.deepEqual(ids(pecasDaSecao(doc, "s1")), ["a", "b", "c"]);
+  assert.deepEqual(ids(pecasDaSecao(doc, "s2")), ["b", "c"]);
+  assert.deepEqual(pecasDaSecao(doc, "nao-existe"), []);
+});
+
+test("comPropsNasPecasDaSecao: escreve nas peças, não na seção, e respeita o null", () => {
+  const doc = [secao("s1", [p("a"), p("b", "BlocoTitulo")]), p("fora")];
+  const novo = comPropsNasPecasDaSecao(doc, "s1", (peca) => (peca.type === "BlocoTitulo" ? null : { arredondamento: 30 }));
+  const [s1] = novo;
+  assert.equal(s1.props.arredondamento, undefined, "a seção não recebe");
+  assert.equal(s1.props.conteudo[0].props.arredondamento, 30);
+  assert.equal(s1.props.conteudo[1].props.arredondamento, undefined, "null deixa a peça como está");
+  assert.equal(novo[1], doc[1], "o que está fora da seção não é tocado");
+  assert.equal(comPropsNasPecasDaSecao(doc, "s1", () => null), null, "nada a mudar → null");
+});
+
+/* ── "Depois da seção", na Estrutura ── */
+test("levarParaOFim: tira de onde estiver e põe por último, sem perder nada", () => {
+  const doc = [p("cab"), p("rodape"), secao("s1", [p("a"), p("b")])];
+  assert.deepEqual(ids(levarParaOFim(doc, "rodape")), ["cab", "s1", "rodape"]);
+  const deDentro = levarParaOFim(doc, "b");
+  assert.deepEqual(ids(deDentro), ["cab", "rodape", "s1", "b"]);
+  assert.deepEqual(ids(deDentro[2].props.conteudo), ["a"]);
+  assert.equal(levarParaOFim(doc, "s1"), null, "já é a última");
+  assert.equal(levarParaOFim(doc, "nao-existe"), null);
 });

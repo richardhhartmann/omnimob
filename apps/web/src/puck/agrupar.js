@@ -533,3 +533,60 @@ export function arrumarColunas(conteudo) {
   const saida = arrumar(conteudo);
   return mudou ? saida : null;
 }
+
+/* ── O QUE SE FAZ NA SEÇÃO VALE PARA AS PEÇAS DE DENTRO ─────────────────────
+
+   A seção só agrupa: ela não tem borda nem cartão. Arredondar uma seção, ou
+   colar nela a aparência copiada, é pedir isso para cada widget que ela
+   contém — mexer na seção em si seria um ajuste que a página não mostra
+   (arredondar uma caixa sem fundo) ou que pinta uma faixa por trás das
+   colunas que ninguém pediu.
+
+   "Peças da seção" são as FOLHAS: uma seção dentro de outra é atravessada, e
+   as peças dela entram também — a resposta para quem arredonda a de fora é
+   "todos os cartões que eu vejo aqui dentro". */
+
+/** As peças de dentro da seção `secaoId`, descendo pelas seções aninhadas. */
+export function pecasDaSecao(conteudo, secaoId) {
+  const secao = acharPeca(conteudo, secaoId);
+  const saida = [];
+  const descer = (item) => {
+    for (const [, dentro] of listasDe(item)) {
+      for (const filho of dentro) {
+        if (filho.type === "Secao") descer(filho);
+        else saida.push(filho);
+      }
+    }
+  };
+  if (secao) descer(secao);
+  return saida;
+}
+
+/**
+ * Troca campos de cada peça de dentro da seção. `propsDe(peca)` devolve as
+ * props novas daquela peça, ou `null` para deixá-la como está.
+ *
+ * @returns {Array|null} a lista nova, ou `null` quando nada mudou.
+ */
+export function comPropsNasPecasDaSecao(conteudo, secaoId, propsDe) {
+  let saida = conteudo;
+  for (const peca of pecasDaSecao(conteudo, secaoId)) {
+    const novas = propsDe(peca);
+    if (novas) saida = comProps(saida, peca.props.id, novas);
+  }
+  return saida === conteudo ? null : saida;
+}
+
+/* ── LEVAR UMA PEÇA PARA O FIM DA PÁGINA ────────────────────────────────────
+   O destino que a Estrutura do Puck não oferece quando a última peça da
+   página é uma seção aberta: ali, tudo abaixo dela é "dentro da seção". Ver
+   `ArrastoNaEstrutura`. Devolve `null` quando não há o que mover (peça
+   inexistente, ou já é a última da página). */
+export function levarParaOFim(conteudo, id) {
+  const lista = conteudo || [];
+  if (lista[lista.length - 1]?.props?.id === id) return null;
+  const peca = acharPeca(lista, id);
+  if (!peca) return null;
+  const sem = removerPeca(lista, id);
+  return sem ? [...sem, peca] : null;
+}
