@@ -140,6 +140,22 @@ const SOBRESCRITAS = {
   ),
 };
 
+/* ── OS TAMANHOS DE TELA DA PRÉVIA ─────────────────────────────────────────
+   Aparelhos de verdade, e não os "Small/Medium/Large" de fábrica do Puck (360,
+   768 e 1280): 768 é exatamente a fronteira entre celular e computador da
+   vitrine (`BREAKPOINT_MOBILE`), e o "Medium" caía do lado do computador —
+   a prévia de tablet mostrava outra coisa que um tablet mostra.
+
+   A prévia é um iframe dessa largura, e é isso que a torna fiel: as regras de
+   celular e tablet da vitrine (styles.css) leem a largura da janela, e a
+   janela do iframe tem a do aparelho. Fora do componente, como `SOBRESCRITAS`. */
+const TELAS = [
+  { width: 390, height: "auto", icon: "Smartphone", label: "Celular" },
+  { width: 820, height: "auto", icon: "Tablet", label: "Tablet" },
+  { width: 1280, height: "auto", icon: "Monitor", label: "Computador" },
+  { width: "100%", height: "auto", icon: "FullWidth", label: "Largura toda" },
+];
+
 export function VitrinePuckPage() {
   const { tenantSlug } = useParams();
   const [carga, setCarga] = useState({ estado: "carregando" });
@@ -518,6 +534,7 @@ export function VitrinePuckPage() {
            colunas tem sobre o que se desenhar. */
         dnd={{ behavior: "static" }}
         dictionary={DICIONARIO_PT}
+        viewports={TELAS}
         /* Acrescenta "lado a lado" e "desagrupar" à barra da peça, sem tirar o
            que o Puck já desenha ali. Ver `puck/AcoesDaPeca`. */
         overrides={SOBRESCRITAS}

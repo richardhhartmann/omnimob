@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ShowcaseLink, ShowcaseLinkExterno, useVitrine } from "./contexto.jsx";
+import { BREAKPOINT_MOBILE } from "./tema.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    O cabeçalho da vitrine.
@@ -26,13 +27,36 @@ import { ShowcaseLink, ShowcaseLinkExterno, useVitrine } from "./contexto.jsx";
    menu. Por isso a escuta é na janela do PRÓPRIO documento do cabeçalho —
    `ownerDocument.defaultView`, que no iframe é a janela da prévia, e não a do
    editor —, e só fica de fora quando essa janela é a do editor (o clássico).
-   ──────────────────────────────────────────────────────────────────────────── */
+
+   ── CELULAR OU COMPUTADOR, PELA MESMA JANELA ──
+
+   `isMobileViewport` booleano é a engine de coordenadas decidindo (vitrine
+   antiga e editor clássico, que têm um layout por modo). SEM ele — a árvore
+   do Puck —, quem decide é a largura da janela do próprio cabeçalho, pela
+   mesma `ownerDocument.defaultView`: no celular, a tela; no editor, o iframe
+   da prévia, que tem a largura do aparelho escolhido. Antes o Puck passava
+   `false` fixo, e o celular recebia o menu de computador espremido — o mesmo
+   que a prévia "Celular" mostrava. */
 
 export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewport, whatsappHref }) {
   const { modo } = useVitrine();
   const noEditor = modo === "editor";
   const [rolado, setRolado] = useState(false);
   const raiz = useRef(null);
+  const automatico = typeof isMobileViewport !== "boolean";
+  const [estreita, setEstreita] = useState(
+    () => automatico && typeof window !== "undefined" && window.innerWidth < BREAKPOINT_MOBILE,
+  );
+
+  useEffect(() => {
+    if (!automatico) return undefined;
+    const janela = raiz.current?.ownerDocument?.defaultView || window;
+    const medir = () => setEstreita(janela.innerWidth < BREAKPOINT_MOBILE);
+    medir();
+    janela.addEventListener("resize", medir);
+    return () => janela.removeEventListener("resize", medir);
+  }, [automatico]);
+  const celular = automatico ? estreita : isMobileViewport;
 
   useEffect(() => {
     const janela = raiz.current?.ownerDocument?.defaultView || window;
@@ -74,7 +98,7 @@ export function ShowcaseHeader({ tenant, tenantSlug, blockStyles, isMobileViewpo
 
   const classe = `luxury-header-wrapper ${rolado ? "is-scrolled" : "not-scrolled"}`;
 
-  if (isMobileViewport) {
+  if (celular) {
     return (
       <div ref={raiz} className={classe}>
         <div style={{ padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "70px" }}>

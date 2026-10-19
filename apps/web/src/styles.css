@@ -841,38 +841,38 @@ button:disabled {
   display: grid; place-items: center; color: #fff;
   background: rgba(255,255,255,0.08);
 }
-.editor-shell .social-editor input {
+:is(.editor-shell, .puck-ponte) .social-editor input {
   width: 100%; padding: 5px 9px; border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.18);
   background: rgba(255,255,255,0.06);
   color: #e6e8ee; font-family: inherit; font-size: 12px;
   box-shadow: none;
 }
-.editor-shell .social-editor input:focus { outline: none; border-color: #818cf8; background: rgba(255,255,255,0.09); }
-.editor-shell .social-editor input::placeholder { color: rgba(230,232,238,0.38); }
-.editor-shell .social-editor__linha > button {
+:is(.editor-shell, .puck-ponte) .social-editor input:focus { outline: none; border-color: #818cf8; background: rgba(255,255,255,0.09); }
+:is(.editor-shell, .puck-ponte) .social-editor input::placeholder { color: rgba(230,232,238,0.38); }
+:is(.editor-shell, .puck-ponte) .social-editor__linha > button {
   width: 22px; height: 22px; padding: 0; border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.18); background: transparent;
   color: rgba(230,232,238,0.55); font-size: 12px; line-height: 1;
   cursor: pointer; box-shadow: none; transform: none;
 }
-.editor-shell .social-editor__linha > button:hover { color: #fca5a5; border-color: rgba(248,113,113,0.5); background: transparent; }
-.editor-shell button.social-editor__mais {
+:is(.editor-shell, .puck-ponte) .social-editor__linha > button:hover { color: #fca5a5; border-color: rgba(248,113,113,0.5); background: transparent; }
+:is(.editor-shell, .puck-ponte) button.social-editor__mais {
   justify-self: start; width: auto; padding: 5px 11px; border-radius: 999px;
   border: 1px dashed rgba(255,255,255,0.2); background: transparent;
   color: rgba(230,232,238,0.6); font-size: 11.5px; font-weight: 600;
   cursor: pointer; box-shadow: none; transform: none;
 }
-.editor-shell button.social-editor__mais:hover { color: #e6e8ee; border-color: #818cf8; background: transparent; }
+:is(.editor-shell, .puck-ponte) button.social-editor__mais:hover { color: #e6e8ee; border-color: #818cf8; background: transparent; }
 
 /* Folha clara: a mesma dupla invertida. */
 .showcase-theme-light .social-editor { border-top-color: rgba(15,23,42,0.18); }
-.editor-shell .showcase-theme-light .social-editor input {
+:is(.editor-shell, .puck-ponte) .showcase-theme-light .social-editor input {
   border-color: rgba(15,23,42,0.18); background: rgba(15,23,42,0.04); color: #0f172a;
 }
-.editor-shell .showcase-theme-light .social-editor input::placeholder { color: rgba(15,23,42,0.42); }
-.editor-shell .showcase-theme-light .social-editor__linha > button { border-color: rgba(15,23,42,0.18); color: rgba(15,23,42,0.5); }
-.editor-shell .showcase-theme-light button.social-editor__mais { border-color: rgba(15,23,42,0.22); color: rgba(15,23,42,0.6); }
+:is(.editor-shell, .puck-ponte) .showcase-theme-light .social-editor input::placeholder { color: rgba(15,23,42,0.42); }
+:is(.editor-shell, .puck-ponte) .showcase-theme-light .social-editor__linha > button { border-color: rgba(15,23,42,0.18); color: rgba(15,23,42,0.5); }
+:is(.editor-shell, .puck-ponte) .showcase-theme-light button.social-editor__mais { border-color: rgba(15,23,42,0.22); color: rgba(15,23,42,0.6); }
 
 /* ── Acrescentar e remover destaque, na propria faixa ── */
 .highlight-box { position: relative; }
@@ -1361,7 +1361,13 @@ html[data-tema-painel="claro"] .seq-marca { background: rgba(15,23,42,0.08); }
    esta, sem depender da ordem do arquivo.
 
    E sem `--ed-*`: aqueles tokens sao do editor, e o editor e o eixo do painel.
-   (Sem crases nestes comentarios: convencao do arquivo.) */
+   (Sem crases nestes comentarios: convencao do arquivo.)
+
+   O prefixo e o editor clássico (.editor-shell) OU o do Puck (.puck-ponte,
+   que so existe editando). So o primeiro existia, e no Puck a folha mora num
+   iframe sem .editor-shell acima: as fichas caiam nos estilos de campo e de
+   botao da vitrine, e o x e o + viravam botoes de formulario enormes. Nao
+   .vitrine-puck: essa raiz e tambem a da pagina publicada. */
 .lista-editavel {
   display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
   margin-top: 7px;
@@ -1372,33 +1378,33 @@ html[data-tema-painel="claro"] .seq-marca { background: rgba(15,23,42,0.08); }
   border: 1px solid rgba(255,255,255,0.18);
   background: rgba(255,255,255,0.06);
 }
-.editor-shell .lista-editavel input.lista-editavel__campo {
+:is(.editor-shell, .puck-ponte) .lista-editavel input.lista-editavel__campo {
   width: auto; min-width: 42px; padding: 2px 0; border: 0; border-radius: 0;
   background: transparent; color: #e6e8ee;
   font-family: inherit; font-size: 11.5px; box-shadow: none;
 }
-.editor-shell .lista-editavel input.lista-editavel__campo:focus { outline: none; box-shadow: none; background: transparent; }
-.editor-shell .lista-editavel input.lista-editavel__campo::placeholder { color: rgba(230,232,238,0.4); }
-.editor-shell .lista-editavel button.lista-editavel__tirar {
+:is(.editor-shell, .puck-ponte) .lista-editavel input.lista-editavel__campo:focus { outline: none; box-shadow: none; background: transparent; }
+:is(.editor-shell, .puck-ponte) .lista-editavel input.lista-editavel__campo::placeholder { color: rgba(230,232,238,0.4); }
+:is(.editor-shell, .puck-ponte) .lista-editavel button.lista-editavel__tirar {
   width: 16px; height: 16px; padding: 0; border: 0; border-radius: 999px;
   background: transparent; color: rgba(230,232,238,0.5);
   font-size: 12px; line-height: 1; cursor: pointer; box-shadow: none; transform: none;
 }
-.editor-shell .lista-editavel button.lista-editavel__tirar:hover { color: #fca5a5; background: transparent; }
-.editor-shell .lista-editavel button.lista-editavel__mais {
+:is(.editor-shell, .puck-ponte) .lista-editavel button.lista-editavel__tirar:hover { color: #fca5a5; background: transparent; }
+:is(.editor-shell, .puck-ponte) .lista-editavel button.lista-editavel__mais {
   width: 22px; height: 22px; padding: 0; border-radius: 999px;
   border: 1px dashed rgba(255,255,255,0.24);
   background: transparent; color: rgba(230,232,238,0.6);
   font-size: 13px; line-height: 1; cursor: pointer; box-shadow: none; transform: none;
 }
-.editor-shell .lista-editavel button.lista-editavel__mais:hover { color: #e6e8ee; border-color: #818cf8; background: transparent; }
+:is(.editor-shell, .puck-ponte) .lista-editavel button.lista-editavel__mais:hover { color: #e6e8ee; border-color: #818cf8; background: transparent; }
 
 /* A folha clara inverte a dupla, como o resto do aparato sobre a folha. */
 .showcase-theme-light .lista-editavel__ficha { border-color: rgba(15,23,42,0.18); background: rgba(15,23,42,0.04); }
-.editor-shell .showcase-theme-light .lista-editavel input.lista-editavel__campo { color: #0f172a; }
-.editor-shell .showcase-theme-light .lista-editavel input.lista-editavel__campo::placeholder { color: rgba(15,23,42,0.42); }
-.editor-shell .showcase-theme-light .lista-editavel button.lista-editavel__tirar { color: rgba(15,23,42,0.5); }
-.editor-shell .showcase-theme-light .lista-editavel button.lista-editavel__mais { border-color: rgba(15,23,42,0.24); color: rgba(15,23,42,0.6); }
+:is(.editor-shell, .puck-ponte) .showcase-theme-light .lista-editavel input.lista-editavel__campo { color: #0f172a; }
+:is(.editor-shell, .puck-ponte) .showcase-theme-light .lista-editavel input.lista-editavel__campo::placeholder { color: rgba(15,23,42,0.42); }
+:is(.editor-shell, .puck-ponte) .showcase-theme-light .lista-editavel button.lista-editavel__tirar { color: rgba(15,23,42,0.5); }
+:is(.editor-shell, .puck-ponte) .showcase-theme-light .lista-editavel button.lista-editavel__mais { border-color: rgba(15,23,42,0.24); color: rgba(15,23,42,0.6); }
 
 /* ── Perguntas: remover uma, acrescentar a proxima ──
    O "×" do editor ocupa o lugar e o tamanho do "+" da vitrine (ver
@@ -4744,7 +4750,7 @@ html[data-tema-painel="claro"] .puck-selecao button {
    `contentEditable` viraria conteúdo que a pessoa apaga junto. O componente
    manda string vazia quando o título é só marcação, e é isso que garante o
    `:empty`. */
-.editor-shell .widget-titulo--vazio:empty::before {
+:is(.editor-shell, .puck-ponte) .widget-titulo--vazio:empty::before {
   content: "Título da peça (opcional)";
   opacity: 0.34;
   font-weight: inherit;
@@ -6414,7 +6420,7 @@ html[data-tema-painel="claro"] .sel-menu {
    diferença aqui é de comportamento. Mesma família do `<a>` sem href do
    contexto: o elemento é o mesmo, o que ele faz é que muda.
    ────────────────────────────────────────────────────────────────────────── */
-.editor-shell .widget-map__mapa { pointer-events: none; }
+:is(.editor-shell, .puck-ponte) .widget-map__mapa { pointer-events: none; }
 
 /* ─── Inspetor: o alternador de fonte de conteúdo ───────────────────────────
    Grade de duas colunas — caixa e texto — para a segunda linha da explicação
@@ -14560,4 +14566,30 @@ ul:has(> [data-puck-layer-tree-id]):not([data-puck-layer-tree-id] ul) {
   border-radius: 2px;
   background: var(--_puck-outline-color-drop-indicator, var(--ed-accent, #6366f1));
   pointer-events: none;
+}
+
+/* ─── A vitrine no celular e no tablet (árvore do Puck) ───────────────────────
+   O layout por modo (`mobileLayout`) ficou com a engine de coordenadas; na
+   árvore, a responsividade é DAQUI. Por media query, e não por consulta de
+   contêiner, de propósito: a prévia do editor é um iframe da largura do
+   aparelho escolhido (Celular, Tablet…), então a mesma regra vale no celular
+   de verdade e na prévia — uma regra, duas telas, o mesmo resultado. Até isto
+   existir, as duas mostravam o computador espremido: três colunas de 100px
+   com o texto quebrando letra a letra.
+
+   Os limites são os de `tema.js`: abaixo de 768px é celular. */
+@media (max-width: 767px) {
+  /* A seção em colunas empilha. O número de colunas vem no `style` do slot
+     (`SecaoEmColunas`), daí o `!important`. */
+  .vitrine-puck .puck-secao > * { grid-template-columns: minmax(0, 1fr) !important; }
+  /* "Largura da peça" (40% a 100%) é decisão de computador: 40% de um
+     celular são 150px. Aqui toda peça ocupa a coluna inteira. */
+  .vitrine-puck .puck-envolucro:not(.puck-envolucro--livre) { width: 100% !important; }
+}
+/* Tablet: três ou quatro colunas viram duas — a quarta coluna de um tablet em
+   pé tem a largura de um celular dividido ao meio. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .vitrine-puck .puck-secao:is([data-colunas="3"], [data-colunas="4"]) > * {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
