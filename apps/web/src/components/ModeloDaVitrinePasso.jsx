@@ -127,14 +127,20 @@ export function ModeloDaVitrinePasso({ tenantSlug, configAtual, aoConcluir, aoAt
 export const MODELO_CSS = `
 .mod-corpo { display: flex; flex-direction: column; gap: 14px; text-align: left; }
 .mod-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-height: 50vh; overflow-y: auto; padding: 2px; }
+/* align-items: stretch explícito: o cartão é um botão, e a regra global de
+   botão centraliza os filhos. A prévia não tem largura própria (ela ocupa a
+   do pai, como na gaveta do editor) e, centralizada, encolhia a ZERO — o
+   cartão mostrava só a borda do quadro, um fio vertical no meio. */
 .mod-cartao {
-  display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%;
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  gap: 6px; text-align: left; width: 100%;
   padding: 8px; border-radius: 12px; cursor: pointer;
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); color: inherit;
   box-shadow: none; transform: none; transition: border-color 0.15s, background 0.15s;
 }
 .mod-cartao:hover { background: rgba(255,255,255,0.06); box-shadow: none; transform: none; }
 .mod-cartao.is-ativo { border-color: #a78bfa; background: rgba(167,139,250,0.12); box-shadow: 0 0 0 2px rgba(167,139,250,0.35); }
+.mod-cartao .previa-modelo { width: 100%; box-sizing: border-box; }
 .mod-cartao strong { font-size: 13px; }
 .mod-cartao em { font-size: 11px; font-style: normal; color: var(--text-muted, #94a3b8); line-height: 1.4; }
 /* A mesma altura e a mesma largura da prévia dos outros cartões: o quadro

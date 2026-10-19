@@ -150,8 +150,13 @@ function SecaoEmColunas({ colunas, conteudo: Conteudo }) {
     gap: 16,
   }), [colunas]);
 
+  /* `puck-secao` e `data-colunas` são o gancho da regra que EMPILHA as colunas
+     no celular e limita a duas no tablet (styles.css). A regra é CSS por
+     largura de tela, e por isso vale igual no celular e na prévia do editor,
+     que é um iframe da largura do aparelho escolhido. */
+  const quantas = Math.min(4, Math.max(1, colunas || 1));
   return (
-    <section style={{ padding: "8px 0" }}>
+    <section className="puck-secao" data-colunas={quantas} style={{ padding: "8px 0" }}>
       {/* O estilo vai NA função do slot, e não num invólucro nosso — é assim
           que o Puck deixa o arrasto funcionar dentro de grid e flex.
 
@@ -714,10 +719,10 @@ export const configVitrine = {
             tenant={tenant}
             tenantSlug={tenantSlug}
             blockStyles={blockStyles}
-            /* Falso fixo: a responsividade passa a ser do CSS, e não de um
-               segundo documento por breakpoint. É a contrapartida combinada
-               quando o layout mobile foi descartado na fase 2. */
-            isMobileViewport={false}
+            /* SEM `isMobileViewport`: o cabeçalho decide sozinho, pela largura
+               da janela em que está desenhado (a tela do celular, ou o iframe
+               da prévia no editor). Havia um `false` fixo aqui, e o celular
+               recebia o menu de computador espremido. Ver `ShowcaseHeader`. */
             whatsappHref={whatsappHref}
           />
         );
