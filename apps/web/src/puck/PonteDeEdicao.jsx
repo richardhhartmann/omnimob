@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef } from "react";
 import { registerOverlayPortal, useGetPuck } from "@puckeditor/core";
 import { VitrineProvider } from "../components/showcase/contexto.jsx";
 import { aplicarEdicaoNoWidget } from "../utils/edicaoDeWidget.js";
-import { agruparCom, motivoParaNaoAgrupar } from "./agrupar.js";
+import { agruparCom, cabeAoLado, motivoParaNaoAgrupar } from "./agrupar.js";
 import { criarPreviaDeSecao } from "./previaDeSecao.js";
 import { anotarIntencao, consumirIntencao, ladoDoPonteiro, limparIntencao } from "./intencaoDeAgrupar.js";
 import { moverJunto, ordemDasPecas, removerPeca } from "./agrupar.js";
+import { assinarPecaArmada, desarmarPeca, pecaArmada } from "./pecaArmada.js";
 import {
   alternarNaSelecao,
   definirSelecao,
@@ -199,6 +200,7 @@ export function PonteDeEdicao({ tenantSlug, dados, aoEditarCadastro, children })
   useTeclasDeTexto(raiz);
   useAcenderNaGaveta(raiz, pegarPuck);
   useAcenderNaEstrutura(raiz);
+  useColocarAoClicar(raiz, pegarPuck);
 
   return (
     <VitrineProvider modo="editor" aoEditar={aoEditar} tenantSlug={tenantSlug} dados={dados}>
@@ -1233,6 +1235,220 @@ function useAcenderNaGaveta(raiz, pegarPuck) {
       doc.removeEventListener("pointerover", aoEntrar, true);
       doc.removeEventListener("pointerleave", apagar, true);
       apagar();
+    };
+  }, [raiz, pegarPuck]);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   CLICAR NA GAVETA, CLICAR NA PÁGINA.
+
+   O cartão da gaveta arma a peça (`pecaArmada.js`); este hook é a outra
+   metade: com uma peça armada, a prancheta mostra onde ela vai entrar — a
+   MESMA prévia do arrasto — e o clique a coloca ali.
+
+   As regras de destino são as do arrasto, para o clique não ser um terceiro
+   jeito de pensar a página:
+
+     · sobre o meio de uma peça → entra acima ou abaixo dela (a metade
+       vertical decide). Se a peça mora numa seção, o "acima/abaixo" é o da
+       SEÇÃO: numa linha de colunas, "abaixo" não existe;
+     · sobre a faixa lateral de uma peça (`ladoDoPonteiro`) → as duas viram
+       colunas, como soltar na lateral (`agruparCom`);
+     · fora de qualquer peça → no fim da página.
+
+   ── POR QUE NA CAPTURA DA JANELA ──
+
+   Com a peça armada, apertar e clicar na prancheta são NOSSOS: sem parar os
+   dois antes de todo mundo, o clique também selecionaria a peça de baixo
+   (`useSelecionarAoClicar`) e o apertar começaria um arrasto dela. A captura
+   na janela do quadro roda antes da do documento, onde os outros escutam.
+
+   ── A DECISÃO CONGELA, COMO NO ARRASTO ──
+
+   A prévia reorganiza a página (abre a vaga, encolhe o alvo), e o teste de
+   acerto lê a página: sem trava, abrir a vaga muda quem está sob o ponteiro, a
+   prévia fecha, a vaga fecha, e o par pisca. A caixa do alvo é guardada ANTES
+   da prévia, e enquanto o ponteiro estiver nela só o lado/metade é reavaliado.
+   É a mesma lição de `useArrastarAoLado`.
+   ──────────────────────────────────────────────────────────────────────────── */
+const ZONA_RAIZ = "root:default-zone";
+
+function useColocarAoClicar(raiz, pegarPuck) {
+  useEffect(() => {
+    const alvo = raiz.current;
+    if (!alvo) return undefined;
+    const doc = alvo.ownerDocument;
+    const janela = doc.defaultView;
+    const hospedeiro = janela?.parent?.document || null;
+    const previa = criarPreviaDeSecao(alvo);
+    let mira = null;
+
+    const apagar = () => { previa.esconder(); mira = null; };
+
+    /* A peça sob o ponteiro, pela menor caixa que o contém — a mesma conta do
+       arrasto: durante a edição o Puck cobre a prancheta com a sobreposição, e
+       a geometria não depende de quem está por cima. */
+    const pecaSob = (ponto) => {
+      let achada = null;
+      let menor = Infinity;
+      for (const el of doc.querySelectorAll("[data-puck-component]:not([data-dnd-placeholder])")) {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        if (ponto.x < r.left || ponto.x > r.right || ponto.y < r.top || ponto.y > r.bottom) continue;
+        if (r.width * r.height < menor) { menor = r.width * r.height; achada = el; }
+      }
+      return achada;
+    };
+
+    /* "Acima/abaixo" de uma peça de dentro de uma seção é acima/abaixo da
+       seção: sobe até a peça que mora na raiz da página. */
+    const naRaiz = (el) => {
+      let atual = el;
+      const { getSelectorForId } = pegarPuck();
+      while (atual) {
+        const id = atual.getAttribute("data-puck-component");
+        if (getSelectorForId(id)?.zone === ZONA_RAIZ) return atual;
+        atual = atual.parentElement?.closest("[data-puck-component]") || null;
+      }
+      return el;
+    };
+
+    /* O destino do ponteiro agora: o que a prévia mostra e o que o clique faz. */
+    const decidir = (ponto) => {
+      const armada = pecaArmada();
+      if (!armada) return null;
+
+      if (mira) {
+        const r = mira.rect;
+        const folga = mira.modo === "empilhar" ? 120 : 0;
+        if (ponto.x >= r.left && ponto.x <= r.right && ponto.y >= r.top - folga && ponto.y <= r.bottom + folga) {
+          const lado = ladoDoPonteiro(r, ponto.x);
+          if (mira.modo === "colunas" && lado) {
+            if (lado !== mira.lado) { mira.lado = lado; previa.colunas(mira.el, lado, null, armada.rotulo, r, null); }
+            return mira;
+          }
+          if (mira.modo === "empilhar" && !lado) {
+            const posicao = ponto.y < r.top + r.height / 2 ? "antes" : "depois";
+            if (posicao !== mira.posicao) { mira.posicao = posicao; previa.empilhar(mira.el, posicao, null, armada.rotulo, r, null, 120); }
+            return mira;
+          }
+        }
+        apagar();
+      }
+
+      const sob = pecaSob(ponto);
+      if (!sob) return { modo: "fim" };
+      const rectSob = sob.getBoundingClientRect();
+      const lado = ladoDoPonteiro(rectSob, ponto.x);
+      const alvoId = sob.getAttribute("data-puck-component");
+      /* Seção cheia não recebe uma quinta coluna: o clique na lateral dela
+         empilha, em vez de prometer o que a transformação recusaria. */
+      if (lado && cabeAoLado(pegarPuck().appState.data.content, alvoId)) {
+        mira = { modo: "colunas", alvoId, el: sob, rect: rectSob, lado };
+        previa.colunas(sob, lado, null, armada.rotulo, rectSob, null);
+        return mira;
+      }
+      const el = naRaiz(sob);
+      const rect = el.getBoundingClientRect();
+      const posicao = ponto.y < rect.top + rect.height / 2 ? "antes" : "depois";
+      mira = { modo: "empilhar", alvoId: el.getAttribute("data-puck-component"), el, rect, posicao };
+      previa.empilhar(el, posicao, null, armada.rotulo, rect, null, 120);
+      return mira;
+    };
+
+    const colocar = (destino) => {
+      const armada = pecaArmada();
+      if (!armada || !destino) return;
+      desarmarPeca();
+      const puck = pegarPuck();
+      const id = `${armada.tipo}-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
+
+      let zona = ZONA_RAIZ;
+      let indice = puck.appState.data.content.length;
+      if (destino.modo !== "fim") {
+        const seletor = puck.getSelectorForId(destino.alvoId);
+        if (seletor) {
+          zona = seletor.zone;
+          indice = destino.modo === "empilhar" && destino.posicao === "antes" ? seletor.index : seletor.index + 1;
+        }
+      }
+      /* A inserção é a do Puck (a mesma ação que a gaveta despacha ao soltar),
+         gravando no desfazer; o "ao lado" é a transformação do arrasto. */
+      puck.dispatch({ type: "insert", componentType: armada.tipo, destinationIndex: indice, destinationZone: zona, id, recordHistory: true });
+      if (destino.modo === "colunas") {
+        puck.dispatch({
+          type: "setData",
+          data: (atual) => {
+            const novo = agruparCom(atual.content, id, destino.alvoId, destino.lado);
+            return novo ? { ...atual, content: novo } : atual;
+          },
+        });
+      }
+      setTimeout(() => {
+        const { getSelectorForId, dispatch, resolveDataById } = pegarPuck();
+        resolveDataById?.(id, "insert");
+        const seletor = getSelectorForId(id);
+        if (seletor) dispatch({ type: "setUi", ui: { itemSelector: seletor } });
+      }, 0);
+    };
+
+    const aoMover = (e) => {
+      if (!pecaArmada()) return;
+      decidir({ x: e.clientX, y: e.clientY });
+    };
+    const aoApertar = (e) => {
+      if (!pecaArmada()) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const aoClicar = (e) => {
+      if (!pecaArmada()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const destino = mira || decidir({ x: e.clientX, y: e.clientY });
+      apagar();
+      colocar(destino);
+    };
+    /* Esc desarma. `preventDefault` porque o Esc do painel sai da tela
+       (`useSaidaDaTela`), e ele respeita quem já tratou a tecla. */
+    const aoTeclar = (e) => {
+      if (e.key !== "Escape" || !pecaArmada()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      desarmarPeca();
+    };
+    /* Apertar fora da prancheta e fora de um cartão da gaveta (inspetor,
+       barra, Estrutura) desiste. O cartão é quem alterna, então ele fica de
+       fora — senão desarmaria aqui e rearmaria no clique. */
+    const aoApertarFora = (e) => {
+      if (!pecaArmada() || e.target?.closest?.(".puck-cartao")) return;
+      desarmarPeca();
+    };
+    const aoMudarArmada = () => {
+      const armada = pecaArmada();
+      /* Na raiz da ponte, e não no `body`: o Puck espelha o className do body
+         hospedeiro no do quadro, e uma classe nossa ali seria apagada. */
+      alvo.classList.toggle("puck-colocando", Boolean(armada));
+      if (!armada) apagar();
+    };
+
+    const cancelar = assinarPecaArmada(aoMudarArmada);
+    janela.addEventListener("pointermove", aoMover, true);
+    janela.addEventListener("pointerdown", aoApertar, true);
+    janela.addEventListener("click", aoClicar, true);
+    janela.addEventListener("keydown", aoTeclar, true);
+    hospedeiro?.defaultView?.addEventListener("keydown", aoTeclar, true);
+    hospedeiro?.addEventListener("pointerdown", aoApertarFora, true);
+    return () => {
+      cancelar();
+      janela.removeEventListener("pointermove", aoMover, true);
+      janela.removeEventListener("pointerdown", aoApertar, true);
+      janela.removeEventListener("click", aoClicar, true);
+      janela.removeEventListener("keydown", aoTeclar, true);
+      hospedeiro?.defaultView?.removeEventListener("keydown", aoTeclar, true);
+      hospedeiro?.removeEventListener("pointerdown", aoApertarFora, true);
+      alvo.classList.remove("puck-colocando");
+      previa.remover();
     };
   }, [raiz, pegarPuck]);
 }
