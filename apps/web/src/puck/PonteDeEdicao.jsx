@@ -374,6 +374,27 @@ function pecaVizinha(el, posicao) {
   return atual;
 }
 
+/* ── PEÇA TRAVADA NÃO TEM PRÉVIA ─────────────────────────────────────────────
+   Travar vira PERMISSÃO no Puck (`resolvePermissions` → `drag: false`), e ele
+   respeita: não arrasta, e ao soltar nada muda. Mas a mira desta ponte não
+   perguntava nada a ninguém — ela acompanha o ponteiro por conta própria —, e
+   com a peça travada na mão desenhava a prévia inteira: o alvo encolhia, a
+   vaga abria, a cópia pulava para o lugar dos outros widgets. Uma promessa que
+   o soltar desmentia.
+
+   A pergunta é a MESMA que o Puck faz antes de deixar arrastar
+   (`getPermissions`), e não uma leitura de `travado` ao lado dela: se um dia
+   outra regra negar o arrasto, a prévia acompanha sem ninguém lembrar daqui.
+   `travado` fica como reserva para o primeiro quadro, antes de o Puck ter
+   resolvido as permissões da peça. */
+function podeArrastar(pegarPuck, id) {
+  const puck = pegarPuck();
+  const item = puck.getItemById?.(id);
+  if (!item) return true;
+  if (puck.getPermissions?.({ item })?.drag === false) return false;
+  return !item.props?.travado;
+}
+
 function useArrastarAoLado(raiz, pegarPuck) {
   useEffect(() => {
     const alvo = raiz.current;
@@ -507,6 +528,7 @@ function useArrastarAoLado(raiz, pegarPuck) {
         const naEstrutura = sob.closest("[data-puck-layer-tree-id]");
         if (naEstrutura) {
           const id = naEstrutura.getAttribute("data-puck-layer-tree-id");
+          if (!podeArrastar(pegarPuck, id)) { gesto = null; return; }
           gesto = {
             origem: "estrutura",
             id,
@@ -563,6 +585,7 @@ function useArrastarAoLado(raiz, pegarPuck) {
       const id = peca
         ? peca.getAttribute("data-puck-component")
         : pegarPuck().selectedItem?.props?.id || null;
+      if (id && !podeArrastar(pegarPuck, id)) { gesto = null; return; }
       gesto = id
         ? { origem: "canvas", id, copia: copiaLimpa(id), deFora: false, x: evento.clientX, y: evento.clientY,
             altura: doc.querySelector(`[data-puck-component="${id}"]`)?.getBoundingClientRect().height || 0 }
@@ -819,7 +842,9 @@ function useArrastarAoLado(raiz, pegarPuck) {
          atrás, encostadas nela e na ordem em que apareciam na página. Ver
          `moverJunto`: é depois do gesto de propósito, porque durante ele o
          documento é da biblioteca. */
-      const selecao = idsSelecionados();
+      /* As travadas da seleção ficam onde estão: arrastar o conjunto não é
+         licença para mover o que a pessoa travou. */
+      const selecao = idsSelecionados().filter((x) => x === solto.id || podeArrastar(pegarPuck, x));
       if (solto.origem !== "gaveta" && selecao.length > 1 && selecao.includes(solto.id)) {
         setTimeout(() => {
           const { dispatch } = pegarPuck();
