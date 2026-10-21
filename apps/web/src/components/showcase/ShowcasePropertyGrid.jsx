@@ -56,10 +56,11 @@ function Grade({ properties, tenantSlug, carouselIndexes, onProxima, onAnterior,
         </p>
       ) : null}
 
-      {visiveis.map((p) => (
+      {visiveis.map((p, i) => (
         <ShowcasePropertyCard
           key={p.id}
           property={p}
+          prioridade={i === 0}
           tenantSlug={tenantSlug}
           carouselIndex={carouselIndexes[p.id] || 0}
           onProxima={onProxima}

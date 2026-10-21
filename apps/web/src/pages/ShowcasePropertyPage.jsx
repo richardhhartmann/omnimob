@@ -15,6 +15,12 @@ import { IconeCheck } from "../components/Icones.jsx";
 import { SITE, useSeo } from "../utils/seo";
 import { esquemaDaTrilha, esquemaDoImovel, useDadosEstruturados } from "../utils/dadosEstruturados";
 import { caminhoDaRegiao, regiaoDoImovel } from "../utils/regioes";
+import { atributosDaFoto, urlNaLargura } from "../utils/imagemResponsiva";
+
+/* Quanto da tela cada foto ocupa — ver `utils/imagemResponsiva.js`. O palco tem
+   a largura da coluna de 1200px menos o respiro; a sugestão, a da `.sug-grid`. */
+const TAMANHOS_DO_PALCO = "(max-width: 1200px) 100vw, 1152px";
+const TAMANHOS_DA_SUGESTAO = "(max-width: 600px) 100vw, (max-width: 1200px) 50vw, 280px";
 
 const IcPin  = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
 const IcArea = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6"/><path d="M3 3l6 6"/><path d="M21 15v6h-6"/><path d="M21 21l-6-6"/></svg>;
@@ -357,6 +363,15 @@ export function ShowcasePropertyPage({ slugFixo, isolada = false }) {
      JSX, o que no modo CLARO vira branco sobre branco — e estilo inline não tem
      como ser corrigido por folha de estilo. */
 
+  /* Sem a imobiliária ainda, nada de cabeçalho. Ele era desenhado vazio e
+     crescia quando a marca chegava (logo, menu, faixa do topo), empurrando a
+     página inteira para baixo: o PageSpeed media CLS de 0,83 no desktop, o pior
+     número da vitrine. Mesma espera da `ShowcasePage`. Navegando dentro da
+     vitrine o tenant já vem do cache, e esta tela nem aparece. */
+  if (!tenant && !error) {
+    return <div style={{ minHeight: "100vh", background: "#0f172a" }} />;
+  }
+
   return (
     <div className={`showcase-body ${classeDeAparencia(showcaseConfig)}${classesDaZebra(showcaseConfig.zebrado, showcaseConfig.zebraEstilo)}`} style={themeStyle}>
       <style>{`
@@ -572,10 +587,14 @@ export function ShowcasePropertyPage({ slugFixo, isolada = false }) {
                 {current360 ? (
                   <Panorama360 key={`pano-${carouselIndex}`} src={images[carouselIndex]?.url} height={520} />
                 ) : (
+                  /* A foto do palco é o LCP desta página: entra na frente da fila
+                     só a primeira — as seguintes chegam pelo carrossel, sem
+                     ninguém esperando por elas. */
                   <img
                     key={carouselIndex}
-                    src={images[carouselIndex]?.url}
+                    {...atributosDaFoto(images[carouselIndex]?.url, TAMANHOS_DO_PALCO)}
                     alt={`${property.title} — foto ${carouselIndex + 1}`}
+                    fetchpriority={carouselIndex === 0 ? "high" : undefined}
                     onClick={openLightbox}
                     style={{ width: "100%", height: "100%", objectFit: "cover", animation: "fadeIn 0.3s ease", cursor: "zoom-in" }}
                   />
@@ -623,7 +642,8 @@ export function ShowcasePropertyPage({ slugFixo, isolada = false }) {
                 <div ref={thumbsRef} style={{ display: "flex", gap: "8px", overflowX: "auto", padding: "12px 0", scrollbarWidth: "none" }}>
                   {images.map((img, i) => (
                     <button key={i} type="button" className="prop-thumb" onClick={() => goTo(i)} style={{ position: "relative", flexShrink: 0, width: "88px", height: "64px", borderRadius: "10px", overflow: "hidden", border: `2px solid ${i === carouselIndex ? primaryColor : "transparent"}`, padding: 0, cursor: "pointer", opacity: i === carouselIndex ? 1 : 0.55 }}>
-                      <img src={img.url} alt={`Foto ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      {/* 88px de miniatura: o degrau de 320 cobre até a tela 3x. */}
+                      <img src={urlNaLargura(img.url, 320)} alt={`Foto ${i + 1}`} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       {img.is360 && (
                         <span style={{ position: "absolute", bottom: "4px", right: "4px", fontSize: "8px", fontWeight: 800, letterSpacing: "0.03em", color: "#fff", background: "rgba(99,102,241,0.95)", padding: "1px 5px", borderRadius: "999px", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }}>360°</span>
                       )}
@@ -861,7 +881,7 @@ export function ShowcasePropertyPage({ slugFixo, isolada = false }) {
                       <Link key={s.id} to={`/vitrine/${tenantSlug}/imovel/${s.id}`} className="sug-link">
                         <article className={`sug-card${sLancamento ? " is-lancamento" : ""}`}>
                           <div className="sug-card__foto">
-                            <img src={sImg} alt={s.title} />
+                            <img {...atributosDaFoto(sImg, TAMANHOS_DA_SUGESTAO, { maxima: 640 })} alt={s.title} loading="lazy" decoding="async" />
                           </div>
                           <div className="sug-card__corpo">
                             {sLancamento && <span style={{ fontSize: "10px", fontWeight: "800", textTransform: "uppercase", color: "#f59e0b", letterSpacing: "0.06em" }}>Lançamento · </span>}

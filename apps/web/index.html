@@ -53,10 +53,28 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- As duas origens que toda vitrine visita antes da primeira foto: a API
+         (os dados da página) e o Cloudinary (as fotos). Abrir a conexão agora
+         adianta o DNS e o TLS, que no 4G passam de meio segundo cada. -->
+    <link rel="preconnect" href="https://api.omnimob.app" crossorigin />
+    <link rel="preconnect" href="https://res.cloudinary.com" />
+    <!-- A fonte NÃO segura a pintura: `media="print"` faz o navegador baixá-la
+         sem bloquear, e o `onload` a liga quando chegar. Com `display=swap` ela
+         já trocaria de qualquer jeito; o que este truque tira é a espera da
+         FOLHA de estilo do Google, que o PageSpeed contava como bloqueio de
+         ~1 s no celular. Sem JavaScript, o <noscript> carrega do jeito antigo. -->
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      />
+    </noscript>
 
     <!-- Dados estruturados. Ficam no HTML (e não no JS) porque é o único
          conteúdo desta página que existe antes da renderização — o Google lê
@@ -73,6 +91,49 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- ── A busca adiantada da vitrine ───────────────────────────────────────
+         A vitrine não desenha nada antes dos dados da API, e a API só era
+         chamada depois de o pacote de JavaScript descer e rodar: as duas esperas
+         em FILA. No 4G do PageSpeed, quase um segundo de pacote antes de a busca
+         sequer começar.
+
+         Este script é síncrono e minúsculo de propósito: lê o endereço, e se for
+         uma vitrine (`/vitrine/<slug>` ou `<slug>.omnimob.app`) dispara as mesmas
+         buscas que a página faria, guardando as promessas em
+         `window.__buscaAdiantada`. O `request()` de `src/api.js` as recolhe —
+         a tela continua sendo quem trata erro e resposta. Fora da vitrine não faz
+         nada; no domínio próprio da imobiliária também não (o slug só se sabe
+         perguntando à API, e é esse caminho que a página já faz).
+
+         Sem cabeçalho nenhum, como o `request()` faz nas leituras: cabeçalho
+         extra obrigaria um OPTIONS antes de cada busca. A lista de subdomínios
+         reservados espelha `utils/dominioVitrine.js`. -->
+    <script>
+      (function () {
+        try {
+          var api = "%VITE_API_URL%";
+          if (api.charAt(0) === "%") api = "https://api.omnimob.app";
+          api = api.replace(/\/+$/, "");
+          var host = location.hostname.toLowerCase();
+          var caminho = location.pathname;
+          var slug = null;
+          var m = caminho.match(/^\/vitrine\/([^/]+)(\/.*)?$/);
+          if (m) {
+            slug = m[1];
+            caminho = m[2] || "/";
+          } else {
+            var s = host.match(/^([^.]+)\.omnimob\.app$/);
+            if (s && !/^(www|api|app|admin|painel|static|cdn|mail)$/.test(s[1])) slug = s[1];
+          }
+          if (!slug || caminho.indexOf("/editar") === 0) return;
+          var buscas = ["/public/" + slug + "/properties"];
+          var imovel = caminho.match(/^\/imovel\/([^/]+)/);
+          if (imovel) buscas.push("/public/" + slug + "/properties/" + imovel[1]);
+          var adiantadas = (window.__buscaAdiantada = {});
+          buscas.forEach(function (b) { adiantadas[b] = fetch(api + b); });
+        } catch (e) { /* sem adiantamento, a página busca sozinha */ }
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
