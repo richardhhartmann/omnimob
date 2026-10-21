@@ -600,6 +600,8 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
 | `test/paridade.test.jsx` | cada peça da vitrine renderizada nos dois modos → HTML idêntico |
 | `test/layout.test.js` | colisão, cascata, independência desktop/mobile, reflow idempotente |
 | `test/normalizacao.test.js` | migração de config antigo, espelho legado, tolerância a lixo |
+| `test/imagemResponsiva.test.js` | as URLs de foto redimensionada (Cloudinary/Unsplash; o resto intocado) e a trava do pacote: só as páginas da vitrine entram por `import` estático no `App.jsx` |
+| `test/dadosEstruturados.test.js` | o JSON-LD: endereço oculto não vaza, número ausente não vira zero, e o anúncio só vira `Product` com preço E foto (sem os dois, o Rich Results Test acusa erro) |
 
 ### Rotas principais (App.jsx)
 ```
@@ -969,9 +971,32 @@ O CSS do editor é escopado em `.editor-shell` no `styles.css` (`editor-*`,
 
 **Divisão por rota.** Tudo vivia num pacote só de 2,6 MB: quem abria a landing
 baixava o painel inteiro antes de ver a primeira palavra. Hoje `App.jsx` carrega
-sob demanda (`lazy`) a landing, o editor de vitrine, o super-admin e as cinco
-páginas institucionais. O pacote comum caiu para 1,1 MB. O resto do painel fica
-junto de propósito — são telas que a mesma pessoa percorre na mesma sessão.
+sob demanda (`lazy`) a landing, o editor de vitrine, o super-admin, as páginas
+institucionais e o **painel** — este num pedaço só (`pages/painel.js`), porque
+são telas que a mesma pessoa percorre na mesma sessão. No pacote comum ficam só
+as três páginas da vitrine (vitrine, imóvel, região): é a página que o
+visitante abre no celular e a que o Google mede. Ele caiu de 1,77 MB para
+656 kB (490 → ~105 kB comprimido). **Tela nova do painel entra em
+`pages/painel.js`, nunca com `import` direto no `App.jsx`** —
+`test/imagemResponsiva.test.js` falha se isso acontecer.
+
+**Vitrine rápida — o que o PageSpeed cobra** (tarefa de performance/SEO):
+- **Fotos do tamanho em que aparecem** (`utils/imagemResponsiva.js`): `srcset`
+  por URL — Cloudinary com `f_auto,q_auto,c_limit,w_N`, Unsplash com `w`. O
+  primeiro cartão da grade e a foto do palco da ficha levam
+  `fetchpriority="high"`; o resto, `loading="lazy"`. Foto 360° e lightbox ficam
+  na resolução original.
+- **Busca adiantada**: um script síncrono no `index.html` dispara as buscas da
+  vitrine (`/vitrine/<slug>` e `<slug>.omnimob.app`) antes de o pacote chegar;
+  o `request()` de `api.js` as recolhe (`window.__buscaAdiantada`).
+- **GET sem `Content-Type`**: o cabeçalho obrigava um preflight CORS antes de
+  cada leitura pública.
+- **Fonte sem bloquear** (`media="print"` + `onload` no `index.html`); o
+  `@import` duplicado do `styles.css` saiu.
+- A ficha espera a imobiliária antes de desenhar o cabeçalho (era CLS 0,83).
+
+O que falta para ≥ 90 no celular é do **servidor**: a API pública leva 2–4 s
+para responder (ver o PR da tarefa).
 
 > Pedaço carregado sob demanda pode FALHAR ao baixar — deploy com a aba aberta
 > troca o hash do arquivo, e o `import()` rejeita. `components/LimiteDeErro.jsx`
