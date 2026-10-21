@@ -1,5 +1,6 @@
 import { comodidadesAtivas } from "../../utils/comodidades";
 import { tipoContratoInfo } from "../../utils/tiposContrato";
+import { atributosDaFoto } from "../../utils/imagemResponsiva";
 import { ShowcaseLink } from "./contexto.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -45,7 +46,15 @@ function ehLancamento(createdAt) {
   return (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24) <= 30;
 }
 
-export function ShowcasePropertyCard({ property: p, tenantSlug, carouselIndex = 0, onProxima, onAnterior }) {
+/* Quanto da tela o cartão ocupa, na mesma régua da `.property-grid`
+   (`minmax(min(300px, 100%), 1fr)`): uma coluna no celular, duas no tablet,
+   três ou quatro no desktop. Errar para cima só custa alguns KB; errar para
+   baixo deixa a foto borrada. */
+const TAMANHOS_DO_CARTAO = "(max-width: 700px) 100vw, (max-width: 1100px) 50vw, 420px";
+
+/* `prioridade` marca o cartão que provavelmente é o LCP — o primeiro da grade.
+   Ele carrega já e na frente da fila; os outros esperam chegar perto da tela. */
+export function ShowcasePropertyCard({ property: p, tenantSlug, carouselIndex = 0, onProxima, onAnterior, prioridade = false }) {
   const images = p.images?.length ? p.images : [{ url: "/property-placeholder.svg" }];
   const indice = Math.min(carouselIndex, images.length - 1);
   const principal = images[indice]?.url;
@@ -60,7 +69,17 @@ export function ShowcasePropertyCard({ property: p, tenantSlug, carouselIndex = 
     <ShowcaseLink para={`/vitrine/${tenantSlug}/imovel/${p.id}`} style={{ textDecoration: "none", display: "block" }}>
       <article className={`property-card-luxury ${lancamento ? "is-lancamento" : ""}`}>
         <div className="card-image-wrapper">
-          <img key={principal} src={principal} alt={p.title} style={{ animation: "imgFade 0.3s ease" }} />
+          <img
+            key={principal}
+            {...atributosDaFoto(principal, TAMANHOS_DO_CARTAO, { maxima: 960 })}
+            alt={p.title}
+            width="480"
+            height="280"
+            loading={prioridade ? "eager" : "lazy"}
+            fetchpriority={prioridade ? "high" : undefined}
+            decoding="async"
+            style={{ animation: "imgFade 0.3s ease" }}
+          />
 
           {/* Cada quina tem um dono. O selo de situação (lançamento / andamento
               da obra) e o de tipo de contrato eram os dois posicionados no alto

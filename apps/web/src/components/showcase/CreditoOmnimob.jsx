@@ -18,7 +18,10 @@ export function CreditoOmnimob({ tenantSlug, isLightMode }) {
       <a href={href} target="_blank" rel="noopener nofollow">
         <span>Desenvolvido por</span>
         <img
-          src={isLightMode ? "/tipo_header_alt_dark.png" : "/tipo_header_alt.png"}
+          /* Cópias de 300px em WebP (3x os 100px desenhados), e não o PNG de
+             2852px do cabeçalho do painel: eram 80–96 kB para uma assinatura
+             de rodapé, apontados pelo PageSpeed em toda página da vitrine. */
+          src={isLightMode ? "/tipo_header_alt_dark_credito.webp" : "/tipo_header_alt_credito.webp"}
           alt="Omnimob — plataforma de gestão imobiliária"
           width="100"
           height="21"

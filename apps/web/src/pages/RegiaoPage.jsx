@@ -190,10 +190,11 @@ export function RegiaoPage({ slugFixo }) {
                   <p style={{ color: "var(--text-muted)", gridColumn: "1 / -1", textAlign: "center", padding: "40px 0" }}>
                     Nenhum imóvel deste tipo nesta região no momento.
                   </p>
-                ) : imoveis.map((p) => (
+                ) : imoveis.map((p, i) => (
                   <ShowcasePropertyCard
                     key={p.id}
                     property={p}
+                    prioridade={i === 0}
                     tenantSlug={tenantSlug}
                     carouselIndex={indices[p.id] || 0}
                     onProxima={proximo}
