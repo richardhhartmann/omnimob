@@ -2,30 +2,11 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, setApiToken, setAdminToken } from "./api";
 import { initPointerGradient } from "./utils/pointerGradient";
-import { DashboardPage, ImovelListPage, ImovelFormPage } from "./pages/DashboardPage";
-import { InicioPage } from "./pages/InicioPage";
-import { LeadsPage } from "./pages/LeadsPage";
-import { RelatoriosPage } from "./pages/RelatoriosPage";
-import { LoginPage } from "./pages/LoginPage";
-import { PropertyInsightsPage } from "./pages/PropertyInsightsPage";
 import { ShowcasePropertyPage } from "./pages/ShowcasePropertyPage";
 import { RegiaoPage } from "./pages/RegiaoPage";
 import { ShowcasePage } from "./pages/ShowcasePage";
-import { TrialConfirmarPage } from "./pages/TrialConfirmarPage";
-import { RecuperarSenhaPage } from "./pages/RecuperarSenhaPage";
-import { AdminLayout } from "./components/AdminLayout";
-import { CargosPage } from "./pages/CargosPage";
-import { AuditoriaPage } from "./pages/AuditoriaPage.jsx";
-import { SuportePage } from "./pages/SuportePage.jsx";
-import { ClientesPage } from "./pages/ClientesPage";
-import { ConfiguracaoPage } from "./pages/ConfiguracaoPage";
-import { TiposImovelPage } from "./pages/TiposImovelPage";
-import { UsuariosPage } from "./pages/UsuariosPage";
 import { clearSession, loadSession, saveSession } from "./session";
-import { ContaSuspensaPage } from "./pages/ContaSuspensaPage";
 import { ehDominioDaOmnimob, slugDoDominioAtual } from "./utils/dominioVitrine";
-import { AdminLoginPage } from "./pages/AdminLoginPage";
-import { AdminConvitePage } from "./pages/AdminConvitePage";
 import { clearAdminSession, loadAdminSession, saveAdminSession } from "./adminSession";
 import { LimiteDeErro } from "./components/LimiteDeErro.jsx";
 /* `telaTardia` e o `lazy()` com a barra do topo em volta: a espera abre quando
@@ -50,6 +31,39 @@ import { FLOW, HUB, modulosDoUsuario } from "./utils/modulos";
    O resto do painel fica junto de propósito: são telas que a mesma pessoa
    percorre na mesma sessão, e fatiá-las trocaria um download grande por doze
    esperas pequenas no meio da navegação. */
+
+/* ── O painel também é uma família tardia ────────────────────────────────────
+   Junto, num pedaço só (`pages/painel.js`), mas FORA do pacote comum. Quem fica
+   no pacote comum são as três páginas da vitrine — a página que o visitante
+   abre no celular pelo link do WhatsApp, e a que o Google mede. Com o painel lá
+   dentro, ela carregava 490 kB comprimidos, dos quais 270 kB nunca rodavam.
+
+   Todas apontam para o MESMO `import()`: o navegador baixa o pedaço uma vez, e
+   a segunda tela do painel já o encontra pronto. */
+const painel = () => import("./pages/painel.js");
+const doPainel = (nome) => telaTardia(() => painel().then((m) => ({ default: m[nome] })));
+const DashboardPage = doPainel("DashboardPage");
+const ImovelListPage = doPainel("ImovelListPage");
+const ImovelFormPage = doPainel("ImovelFormPage");
+const InicioPage = doPainel("InicioPage");
+const LeadsPage = doPainel("LeadsPage");
+const RelatoriosPage = doPainel("RelatoriosPage");
+const LoginPage = doPainel("LoginPage");
+const PropertyInsightsPage = doPainel("PropertyInsightsPage");
+const TrialConfirmarPage = doPainel("TrialConfirmarPage");
+const RecuperarSenhaPage = doPainel("RecuperarSenhaPage");
+const AdminLayout = doPainel("AdminLayout");
+const CargosPage = doPainel("CargosPage");
+const AuditoriaPage = doPainel("AuditoriaPage");
+const SuportePage = doPainel("SuportePage");
+const ClientesPage = doPainel("ClientesPage");
+const ConfiguracaoPage = doPainel("ConfiguracaoPage");
+const TiposImovelPage = doPainel("TiposImovelPage");
+const UsuariosPage = doPainel("UsuariosPage");
+const ContaSuspensaPage = doPainel("ContaSuspensaPage");
+const AdminLoginPage = doPainel("AdminLoginPage");
+const AdminConvitePage = doPainel("AdminConvitePage");
+
 const OmnimobLandingPage = telaTardia(() =>
   import("./pages/OmnimobLandingPage").then((m) => ({ default: m.OmnimobLandingPage })));
 const ShowcaseEditorPage = telaTardia(() =>
@@ -419,7 +433,15 @@ export default function App() {
      Vem ANTES da resolução de domínio porque não depende dela: quem chegou com
      esta sessão chegou pelo painel. */
   if (session?.suspenso) {
-    return <ContaSuspensaPage session={session} onLogout={handleLogout} />;
+    // Fora da árvore de rotas, e por isso com a própria espera: a tela mora no
+    // pedaço do painel, que chega por `import()`.
+    return (
+      <LimiteDeErro>
+        <Suspense fallback={<Carregando />}>
+          <ContaSuspensaPage session={session} onLogout={handleLogout} />
+        </Suspense>
+      </LimiteDeErro>
+    );
   }
 
   // Ainda perguntando de quem é este domínio: não decide nada antes da resposta.
