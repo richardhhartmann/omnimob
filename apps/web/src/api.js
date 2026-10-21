@@ -33,11 +33,30 @@ function normalizeErrorMessage(body) {
   return body.error || "Erro na requisicao.";
 }
 
+/* ── A busca adiantada da vitrine ─────────────────────────────────────────────
+   O `index.html` dispara a busca dos dados da vitrine ANTES de este pacote
+   chegar — ver o script de lá. Aqui a resposta é recolhida, uma vez só: a
+   segunda visita à mesma rota (voltar e ir de novo) busca de novo, como
+   qualquer outra. Fora do navegador (a suíte de testes) não há `window`. */
+function buscaAdiantada(path) {
+  const adiantadas = typeof window !== "undefined" ? window.__buscaAdiantada : null;
+  const resposta = adiantadas?.[path];
+  if (!resposta) return null;
+  delete adiantadas[path];
+  return resposta;
+}
+
 async function request(path, options = {}) {
   const { headers: customHeaders = {}, ...restOptions } = options;
+  const leitura = !restOptions.method || restOptions.method === "GET";
 
+  /* `Content-Type` só quando há corpo a descrever. Num GET ele não diz nada ao
+     servidor e custa uma ida inteira à rede: é cabeçalho fora da lista
+     "simples" do CORS, e obriga o navegador a mandar um OPTIONS antes de cada
+     leitura. Na vitrine pública — que não manda sessão nem `x-tenant-slug` —
+     era a única coisa que transformava cada busca em duas. */
   const headers = {
-    "Content-Type": "application/json",
+    ...(leitura ? {} : { "Content-Type": "application/json" }),
     ...customHeaders,
   };
 
@@ -45,10 +64,10 @@ async function request(path, options = {}) {
     headers["Authorization"] = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await ((leitura && buscaAdiantada(path)) || fetch(`${API_URL}${path}`, {
     ...restOptions,
     headers,
-  });
+  }));
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));

@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+/* A Plus Jakarta Sans vem do <link> do `index.html`, que já a pedia (sem o peso
+   300, que entrou lá). O `@import` que estava aqui era a mesma fonte pedida duas
+   vezes — e `@import` dentro de CSS é a pior forma de pedir: o navegador só o
+   descobre depois de baixar este arquivo inteiro, e segura a pintura até ele
+   voltar. O PageSpeed media ~800 ms bloqueados por ele no celular. */
 
 :root {
   /* Fundo do painel da imobiliária.
