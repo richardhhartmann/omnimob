@@ -21,7 +21,7 @@ const imovel = {
 
 test("imóvel: anúncio com oferta de venda, quartos, metragem e fotos", () => {
   const s = esquemaDoImovel({ property: imovel, tenant: { name: "Casa Nobre" }, url: "https://x/imovel/1" });
-  assert.equal(s["@type"], "RealEstateListing");
+  assert.deepEqual(s["@type"], ["RealEstateListing", "Product"]);
   assert.equal(s.offers.price, 450000);
   assert.equal(s.offers.priceCurrency, "BRL");
   assert.match(s.offers.businessFunction, /Sell$/);
@@ -63,6 +63,20 @@ test("imóvel: locação é oferta por mês; sem preço, sem oferta", () => {
   assert.equal(loc.offers.priceSpecification.unitCode, "MON");
   const sem = esquemaDoImovel({ property: { ...imovel, price: 0 }, url: "https://x/1" });
   assert.equal("offers" in sem, false);
+});
+
+/* Para o Google, `Product` sem oferta ou sem foto é ERRO no Rich Results Test
+   — e um erro ali tira o anúncio do resultado rico. Sem os dois, o imóvel
+   continua só `RealEstateListing`, que é válido do mesmo jeito. */
+test("imóvel: só vira Product com preço E foto", () => {
+  const semPreco = esquemaDoImovel({ property: { ...imovel, price: 0 }, url: "https://x/1" });
+  assert.equal(semPreco["@type"], "RealEstateListing");
+  const semFoto = esquemaDoImovel({ property: { ...imovel, images: [] }, url: "https://x/1" });
+  assert.equal(semFoto["@type"], "RealEstateListing");
+  const completo = esquemaDoImovel({ property: imovel, url: "https://x/1" });
+  assert.ok(completo["@type"].includes("Product"));
+  assert.ok(completo.name && completo.image.length && completo.offers.price && completo.offers.priceCurrency,
+    "os campos que o Google exige de um Product com oferta");
 });
 
 test("tipo: texto do cadastro vira tipo do Schema.org, com fallback", () => {

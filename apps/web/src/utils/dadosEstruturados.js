@@ -75,19 +75,34 @@ function enderecoDoImovel(p) {
 }
 
 /**
- * O anúncio: `RealEstateListing` com a `Offer` e o imóvel em `about`.
+ * O anúncio: `RealEstateListing` com a `Offer` e o imóvel em `about` — e
+ * também `Product`, quando há preço e foto.
+ *
+ * ── POR QUE `Product` ──
+ * `RealEstateListing` é o tipo certo para o Schema.org, mas não é um dos
+ * resultados ricos do Google: o Rich Results Test só enxergava a trilha, e o
+ * preço nunca aparecia na busca. `Product` é o tipo que o Google lê como
+ * anúncio com preço. Os dois tipos juntos (`@type` em lista) valem ao mesmo
+ * tempo — um leitor de Schema.org vê o imóvel, o Google vê a oferta.
+ *
+ * ── POR QUE SÓ COM PREÇO E FOTO ──
+ * Para o Google, `Product` sem `offers` (o imóvel "sob consulta") é ERRO, não
+ * aviso — e listagem de produto sem `image` também. Declarar o tipo sem poder
+ * cumpri-lo é pior que não declarar: o anúncio sem preço continua sendo um
+ * `RealEstateListing` válido, só não concorre como produto.
  * @param {{ property: object, tenant?: object, url: string }} o
  */
 export function esquemaDoImovel({ property: p, tenant, url }) {
   if (!p) return null;
   const locacao = p.tipoContrato === "LOCACAO" || p.tipoContrato === "BUILT_TO_SUIT";
   const preco = Number(p.price);
+  const temPreco = Number.isFinite(preco) && preco > 0;
   const imagens = (p.images || []).map((i) => i?.url).filter(Boolean);
   const area = Number(p.areaPrivativa || p.squareFootage || p.areaConstruida || p.areaTotal || 0);
 
   return enxugar({
     "@context": "https://schema.org",
-    "@type": "RealEstateListing",
+    "@type": temPreco && imagens.length ? ["RealEstateListing", "Product"] : "RealEstateListing",
     "@id": url,
     url,
     name: String(p.title || "").trim(),
@@ -107,7 +122,7 @@ export function esquemaDoImovel({ property: p, tenant, url }) {
         ? [{ "@type": "LocationFeatureSpecification", name: "Vagas de garagem", value: Number(p.parkingSpots) }]
         : [],
     },
-    offers: Number.isFinite(preco) && preco > 0
+    offers: temPreco
       ? {
           "@type": "Offer",
           price: preco,
