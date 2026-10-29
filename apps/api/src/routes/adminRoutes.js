@@ -1651,3 +1651,56 @@ adminRouter.get("/auditoria", requirePermissaoAdmin("verAuditoria"), async (req,
     return res.status(500).json({ error: "Erro ao buscar a trilha da plataforma." });
   }
 });
+
+/* ─── Avaliações ──────────────────────────────────────────────────────────────
+
+   A nota que os usuários dão ao painel (`avaliacaoRoutes`). As mais recentes
+   primeiro, paginadas no servidor, com o resumo do filtro (média e quantas de
+   cada nota) e o total de NÃO LIDAS de todos os clientes — é ele que acende o
+   contador do menu. Abrir a aba não marca nada como lido: é o botão. */
+adminRouter.get("/avaliacoes", requirePermissaoAdmin("verAvaliacoes"), async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
+    const nota = Number(req.query.nota);
+    const where = {
+      ...(req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {}),
+      ...(nota >= 1 && nota <= 5 ? { nota } : {}),
+      ...(req.query.naoLidas === "1" ? { lidaEm: null } : {}),
+    };
+    const [avaliacoes, total, porNota, naoLidas] = await Promise.all([
+      prisma.avaliacao.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { tenant: { select: { id: true, name: true, slug: true } } },
+      }),
+      prisma.avaliacao.count({ where }),
+      prisma.avaliacao.groupBy({ by: ["nota"], where: { ...where, nota: undefined }, _count: { nota: true } }),
+      prisma.avaliacao.count({ where: { lidaEm: null } }),
+    ]);
+    const distribuicao = Object.fromEntries([1, 2, 3, 4, 5].map((n) => [n, porNota.find((p) => p.nota === n)?._count.nota || 0]));
+    const respostas = Object.values(distribuicao).reduce((s, n) => s + n, 0);
+    const media = respostas ? Object.entries(distribuicao).reduce((s, [n, q]) => s + Number(n) * q, 0) / respostas : null;
+    return res.json({ avaliacoes, total, page, limit, naoLidas, distribuicao, media });
+  } catch (err) {
+    console.error("[GET /admin/avaliacoes]", err);
+    return res.status(500).json({ error: "Erro ao carregar as avaliações." });
+  }
+});
+
+/* Marca como lidas as `ids` do corpo, ou TODAS as não lidas sem `ids`. */
+adminRouter.post("/avaliacoes/lidas", requirePermissaoAdmin("verAvaliacoes"), async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+    const r = await prisma.avaliacao.updateMany({
+      where: { lidaEm: null, ...(ids ? { id: { in: ids } } : {}) },
+      data: { lidaEm: new Date() },
+    });
+    return res.json({ marcadas: r.count });
+  } catch (err) {
+    console.error("[POST /admin/avaliacoes/lidas]", err);
+    return res.status(500).json({ error: "Erro ao marcar como lidas." });
+  }
+});

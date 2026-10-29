@@ -6,6 +6,7 @@ import { TrialAviso } from "./TrialAviso";
 import { FaixaDeConta } from "./FaixaDeConta.jsx";
 import { BoasVindasModal } from "./BoasVindasModal";
 import { PulsoTrialModal } from "./PulsoTrialModal";
+import { PedidoDeAvaliacao } from "./PedidoDeAvaliacao";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
 import { relatoriosVisiveis, PARAMETRO_DE } from "../utils/relatorios";
@@ -1041,6 +1042,18 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         tenantId={tenantId}
         pronto={contaResolvida && !tourGlobalAtivo}
       />
+
+      {/* A avaliação do painel, para quem já é cliente (o trial tem a pergunta
+          acima, e o servidor recusa as duas ao mesmo tempo). Nem na
+          demonstração nem com o suporte dentro da conta. */}
+      {!demo && !session?.suporte ? (
+        <PedidoDeAvaliacao
+          tenantSlug={tenantSlug}
+          tenantId={tenantId}
+          usuarioId={session?.usuario?.id || ""}
+          pronto={contaResolvida && !tourGlobalAtivo}
+        />
+      ) : null}
 
       {preferenciasAbertas ? (
         <ModalPreferencias

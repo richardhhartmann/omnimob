@@ -1241,6 +1241,11 @@ export const api = {
   chamadosPendentes: (tenantSlug) =>
     request("/api/chamados/pendentes", { headers: { "x-tenant-slug": tenantSlug } }),
   /* O que mudou e a pessoa ainda não viu, com a última fala de cada um. */
+  /* A avaliação do painel: `minhaAvaliacao` diz se é para perguntar (quem
+     decide é o servidor), `avaliar` grava a nota. Ver `avaliacaoRoutes`. */
+  minhaAvaliacao: (tenantSlug) => request("/api/avaliacoes/minha", { headers: { "x-tenant-slug": tenantSlug } }),
+  avaliar: (tenantSlug, payload) =>
+    request("/api/avaliacoes", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
   chamadosNovidades: (tenantSlug) =>
     request("/api/chamados/novidades", { headers: { "x-tenant-slug": tenantSlug } }),
 
@@ -1353,6 +1358,15 @@ export const adminApi = {
 
   // As versões da Omnimob, uma por PR na main (`services/versao.js`).
   listVersoes: () => adminRequest("/api/admin/versoes"),
+
+  // Avaliações: `{ avaliacoes, total, naoLidas, distribuicao, media }`.
+  listAvaliacoes: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null && v !== false));
+    return adminRequest(`/api/admin/avaliacoes${q.toString() ? `?${q}` : ""}`);
+  },
+  // Sem `ids`, marca TODAS as não lidas.
+  marcarAvaliacoesLidas: (ids) =>
+    adminRequest("/api/admin/avaliacoes/lidas", { method: "POST", body: JSON.stringify(ids ? { ids } : {}) }),
 
   /* A trilha da plataforma (`tenantId` nulo): `{ registros, total, page,
      limit, usuarios }`. Os filtros vazios não vão na URL. */

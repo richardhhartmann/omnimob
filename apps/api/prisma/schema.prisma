@@ -499,6 +499,7 @@ model Tenant {
   vendas       Venda[]
   chamados     Chamado[]
   pesquisas    PesquisaTrial[]
+  avaliacoes   Avaliacao[]
 
   auditorias  Auditoria[]
   leadEventos LeadEvento[]
@@ -530,6 +531,34 @@ model Tenant {
  * dispensa a pergunta no computador do escritório a receberia de novo no
  * celular alguns minutos depois.
  */
+/// "O que você está achando da Omnimob?" — a nota que o usuário dá ao painel,
+/// pedida de vez em quando depois de trabalho feito (`web/utils/pulsoAvaliacao.js`).
+/// UMA por pessoa: quem respondeu não é perguntado de novo, e é o índice único
+/// que garante. Lida pela aba Avaliações do super-admin. Conta em trial não é
+/// perguntada aqui — ela já tem a `PesquisaTrial`.
+model Avaliacao {
+  id          String    @id @default(cuid())
+  tenantId    String
+  /// Sem FK, como a `Auditoria`: a opinião sobrevive a quem a deu.
+  usuarioId   String
+  usuarioNome String
+  /// 1 a 5 estrelas.
+  nota        Int
+  comentario  String?
+  /// Onde a pessoa estava quando respondeu (a rota do painel).
+  tela        String?
+  /// Quando alguém da Omnimob marcou como lida. Nula acende o contador da aba.
+  lidaEm      DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, usuarioId])
+  @@index([createdAt])
+  @@index([lidaEm])
+  @@map("tb_avaliacao")
+}
+
 model PesquisaTrial {
   id         String   @id @default(cuid())
   tenantId   String   @map("tenant_id")

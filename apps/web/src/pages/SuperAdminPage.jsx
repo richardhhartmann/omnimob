@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, UsersThree } from "@phosphor-icons/react";
+import { Buildings, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, Star, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -16,6 +16,7 @@ import { AdminUsuariosPage, USUARIOS_CSS } from "./admin/AdminUsuariosPage";
 import { AdminCargosPage, CARGOS_CSS } from "./admin/AdminCargosPage";
 import { AdminVersoesPage, VERSOES_CSS } from "./admin/AdminVersoesPage";
 import { AdminAuditoriaPage, AUDITORIA_CSS } from "./admin/AdminAuditoriaPage";
+import { AdminAvaliacoesPage, AVALIACOES_CSS } from "./admin/AdminAvaliacoesPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -152,6 +153,13 @@ const ABAS = [
     nota: "quanto do tour cada pessoa percorreu",
     icone: <GraduationCap size={16} />,
   },
+  {
+    chave: "avaliacoes",
+    permissao: "verAvaliacoes",
+    rotulo: "Avaliações",
+    nota: "o que os usuários acham do painel",
+    icone: <Star size={16} />,
+  },
   /* Sem permissão própria (`null`): todo cargo do painel vê. É a primeira
      pergunta do suporte — "isso já estava no ar quando o cliente reclamou?". */
   {
@@ -250,6 +258,8 @@ export function SuperAdminPage({ session, onLogout }) {
   // Contado pela aba de chamados quando ela carrega, e exibido no menu — é o
   // único número do painel que pede ação imediata.
   const [chamadosAbertos, setChamadosAbertos] = useState(0);
+  // Avaliação não lida: o mesmo princípio do contador de chamados.
+  const [avaliacoesNovas, setAvaliacoesNovas] = useState(0);
 
   const { confirm, modal: confirmModal } = useConfirm();
   // Qual imobiliária está abrindo agora. Trava o botão daquela linha, e só dela.
@@ -308,6 +318,10 @@ export function SuperAdminPage({ session, onLogout }) {
       .then((r) => setChamadosAbertos((r.porStatus?.ABERTO || 0) + (r.porStatus?.EM_ATENDIMENTO || 0)))
       .catch(() => {});
   }, [permissoes.verChamados]);
+  useEffect(() => {
+    if (!permissoes.verAvaliacoes) return;
+    adminApi.listAvaliacoes({ naoLidas: "1", limit: 1 }).then((r) => setAvaliacoesNovas(r.naoLidas || 0)).catch(() => {});
+  }, [permissoes.verAvaliacoes]);
 
   /* O que dá para julgar sem rede (tamanho, caracteres, nomes reservados) é
      julgado na hora; só o "esse já é de alguém" pergunta ao servidor, e espera
@@ -613,7 +627,8 @@ export function SuperAdminPage({ session, onLogout }) {
     }
   }
 
-  const abas = abasVisiveis.map((a) => (a.chave === "chamados" ? { ...a, badge: chamadosAbertos } : a));
+  const badges = { chamados: chamadosAbertos, avaliacoes: avaliacoesNovas };
+  const abas = abasVisiveis.map((a) => (badges[a.chave] != null ? { ...a, badge: badges[a.chave] } : a));
 
   return (
     <AdminShell
@@ -623,7 +638,7 @@ export function SuperAdminPage({ session, onLogout }) {
       aba={aba}
       aoTrocarAba={setAba}
       versao={eu.versao}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}`}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}`}
     >
       {confirmModal}
 
@@ -638,6 +653,7 @@ export function SuperAdminPage({ session, onLogout }) {
 
       {painel("chamados", <AdminChamadosPage aoContar={setChamadosAbertos} ativa={aba === "chamados"} />)}
       {painel("tutoriais", <AdminTutoriaisPage />)}
+      {painel("avaliacoes", <AdminAvaliacoesPage aoContar={setAvaliacoesNovas} />)}
       {painel("usuarios", <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} />)}
       {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
       {painel("seguranca", <AdminSegurancaPage />)}
