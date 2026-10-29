@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, UsersThree } from "@phosphor-icons/react";
+import { Buildings, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -14,6 +14,7 @@ import { AdminTutoriaisPage, TUTORIAIS_CSS } from "./admin/AdminTutoriaisPage";
 import { AdminSegurancaPage, SEGURANCA_CSS } from "./admin/AdminSegurancaPage";
 import { AdminUsuariosPage, USUARIOS_CSS } from "./admin/AdminUsuariosPage";
 import { AdminCargosPage, CARGOS_CSS } from "./admin/AdminCargosPage";
+import { AdminVersoesPage, VERSOES_CSS } from "./admin/AdminVersoesPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -150,6 +151,15 @@ const ABAS = [
     nota: "quanto do tour cada pessoa percorreu",
     icone: <GraduationCap size={16} />,
   },
+  /* Sem permissão própria (`null`): todo cargo do painel vê. É a primeira
+     pergunta do suporte — "isso já estava no ar quando o cliente reclamou?". */
+  {
+    chave: "versoes",
+    permissao: null,
+    rotulo: "Versionamento",
+    nota: "as versões da Omnimob e o que cada uma mudou",
+    icone: <ClockCounterClockwise size={16} />,
+  },
   /* Quem opera a plataforma, e o que cada um alcança. Depois das abas de
      rotina e antes da conta própria: é gestão, não operação. */
   {
@@ -177,7 +187,10 @@ const ABAS = [
   },
 ];
 
-const abasPermitidas = (permissoes) => ABAS.filter((a) => permissoes?.[a.permissao]);
+/* `permissoes` nulo é "ainda não sei" (antes do `/eu`): nem a aba livre aparece,
+   senão um cargo vazio veria o Versionamento piscar antes do aviso de vazio. */
+const abasPermitidas = (permissoes) =>
+  permissoes ? ABAS.filter((a) => a.permissao === null || permissoes[a.permissao]) : [];
 
 export function SuperAdminPage({ session, onLogout }) {
   const navegar = useNavigate();
@@ -188,17 +201,37 @@ export function SuperAdminPage({ session, onLogout }) {
     id: session?.id || null,
     cargoId: session?.cargoId ?? null,
     permissoes: session?.permissoes || null,
+    versao: null,
   }));
   const permissoes = eu.permissoes || {};
-  const abasVisiveis = abasPermitidas(permissoes);
-  const [abaEscolhida, setAba] = useState("tenants");
+  const abasVisiveis = abasPermitidas(eu.permissoes);
+  /* A aba mora no endereço (`?aba=`): F5 volta nela, e um link — o de um
+     e-mail de chamado, por exemplo — abre direto onde precisa. */
+  const [abaEscolhida, setAbaEscolhida] = useState(() => new URLSearchParams(window.location.search).get("aba") || "tenants");
+  function setAba(chave) {
+    setAbaEscolhida(chave);
+    const url = new URL(window.location.href);
+    url.searchParams.set("aba", chave);
+    window.history.replaceState(null, "", url);
+  }
   /* A aba escolhida só vale se o cargo a alcança; senão cai na primeira que
-     alcança. É o "não abre por URL" desta tela, que troca de aba por estado. */
+     alcança. O endereço é só um pedido: o cargo continua decidindo. */
   const aba = abasVisiveis.some((a) => a.chave === abaEscolhida) ? abaEscolhida : abasVisiveis[0]?.chave;
+  /* Cada aba monta na primeira vez que abre e depois fica montada, escondida:
+     a resposta pela metade num chamado ou a busca digitada não se perdem numa
+     ida e volta (o mesmo do painel do VYA). */
+  const [montadas, setMontadas] = useState(() => new Set());
+  useEffect(() => {
+    if (aba) setMontadas((m) => (m.has(aba) ? m : new Set(m).add(aba)));
+  }, [aba]);
+  const painel = (chave, conteudo) =>
+    montadas.has(chave) && abasVisiveis.some((a) => a.chave === chave) ? (
+      <section key={chave} hidden={aba !== chave}>{conteudo}</section>
+    ) : null;
 
   useEffect(() => {
     adminApi.eu()
-      .then((r) => setEu({ id: r.id, cargoId: r.cargoId ?? null, permissoes: r.permissoes }))
+      .then((r) => setEu({ id: r.id, cargoId: r.cargoId ?? null, permissoes: r.permissoes, versao: r.versao || null }))
       .catch((err) => {
         /* Acesso encerrado (desativado, token velho): sai avisando, em vez de
            deixar a tela cheia de 401. */
@@ -580,7 +613,8 @@ export function SuperAdminPage({ session, onLogout }) {
       abas={abas}
       aba={aba}
       aoTrocarAba={setAba}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}`}
+      versao={eu.versao}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}`}
     >
       {confirmModal}
 
@@ -593,15 +627,14 @@ export function SuperAdminPage({ session, onLogout }) {
         </div>
       ) : null}
 
-      {aba === "chamados" ? (
-        <AdminChamadosPage aoContar={setChamadosAbertos} />
-      ) : null}
-      {aba === "tutoriais" ? <AdminTutoriaisPage /> : null}
-      {aba === "usuarios" ? <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} /> : null}
-      {aba === "cargos" ? <AdminCargosPage meuCargoId={eu.cargoId} /> : null}
-      {aba === "seguranca" ? <AdminSegurancaPage /> : null}
+      {painel("chamados", <AdminChamadosPage aoContar={setChamadosAbertos} ativa={aba === "chamados"} />)}
+      {painel("tutoriais", <AdminTutoriaisPage />)}
+      {painel("usuarios", <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} />)}
+      {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
+      {painel("seguranca", <AdminSegurancaPage />)}
+      {painel("versoes", <AdminVersoesPage />)}
 
-      {aba === "tenants" ? (
+      {painel("tenants", (
         <>
         {/* ── Cabeçalho ── */}
         <Reveal className="sa-head">
@@ -722,7 +755,7 @@ export function SuperAdminPage({ session, onLogout }) {
           })}
         </div>
         </>
-      ) : null}
+      ))}
 
       {/* ── A senha reemitida ─────────────────────────────────────────────
           O MESMO desenho do cartão de credenciais da criação (`sa-credenciais`),

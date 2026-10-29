@@ -111,6 +111,8 @@ export const api = {
      estar logado, porque vincular é uma afirmação sobre quem você já provou
      ser. Ver `authRoutes`. */
   googleDisponivel: () => request("/api/auth/google/disponivel"),
+  // A versão no ar (`{ numero, commit }`), a mesma do rodapé do super-admin.
+  versao: () => request("/public/versao"),
 
   entrarComGoogle: (credential) =>
     request("/api/auth/google/entrar", { method: "POST", body: JSON.stringify({ credential }) }),
@@ -1336,6 +1338,9 @@ export const adminApi = {
   // Progresso bruto dos tutoriais por tenant e usuário; a porcentagem é
   // calculada na tela, que é quem conhece o fluxo.
   listTutoriais: () => adminRequest("/api/admin/tutoriais"),
+
+  // As versões da Omnimob, uma por PR na main (`services/versao.js`).
+  listVersoes: () => adminRequest("/api/admin/versoes"),
 
   /* ─── Quem sou e o que alcanço ─────────────────────────────────────────────
      Relido do banco a cada chamada. O painel chama ao abrir: é o que faz um

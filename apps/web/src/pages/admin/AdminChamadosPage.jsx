@@ -139,7 +139,7 @@ function falasDe(c) {
   ];
 }
 
-export function AdminChamadosPage({ aoContar }) {
+export function AdminChamadosPage({ aoContar, ativa = true }) {
   const [todos, setTodos] = useState([]);
   const [porStatus, setPorStatus] = useState({});
   const [internosAbertos, setInternosAbertos] = useState(0);
@@ -267,17 +267,18 @@ export function AdminChamadosPage({ aoContar }) {
     ajustar();
     window.addEventListener("resize", ajustar);
     return () => window.removeEventListener("resize", ajustar);
-  }, [carregouUmaVez]);
+    // `ativa`: escondida, a aba mede topo 0; a altura certa só sai ao reaparecer.
+  }, [carregouUmaVez, ativa]);
 
   /* A conversa aberta e a fila se atualizam sozinhas: a conversa a cada 15 s,
      a fila a cada 30 s — o contador da aba é o que avisa que chegou trabalho. */
   useEffect(() => {
     const id = setInterval(() => {
-      if (document.hidden || aberta == null || enviando) return;
+      if (document.hidden || !ativa || aberta == null || enviando) return;
       atualizarConversa(aberta, true);
     }, 15000);
     return () => clearInterval(id);
-  }, [aberta, enviando, atualizarConversa]);
+  }, [aberta, enviando, atualizarConversa, ativa]);
   useEffect(() => {
     const id = setInterval(() => { if (!document.hidden) carregarLista(true); }, 30000);
     return () => clearInterval(id);

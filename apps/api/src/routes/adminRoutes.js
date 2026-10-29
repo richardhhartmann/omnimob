@@ -42,6 +42,7 @@ import {
 import { montarSessao, impressaoDaSenha } from "./authRoutes.js";
 import { ehTenantProtegido, MOTIVO_PROTEGIDO } from "../services/tenantProtegido.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
+import { historico, versaoAtual } from "../services/versao.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
   COM_CONVERSA as CHAMADO_COM_CONVERSA,
@@ -340,7 +341,15 @@ adminRouter.use(requireSuperAdmin);
    seguinte em vez de daqui a sete dias. */
 adminRouter.get("/eu", (req, res) => {
   const { id, nome, email, cargoId, cargoNome, permissoes } = req.superAdmin;
-  return res.json({ id, nome, email, cargoId, cargo: cargoNome, permissoes, catalogo: catalogoDePermissoes() });
+  return res.json({ id, nome, email, cargoId, cargo: cargoNome, permissoes, catalogo: catalogoDePermissoes(), versao: versaoAtual() });
+});
+
+/* As versões da Omnimob e o que cada uma mudou (`services/versao.js`). Sem
+   permissão própria: todo cargo do painel vê, porque é a primeira pergunta do
+   suporte ("isso já estava no ar quando o cliente reclamou?"). */
+adminRouter.get("/versoes", (_req, res) => {
+  const h = historico();
+  return res.json({ ...(h || { versoes: [], antes: null }), indisponivel: !h, no_ar: versaoAtual() });
 });
 
 /* ─── Segundo fator: ligar, conferir e desligar ───────────────────────────────

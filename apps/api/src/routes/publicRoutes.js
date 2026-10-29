@@ -20,6 +20,7 @@ import { portalPorCaminho, portaisDoImovel } from "../services/portais.js";
 import { proximoResponsavel } from "../services/distribuicaoLeads.js";
 import { dadosDaVitrine } from "../services/dadosDaVitrine.js";
 import { emitir } from "../services/webhooks.js";
+import { versaoAtual } from "../services/versao.js";
 import {
   criarTrial,
   assinarConvite,
@@ -705,6 +706,10 @@ publicRouter.get("/:slug/marca", async (req, res) => {
     return res.status(500).json({ error: "Erro interno no servidor." });
   }
 });
+
+/* A versão no ar (`services/versao.js`), para o painel do cliente mostrar a
+   dele. Pública e sem banco: é o que o suporte pede ao cliente ler. */
+publicRouter.get("/versao", (_req, res) => res.json(versaoAtual()));
 
 publicRouter.get("/planos", async (_req, res) => {
   try {

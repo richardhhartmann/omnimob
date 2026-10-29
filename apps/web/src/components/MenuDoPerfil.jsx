@@ -181,6 +181,14 @@ export function MenuDoPerfil({
     api.googleDisponivel().then(setGoogle).catch(() => {});
   }, [aberto]);
 
+  /* A versão no ar, para a pessoa dizer ao suporte qual tem ("estou na
+     1.4.2"). Uma vez por menu aberto: muda a cada deploy, não a cada clique. */
+  const [versao, setVersao] = useState(null);
+  useEffect(() => {
+    if (!aberto || versao) return;
+    api.versao().then(setVersao).catch(() => {});
+  }, [aberto, versao]);
+
   /* AS NOVIDADES DOS CHAMADOS — o que o suporte respondeu ou resolveu e a
      pessoa ainda não abriu, cada uma com a última fala. Perguntado só quando
      o submenu de Ajuda abre e só se o contador diz que há algo: é a lista do
@@ -408,7 +416,7 @@ export function MenuDoPerfil({
                 anunciado, pelo mesmo motivo do Google acima. */}
             <button type="button" className="mp-linha" disabled title="Ainda não disponível">
               <span className="mp-linha__icone"><Notebook size={17} /></span>
-              <span className="mp-linha__texto">Notas de versão<small>em breve</small></span>
+              <span className="mp-linha__texto">Notas de versão<small>{versao?.numero && versao.numero !== "dev" ? `Omnimob ${versao.numero} · ` : ""}em breve</small></span>
             </button>
             <span className="mp-risco" role="separator" />
             {/* Abrem em aba nova: são páginas públicas, e tirar alguém do painel
