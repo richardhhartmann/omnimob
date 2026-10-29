@@ -7,6 +7,7 @@ import { FaixaDeConta } from "./FaixaDeConta.jsx";
 import { BoasVindasModal } from "./BoasVindasModal";
 import { PulsoTrialModal } from "./PulsoTrialModal";
 import { PedidoDeAvaliacao } from "./PedidoDeAvaliacao";
+import { ComunicadoDeNovidades } from "./novidades/ComunicadoDeNovidades";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
 import { relatoriosVisiveis, PARAMETRO_DE } from "../utils/relatorios";
@@ -207,6 +208,21 @@ const TOAST_META = {
 export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   const location  = useLocation();
   const navigate  = useNavigate();
+  /* O pedido de abrir as Novidades: do menu (a mais recente) ou do link do
+     e-mail, que traz a semana em `?novidades=`. O parâmetro sai do endereço ao
+     ser lido, para um F5 não abrir de novo. */
+  const [pedidoNovidades, setPedidoNovidades] = useState(() => {
+    const chave = new URLSearchParams(window.location.search).get("novidades");
+    return chave ? { chave } : null;
+  });
+  const atenderNovidades = useCallback(() => {
+    setPedidoNovidades(null);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("novidades")) {
+      url.searchParams.delete("novidades");
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }, []);
   const tenantSlug = session?.tenant?.slug  || "";
   /* O que identifica a imobiliária para o armazenamento local. NÃO é o slug —
      ele é reutilizável entre empresas ao longo do tempo. Ver
@@ -1046,6 +1062,17 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       {/* A avaliação do painel, para quem já é cliente (o trial tem a pergunta
           acima, e o servidor recusa as duas ao mesmo tempo). Nem na
           demonstração nem com o suporte dentro da conta. */}
+      {/* As Novidades da semana: abrem sozinhas uma vez por pessoa (o servidor
+          diz qual e já corta o que ela não alcança) e a pedido, por Ajuda ›
+          Notas de versão ou pelo link do e-mail (`?novidades=<chave>`). */}
+      <ComunicadoDeNovidades
+        tenantSlug={tenantSlug}
+        pronto={contaResolvida && !tourGlobalAtivo}
+        registrar={!demo && !session?.suporte}
+        pedido={pedidoNovidades}
+        aoAtender={atenderNovidades}
+      />
+
       {!demo && !session?.suporte ? (
         <PedidoDeAvaliacao
           tenantSlug={tenantSlug}
@@ -1466,6 +1493,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                 aoAbrirAjuda={() => { setAjudaEm("menu"); setAjudaAberta(true); }}
                 aoAbrirChamado={abrirChamadoNoModal}
                 aoAbrirSuporte={(numero) => navigate(numero ? `/suporte/${numero}` : "/suporte")}
+                aoAbrirNovidades={() => setPedidoNovidades({ chave: null })}
                 chamados={chamados}
                 aoAbrirPreferencias={() => setPreferenciasAbertas(true)}
                 aoAbrirPerfil={() => setMeusDadosAbertos(true)}

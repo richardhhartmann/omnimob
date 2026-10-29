@@ -42,7 +42,8 @@ import {
 import { montarSessao, impressaoDaSenha } from "./authRoutes.js";
 import { ehTenantProtegido, MOTIVO_PROTEGIDO } from "../services/tenantProtegido.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
-import { historico, versaoAtual } from "../services/versao.js";
+import { daApresentacao, historico, versaoAtual } from "../services/versao.js";
+import { chaveValida, enviarNovidadesPorEmail, normalizarNovidade, resumoDaNovidade } from "../services/novidades.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
   COM_CONVERSA as CHAMADO_COM_CONVERSA,
@@ -1702,5 +1703,118 @@ adminRouter.post("/avaliacoes/lidas", requirePermissaoAdmin("verAvaliacoes"), as
   } catch (err) {
     console.error("[POST /admin/avaliacoes/lidas]", err);
     return res.status(500).json({ error: "Erro ao marcar como lidas." });
+  }
+});
+
+/* ─── Novidades ───────────────────────────────────────────────────────────────
+
+   A revisão antes de ir para os clientes. A rotina de terça deixa o rascunho
+   (`novidadeRoutes`); aqui se lê, reescreve, anexa os prints e publica. A
+   regra (validação, o que cada um vê, o e-mail) é de `services/novidades.js`.
+   Ver: `verNovidades`. Publicar (vai para todos os clientes, e por e-mail):
+   `publicarNovidades`. */
+adminRouter.get("/novidades", requirePermissaoAdmin("verNovidades"), async (_req, res) => {
+  try {
+    const todas = await prisma.novidade.findMany({ orderBy: { chave: "desc" } });
+    return res.json({ novidades: todas.map(resumoDaNovidade) });
+  } catch (err) {
+    console.error("[GET /admin/novidades]", err);
+    return res.status(500).json({ error: "Erro ao listar as novidades." });
+  }
+});
+
+adminRouter.get("/novidades/:chave", requirePermissaoAdmin("verNovidades"), async (req, res) => {
+  try {
+    const n = await prisma.novidade.findUnique({ where: { chave: req.params.chave } });
+    if (!n) return res.status(404).json({ error: "Novidade não encontrada." });
+    return res.json({ ...resumoDaNovidade(n), conteudo: n.conteudo });
+  } catch (err) {
+    console.error("[GET /admin/novidades/:chave]", err);
+    return res.status(500).json({ error: "Erro ao abrir a novidade." });
+  }
+});
+
+/* Grava a revisão. Vale também numa publicada: corrigir um erro de digitação
+   não pode exigir despublicar. Na nova, cria o rascunho (a semana sem rotina). */
+adminRouter.put("/novidades/:chave", requirePermissaoAdmin("verNovidades"), async (req, res) => {
+  const { chave } = req.params;
+  if (!chaveValida(chave)) return res.status(400).json({ error: "A chave é a terça da semana, em AAAA-MM-DD." });
+  try {
+    const conteudo = normalizarNovidade(req.body?.conteudo, chave);
+    const quem = req.superAdmin.nome || req.superAdmin.email;
+    const n = await prisma.novidade.upsert({
+      where: { chave },
+      update: { conteudo, atualizadoPor: quem },
+      create: { chave, conteudo, versao: daApresentacao(chave), origem: "painel", atualizadoPor: quem },
+    });
+    return res.json({ ...resumoDaNovidade(n), conteudo: n.conteudo });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("[PUT /admin/novidades/:chave]", err);
+    return res.status(500).json({ error: "Erro ao salvar a novidade." });
+  }
+});
+
+adminRouter.post("/novidades/:chave/publicar", requirePermissaoAdmin("publicarNovidades"), async (req, res) => {
+  try {
+    const atual = await prisma.novidade.findUnique({ where: { chave: req.params.chave } });
+    if (!atual) return res.status(404).json({ error: "Novidade não encontrada." });
+    const n = await prisma.novidade.update({
+      where: { chave: atual.chave },
+      // Republicar não muda a data: o prazo da semana é contado pela primeira.
+      data: { status: "PUBLICADO", publicadoEm: atual.publicadoEm || new Date(), publicadoPor: req.superAdmin.nome || req.superAdmin.email },
+    });
+    const email = req.body?.email ? await enviarNovidadesPorEmail(prisma, n) : null;
+    return res.json({ ...resumoDaNovidade(n), email });
+  } catch (err) {
+    console.error("[POST /admin/novidades/:chave/publicar]", err);
+    return res.status(500).json({ error: "Erro ao publicar." });
+  }
+});
+
+/* Volta a rascunho: some do comunicado e de Notas de versão. Quem já viu
+   continua contado. */
+adminRouter.post("/novidades/:chave/despublicar", requirePermissaoAdmin("publicarNovidades"), async (req, res) => {
+  try {
+    const n = await prisma.novidade.update({ where: { chave: req.params.chave }, data: { status: "RASCUNHO" } });
+    return res.json(resumoDaNovidade(n));
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Novidade não encontrada." });
+    console.error("[POST /admin/novidades/:chave/despublicar]", err);
+    return res.status(500).json({ error: "Erro ao despublicar." });
+  }
+});
+
+/* QUEM VIU: uma linha por pessoa, juntando as aberturas — primeira e última
+   vez, quantas vezes, até onde foi, quanto tempo ficou e em que aparelho. */
+adminRouter.get("/novidades/:chave/vistos", requirePermissaoAdmin("verNovidades"), async (req, res) => {
+  try {
+    const linhas = await prisma.novidadeVisto.findMany({
+      where: { chave: req.params.chave, ...(req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {}) },
+      include: { tenant: { select: { name: true, slug: true } } },
+      orderBy: { abertoEm: "asc" },
+    });
+    const porPessoa = new Map();
+    for (const l of linhas) {
+      const p = porPessoa.get(l.usuarioId) || {
+        usuarioId: l.usuarioId, usuarioNome: l.usuarioNome, tenant: l.tenant,
+        primeiraEm: l.abertoEm, ultimaEm: l.ultimoEm, vezes: 0, slideMax: 0, totalSlides: 0,
+        chegouAoFim: false, segundos: 0, dispositivos: [], origens: [],
+      };
+      p.vezes += 1;
+      p.ultimaEm = l.ultimoEm > p.ultimaEm ? l.ultimoEm : p.ultimaEm;
+      p.slideMax = Math.max(p.slideMax, l.slideMax);
+      p.totalSlides = Math.max(p.totalSlides, l.totalSlides);
+      p.chegouAoFim ||= l.chegouAoFim;
+      p.segundos += Math.max(0, Math.round(((l.fechadoEm || l.ultimoEm) - l.abertoEm) / 1000));
+      if (l.dispositivo && !p.dispositivos.includes(l.dispositivo)) p.dispositivos.push(l.dispositivo);
+      if (l.origem && !p.origens.includes(l.origem)) p.origens.push(l.origem);
+      porPessoa.set(l.usuarioId, p);
+    }
+    const pessoas = [...porPessoa.values()].sort((a, b) => b.ultimaEm - a.ultimaEm);
+    return res.json({ pessoas, total: pessoas.length });
+  } catch (err) {
+    console.error("[GET /admin/novidades/:chave/vistos]", err);
+    return res.status(500).json({ error: "Erro ao ler quem viu." });
   }
 });

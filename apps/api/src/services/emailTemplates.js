@@ -1010,3 +1010,35 @@ export function emailLeadsParados({ imobiliaria, horas, leads, base = "" }) {
 
   return { subject, body, html };
 }
+
+/**
+ * As Novidades da semana, por e-mail (`services/novidades.js`). Cada pessoa
+ * recebe só os títulos que ela alcança — o mesmo corte da apresentação — e o
+ * botão abre a apresentação inteira dentro do painel.
+ */
+export function emailNovidades({ nome, titulo: tituloDaSemana, versao, itens: lista, link }) {
+  const subject = `${tituloDaSemana} — o que mudou na Omnimob`;
+  const body = [
+    `Olá, ${nome}.`,
+    "",
+    `${tituloDaSemana}${versao ? ` (versão ${versao})` : ""}:`,
+    "",
+    ...lista.map((i) => `• ${i.titulo} — ${i.onde}`),
+    "",
+    `Veja a apresentação com o passo a passo de cada uma: ${link}`,
+  ].join("\n");
+
+  const html = layoutEmail({
+    preheader: `${lista.length} ${lista.length === 1 ? "novidade" : "novidades"} no seu painel.`,
+    conteudo: [
+      eyebrow(`● NOVIDADES${versao ? ` · VERSÃO ${esc(versao)}` : ""}`),
+      titulo(tituloDaSemana),
+      paragrafo(`Olá, ${forte(nome)}. Isto é o que mudou no painel para você:`),
+      dados(lista.map((i) => ({ rotulo: i.rotulo, valor: `${i.titulo} — ${i.onde}` }))),
+      botao("Ver a apresentação", link),
+      linkDeReserva(link),
+    ],
+  });
+
+  return { subject, body, html };
+}

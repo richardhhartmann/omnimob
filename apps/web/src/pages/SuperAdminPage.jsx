@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, Star, UsersThree } from "@phosphor-icons/react";
+import { Buildings, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, Sparkle, Star, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -17,6 +17,7 @@ import { AdminCargosPage, CARGOS_CSS } from "./admin/AdminCargosPage";
 import { AdminVersoesPage, VERSOES_CSS } from "./admin/AdminVersoesPage";
 import { AdminAuditoriaPage, AUDITORIA_CSS } from "./admin/AdminAuditoriaPage";
 import { AdminAvaliacoesPage, AVALIACOES_CSS } from "./admin/AdminAvaliacoesPage";
+import { AdminNovidadesPage, NOVIDADES_CSS } from "./admin/AdminNovidadesPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -159,6 +160,13 @@ const ABAS = [
     rotulo: "Avaliações",
     nota: "o que os usuários acham do painel",
     icone: <Star size={16} />,
+  },
+  {
+    chave: "novidades",
+    permissao: "verNovidades",
+    rotulo: "Novidades",
+    nota: "a apresentação semanal para os clientes",
+    icone: <Sparkle size={16} />,
   },
   /* Sem permissão própria (`null`): todo cargo do painel vê. É a primeira
      pergunta do suporte — "isso já estava no ar quando o cliente reclamou?". */
@@ -638,7 +646,7 @@ export function SuperAdminPage({ session, onLogout }) {
       aba={aba}
       aoTrocarAba={setAba}
       versao={eu.versao}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}`}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}\n${NOVIDADES_CSS}`}
     >
       {confirmModal}
 
@@ -654,6 +662,7 @@ export function SuperAdminPage({ session, onLogout }) {
       {painel("chamados", <AdminChamadosPage aoContar={setChamadosAbertos} ativa={aba === "chamados"} />)}
       {painel("tutoriais", <AdminTutoriaisPage />)}
       {painel("avaliacoes", <AdminAvaliacoesPage aoContar={setAvaliacoesNovas} />)}
+      {painel("novidades", <AdminNovidadesPage podePublicar={Boolean(permissoes.publicarNovidades)} />)}
       {painel("usuarios", <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} />)}
       {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
       {painel("seguranca", <AdminSegurancaPage />)}

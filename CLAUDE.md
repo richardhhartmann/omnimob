@@ -137,6 +137,19 @@ omnimob/
   busca é `findFirst` com o `tenantId`: o #12 de uma imobiliária é vizinho do
   #13 de outra, e o de fora responde 404. A régua de status e o e-mail moram
   em `services/chamados.js`, que o `/api/admin/chamados/*` também usa
+- `/api/avaliacoes/*` — **"O que você está achando da Omnimob?"**. `GET /minha`
+  diz se é para perguntar (quem decide é o servidor: não para quem já
+  respondeu, conta em TRIAL, suporte dentro da conta ou demonstração); `POST /`
+  grava a nota (1 a 5), uma por pessoa. A tela pergunta a cada 5 operações, ao
+  SAIR da tela onde trabalhou (`utils/pulsoAvaliacao.js`, contador próprio ao
+  lado do pulso do trial). Lida na aba Avaliações do super-admin
+- `/api/novidades/*` — **as Novidades da semana**, do lado da imobiliária:
+  `GET /pendente` (o comunicado que abre sozinho, uma vez por pessoa, nos 14
+  dias depois de publicado), `GET /` e `GET /:chave` (Ajuda › Notas de versão)
+  e `POST /:chave/visto` (quem viu, até onde, quanto tempo). O servidor corta o
+  que cada um vê por `modulo` e `permissao`. `PUT /api/novidades/rascunho/:chave`
+  é a porta da rotina de terça, com `Bearer NOVIDADES_TOKEN`, montada ANTES.
+  Fluxo inteiro em `docs/novidades/README.md`
 - `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
 - `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP. **Usuário novo
   nasce sem senha e é ativado por e-mail**: `POST /api/usuarios` exige e-mail e
@@ -148,9 +161,12 @@ omnimob/
   com vários candidatos quem decide a conta é a senha. `test/conviteUsuario.test.js`
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`.
   **Tem cargo**: `CargoSuperAdmin` com permissão por ABA (`verTenants`,
-  `verChamados`, `verTutoriais`, `verUsuarios`, `verCargos`, `verSeguranca`) e
-  por AÇÃO (`entrarNoTenant`, `editarTenant`, `excluirTenant`,
-  `resolverChamado`, `gerenciarUsuarios`). Catálogo único em
+  `verChamados`, `verTutoriais`, `verAvaliacoes`, `verNovidades`, `verUsuarios`,
+  `verCargos`, `verAuditoria`, `verSeguranca`) e por AÇÃO (`entrarNoTenant`,
+  `editarTenant`, `excluirTenant`, `resolverChamado`, `gerenciarUsuarios`,
+  `publicarNovidades`). A aba **Versionamento** não tem permissão: todo cargo
+  vê. A aba vai no endereço (`/admin?aba=chamados`) e cada aba, depois de
+  aberta, fica montada (escondida) — a resposta pela metade não se perde. Catálogo único em
   `services/permissoesSuperAdmin.js`; `requireSuperAdmin` relê cargo e `ativo`
   do banco a cada requisição e cada rota fica atrás de
   `requirePermissaoAdmin("…")`. Super-admin sem cargo não alcança NADA.
@@ -199,6 +215,9 @@ omnimob/
   OAuth e publicação no Mercado Livre, e a ponte de WhatsApp
 - `GET /api/tenants/me/exportar` — tudo da imobiliária num JSON, para
   portabilidade e LGPD
+- `POST /public/erros` — o relato da sentinela do navegador
+  (`utils/sentinelaDeErros.js`); vai, junto com os 500 do Express, para
+  `services/avisoDeErro.js`. `GET /public/versao` — a versão no ar
 - `/public/*` — showcase público (sem auth); inclui `GET /public/vitrines` (galeria da landing) e `GET /public/sitemap.xml`, servido em `omnimob.app/sitemap.xml` por reescrita da Vercel, e `GET /public/:slug/feed.xml` — o feed **VRSync** que ZAP/VivaReal/OLX Imóveis vêm buscar (carga agendada; nós não empurramos nada)
 - `/previa/*` — HTML com Open Graph para robôs de prévia (WhatsApp, Facebook, LinkedIn). A Vercel reescreve `/vitrine/*` para cá **só** quando o user-agent é de robô; pessoa continua recebendo o SPA. Ver `previaRoutes.js`. **O Googlebot não passa por aqui** — ele executa JS e recebe o SPA; por isso o JSON-LD (Schema.org) mora no front (`utils/dadosEstruturados.js`), injetado no `<head>` por rota como o `useSeo`
 - `/health` — health check real (DB + latência + versão do schema)
@@ -227,7 +246,12 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/mercadoLivre.test.js` | a tradução imóvel → anúncio (limites, tipos, atributos vazios). **Não prova que a integração funciona** — isso exige conta de vendedor |
 | `test/suporteChamados.test.js` | a conversa do chamado: B não lê nem escreve no chamado da A pelo número real (404); o corretor não lê o do colega; o ciclo ABERTO → AGUARDANDO_CLIENTE → EM_ATENDIMENTO → RESOLVIDO → reaberto pelos dois lados; novidade acende e apaga ao abrir; chamado interno só pelo token e só para a casa; a conversa some com a imobiliária |
 | `test/demo.test.js` | a sessão de demonstração lê tudo e não escreve nada — imóvel, cargo e o próprio progresso do tour recebem 403 `SOMENTE_DEMO`; o token normal da mesma pessoa continua escrevendo. Sem `DEMO_TENANT_SLUG`, 404 |
-| `test/superAdminPermissoes.test.js` | cargo "Suporte" recebe 403 no `entrar`/`editar`/`excluir` mesmo chamando a URL; rebaixar vale na requisição seguinte; Administrador não perde as chaves da casa; convite é de uso único; a escrita entra na `Auditoria` com `tenantId` nulo |
+| `test/superAdminPermissoes.test.js` | cargo "Suporte" recebe 403 no `entrar`/`editar`/`excluir` mesmo chamando a URL; rebaixar vale na requisição seguinte; Administrador não perde as chaves da casa; convite é de uso único; a escrita entra na `Auditoria` com `tenantId` nulo e a aba Auditoria só a lê com `verAuditoria`; o Versionamento abre para todo cargo |
+| `test/versao.test.js` | a régua MAIOR.SEMANA.ENTREGA: a semana vira terça 15h01 de Brasília e a entrega recomeça a cada semana. **Não toca no banco** |
+| `test/avisoDeErro.test.js` | o aviso de erro agrupa o mesmo defeito e avisa uma vez por hora, com teto. **Não toca no banco** |
+| `test/avaliacoes.test.js` | uma avaliação por pessoa; o suporte dentro da conta não avalia pelo cliente; conta em trial não é perguntada; só quem tem `verAvaliacoes` lê |
+| `test/novidadesRegra.test.js` | a validação do conteúdo (texto, tipo, permissão, módulo, print só https) e o corte Hub/Flow/permissão. **Não toca no banco** |
+| `test/novidades.test.js` | a rotina entra só com a chave e nunca sobrescreve a publicada; revisar não é publicar; só-Hub não vê o Omniflow; o comunicado abre uma vez e o registro de quem viu é de quem viu |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
 cada requisição (ativo? qual cargo?) e ignora o que veio dentro do JWT. Sem
@@ -348,6 +372,20 @@ invisíveis porque com um cliente só o sintoma não aparece.
   falamos com um serviço que a imobiliária contrata. A diferença não é técnica,
   é de responsabilidade — hospedar faria a Omnimob operar a violação dos termos
   da Meta em nome de centenas de clientes.
+- `versao.js` — **a versão da Omnimob**, MAIOR.SEMANA.ENTREGA tirada do git
+  (a régua do VYA): a semana vira toda terça às 15h01 de Brasília (a 1 começou
+  em 27/10/2026) e cada PR na `main` é uma entrega. O servidor não tem `.git`:
+  o `npm run build` grava `versoes.json` (`scripts/versao.js --gravar`, que
+  nunca derruba o deploy) e a imagem Docker recebe `OMNIMOB_VERSAO`. Aparece
+  no rodapé e na aba Versionamento do super-admin e em Ajuda › Notas de versão
+- `avisoDeErro.js` — o erro do navegador (`POST /public/erros`) e o 500 do
+  Express viram e-mail em `CHAMADOS_INTERNOS_EMAIL`, agrupados por impressão
+  digital: uma vez por hora por erro, teto de 20 por hora. Memória do processo
+- `novidades.js` — **as Novidades da semana**: validação do conteúdo, o corte
+  por pessoa (`modulo` FLOW = contratou E o cargo alcança; `permissao` = coluna
+  do `Cargo`) e o e-mail de cada um com o seu recorte. Porte do
+  `modules/dashboard/novidades.py` do VYA; o desenho dos slides é o mesmo do
+  PPTX (`web/components/novidades/`)
 - `provisioningService.js`, `migrationService.js`, `healthService.js`, `notificationService.js` (stub).
 
 **Camada do Flow (`src/services/flow/`):**
@@ -428,7 +466,8 @@ invisíveis porque com um cliente só o sintoma não aparece.
 | `RESEND_API_KEY` | — | vazio (só loga o link) | **obrigatória** — é o único transporte de e-mail que funciona no Render |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_UPLOAD_PRESET` | — | `dpwuxmbli` / `domus-app` | idem — **os mesmos valores dos `VITE_`** |
 | `CONTATO_EMAIL` | — | destino do formulário de contato | idem |
-| `CHAMADOS_INTERNOS_EMAIL` | — | opcional (cai no `CONTATO_EMAIL`) | quem recebe o chamado INTERNO — a equipe pedindo ao desenvolvimento |
+| `CHAMADOS_INTERNOS_EMAIL` | — | opcional (cai no `CONTATO_EMAIL`) | quem recebe o chamado INTERNO — a equipe pedindo ao desenvolvimento — e os erros do navegador e do servidor (`avisoDeErro.js`) |
+| `NOVIDADES_TOKEN` | — | opcional | segredo longo; a chave da rotina de terça que entrega o rascunho das Novidades — **vazia, a porta não existe** |
 | `DEMO_TENANT_SLUG` | — | `demonstracao` (`npm run demonstracao` cria) | idem — o mesmo script, rodado contra produção; vazia = demonstração indisponível |
 
 **Sobre o banco da PLATAFORMA (`PLATAFORMA_DATABASE_URL`):** `SuperAdmin` e
@@ -548,6 +587,8 @@ Modelos principais:
 | `PropertyPublication` | Fila de publicação social (Facebook/Instagram/WhatsApp) |
 | `Chamado` / `ChamadoMensagem` | O chamado de suporte e a conversa dentro dele. `status` tem quatro paradas (ver `services/chamados.js`); `autorTipo` é `CLIENTE`, `SUPORTE` ou `SISTEMA` — o terceiro é o que o sistema anota sozinho ("Resolvido por …") e não gera e-mail. `tenantId` copiado na mensagem, para filtrar sem `join` |
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
+| `Avaliacao` | A nota (1 a 5) que o usuário dá ao painel. Uma por pessoa (`@@unique([tenantId, usuarioId])`), sem FK para o usuário. `lidaEm` nula acende o contador do super-admin |
+| `Novidade` / `NovidadeVisto` | A apresentação da semana (chave = a terça, `AAAA-MM-DD`; `RASCUNHO` → `PUBLICADO`) e cada vez que alguém a abriu. Sem `tenantId` na `Novidade` de propósito: é da Omnimob, e o corte é por pessoa em `services/novidades.js` |
 | `Negocio` | **Flow.** O negócio no funil. `codigo` é inteiro sequencial porque é um id que PESSOAS dizem em voz alta. Guarda as duas travas (quem validou e quando) e o split congelado |
 | `NegocioEvento` | Histórico do negócio, com `usuarioNome` copiado |
 | `NegocioDocumento` | Comprovação cadastral. Arquivo no Cloudinary; `verificado` é separado de "existe o arquivo" |
@@ -1101,10 +1142,16 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
   landing — sem erro nenhum, como o preço anual fez quando entrou
 - **A troca de módulo pelo super-admin.** Hoje é `npm run modulos` ou a
   assinatura; falta a tela
-- **Ver a trilha da plataforma.** As escritas do super-admin (usuários e cargos
-  da Omnimob) já entram na `Auditoria` com `tenantId` nulo; falta a aba que as
-  mostre. "Recuperar senha" de super-admin também não existe — hoje é o
-  convite (só para quem nunca definiu senha) ou mexer no banco
+- **A trilha da plataforma só vê usuários e cargos.** A aba Auditoria do
+  super-admin lê as escritas com `tenantId` nulo, e só `SuperAdmin` e
+  `CargoSuperAdmin` são gravados ali: editar ou excluir um TENANT pelo
+  super-admin não deixa linha em trilha nenhuma. "Recuperar senha" de
+  super-admin também não existe — hoje é o convite (só para quem nunca
+  definiu senha) ou mexer no banco
+- **A rotina das Novidades na nuvem** precisa ser criada (claude.ai/code, terça
+  15h01) e `NOVIDADES_TOKEN` definida na API — ver `docs/novidades/README.md`.
+  A publicação automática e a cópia por e-mail para a equipe, que o VYA tem,
+  não foram portadas
 - Blog/conteúdo para SEO (o site institucional já existe: `/sobre`, `/contato`, `/termos`, `/privacidade`, `/vitrines`)
 - Testes automatizados e deploy CI/CD (recuperação de senha **já existe** — `POST /api/auth/recuperar-senha`)
 
@@ -1124,6 +1171,8 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 | `npm run relatorio` | Relatório mensal por e-mail aos clientes Profissional/Premium. Ensaio por padrão; `--aplicar` envia. `--mes=7 --ano=2026` escolhe o período |
 | `npm run stripe:limpar -- --slug=…` | Cancela assinaturas do slug no Stripe |
 | `npm run prisma:seed:dev` | Imobiliárias de exemplo + catálogos |
+| `npm run versao` | A versão do HEAD (`-- --semana AAAA-MM-DD` dá a MAIOR.SEMANA de uma terça; `-- --gravar` é o do build) |
+| `npm run novidades -- <pasta>` | Entrega `<pasta>/conteudo.json` como rascunho das Novidades (`--conferir` só valida). Precisa de `NOVIDADES_TOKEN`; `OMNIMOB_API_URL` troca o destino |
 | `npm run demonstracao` | A imobiliária `demonstracao` do "Ver por dentro": a `imobiliaria-centro` do seed com outro slug, logins `demo-*`, **fotos de imóvel de verdade** (Unsplash, escolhidas por tipo), Premium com os dois módulos, EM_DIA e sem vencimento (não cai na faxina). Idempotente; a senha do `demo-admin` é aleatória e sai UMA vez (`-- --senha-nova` gera outra). `INFISICAL_ENV=prod` para produção. O seed exporta as funções e aceita os dados por parâmetro justamente para este script não duplicá-lo |
 
 > O subdomínio de cada imobiliária é cadastrado **individualmente** na Vercel no

@@ -500,6 +500,7 @@ model Tenant {
   chamados     Chamado[]
   pesquisas    PesquisaTrial[]
   avaliacoes   Avaliacao[]
+  novidadesVistas NovidadeVisto[]
 
   auditorias  Auditoria[]
   leadEventos LeadEvento[]
@@ -557,6 +558,63 @@ model Avaliacao {
   @@index([createdAt])
   @@index([lidaEm])
   @@map("tb_avaliacao")
+}
+
+/// As NOVIDADES da semana: a apresentação que conta aos clientes o que mudou.
+/// Chega como RASCUNHO pela rotina de terça (`PUT /api/novidades/rascunho/:chave`),
+/// é revisada e publicada no super-admin, e aparece UMA vez para cada pessoa ao
+/// entrar no painel. Sem `tenantId` de propósito: é da Omnimob, igual para todos —
+/// quem corta o que cada um vê é `services/novidades.js` (módulo e permissão).
+/// Ver `docs/novidades/README.md`.
+model Novidade {
+  /// A terça em que a semana fecha (AAAA-MM-DD). É a chave que a rotina manda.
+  chave         String    @id
+  /// RASCUNHO | PUBLICADO
+  status        String    @default("RASCUNHO")
+  /// O mesmo formato do `docs/novidades/exemplo/conteudo.json`.
+  conteudo      Json
+  /// MAIOR.SEMANA (`services/versao.js` › daApresentacao).
+  versao        String?
+  /// "agendamento" (a rotina) ou "painel".
+  origem        String?
+  atualizadoPor String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  publicadoEm   DateTime?
+  publicadoPor  String?
+
+  vistos NovidadeVisto[]
+
+  @@map("tb_novidade")
+}
+
+/// Uma linha por vez que a apresentação abriu para alguém: até onde foi, se
+/// chegou ao fim, quanto tempo ficou. A aba Novidades junta por pessoa. É
+/// também o "já viu", que impede o comunicado de abrir de novo.
+model NovidadeVisto {
+  id          String    @id @default(cuid())
+  chave       String
+  tenantId    String
+  /// Sem FK, como a `Auditoria`: o registro sobrevive a quem viu.
+  usuarioId   String
+  usuarioNome String
+  /// "comunicado" (abriu sozinho) ou "menu" (Ajuda › Notas de versão).
+  origem      String?
+  /// "celular" | "computador"
+  dispositivo String?
+  totalSlides Int       @default(0)
+  slideMax    Int       @default(1)
+  chegouAoFim Boolean   @default(false)
+  abertoEm    DateTime  @default(now())
+  ultimoEm    DateTime  @default(now())
+  fechadoEm   DateTime?
+
+  novidade Novidade @relation(fields: [chave], references: [chave], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([chave, tenantId])
+  @@index([usuarioId, chave])
+  @@map("tb_novidade_visto")
 }
 
 model PesquisaTrial {

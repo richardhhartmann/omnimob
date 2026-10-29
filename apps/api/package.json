@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "build": "prisma migrate deploy && node scripts/versao.js --gravar",
     "versao": "node scripts/versao.js",
+    "novidades": "node ../../scripts/com-env.mjs -- node scripts/novidades-enviar.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "node ../../scripts/com-env.mjs -- prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",

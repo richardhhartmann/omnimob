@@ -1243,6 +1243,21 @@ export const api = {
   /* O que mudou e a pessoa ainda não viu, com a última fala de cada um. */
   /* A avaliação do painel: `minhaAvaliacao` diz se é para perguntar (quem
      decide é o servidor), `avaliar` grava a nota. Ver `avaliacaoRoutes`. */
+  /* As Novidades da semana (`novidadeRoutes`), já cortadas pelo servidor para
+     esta pessoa. `pendente` é o comunicado que abre sozinho; a lista e a
+     leitura servem a Ajuda › Notas de versão. */
+  novidadesPendente: (tenantSlug) => request("/api/novidades/pendente", { headers: { "x-tenant-slug": tenantSlug } }),
+  listarNovidades: (tenantSlug) => request("/api/novidades", { headers: { "x-tenant-slug": tenantSlug } }),
+  lerNovidade: (tenantSlug, chave) =>
+    request(`/api/novidades/${encodeURIComponent(chave)}`, { headers: { "x-tenant-slug": tenantSlug } }),
+  // `keepalive` no fechamento: a aba pode estar fechando junto.
+  registrarVistoNovidade: (tenantSlug, chave, corpo, { keepalive = false } = {}) =>
+    request(`/api/novidades/${encodeURIComponent(chave)}/visto`, {
+      method: "POST",
+      keepalive,
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(corpo),
+    }),
   minhaAvaliacao: (tenantSlug) => request("/api/avaliacoes/minha", { headers: { "x-tenant-slug": tenantSlug } }),
   avaliar: (tenantSlug, payload) =>
     request("/api/avaliacoes", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
@@ -1364,6 +1379,18 @@ export const adminApi = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null && v !== false));
     return adminRequest(`/api/admin/avaliacoes${q.toString() ? `?${q}` : ""}`);
   },
+  // ─── Novidades da semana (revisão e publicação) ───────────────────────────
+  listNovidades: () => adminRequest("/api/admin/novidades"),
+  lerNovidadeAdmin: (chave) => adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}`),
+  salvarNovidade: (chave, conteudo) =>
+    adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}`, { method: "PUT", body: JSON.stringify({ conteudo }) }),
+  // `{ email: true }` manda a cada pessoa o recorte dela; a resposta diz para quantas.
+  publicarNovidade: (chave, payload = {}) =>
+    adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}/publicar`, { method: "POST", body: JSON.stringify(payload) }),
+  despublicarNovidade: (chave) => adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}/despublicar`, { method: "POST" }),
+  vistosNovidade: (chave, tenantId = "") =>
+    adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}/vistos${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`),
+
   // Sem `ids`, marca TODAS as não lidas.
   marcarAvaliacoesLidas: (ids) =>
     adminRequest("/api/admin/avaliacoes/lidas", { method: "POST", body: JSON.stringify(ids ? { ids } : {}) }),

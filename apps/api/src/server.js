@@ -12,6 +12,7 @@ import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
 import { chamadoRouter } from "./routes/chamadoRoutes.js";
 import { avaliacaoRouter } from "./routes/avaliacaoRoutes.js";
+import { novidadeRouter, rascunhoNovidadeRouter } from "./routes/novidadeRoutes.js";
 import { importacaoRouter } from "./routes/importacaoRoutes.js";
 import { apiPublicaRouter } from "./routes/apiPublicaRoutes.js";
 import { chavesApiRouter } from "./routes/chavesApiRoutes.js";
@@ -242,6 +243,10 @@ app.use("/api/usuarios", usuarioRouter);
 app.use("/api/tutorial", tutorialRouter);
 app.use("/api/chamados", chamadoRouter);
 app.use("/api/avaliacoes", avaliacaoRouter);
+/* A rotina de terça entrega o rascunho com a chave própria (NOVIDADES_TOKEN):
+   montada ANTES, senão o `requireAuth` do router da imobiliária a engoliria. */
+app.use("/api/novidades/rascunho", rascunhoNovidadeRouter);
+app.use("/api/novidades", novidadeRouter);
 app.use("/api/importacao", importacaoRouter);
 app.use("/api/chaves-api", chavesApiRouter);
 app.use("/api/webhooks-saida", webhookRouter);
