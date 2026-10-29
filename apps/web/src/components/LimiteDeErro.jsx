@@ -1,4 +1,5 @@
 import { Component } from "react";
+import { relatarErro } from "../utils/sentinelaDeErros";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Rede de segurança das rotas carregadas sob demanda.
@@ -40,8 +41,10 @@ export class LimiteDeErro extends Component {
   }
 
   componentDidCatch(erro, info) {
-    // Sem serviço de monitoramento ainda; o console é o que existe hoje.
     console.error("[LimiteDeErro]", erro, info?.componentStack);
+    /* O React já engoliu este erro: a janela não o vê, então a sentinela é
+       chamada daqui. A pilha de componentes diz QUAL tela quebrou. */
+    relatarErro(erro, { pilha: `${erro?.stack || ""}${info?.componentStack || ""}` });
   }
 
   render() {

@@ -38,6 +38,7 @@ import { tutorialRouter } from "./routes/tutorialRoutes.js";
 import { usuarioRouter } from "./routes/usuarioRoutes.js";
 import { getHealth } from "./services/healthService.js";
 import { contextoDeAuditoria } from "./services/auditoria.js";
+import { avisarErro } from "./services/avisoDeErro.js";
 
 dotenv.config();
 
@@ -290,7 +291,7 @@ app.use("/public", publicRouter);
    responder JSON para um robô que só entende marcação. */
 app.use("/previa", previaRouter);
 
-app.use((error, _req, res, _next) => {
+app.use((error, req, res, _next) => {
   console.error(error);
   /* ── 500 É PARA DEFEITO NOSSO ─────────────────────────────────────────────
      O `express.json()` lança com `status: 400` quando o CLIENTE manda um corpo
@@ -302,6 +303,8 @@ app.use((error, _req, res, _next) => {
   if (Number.isInteger(status) && status >= 400 && status < 500) {
     return res.status(status).json({ error: "Requisição inválida." });
   }
+  // O 500 que ninguém previu vai para a mesma caixa dos erros do navegador.
+  avisarErro({ origem: "servidor", mensagem: error?.message || String(error), pilha: error?.stack, url: `${req.method} ${req.originalUrl}` });
   res.status(500).json({ error: "Erro interno no servidor." });
 });
 

@@ -22,6 +22,18 @@ export function setAdminToken(token) {
   adminToken = token;
 }
 
+/* O relato da sentinela (`utils/sentinelaDeErros.js`). Fora do `request` de
+   propósito: um erro aqui não pode disparar outro relato, nem contar como
+   ação no pulso. `keepalive` para sair mesmo com a aba fechando. */
+export function enviarRelatoDeErro(corpo) {
+  fetch(`${API_URL}/public/erros`, {
+    method: "POST",
+    keepalive: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  }).catch(() => {});
+}
+
 function normalizeErrorMessage(body) {
   if (!body || typeof body !== "object") return "Erro na requisicao.";
   if (body.details?.fieldErrors && typeof body.details.fieldErrors === "object") {

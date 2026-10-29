@@ -21,6 +21,7 @@ import { proximoResponsavel } from "../services/distribuicaoLeads.js";
 import { dadosDaVitrine } from "../services/dadosDaVitrine.js";
 import { emitir } from "../services/webhooks.js";
 import { versaoAtual } from "../services/versao.js";
+import { avisarErro } from "../services/avisoDeErro.js";
 import {
   criarTrial,
   assinarConvite,
@@ -705,6 +706,30 @@ publicRouter.get("/:slug/marca", async (req, res) => {
     console.error("[GET /public/:slug/marca]", erro);
     return res.status(500).json({ error: "Erro interno no servidor." });
   }
+});
+
+/* O relato de erro do navegador (`web/src/utils/sentinelaDeErros.js`). Público
+   porque quebra também na vitrine e no login, onde não há sessão; por isso o
+   limite e o corte de cada campo — é texto de qualquer um indo para um e-mail.
+   Responde 204 sempre: quem relata não tem o que fazer com a resposta. */
+const errosLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+const corte = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+publicRouter.post("/erros", errosLimiter, (req, res) => {
+  const b = req.body || {};
+  if (corte(b.mensagem, 1)) {
+    avisarErro({
+      origem: "navegador",
+      mensagem: corte(b.mensagem, 500),
+      pilha: corte(b.pilha, 4000),
+      url: corte(b.url, 500),
+      contexto: {
+        Imobiliária: corte(b.tenant, 80),
+        Usuário: corte(b.usuario, 80),
+        Navegador: corte(req.headers["user-agent"], 200),
+      },
+    });
+  }
+  return res.status(204).end();
 });
 
 /* A versão no ar (`services/versao.js`), para o painel do cliente mostrar a
