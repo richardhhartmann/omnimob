@@ -301,7 +301,7 @@ const ESTILO = `
 .nov-cartao{ cursor:pointer; transition: transform .15s, box-shadow .15s; font: inherit; }
 .nov-cartao:hover{ transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99,102,241,.15); }
 .nov-barra{ display:flex; align-items:center; gap:8px; justify-content:center; color:#CBD5E1; font-size:13px; }
-.nov-barra button{ display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(148,163,184,.35); background:rgba(14,15,26,.6); color:#fff; border-radius:999px; padding:7px 14px; font:inherit; font-size:13px; cursor:pointer; }
+.nov-barra button{ width:auto; display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(148,163,184,.35); background:rgba(14,15,26,.6); color:#fff; border-radius:999px; padding:7px 14px; font:inherit; font-size:13px; cursor:pointer; }
 .nov-barra button:hover:not(:disabled){ border-color:${COR.indigoClaro}; }
 .nov-pontos{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; max-width:60%; }
 .nov-pontos i{ width:6px; height:6px; border-radius:99px; background:rgba(148,163,184,.4); cursor:pointer; }

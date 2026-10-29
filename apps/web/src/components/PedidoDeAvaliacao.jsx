@@ -175,7 +175,7 @@ export function PedidoDeAvaliacao({ tenantSlug, tenantId, usuarioId, pronto = tr
 const CSS = `
 .pa-estrelas { display: flex; gap: 6px; margin: 14px 0 4px; }
 .pa-estrela {
-  font-size: 30px; line-height: 1; padding: 2px 4px; cursor: pointer;
+  width: auto; font-size: 30px; line-height: 1; padding: 2px 4px; cursor: pointer;
   background: none; border: none; color: rgba(148,163,184,0.35); transition: color 0.12s ease, transform 0.12s ease;
 }
 .pa-estrela:hover { transform: scale(1.08); }

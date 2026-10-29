@@ -81,7 +81,7 @@ function Barra({ pct, titulo }) {
   );
 }
 
-export function AdminTutoriaisPage() {
+export function AdminTutoriaisPage({ tenantSlug = "" }) {
   const [tenants, setTenants] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -118,12 +118,13 @@ export function AdminTutoriaisPage() {
         return { ...t, usuarios, media, intocados };
       })
       .filter((t) => {
+        if (tenantSlug && t.slug !== tenantSlug) return false;
         if (!q) return true;
         return [t.nome, t.slug, ...t.usuarios.map((u) => u.nome)]
           .filter(Boolean)
           .some((v) => v.toLowerCase().includes(q));
       });
-  }, [tenants, busca]);
+  }, [tenants, busca, tenantSlug]);
 
   const totalUsuarios = analisados.reduce((s, t) => s + t.usuarios.length, 0);
   const mediaGeral = totalUsuarios

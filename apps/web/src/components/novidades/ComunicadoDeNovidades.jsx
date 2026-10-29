@@ -56,33 +56,44 @@ export function ComunicadoDeNovidades({ tenantSlug, pronto = true, registrar = t
     setAberto({ ...n, origem });
   }, [registrar, tenantSlug]);
 
-  // O automático: uma vez por carga do painel, quando nada mais está na tela.
+  /* O automático: uma vez por carga do painel, quando nada mais está na tela.
+     Com respiro e conferência de novo no fim dele, como a pesquisa do trial:
+     a recepção fecha e o tour sobe um instante DEPOIS, e o comunicado não
+     pode chegar primeiro e ficar por baixo do holofote. Se um tour estiver no
+     ar, fica para quando ele acabar (`pronto` volta a valer). */
   useEffect(() => {
-    if (!tenantSlug || !pronto || jaPerguntou.current || tourAtivo()) return;
-    jaPerguntou.current = true;
-    api.novidadesPendente(tenantSlug)
-      .then((r) => { if (r?.novidade && !tourAtivo()) abrir(r.novidade, "comunicado"); })
-      .catch(() => {});
+    if (!tenantSlug || !pronto || jaPerguntou.current) return undefined;
+    const t = setTimeout(() => {
+      if (tourAtivo()) return;
+      jaPerguntou.current = true;
+      api.novidadesPendente(tenantSlug)
+        .then((r) => { if (r?.novidade && !tourAtivo()) abrir(r.novidade, "comunicado"); })
+        .catch(() => {});
+    }, 2500);
+    return () => clearTimeout(t);
   }, [tenantSlug, pronto, abrir]);
 
-  // A pedido: a semana pedida, ou a mais recente; a lista alimenta o seletor.
+  /* A pedido: a semana pedida, ou a mais recente; a lista alimenta o seletor.
+     O pedido é CONSUMIDO na entrada, e a abertura segue sem depender dele:
+     limpar o pedido no fim derrubava, pela limpeza do efeito, a abertura que
+     ainda estava a caminho. A referência impede o mesmo pedido de abrir duas
+     vezes (o StrictMode roda o efeito em dobro). Espera `pronto` também: o
+     link do e-mail chega antes da recepção de boas-vindas, e a apresentação
+     ficaria por baixo dela. */
+  const atendido = useRef(null);
   useEffect(() => {
-    if (!pedido || !tenantSlug) return;
-    let vivo = true;
+    if (!pedido || !tenantSlug || !pronto || atendido.current === pedido) return;
+    atendido.current = pedido;
+    aoAtender?.();
     api.listarNovidades(tenantSlug)
       .then(async (r) => {
         const lista = r?.novidades || [];
-        if (!vivo) return;
         setSemanas(lista);
         const chave = pedido.chave && lista.some((n) => n.chave === pedido.chave) ? pedido.chave : lista[0]?.chave;
-        if (!chave) { aoAtender?.(); return; }
-        const n = await api.lerNovidade(tenantSlug, chave);
-        if (vivo) abrir(n, "menu");
+        if (chave) abrir(await api.lerNovidade(tenantSlug, chave), "menu");
       })
-      .catch(() => {})
-      .finally(() => aoAtender?.());
-    return () => { vivo = false; };
-  }, [pedido, tenantSlug, abrir, aoAtender]);
+      .catch(() => {});
+  }, [pedido, tenantSlug, pronto, abrir, aoAtender]);
 
   const aoMudarSlide = useCallback((numero, total) => registro.current?.slide(numero, total), []);
 
@@ -133,7 +144,7 @@ const CSS = `
 .cn-topo { display: flex; align-items: center; gap: 12px; color: #cbd5e1; font-size: 13px; }
 .cn-versao { font-weight: 700; letter-spacing: 0.04em; }
 .cn-semanas { background: rgba(14,15,26,0.8); color: #fff; border: 1px solid rgba(148,163,184,0.35); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12.5px; }
-.cn-fechar { margin-left: auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: #fff; background: rgba(14,15,26,0.8); border: 1px solid rgba(148,163,184,0.35); }
+.cn-fechar { margin-left: auto; width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: #fff; background: rgba(14,15,26,0.8); border: 1px solid rgba(148,163,184,0.35); }
 .cn-fechar:hover { border-color: #a5b4fc; }
 .cn-carregando { color: #cbd5e1; text-align: center; padding: 80px 0; }
 @media (max-width: 640px) { .cn-veu { padding: 10px; } }

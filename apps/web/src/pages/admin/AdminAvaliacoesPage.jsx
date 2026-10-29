@@ -171,7 +171,7 @@ export const AVALIACOES_CSS = `
 .av-item__quando { margin-left: auto; }
 .av-item__texto { margin: 10px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--default); white-space: pre-wrap; }
 .dl-root .av-lida {
-  font-family: inherit; font-size: 11.5px; color: var(--accent-soft); background: none; border: none; padding: 0; cursor: pointer; box-shadow: none; transform: none;
+  width: auto; font-family: inherit; font-size: 11.5px; color: var(--accent-soft); background: none; border: none; padding: 0; cursor: pointer; box-shadow: none; transform: none;
 }
 .dl-root .av-lida:hover { text-decoration: underline; background: none; box-shadow: none; transform: none; }
 `;

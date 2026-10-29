@@ -16,7 +16,7 @@ import { Button, OmnimobStyles, LogoLockup } from "../styles/omnimobKit";
    próximo assunto (faxina de trials, métricas) não teria onde entrar.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, versao, children }) {
+export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, versao, seletor, children }) {
   const atual = abas.find((a) => a.chave === aba) || abas[0];
 
   return (
@@ -41,6 +41,9 @@ export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, ver
 
       <div className="as-shell">
         <aside className="as-side">
+          {/* O cliente em foco (`?cliente=`): as abas com dado de cliente
+              passam a mostrar só o dele. */}
+          {seletor}
           <span className="dl-mono as-side__label">PLATAFORMA</span>
           <nav className="as-nav">
             {abas.map((a) => (
@@ -150,6 +153,8 @@ const SHELL_CSS = `
   color: #55555f; font-size: 9px; letter-spacing: 0.06em; text-transform: none;
   padding: 10px 12px 0; border-top: 1px solid var(--line-soft);
 }
+
+.as-foco { width: 100%; font-size: 12.5px; padding-top: 8px; padding-bottom: 8px; }
 
 .as-main { flex: 1; min-width: 0; }
 

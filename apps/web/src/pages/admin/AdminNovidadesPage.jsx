@@ -84,14 +84,17 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
   }
   useEffect(() => { carregarLista(); }, []);
 
+  /* Depende de a semana EXISTIR na lista, e não da lista: reler a lista depois
+     de salvar ou publicar não pode recarregar o detalhe (e apagar o aviso). */
+  const existe = Boolean(lista?.some((n) => n.chave === escolhida));
+  useEffect(() => { setAviso(null); }, [escolhida]);
   useEffect(() => {
-    if (!escolhida || !lista?.some((n) => n.chave === escolhida)) { setDetalhe(null); setRascunho(null); return; }
+    if (!escolhida || !existe) { setDetalhe(null); setRascunho(null); return undefined; }
     let vivo = true;
-    setAviso(null);
     adminApi.lerNovidadeAdmin(escolhida).then((d) => { if (vivo) { setDetalhe(d); setRascunho(d.conteudo); } }).catch((e) => setAviso({ tom: "danger", texto: e.message }));
     adminApi.vistosNovidade(escolhida, tenantId).then((v) => { if (vivo) setVistos(v); }).catch(() => setVistos(null));
     return () => { vivo = false; };
-  }, [escolhida, lista, tenantId]);
+  }, [escolhida, existe, tenantId]);
 
   const sujo = useMemo(() => Boolean(detalhe && rascunho && JSON.stringify(rascunho) !== JSON.stringify(detalhe.conteudo)), [detalhe, rascunho]);
   const resumo = lista?.find((n) => n.chave === escolhida) || null;
@@ -365,13 +368,13 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
 export const NOVIDADES_CSS = `
 .nv-semanas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .dl-root .nv-semana {
-  display: inline-flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 12px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 10px; width: auto; flex: 0 0 auto; white-space: nowrap; padding: 9px 14px; border-radius: 12px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--line); color: var(--default); font-family: inherit; font-size: 13px;
   box-shadow: none; transform: none;
 }
 .dl-root .nv-semana:hover { border-color: #34343c; background: var(--surface); box-shadow: none; transform: none; }
 .dl-root .nv-semana.is-on { border-color: rgba(99,102,241,0.55); background: rgba(99,102,241,0.08); }
-.nv-semana--vazia { border-style: dashed; cursor: default; }
+.nv-semana--vazia { border-style: dashed; cursor: default; padding: 9px 14px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--line); font-size: 13px; color: var(--default); }
 .nv-semana__qtd { color: var(--placeholder); font-size: 9px; text-transform: none; }
 .nv-anteriores { max-width: 260px; }
 .nv-detalhe { display: grid; gap: 14px; }
@@ -381,7 +384,7 @@ export const NOVIDADES_CSS = `
 .nv-acoes { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .nv-email { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--subtle); cursor: pointer; }
 .dl-root .nv-link {
-  font-family: inherit; font-size: 12px; color: var(--accent-soft); background: none; border: none; padding: 0; cursor: pointer; box-shadow: none; transform: none;
+  display: inline-flex; width: auto; font-family: inherit; font-size: 12px; color: var(--accent-soft); background: none; border: none; padding: 0; cursor: pointer; box-shadow: none; transform: none;
 }
 .dl-root .nv-link:hover { text-decoration: underline; background: none; box-shadow: none; transform: none; }
 .nv-palco { padding: 18px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
@@ -394,8 +397,8 @@ export const NOVIDADES_CSS = `
 .nv-print { position: relative; width: 64px; height: 40px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
 .nv-print img { width: 100%; height: 100%; object-fit: cover; }
 .nv-print button { position: absolute; top: 1px; right: 1px; width: 16px; height: 16px; border-radius: 50%; border: none; background: rgba(0,0,0,0.7); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; }
-.dl-root .nv-anexar { display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); color: var(--subtle); font-size: 12px; cursor: pointer; }
-.dl-root .nv-tirar { margin-left: auto; font-family: inherit; font-size: 12px; color: #fca5a5; background: none; border: none; cursor: pointer; padding: 0; box-shadow: none; transform: none; }
+.dl-root .nv-anexar { width: auto; display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); color: var(--subtle); font-size: 12px; cursor: pointer; }
+.dl-root .nv-tirar { width: auto; margin-left: auto; font-family: inherit; font-size: 12px; color: #fca5a5; background: none; border: none; cursor: pointer; padding: 0; box-shadow: none; transform: none; }
 .nv-vistos h3 { margin: 0 0 8px; font-size: 14px; color: var(--strong); }
 .nv-tabela { overflow-x: auto; }
 .nv-tabela table { width: 100%; border-collapse: collapse; font-size: 12.5px; }

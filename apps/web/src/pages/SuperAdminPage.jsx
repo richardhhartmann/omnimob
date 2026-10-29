@@ -213,6 +213,20 @@ const ABAS = [
 
 /* `permissoes` nulo é "ainda não sei" (antes do `/eu`): nem a aba livre aparece,
    senão um cargo vazio veria o Versionamento piscar antes do aviso de vazio. */
+/* ── O CLIENTE EM FOCO (porte do painel do VYA) ──
+   Mora no endereço (`?cliente=<slug>`): recarregar ou mandar o link mantém. As
+   abas com dado de cliente mostram só o dele; as da equipe dizem que não mudam.
+   Abas fora deste mapa: "mostrando só o que é deste cliente". */
+const NOTA_DO_FOCO = {
+  tenants: "A lista mostra só este cliente.",
+  novidades: "A apresentação é a mesma para todos; o Quem viu mostra só as pessoas deste cliente.",
+  versoes: "As versões são da Omnimob inteira e não mudam com o cliente.",
+  usuarios: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
+  cargos: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
+  auditoria: "A trilha é da equipe da Omnimob e não muda com o cliente.",
+  seguranca: "Esta aba é da sua conta e não muda com o cliente.",
+};
+
 const abasPermitidas = (permissoes) =>
   permissoes ? ABAS.filter((a) => a.permissao === null || permissoes[a.permissao]) : [];
 
@@ -246,6 +260,14 @@ export function SuperAdminPage({ session, onLogout }) {
      a resposta pela metade num chamado ou a busca digitada não se perdem numa
      ida e volta (o mesmo do painel do VYA). */
   const [montadas, setMontadas] = useState(() => new Set());
+  const [focoSlug, setFocoSlug] = useState(() => new URLSearchParams(window.location.search).get("cliente") || "");
+  function focar(slug) {
+    setFocoSlug(slug);
+    const url = new URL(window.location.href);
+    if (slug) url.searchParams.set("cliente", slug);
+    else url.searchParams.delete("cliente");
+    window.history.replaceState(null, "", url);
+  }
   useEffect(() => {
     if (aba) setMontadas((m) => (m.has(aba) ? m : new Set(m).add(aba)));
   }, [aba]);
@@ -397,9 +419,12 @@ export function SuperAdminPage({ session, onLogout }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tenants;
-    return tenants.filter((t) => `${t.name} ${t.slug} ${t.email}`.toLowerCase().includes(q));
-  }, [tenants, search]);
+    const doFoco = focoSlug ? tenants.filter((t) => t.slug === focoSlug) : tenants;
+    if (!q) return doFoco;
+    return doFoco.filter((t) => `${t.name} ${t.slug} ${t.email}`.toLowerCase().includes(q));
+  }, [tenants, search, focoSlug]);
+  // O nome chega com a lista; até lá (ou se o slug sumiu dela), o próprio slug.
+  const foco = focoSlug ? tenants.find((t) => t.slug === focoSlug) || { id: "", slug: focoSlug, name: focoSlug } : null;
 
   function openCreate() {
     setEditingId(null);
@@ -646,6 +671,12 @@ export function SuperAdminPage({ session, onLogout }) {
       aba={aba}
       aoTrocarAba={setAba}
       versao={eu.versao}
+      seletor={permissoes.verTenants && tenants.length ? (
+        <select className="dl-input as-foco" value={focoSlug} onChange={(e) => focar(e.target.value)} aria-label="Cliente em foco">
+          <option value="">Todos os clientes</option>
+          {tenants.map((t) => <option key={t.id} value={t.slug}>{t.name}</option>)}
+        </select>
+      ) : null}
       css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}\n${NOVIDADES_CSS}`}
     >
       {confirmModal}
@@ -659,10 +690,25 @@ export function SuperAdminPage({ session, onLogout }) {
         </div>
       ) : null}
 
-      {painel("chamados", <AdminChamadosPage aoContar={setChamadosAbertos} ativa={aba === "chamados"} />)}
-      {painel("tutoriais", <AdminTutoriaisPage />)}
-      {painel("avaliacoes", <AdminAvaliacoesPage aoContar={setAvaliacoesNovas} />)}
-      {painel("novidades", <AdminNovidadesPage podePublicar={Boolean(permissoes.publicarNovidades)} />)}
+      {foco && aba ? (
+        <div className="sa-foco">
+          <div>
+            <strong>{foco.name}</strong> <span className="dl-mono">/{foco.slug}</span>
+            <p>{NOTA_DO_FOCO[aba] || "Mostrando só o que é deste cliente."}</p>
+          </div>
+          {permissoes.entrarNoTenant && foco.id ? (
+            <Button as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false} disabled={entrando === foco.id} onClick={() => entrarComo(foco)}>
+              {entrando === foco.id ? "Entrando…" : "Entrar como administrador"}
+            </Button>
+          ) : null}
+          <button type="button" className="sa-foco__fechar" onClick={() => focar("")} aria-label="Voltar a todos os clientes" title="Voltar a todos os clientes">×</button>
+        </div>
+      ) : null}
+
+      {painel("chamados", <AdminChamadosPage aoContar={setChamadosAbertos} ativa={aba === "chamados"} tenantSlug={focoSlug} />)}
+      {painel("tutoriais", <AdminTutoriaisPage tenantSlug={focoSlug} />)}
+      {painel("avaliacoes", <AdminAvaliacoesPage aoContar={setAvaliacoesNovas} tenantId={foco?.id || ""} />)}
+      {painel("novidades", <AdminNovidadesPage podePublicar={Boolean(permissoes.publicarNovidades)} tenantId={foco?.id || ""} />)}
       {painel("usuarios", <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} />)}
       {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
       {painel("seguranca", <AdminSegurancaPage />)}
@@ -1119,6 +1165,22 @@ export function SuperAdminPage({ session, onLogout }) {
 /* Só o que é DESTA aba. A moldura — fundo, topbar, sidebar — mora no
    `AdminShell`, junto do JSX que a usa. */
 const CSS = `
+/* ── O cliente em foco: a faixa no topo das abas ── */
+.sa-foco {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 20px; padding: 12px 16px; border-radius: 14px;
+  background: rgba(99,102,241,0.07); border: 1px solid rgba(99,102,241,0.30);
+}
+.sa-foco > div { flex: 1; min-width: 0; }
+.sa-foco strong { color: var(--strong); font-size: 14px; }
+.sa-foco .dl-mono { color: var(--placeholder); font-size: 9.5px; text-transform: none; }
+.sa-foco p { margin: 4px 0 0; font-size: 12px; color: var(--subtle); }
+.dl-root .sa-foco__fechar {
+  width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 17px; line-height: 1;
+  background: none; border: 1px solid var(--line); color: var(--subtle); box-shadow: none; transform: none;
+}
+.dl-root .sa-foco__fechar:hover { color: var(--strong); border-color: #34343c; background: none; box-shadow: none; transform: none; }
+
 /* ── O add-on do Flow, no formulario de tenant ──
    No ROSA do modulo (#ec0b5b), e nao no jade que estava aqui: o Flow tem uma
    cor so, e ela e a da palavra "flow" na arte.────────────────────────────

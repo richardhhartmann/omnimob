@@ -241,7 +241,7 @@ export const VERSOES_CSS = `
 .vs-area { font-size: 10.5px; color: var(--subtle); padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); }
 .vs-acoes { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .dl-root .vs-link {
-  font-family: inherit; font-size: 11.5px; color: var(--accent-soft); text-decoration: none;
+  width: auto; font-family: inherit; font-size: 11.5px; color: var(--accent-soft); text-decoration: none;
   background: none; border: none; padding: 0; cursor: pointer; box-shadow: none; transform: none;
 }
 .dl-root .vs-link:hover { text-decoration: underline; background: none; box-shadow: none; transform: none; }

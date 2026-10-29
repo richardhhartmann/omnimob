@@ -139,7 +139,7 @@ function falasDe(c) {
   ];
 }
 
-export function AdminChamadosPage({ aoContar, ativa = true }) {
+export function AdminChamadosPage({ aoContar, ativa = true, tenantSlug = "" }) {
   const [todos, setTodos] = useState([]);
   const [porStatus, setPorStatus] = useState({});
   const [internosAbertos, setInternosAbertos] = useState(0);
@@ -203,6 +203,8 @@ export function AdminChamadosPage({ aoContar, ativa = true }) {
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return todos.filter((c) => {
+      // O cliente em foco: o contador do menu continua o de todos.
+      if (tenantSlug && c.tenantSlug !== tenantSlug) return false;
       if (filtro === "abertos" && c.resolvido) return false;
       if (filtro === "nossa" && !NOSSA_VEZ[c.status]) return false;
       if (filtro === "resolvidos" && !c.resolvido) return false;
@@ -211,7 +213,7 @@ export function AdminChamadosPage({ aoContar, ativa = true }) {
       return [c.titulo, c.tenantNome, c.tenantSlug, c.usuario, c.abertoPor].some((v) => String(v || "").toLowerCase().includes(termo))
         || String(c.numero) === termo.replace(/^#|^n[ºo°]?\s*/, "");
     });
-  }, [todos, filtro, busca]);
+  }, [todos, filtro, busca, tenantSlug]);
 
   /* Uma resposta do servidor atualiza a conversa guardada e a linha da lista
      — sempre pelo número do PEDIDO. */
