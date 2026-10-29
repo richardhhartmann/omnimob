@@ -638,6 +638,12 @@ model CargoSuperAdmin {
   verSeguranca Boolean @default(false)
   verUsuarios  Boolean @default(false)
   verCargos    Boolean @default(false)
+  /** Auditoria: quem da Omnimob mexeu em quê (a trilha com `tenantId` nulo). */
+  verAuditoria  Boolean @default(false)
+  /** Avaliações: as notas que os usuários das imobiliárias dão ao painel. */
+  verAvaliacoes Boolean @default(false)
+  /** Novidades: ver e revisar a apresentação semanal. Publicar é outra caixa. */
+  verNovidades  Boolean @default(false)
 
   // ── Por ação, dentro da aba ──
   /** Tenants: entrar na conta do cliente como o Administrador dela. */
@@ -650,6 +656,8 @@ model CargoSuperAdmin {
   resolverChamado Boolean @default(false)
   /** Usuários: criar, editar, desativar e reenviar convite. */
   gerenciarUsuarios Boolean @default(false)
+  /** Novidades: publicar para todos os clientes (e mandar o e-mail). */
+  publicarNovidades Boolean @default(false)
 
   superAdmins SuperAdmin[]
 

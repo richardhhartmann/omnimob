@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, UsersThree } from "@phosphor-icons/react";
+import { Buildings, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -15,6 +15,7 @@ import { AdminSegurancaPage, SEGURANCA_CSS } from "./admin/AdminSegurancaPage";
 import { AdminUsuariosPage, USUARIOS_CSS } from "./admin/AdminUsuariosPage";
 import { AdminCargosPage, CARGOS_CSS } from "./admin/AdminCargosPage";
 import { AdminVersoesPage, VERSOES_CSS } from "./admin/AdminVersoesPage";
+import { AdminAuditoriaPage, AUDITORIA_CSS } from "./admin/AdminAuditoriaPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -176,6 +177,13 @@ const ABAS = [
     nota: "permissões por aba e por ação",
     icone: <IdentificationBadge size={16} />,
   },
+  {
+    chave: "auditoria",
+    permissao: "verAuditoria",
+    rotulo: "Auditoria",
+    nota: "quem da Omnimob mexeu em usuários e cargos",
+    icone: <ClipboardText size={16} />,
+  },
   /* Por último, e é o lugar certo: não é rotina, é a conta de quem opera. Só
      se mexe nela ao trocar de celular ou ao ligar o segundo fator. */
   {
@@ -202,6 +210,7 @@ export function SuperAdminPage({ session, onLogout }) {
     cargoId: session?.cargoId ?? null,
     permissoes: session?.permissoes || null,
     versao: null,
+    catalogo: null,
   }));
   const permissoes = eu.permissoes || {};
   const abasVisiveis = abasPermitidas(eu.permissoes);
@@ -231,7 +240,7 @@ export function SuperAdminPage({ session, onLogout }) {
 
   useEffect(() => {
     adminApi.eu()
-      .then((r) => setEu({ id: r.id, cargoId: r.cargoId ?? null, permissoes: r.permissoes, versao: r.versao || null }))
+      .then((r) => setEu({ id: r.id, cargoId: r.cargoId ?? null, permissoes: r.permissoes, versao: r.versao || null, catalogo: r.catalogo || null }))
       .catch((err) => {
         /* Acesso encerrado (desativado, token velho): sai avisando, em vez de
            deixar a tela cheia de 401. */
@@ -614,7 +623,7 @@ export function SuperAdminPage({ session, onLogout }) {
       aba={aba}
       aoTrocarAba={setAba}
       versao={eu.versao}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}`}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}`}
     >
       {confirmModal}
 
@@ -633,6 +642,7 @@ export function SuperAdminPage({ session, onLogout }) {
       {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
       {painel("seguranca", <AdminSegurancaPage />)}
       {painel("versoes", <AdminVersoesPage />)}
+      {painel("auditoria", <AdminAuditoriaPage catalogo={eu.catalogo} />)}
 
       {painel("tenants", (
         <>

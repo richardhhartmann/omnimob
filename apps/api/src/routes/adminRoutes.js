@@ -1596,3 +1596,58 @@ adminRouter.delete("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req
     return res.status(500).json({ error: "Erro ao excluir cargo." });
   }
 });
+
+/* ─── A trilha da PLATAFORMA ──────────────────────────────────────────────────
+
+   As escritas de super-admin (usuários e cargos da Omnimob) já entravam na
+   `Auditoria` com `tenantId` nulo; faltava onde lê-las. Só leitura, como a da
+   imobiliária, e do cliente `plataforma`: é para o banco da plataforma que
+   essas linhas vão (ver `db.js`).
+
+   Paginada por página, e os filtros saem do que existe na trilha — o mesmo
+   desenho de `auditoriaRoutes`, para as duas telas se lerem igual. */
+const TRILHA_DA_PLATAFORMA = { tenantId: null };
+
+adminRouter.get("/auditoria", requirePermissaoAdmin("verAuditoria"), async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+    const { acao, entidade, usuarioId, busca } = req.query;
+    const where = {
+      ...TRILHA_DA_PLATAFORMA,
+      ...(acao ? { acao: String(acao) } : {}),
+      ...(entidade ? { entidade: String(entidade) } : {}),
+      ...(usuarioId ? { usuarioId: String(usuarioId) } : {}),
+      ...(busca
+        ? {
+            OR: [
+              { resumo: { contains: String(busca), mode: "insensitive" } },
+              { usuarioNome: { contains: String(busca), mode: "insensitive" } },
+              { entidadeId: String(busca) },
+            ],
+          }
+        : {}),
+    };
+    const [registros, total, pessoas] = await Promise.all([
+      plataforma.auditoria.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
+      plataforma.auditoria.count({ where }),
+      plataforma.auditoria.groupBy({
+        by: ["usuarioId", "usuarioNome"],
+        where: { ...TRILHA_DA_PLATAFORMA, usuarioId: { not: null } },
+        _count: { usuarioId: true },
+      }),
+    ]);
+    return res.json({
+      registros,
+      total,
+      page,
+      limit,
+      usuarios: pessoas
+        .map((p) => ({ id: p.usuarioId, nome: p.usuarioNome || "(sem nome)", total: p._count.usuarioId }))
+        .sort((a, b) => b.total - a.total),
+    });
+  } catch (err) {
+    console.error("[GET /admin/auditoria]", err);
+    return res.status(500).json({ error: "Erro ao buscar a trilha da plataforma." });
+  }
+});

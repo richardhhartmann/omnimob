@@ -45,6 +45,10 @@ COPY apps/api/src ./src
 
 ARG GIT_COMMIT=""
 ENV GIT_COMMIT=$GIT_COMMIT
+# A versão MAIOR.SEMANA.ENTREGA (src/services/versao.js), que sem o .git não dá
+# para calcular aqui: quem constrói passa `--build-arg OMNIMOB_VERSAO=$(npm run -s versao -w apps/api)`.
+ARG OMNIMOB_VERSAO=""
+ENV OMNIMOB_VERSAO=$OMNIMOB_VERSAO
 
 USER appuser
 

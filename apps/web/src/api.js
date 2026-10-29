@@ -1342,6 +1342,13 @@ export const adminApi = {
   // As versões da Omnimob, uma por PR na main (`services/versao.js`).
   listVersoes: () => adminRequest("/api/admin/versoes"),
 
+  /* A trilha da plataforma (`tenantId` nulo): `{ registros, total, page,
+     limit, usuarios }`. Os filtros vazios não vão na URL. */
+  listAuditoria: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null));
+    return adminRequest(`/api/admin/auditoria${q.toString() ? `?${q}` : ""}`);
+  },
+
   /* ─── Quem sou e o que alcanço ─────────────────────────────────────────────
      Relido do banco a cada chamada. O painel chama ao abrir: é o que faz um
      rebaixamento aparecer no menu na hora, e não daqui a sete dias. */

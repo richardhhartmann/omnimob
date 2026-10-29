@@ -126,8 +126,9 @@ export function versaoAtual() {
     const h = historico();
     const topo = h?.versoes?.[0] || null;
     const commit = (process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT || topo?.commit || "").slice(0, 7) || null;
-    /* Sem versão nova desde o INICIO, quem está no ar é a 1.0. */
-    const numero = topo?.versao || (h ? h.antes.versao : "dev");
+    /* Sem versão nova desde o INICIO, quem está no ar é a 1.0. A imagem
+       Docker não leva o .git: lá o número chega pronto em OMNIMOB_VERSAO. */
+    const numero = topo?.versao || (h ? h.antes.versao : (process.env.OMNIMOB_VERSAO || "").trim() || "dev");
     atual = { numero, commit };
   }
   return atual;
