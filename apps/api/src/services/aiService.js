@@ -8,6 +8,9 @@
  * Configuração via ambiente: GEMINI_API_KEY e GEMINI_MODEL (default 2.5-flash).
  */
 
+import { prisma } from "../db.js";
+import { contextoAtual } from "./auditoria.js";
+
 const API_KEY = process.env.GEMINI_API_KEY || "";
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -71,6 +74,7 @@ async function callGemini(parts, { system, temperature = 0.7, responseSchema } =
   }
 
   const data = await response.json();
+  registrarConsumo(data?.usageMetadata);
 
   if (data?.promptFeedback?.blockReason) {
     const err = new Error(`Conteúdo bloqueado pela IA: ${data.promptFeedback.blockReason}`);
@@ -85,6 +89,37 @@ async function callGemini(parts, { system, temperature = 0.7, responseSchema } =
     throw err;
   }
   return text;
+}
+
+/* ── O CONSUMO, por imobiliária ─────────────────────────────────────────────
+   Toda chamada ao Gemini passa por `callGemini`, e é aqui que ela é anotada:
+   a imobiliária, a pessoa e a rota vêm do contexto da auditoria (o mesmo
+   `AsyncLocalStorage`), então rota nova de IA entra na conta sem ninguém
+   lembrar. Conta o que o provedor COBRA — inclusive a resposta bloqueada.
+   Sem imobiliária no contexto (script, super-admin), não há de quem cobrar.
+   Disparado e esquecido: anotar nunca atrasa nem derruba a geração. */
+
+/** A rota sem os ids: "POST /api/properties/:id/ai/gerar". É o "recurso". */
+export function rotaDoRecurso(rota) {
+  return String(rota || "").replace(/\/(c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f-]{27}|\d+)(?=\/|$)/gi, "/:id").slice(0, 200) || null;
+}
+
+function registrarConsumo(uso) {
+  try {
+    const ctx = contextoAtual();
+    if (!ctx?.tenantId) return;
+    prisma.consumoIA
+      .create({
+        data: {
+          tenantId: ctx.tenantId,
+          usuarioId: ctx.usuarioId || null,
+          rota: rotaDoRecurso(ctx.rota),
+          tokensEntrada: Number(uso?.promptTokenCount) || 0,
+          tokensSaida: Number(uso?.candidatesTokenCount) || 0,
+        },
+      })
+      .catch(() => {});
+  } catch { /* acessório */ }
 }
 
 /** Geração a partir de um prompt só-texto. */

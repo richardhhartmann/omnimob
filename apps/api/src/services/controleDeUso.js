@@ -25,7 +25,7 @@ export function situacaoDeUso(ultimaAtividade, agora = Date.now()) {
 export async function controleDeUso(prisma, agora = Date.now()) {
   const desde = new Date(agora - 30 * DIA);
   const comTenant = { tenantId: { not: null } };
-  const [tenants, ultima, escritas, pessoas, leads, usuarios, imoveis] = await Promise.all([
+  const [tenants, ultima, escritas, pessoas, leads, usuarios, imoveis, ia] = await Promise.all([
     prisma.tenant.findMany({
       select: { id: true, name: true, slug: true, plano: true, statusPagamento: true, ativo: true, createdAt: true },
     }),
@@ -35,6 +35,13 @@ export async function controleDeUso(prisma, agora = Date.now()) {
     prisma.propertyLead.groupBy({ by: ["tenantId"], where: { createdAt: { gte: desde } }, _count: { _all: true } }),
     prisma.usuario.groupBy({ by: ["tenantId"], where: { ativo: true }, _count: { _all: true } }),
     prisma.property.groupBy({ by: ["tenantId"], where: { status: "ACTIVE" }, _count: { _all: true } }),
+    // A IA gravada em `aiService.callGemini`: chamadas e tokens dos 30 dias.
+    prisma.consumoIA.groupBy({
+      by: ["tenantId"],
+      where: { createdAt: { gte: desde } },
+      _count: { _all: true },
+      _sum: { tokensEntrada: true, tokensSaida: true },
+    }),
   ]);
 
   const mapa = (linhas, valor) => new Map(linhas.map((l) => [l.tenantId, valor(l)]));
@@ -43,6 +50,7 @@ export async function controleDeUso(prisma, agora = Date.now()) {
   const leadsDe = mapa(leads, (l) => l._count._all);
   const usuariosDe = mapa(usuarios, (l) => l._count._all);
   const imoveisDe = mapa(imoveis, (l) => l._count._all);
+  const iaDe = mapa(ia, (l) => ({ chamadas: l._count._all, tokensEntrada: l._sum.tokensEntrada || 0, tokensSaida: l._sum.tokensSaida || 0 }));
   const pessoasDe = new Map();
   for (const p of pessoas) pessoasDe.set(p.tenantId, (pessoasDe.get(p.tenantId) || 0) + 1);
 
@@ -56,11 +64,15 @@ export async function controleDeUso(prisma, agora = Date.now()) {
       usuarios: usuariosDe.get(t.id) || 0,
       leads30: leadsDe.get(t.id) || 0,
       imoveisAtivos: imoveisDe.get(t.id) || 0,
+      ia30: iaDe.get(t.id) || { chamadas: 0, tokensEntrada: 0, tokensSaida: 0 },
     }))
     // Mais recente primeiro; quem nunca usou vai para o fim.
     .sort((a, b) => (b.ultimaAtividade ? +new Date(b.ultimaAtividade) : 0) - (a.ultimaAtividade ? +new Date(a.ultimaAtividade) : 0));
 
-  const resumo = { total: linhas.length, ativa: 0, esfriando: 0, parada: 0, nunca: 0 };
-  for (const l of linhas) if (l.ativo) resumo[l.situacao] += 1;
+  const resumo = { total: linhas.length, ativa: 0, esfriando: 0, parada: 0, nunca: 0, ia30: { chamadas: 0, tokensEntrada: 0, tokensSaida: 0 } };
+  for (const l of linhas) {
+    if (l.ativo) resumo[l.situacao] += 1;
+    for (const k of ["chamadas", "tokensEntrada", "tokensSaida"]) resumo.ia30[k] += l.ia30[k];
+  }
   return { resumo, tenants: linhas };
 }

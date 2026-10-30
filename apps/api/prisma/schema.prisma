@@ -500,6 +500,9 @@ model Tenant {
   chamados     Chamado[]
   pesquisas    PesquisaTrial[]
   avaliacoes   Avaliacao[]
+  comunicadosVistos ComunicadoVisto[]
+  consumosIa   ConsumoIA[]
+  sessoes      SessaoUsuario[]
   novidadesVistas NovidadeVisto[]
 
   auditorias  Auditoria[]
@@ -586,6 +589,85 @@ model Novidade {
   vistos NovidadeVisto[]
 
   @@map("tb_novidade")
+}
+
+/// O COMUNICADO AVULSO: o aviso que não é novidade de produto ("manutenção no
+/// sábado às 22h"). De um cliente (`tenantId`) ou de todos (nulo). Abre UMA vez
+/// para cada pessoa ao entrar no painel, enquanto estiver ativo e no prazo.
+model Comunicado {
+  id        String    @id @default(cuid())
+  titulo    String
+  texto     String
+  /// Nulo = todos os clientes. Sem FK: o comunicado é da Omnimob, e o de um
+  /// cliente que saiu fica no histórico da aba.
+  tenantId  String?
+  ativo     Boolean   @default(true)
+  /// Depois disto não abre mais para ninguém (nulo = até encerrar à mão).
+  expiraEm  DateTime?
+  criadoPor String?
+  createdAt DateTime  @default(now())
+
+  vistos ComunicadoVisto[]
+
+  @@index([ativo, createdAt])
+  @@map("tb_comunicado")
+}
+
+model ComunicadoVisto {
+  id           String   @id @default(cuid())
+  comunicadoId String
+  tenantId     String
+  usuarioId    String
+  vistoEm      DateTime @default(now())
+
+  comunicado Comunicado @relation(fields: [comunicadoId], references: [id], onDelete: Cascade)
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([comunicadoId, usuarioId])
+  @@map("tb_comunicado_visto")
+}
+
+/// Cada chamada ao Gemini, com os tokens que ela gastou. Gravada num ponto só
+/// (`aiService.callGemini`), com a imobiliária, a pessoa e a rota tiradas do
+/// contexto da auditoria — rota nova de IA entra na conta sozinha.
+model ConsumoIA {
+  id            String   @id @default(cuid())
+  tenantId      String
+  usuarioId     String?
+  /// A rota que pediu ("POST /api/properties/:id/ai/gerar"): é o "recurso".
+  rota          String?
+  tokensEntrada Int      @default(0)
+  tokensSaida   Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("tb_consumo_ia")
+}
+
+/// Uma SESSÃO do painel, pelo `jti` do token. Registrada no primeiro uso (e o
+/// uso, de 5 em 5 minutos) pelo `requireAuth` — assim toda origem de token
+/// (senha, Google, demonstração, "Entrar" do suporte) entra sem ninguém
+/// lembrar. Encerrar é gravar o `jti` em `SessaoRevogada`, que já existia.
+model SessaoUsuario {
+  jti         String   @id
+  usuarioId   String
+  tenantId    String
+  /// "painel" | "demo" | "reativacao" | "suporte"
+  tipo        String   @default("painel")
+  ip          String?
+  userAgent   String?
+  criadaEm    DateTime @default(now())
+  ultimoUsoEm DateTime @default(now())
+  expiraEm    DateTime
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, expiraEm])
+  @@index([usuarioId])
+  @@map("tb_sessao_usuario")
 }
 
 /// A publicação AUTOMÁTICA das Novidades, numa linha só (id = 1). Ligada, o
@@ -769,6 +851,12 @@ model CargoSuperAdmin {
   verUso        Boolean @default(false)
   /** Interessados: quem pediu contato comercial pela landing. */
   verInteressados Boolean @default(false)
+  /** Comunicados: ver e mandar o aviso avulso (um cliente ou todos). */
+  verComunicados Boolean @default(false)
+  /** E-mails dos usuários: quem tem e quem usa sem ter. */
+  verEmails      Boolean @default(false)
+  /** Contas e acesso: as sessões abertas, convites pendentes e o Google. */
+  verAcessos     Boolean @default(false)
 
   // ── Por ação, dentro da aba ──
   /** Tenants: entrar na conta do cliente como o Administrador dela. */
@@ -783,6 +871,8 @@ model CargoSuperAdmin {
   gerenciarUsuarios Boolean @default(false)
   /** Novidades: publicar para todos os clientes (e mandar o e-mail). */
   publicarNovidades Boolean @default(false)
+  /** Contas e acesso: encerrar a sessão de alguém (derruba na hora). */
+  encerrarSessoes   Boolean @default(false)
 
   superAdmins SuperAdmin[]
 
@@ -1045,6 +1135,7 @@ model Usuario {
   @@map("tb_usuario")
 
   sessoesRevogadas SessaoRevogada[]
+  sessoes          SessaoUsuario[]
 }
 
 /**

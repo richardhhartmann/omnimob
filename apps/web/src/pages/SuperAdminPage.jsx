@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, ChartPieSlice, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, Sparkle, Star, UserPlus, UsersThree } from "@phosphor-icons/react";
+import { Buildings, ChartPieSlice, ClipboardText, ClockCounterClockwise, EnvelopeSimple, GraduationCap, IdentificationBadge, Key, Lifebuoy, Megaphone, ShieldCheck, Sparkle, Star, UserPlus, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -20,6 +20,9 @@ import { AdminAvaliacoesPage, AVALIACOES_CSS } from "./admin/AdminAvaliacoesPage
 import { AdminNovidadesPage, NOVIDADES_CSS } from "./admin/AdminNovidadesPage";
 import { AdminUsoPage, USO_CSS } from "./admin/AdminUsoPage";
 import { AdminInteressadosPage, INTERESSADOS_CSS } from "./admin/AdminInteressadosPage";
+import { AdminComunicadosPage, COMUNICADOS_CSS } from "./admin/AdminComunicadosPage";
+import { AdminEmailsPage } from "./admin/AdminEmailsPage";
+import { AdminAcessosPage, ACESSOS_CSS } from "./admin/AdminAcessosPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -171,6 +174,13 @@ const ABAS = [
     icone: <Sparkle size={16} />,
   },
   {
+    chave: "comunicados",
+    permissao: "verComunicados",
+    rotulo: "Comunicados",
+    nota: "o aviso avulso, para um cliente ou para todos",
+    icone: <Megaphone size={16} />,
+  },
+  {
     chave: "uso",
     permissao: "verUso",
     rotulo: "Controle de Uso",
@@ -183,6 +193,20 @@ const ABAS = [
     rotulo: "Interessados",
     nota: "quem pediu contato comercial pela landing",
     icone: <UserPlus size={16} />,
+  },
+  {
+    chave: "emails",
+    permissao: "verEmails",
+    rotulo: "E-mails",
+    nota: "quem usa o painel sem e-mail cadastrado",
+    icone: <EnvelopeSimple size={16} />,
+  },
+  {
+    chave: "acessos",
+    permissao: "verAcessos",
+    rotulo: "Contas e acesso",
+    nota: "sessões abertas, convites pendentes e Google",
+    icone: <Key size={16} />,
   },
   /* Sem permissão própria (`null`): todo cargo do painel vê. É a primeira
      pergunta do suporte — "isso já estava no ar quando o cliente reclamou?". */
@@ -237,6 +261,7 @@ const NOTA_DO_FOCO = {
   tenants: "A lista mostra só este cliente.",
   novidades: "A apresentação é a mesma para todos; o Quem viu mostra só as pessoas deste cliente.",
   interessados: "Esta aba é do site da Omnimob e não muda com o cliente.",
+  comunicados: "O formulário já vem para este cliente; a lista mostra todos os avisos.",
   versoes: "As versões são da Omnimob inteira e não mudam com o cliente.",
   usuarios: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
   cargos: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
@@ -700,7 +725,7 @@ export function SuperAdminPage({ session, onLogout }) {
           {tenants.map((t) => <option key={t.id} value={t.slug}>{t.name}</option>)}
         </select>
       ) : null}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}\n${NOVIDADES_CSS}\n${USO_CSS}\n${INTERESSADOS_CSS}`}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}\n${NOVIDADES_CSS}\n${USO_CSS}\n${INTERESSADOS_CSS}\n${COMUNICADOS_CSS}\n${ACESSOS_CSS}`}
     >
       {confirmModal}
 
@@ -734,6 +759,9 @@ export function SuperAdminPage({ session, onLogout }) {
       {painel("novidades", <AdminNovidadesPage podePublicar={Boolean(permissoes.publicarNovidades)} tenantId={foco?.id || ""} />)}
       {painel("uso", <AdminUsoPage tenantSlug={focoSlug} />)}
       {painel("interessados", <AdminInteressadosPage aoContar={setInteressadosNovos} />)}
+      {painel("comunicados", <AdminComunicadosPage tenants={tenants} foco={foco?.id ? foco : null} />)}
+      {painel("emails", <AdminEmailsPage tenantId={foco?.id || ""} />)}
+      {painel("acessos", <AdminAcessosPage tenantId={foco?.id || ""} podeEncerrar={Boolean(permissoes.encerrarSessoes)} />)}
       {painel("usuarios", <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} />)}
       {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
       {painel("seguranca", <AdminSegurancaPage />)}

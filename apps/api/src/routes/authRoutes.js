@@ -103,6 +103,8 @@ export function montarSessao(usuario, { escopo = null, validade = null, suporte 
       id: usuario.id,
       nome: usuario.nome,
       login: usuario.login,
+      // Nulo diz "sem e-mail": é o que acende o pedido de e-mail no painel.
+      email: usuario.email ?? null,
       cargo: cargoDaSessao(usuario.cargo),
       /* NULO é informação, não ausência: significa "nunca escolhi tema", e é o
          que faz o painel cair no da imobiliária. Normalizar para uma string
@@ -651,6 +653,27 @@ authRouter.put("/meus-atalhos", requireAuth, async (req, res) => {
   }
 });
 
+/* O PEDIDO DE E-MAIL: quem está sem e-mail cadastra o próprio. Só PREENCHE,
+   nunca troca — o e-mail é o caminho do "esqueci a senha", e mudar um que já
+   existe continua com o administrador (Usuários). O suporte dentro da conta
+   não cadastra pelo cliente. */
+authRouter.put("/meu-email", requireAuth, async (req, res) => {
+  try {
+    if (req.authSuporte) return res.status(403).json({ error: "O e-mail é da pessoa; a equipe da Omnimob não cadastra por ela." });
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160) {
+      return res.status(400).json({ error: "E-mail inválido." });
+    }
+    const atual = await prisma.usuario.findUnique({ where: { id: req.authUserId }, select: { email: true } });
+    if (atual?.email) return res.status(409).json({ error: "Você já tem um e-mail cadastrado. Para trocar, fale com o administrador." });
+    await prisma.usuario.update({ where: { id: req.authUserId }, data: { email } });
+    return res.json({ email });
+  } catch (erro) {
+    console.error("[auth] meu-email:", erro);
+    return res.status(500).json({ error: "Erro ao salvar o e-mail." });
+  }
+});
+
 authRouter.put("/meu-tema", requireAuth, async (req, res) => {
   try {
     const bruto = req.body?.tema;
@@ -805,6 +828,7 @@ authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {
       id: usuario.id,
       nome: usuario.nome,
       login: usuario.login,
+      email: usuario.email ?? null,
       cargo: cargoDaSessao(usuario.cargo),
       // Mesma regra do login: nulo significa "nunca escolhi tema".
       temaPainel: usuario.temaPainel ?? null,

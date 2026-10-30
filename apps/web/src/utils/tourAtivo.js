@@ -61,6 +61,24 @@ export function tourAtivo() {
   return abertos > 0;
 }
 
+/**
+ * Roda `fn` assim que não houver tour na tela — já, se não houver. Devolve o
+ * cancelamento. É a fila dos avisos do painel (comunicado, Novidades, pedido
+ * de e-mail): cada um se marca como aberto e o seguinte espera a vez.
+ */
+export function quandoSemTour(fn) {
+  if (!tourAtivo()) {
+    fn();
+    return () => {};
+  }
+  const sair = assinarTour(() => {
+    if (tourAtivo()) return;
+    sair();
+    fn();
+  });
+  return sair;
+}
+
 /** Avisa quando a resposta de `tourAtivo` muda. Devolve a função que desassina. */
 export function assinarTour(fn) {
   ouvintes.add(fn);

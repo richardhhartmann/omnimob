@@ -1,6 +1,6 @@
 -- Abas novas no painel da Omnimob (Auditoria, Avaliações, Novidades, Controle
--- de Uso e Interessados) e a ação de publicar as Novidades, que vai a todos os
--- clientes.
+-- de Uso, Interessados, Comunicados, E-mails e Contas e acesso), a ação de
+-- publicar as Novidades, que vai a todos os clientes, e a de encerrar sessão.
 --
 -- Padrão `false`, como as outras: cargo existente não ganha aba sem alguém
 -- marcar. O Administrador é a exceção, como na migração que o criou — ele é
@@ -16,9 +16,14 @@ ALTER TABLE "tb_cargo_super_admin"
     ADD COLUMN "verNovidades" BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN "publicarNovidades" BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN "verUso" BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN "verInteressados" BOOLEAN NOT NULL DEFAULT false;
+    ADD COLUMN "verInteressados" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN "verComunicados" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN "verEmails" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN "verAcessos" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN "encerrarSessoes" BOOLEAN NOT NULL DEFAULT false;
 
 UPDATE "tb_cargo_super_admin"
    SET "verAuditoria" = true, "verAvaliacoes" = true, "verNovidades" = true, "publicarNovidades" = true,
-       "verUso" = true, "verInteressados" = true
+       "verUso" = true, "verInteressados" = true, "verComunicados" = true, "verEmails" = true,
+       "verAcessos" = true, "encerrarSessoes" = true
  WHERE "nome" = 'Administrador';

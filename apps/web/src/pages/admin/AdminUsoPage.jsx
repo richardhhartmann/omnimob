@@ -9,7 +9,8 @@ import { Alert, Button, Eyebrow, Reveal } from "../../styles/omnimobKit";
    controleDeUso.js`): a última vez que alguém da imobiliária cadastrou ou mudou
    algo, quantas escritas e quantas pessoas nos últimos 30 dias, e os leads que
    chegaram. Consultar não deixa rastro — "parada" é "ninguém mexeu em nada".
-   O consumo de IA do VYA não veio: aqui ele não é registrado por conta.
+   O consumo de IA (chamadas e tokens do Gemini nos 30 dias) vem de
+   `ConsumoIA`, gravado num ponto só em `aiService.callGemini`.
    ──────────────────────────────────────────────────────────────────────────── */
 
 const SITUACOES = {
@@ -18,6 +19,9 @@ const SITUACOES = {
   parada: { rotulo: "Parada", detalhe: "mais de 30 dias", cor: "#fda4af", fundo: "rgba(244,63,94,0.12)", borda: "rgba(244,63,94,0.30)" },
   nunca: { rotulo: "Nunca usou", detalhe: "nenhuma escrita registrada", cor: "#cbd5e1", fundo: "rgba(148,163,184,0.12)", borda: "rgba(148,163,184,0.25)" },
 };
+
+/** 12.345 → "12,3 mil"; o número exato fica no title. */
+const curto = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} mi` : n >= 1e3 ? `${(n / 1e3).toFixed(1).replace(".", ",")} mil` : String(n));
 
 function haQuanto(iso) {
   if (!iso) return "—";
@@ -84,6 +88,12 @@ export function AdminUsoPage({ tenantSlug = "" }) {
         </div>
       ) : null}
 
+      {dados ? (
+        <p className="dl-mono dl-note sa-note">
+          // IA nos últimos 30 dias: {dados.resumo.ia30.chamadas} chamadas · {curto(dados.resumo.ia30.tokensEntrada)} tokens de entrada · {curto(dados.resumo.ia30.tokensSaida)} de saída
+        </p>
+      ) : null}
+
       <div className="sa-bar">
         <input className="dl-input sa-search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar imobiliária…" />
         <Button as="button" type="button" variant="ghost" className="dl-btn--sm" arrow={false} onClick={carregar}>Atualizar</Button>
@@ -98,7 +108,7 @@ export function AdminUsoPage({ tenantSlug = "" }) {
             <thead>
               <tr>
                 <th>Imobiliária</th><th>Situação</th><th>Última atividade</th><th>Escritas (30d)</th>
-                <th>Pessoas (30d)</th><th>Usuários</th><th>Leads (30d)</th><th>Imóveis ativos</th>
+                <th>Pessoas (30d)</th><th>Usuários</th><th>Leads (30d)</th><th>Imóveis ativos</th><th>IA (30d)</th>
               </tr>
             </thead>
             <tbody>
@@ -117,6 +127,9 @@ export function AdminUsoPage({ tenantSlug = "" }) {
                     <td>{t.usuarios}</td>
                     <td>{t.leads30}</td>
                     <td>{t.imoveisAtivos}</td>
+                    <td title={`${t.ia30.tokensEntrada} tokens de entrada, ${t.ia30.tokensSaida} de saída`}>
+                      {t.ia30.chamadas ? `${t.ia30.chamadas} · ${curto(t.ia30.tokensEntrada + t.ia30.tokensSaida)} tokens` : "—"}
+                    </td>
                   </tr>
                 );
               })}
@@ -136,6 +149,8 @@ export const USO_CSS = `
   background: var(--surface); border: 1px solid var(--line); color: var(--default); font-family: inherit; box-shadow: none; transform: none;
 }
 .dl-root .us-cartao:hover { border-color: #34343c; background: var(--surface); box-shadow: none; transform: none; }
+/* Cartão que é só número (E-mails, Contas e acesso), sem filtro para clicar. */
+.dl-root div.us-cartao { cursor: default; }
 .dl-root .us-cartao.is-on { border-color: rgba(99,102,241,0.55); background: rgba(99,102,241,0.08); }
 .us-cartao strong { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
 .us-cartao span { font-size: 13px; color: var(--strong); }

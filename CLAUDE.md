@@ -153,6 +153,17 @@ omnimob/
   rascunho já sai publicado. A aba só EDITA o que a rotina entregou — não há
   "começar a semana à mão" (o rascunho ficava preso à semana errada). Fluxo
   inteiro em `docs/novidades/README.md`
+- `/api/comunicados/*` — **o aviso avulso** da Omnimob ("manutenção no
+  sábado"), para um cliente ou para todos: `GET /pendente` (o mais antigo que a
+  pessoa não viu, ativo e no prazo; nunca para demonstração ou suporte) e
+  `POST /:id/visto`. Abre uma vez por pessoa (`ComunicadoAvulso`). Os avisos
+  do painel — comunicado, Novidades, pedido de e-mail — fazem FILA pelo
+  registro de tour (`utils/tourAtivo.js › quandoSemTour`): o aberto segura os
+  outros
+- `PUT /api/auth/meu-email` — o **pedido de e-mail** (`PedidoDeEmail`, no
+  máximo a cada 7 dias): quem está sem e-mail cadastra o próprio. Só
+  PREENCHE — trocar um e-mail existente é do administrador, porque é o caminho
+  da recuperação de senha. O login e o `/auth/me` passaram a mandar `email`
 - `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
 - `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP. **Usuário novo
   nasce sem senha e é ativado por e-mail**: `POST /api/usuarios` exige e-mail e
@@ -164,10 +175,11 @@ omnimob/
   com vários candidatos quem decide a conta é a senha. `test/conviteUsuario.test.js`
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`.
   **Tem cargo**: `CargoSuperAdmin` com permissão por ABA (`verTenants`,
-  `verChamados`, `verTutoriais`, `verAvaliacoes`, `verNovidades`, `verUso`,
-  `verInteressados`, `verUsuarios`, `verCargos`, `verAuditoria`, `verSeguranca`) e por AÇÃO (`entrarNoTenant`,
+  `verChamados`, `verTutoriais`, `verAvaliacoes`, `verNovidades`,
+  `verComunicados`, `verUso`, `verInteressados`, `verEmails`, `verAcessos`,
+  `verUsuarios`, `verCargos`, `verAuditoria`, `verSeguranca`) e por AÇÃO (`entrarNoTenant`,
   `editarTenant`, `excluirTenant`, `resolverChamado`, `gerenciarUsuarios`,
-  `publicarNovidades`). A aba **Versionamento** não tem permissão: todo cargo
+  `publicarNovidades`, `encerrarSessoes`). A aba **Versionamento** não tem permissão: todo cargo
   vê. A aba vai no endereço (`/admin?aba=chamados`) e cada aba, depois de
   aberta, fica montada (escondida) — a resposta pela metade não se perde. Catálogo único em
   `services/permissoesSuperAdmin.js`; `requireSuperAdmin` relê cargo e `ativo`
@@ -258,6 +270,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/avaliacoes.test.js` | uma avaliação por pessoa; o suporte dentro da conta não avalia pelo cliente; conta em trial não é perguntada; só quem tem `verAvaliacoes` lê |
 | `test/novidadesRegra.test.js` | a validação do conteúdo (texto, tipo, permissão, módulo, print só https) e o corte Hub/Flow/permissão. **Não toca no banco** |
 | `test/novidades.test.js` | a rotina entra só com a chave e nunca sobrescreve a publicada; revisar não é publicar e a aba não cria semana; só-Hub não vê o Omniflow; o comunicado abre uma vez e o registro de quem viu é de quem viu; a publicação automática só é ligada por quem publica |
+| `test/contasEComunicados.test.js` | o comunicado de um cliente não aparece para outro (nem marcado pelo id real) e abre uma vez; o pedido de e-mail só preenche, nunca troca; a sessão aparece no primeiro uso e "encerrar" derruba na requisição seguinte (e só com `encerrarSessoes`); o consumo de IA entra no Controle de Uso |
 | `test/interessados.test.js` | o interesse da landing é guardado mesmo sem destino de e-mail; a aba lista e marca atendido; a régua do Controle de Uso (ativa, esfriando, parada, nunca) |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
@@ -388,10 +401,21 @@ invisíveis porque com um cliente só o sintoma não aparece.
 - `avisoDeErro.js` — o erro do navegador (`POST /public/erros`) e o 500 do
   Express viram e-mail em `CHAMADOS_INTERNOS_EMAIL`, agrupados por impressão
   digital: uma vez por hora por erro, teto de 20 por hora. Memória do processo
+- `sessoes.js` — **as sessões do painel**, que até aqui não existiam como
+  lista (JWT sem estado, só as REVOGADAS). Registradas no PRIMEIRO USO pelo
+  `requireAuth`, a partir do `jti` que todo token já carrega — toda origem
+  (senha, Google, demonstração, reativação, suporte) entra sem tocar no
+  `montarSessao` —, e o uso regravado no máximo de 5 em 5 min. Encerrar é
+  gravar o jti em `SessaoRevogada`. Lidas na aba Contas e acesso
+- O **consumo de IA** é anotado num ponto só, `aiService.callGemini`: a
+  imobiliária, a pessoa e a rota (sem ids: o "recurso") vêm do contexto da
+  auditoria, e os tokens do `usageMetadata` do Gemini (`ConsumoIA`). Rota nova
+  de IA entra na conta sozinha
 - `controleDeUso.js` — **quem usa, quem esfriou e quem parou**, tirado da
   trilha de auditoria (sem rastreamento novo): última escrita, escritas e
-  pessoas em 30 dias, leads, usuários e imóveis ativos por imobiliária. Ler
-  não deixa rastro, então "parada" é "ninguém cadastrou nem mudou nada"
+  pessoas em 30 dias, leads, usuários, imóveis ativos e o consumo de IA
+  (chamadas e tokens) por imobiliária. Ler não deixa rastro, então "parada" é
+  "ninguém cadastrou nem mudou nada"
 - `novidades.js` — **as Novidades da semana**: validação do conteúdo, o corte
   por pessoa (`modulo` FLOW = contratou E o cargo alcança; `permissao` = coluna
   do `Cargo`) e o e-mail de cada um com o seu recorte. Porte do
@@ -600,6 +624,9 @@ Modelos principais:
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
 | `Avaliacao` | A nota (1 a 5) que o usuário dá ao painel. Uma por pessoa (`@@unique([tenantId, usuarioId])`), sem FK para o usuário. `lidaEm` nula acende o contador do super-admin |
 | `NovidadeConfig` | A publicação automática das Novidades, numa linha só (`id = 1`) |
+| `Comunicado` / `ComunicadoVisto` | O aviso avulso (`tenantId` nulo = todos) e quem já viu. Não se edita: encerra-se e manda-se outro |
+| `ConsumoIA` | Cada chamada ao Gemini, com tokens de entrada e saída, imobiliária, pessoa e rota |
+| `SessaoUsuario` | A sessão do painel pelo `jti`, registrada no primeiro uso (`services/sessoes.js`) |
 | `InteresseComercial` | Quem pediu contato comercial pela landing, com o resultado do e-mail (`envio`) e a marcação de atendido. Da Omnimob, sem `tenantId` |
 | `Novidade` / `NovidadeVisto` | A apresentação da semana (chave = a terça, `AAAA-MM-DD`; `RASCUNHO` → `PUBLICADO`) e cada vez que alguém a abriu. Sem `tenantId` na `Novidade` de propósito: é da Omnimob, e o corte é por pessoa em `services/novidades.js` |
 | `Negocio` | **Flow.** O negócio no funil. `codigo` é inteiro sequencial porque é um id que PESSOAS dizem em voz alta. Guarda as duas travas (quem validou e quando) e o split congelado |

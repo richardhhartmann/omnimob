@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../db.js";
 import { preencherContexto } from "../services/auditoria.js";
+import { registrarUsoDaSessao } from "../services/sessoes.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
@@ -164,6 +165,15 @@ async function autenticarBase(req, res, next) {
       }
       req.authDemo = true;
     }
+
+    /* A sessão entra na lista de "Contas e acesso" no primeiro uso, pelo jti
+       do token, e o uso é regravado de 5 em 5 min. Ver `services/sessoes.js`. */
+    registrarUsoDaSessao({
+      payload,
+      usuario,
+      req,
+      tipo: payload.escopo === ESCOPO_DEMO ? "demo" : payload.escopo === ESCOPO_REATIVACAO ? "reativacao" : payload.suporte ? "suporte" : "painel",
+    });
 
     req.authUserId = usuario.id;
     req.authUserNome = usuario.nome;

@@ -1243,6 +1243,14 @@ export const api = {
   /* O que mudou e a pessoa ainda não viu, com a última fala de cada um. */
   /* A avaliação do painel: `minhaAvaliacao` diz se é para perguntar (quem
      decide é o servidor), `avaliar` grava a nota. Ver `avaliacaoRoutes`. */
+  // O aviso avulso da Omnimob (`comunicadoRoutes`): o pendente e o "já vi".
+  comunicadoPendente: (tenantSlug) => request("/api/comunicados/pendente", { headers: { "x-tenant-slug": tenantSlug } }),
+  marcarComunicadoVisto: (tenantSlug, id) =>
+    request(`/api/comunicados/${encodeURIComponent(id)}/visto`, { method: "POST", headers: { "x-tenant-slug": tenantSlug } }),
+  // Só preenche: o servidor recusa trocar um e-mail que já existe.
+  cadastrarMeuEmail: (tenantSlug, email) =>
+    request("/api/auth/meu-email", { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify({ email }) }),
+
   /* As Novidades da semana (`novidadeRoutes`), já cortadas pelo servidor para
      esta pessoa. `pendente` é o comunicado que abre sozinho; a lista e a
      leitura servem a Ajuda › Notas de versão. */
@@ -1379,6 +1387,16 @@ export const adminApi = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null && v !== false));
     return adminRequest(`/api/admin/avaliacoes${q.toString() ? `?${q}` : ""}`);
   },
+  // Comunicados avulsos: a lista (com quantos viram), mandar e encerrar.
+  listComunicados: () => adminRequest("/api/admin/comunicados"),
+  criarComunicado: (payload) => adminRequest("/api/admin/comunicados", { method: "POST", body: JSON.stringify(payload) }),
+  encerrarComunicado: (id) => adminRequest(`/api/admin/comunicados/${id}/encerrar`, { method: "POST" }),
+  // E-mails dos usuários: `{ resumo, semEmail }`.
+  listEmails: (tenantId = "") => adminRequest(`/api/admin/emails${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`),
+  // Contas e acesso: `{ resumo, sessoes, convites }`; encerrar derruba a sessão.
+  listAcessos: (tenantId = "") => adminRequest(`/api/admin/acessos${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`),
+  encerrarSessao: (jti) => adminRequest(`/api/admin/acessos/${encodeURIComponent(jti)}/encerrar`, { method: "POST" }),
+
   // Controle de Uso: `{ resumo, tenants }`, tirado da trilha de auditoria.
   uso: () => adminRequest("/api/admin/uso"),
   // Interessados da landing: `{ interessados, total, pendentes }`.

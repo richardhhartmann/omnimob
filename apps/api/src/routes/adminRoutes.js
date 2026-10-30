@@ -45,6 +45,7 @@ import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 import { historico, versaoAtual } from "../services/versao.js";
 import { chaveValida, configDasNovidades, normalizarNovidade, publicarNovidade, resumoDaNovidade } from "../services/novidades.js";
 import { controleDeUso } from "../services/controleDeUso.js";
+import { dispositivoDe } from "../services/sessoes.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
   COM_CONVERSA as CHAMADO_COM_CONVERSA,
@@ -1901,5 +1902,175 @@ adminRouter.post("/interessados/:id/atendido", requirePermissaoAdmin("verInteres
     if (err.code === "P2025") return res.status(404).json({ error: "Interessado não encontrado." });
     console.error("[POST /admin/interessados/:id/atendido]", err);
     return res.status(500).json({ error: "Erro ao marcar como atendido." });
+  }
+});
+
+/* ─── Comunicados avulsos ─────────────────────────────────────────────────────
+   O aviso que não é novidade de produto, para um cliente ou para todos
+   (`comunicadoRoutes`). Ver e mandar: `verComunicados`. Não se edita: um
+   aviso já visto por metade da equipe não pode mudar por baixo da outra
+   metade — encerra-se e manda-se outro. */
+const nomesDosTenants = async (ids) =>
+  new Map((await prisma.tenant.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, slug: true } })).map((t) => [t.id, t]));
+
+adminRouter.get("/comunicados", requirePermissaoAdmin("verComunicados"), async (_req, res) => {
+  try {
+    const lista = await prisma.comunicado.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: { _count: { select: { vistos: true } } },
+    });
+    const tenants = await nomesDosTenants(lista.map((c) => c.tenantId).filter(Boolean));
+    return res.json({
+      comunicados: lista.map(({ _count, ...c }) => ({
+        ...c,
+        vistos: _count.vistos,
+        tenant: c.tenantId ? tenants.get(c.tenantId) || { id: c.tenantId, name: "(imobiliária removida)", slug: "" } : null,
+        valendo: c.ativo && (!c.expiraEm || c.expiraEm > new Date()),
+      })),
+    });
+  } catch (err) {
+    console.error("[GET /admin/comunicados]", err);
+    return res.status(500).json({ error: "Erro ao listar os comunicados." });
+  }
+});
+
+adminRouter.post("/comunicados", requirePermissaoAdmin("verComunicados"), async (req, res) => {
+  try {
+    const titulo = String(req.body?.titulo || "").trim();
+    const texto = String(req.body?.texto || "").trim();
+    if (!titulo || titulo.length > 80) return res.status(400).json({ error: "O título tem de 1 a 80 caracteres." });
+    if (!texto || texto.length > 1500) return res.status(400).json({ error: "O texto tem de 1 a 1500 caracteres." });
+    const tenantId = req.body?.tenantId ? String(req.body.tenantId) : null;
+    if (tenantId && !(await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } }))) {
+      return res.status(400).json({ error: "Imobiliária não encontrada." });
+    }
+    const expiraEm = req.body?.expiraEm ? new Date(req.body.expiraEm) : null;
+    if (expiraEm && (Number.isNaN(expiraEm.getTime()) || expiraEm <= new Date())) {
+      return res.status(400).json({ error: "O prazo precisa ser uma data futura." });
+    }
+    const c = await prisma.comunicado.create({
+      data: { titulo, texto, tenantId, expiraEm, criadoPor: req.superAdmin.nome || req.superAdmin.email },
+    });
+    return res.status(201).json(c);
+  } catch (err) {
+    console.error("[POST /admin/comunicados]", err);
+    return res.status(500).json({ error: "Erro ao mandar o comunicado." });
+  }
+});
+
+adminRouter.post("/comunicados/:id/encerrar", requirePermissaoAdmin("verComunicados"), async (req, res) => {
+  try {
+    const c = await prisma.comunicado.update({ where: { id: req.params.id }, data: { ativo: false } });
+    return res.json(c);
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Comunicado não encontrado." });
+    console.error("[POST /admin/comunicados/:id/encerrar]", err);
+    return res.status(500).json({ error: "Erro ao encerrar o comunicado." });
+  }
+});
+
+/* ─── E-mails dos usuários ────────────────────────────────────────────────────
+   De todos os clientes juntos: quem tem e-mail e quem usa o painel SEM ter —
+   é para o e-mail que vão as Novidades e a recuperação de senha. "Usando" é
+   ter sessão nos últimos 30 dias (`SessaoUsuario`). Só leitura: corrigir o
+   e-mail é do administrador da imobiliária, ou da própria pessoa pelo pedido
+   de e-mail do painel. */
+adminRouter.get("/emails", requirePermissaoAdmin("verEmails"), async (req, res) => {
+  try {
+    const desde = new Date(Date.now() - 30 * 864e5);
+    const where = { ativo: true, tenant: { ativo: true }, ...(req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {}) };
+    const [usuarios, uso] = await Promise.all([
+      prisma.usuario.findMany({
+        where,
+        select: { id: true, nome: true, login: true, email: true, tenantId: true, cargo: { select: { descricao: true } }, tenant: { select: { name: true, slug: true } } },
+        orderBy: { nome: "asc" },
+      }),
+      prisma.sessaoUsuario.groupBy({ by: ["usuarioId"], where: { ultimoUsoEm: { gte: desde } }, _max: { ultimoUsoEm: true } }),
+    ]);
+    const ultimoUso = new Map(uso.map((u) => [u.usuarioId, u._max.ultimoUsoEm]));
+    const semEmail = usuarios
+      .filter((u) => !u.email)
+      .map((u) => ({ ...u, cargo: u.cargo?.descricao || null, ultimoUsoEm: ultimoUso.get(u.id) || null }))
+      // Quem usa sem e-mail primeiro: é a pessoa que mais perde.
+      .sort((a, b) => (b.ultimoUsoEm ? +new Date(b.ultimoUsoEm) : 0) - (a.ultimoUsoEm ? +new Date(a.ultimoUsoEm) : 0));
+    return res.json({
+      resumo: {
+        usuarios: usuarios.length,
+        comEmail: usuarios.length - semEmail.length,
+        semEmail: semEmail.length,
+        usandoSemEmail: semEmail.filter((u) => u.ultimoUsoEm).length,
+      },
+      semEmail,
+    });
+  } catch (err) {
+    console.error("[GET /admin/emails]", err);
+    return res.status(500).json({ error: "Erro ao listar os e-mails." });
+  }
+});
+
+/* ─── Contas e acesso ─────────────────────────────────────────────────────────
+   As sessões abertas (registradas no primeiro uso, `services/sessoes.js`),
+   quem ainda não ativou a conta pelo convite e quem entra com o Google.
+   Encerrar uma sessão é gravar o jti em `SessaoRevogada` — o mesmo "sair" do
+   painel —, e a pessoa cai no login na requisição seguinte: `encerrarSessoes`. */
+adminRouter.get("/acessos", requirePermissaoAdmin("verAcessos"), async (req, res) => {
+  try {
+    const agora = new Date();
+    const doTenant = req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {};
+    const [sessoes, convites, google] = await Promise.all([
+      prisma.sessaoUsuario.findMany({
+        where: { ...doTenant, expiraEm: { gt: agora } },
+        orderBy: { ultimoUsoEm: "desc" },
+        take: 300,
+        include: {
+          usuario: { select: { nome: true, login: true, sessoesRevogadas: { select: { jti: true } } } },
+          tenant: { select: { name: true, slug: true } },
+        },
+      }),
+      prisma.usuario.findMany({
+        where: { ...doTenant, ativo: true, senha: "" },
+        select: { id: true, nome: true, email: true, createdAt: true, tenant: { select: { name: true, slug: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.usuario.count({ where: { ...doTenant, ativo: true, googleId: { not: null } } }),
+    ]);
+    const ativas = sessoes
+      .filter((s) => !s.usuario.sessoesRevogadas.some((r) => r.jti === s.jti))
+      .map(({ usuario, userAgent, ...s }) => ({
+        ...s,
+        dispositivo: dispositivoDe(userAgent),
+        usuario: { id: s.usuarioId, nome: usuario.nome, login: usuario.login },
+      }));
+    return res.json({
+      resumo: {
+        sessoes: ativas.length,
+        pessoas: new Set(ativas.map((s) => s.usuarioId)).size,
+        convitesPendentes: convites.length,
+        comGoogle: google,
+      },
+      sessoes: ativas,
+      convites,
+    });
+  } catch (err) {
+    console.error("[GET /admin/acessos]", err);
+    return res.status(500).json({ error: "Erro ao listar os acessos." });
+  }
+});
+
+adminRouter.post("/acessos/:jti/encerrar", requirePermissaoAdmin("encerrarSessoes"), async (req, res) => {
+  try {
+    const sessao = await prisma.sessaoUsuario.findUnique({ where: { jti: req.params.jti } });
+    if (!sessao) return res.status(404).json({ error: "Sessão não encontrada." });
+    await prisma.sessaoRevogada.upsert({
+      where: { usuarioId_jti: { usuarioId: sessao.usuarioId, jti: sessao.jti } },
+      update: {},
+      create: { usuarioId: sessao.usuarioId, jti: sessao.jti, expiraEm: sessao.expiraEm },
+    });
+    return res.json({ encerrada: true });
+  } catch (err) {
+    console.error("[POST /admin/acessos/:jti/encerrar]", err);
+    return res.status(500).json({ error: "Erro ao encerrar a sessão." });
   }
 });

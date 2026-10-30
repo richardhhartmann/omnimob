@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { X } from "@phosphor-icons/react";
 import { api } from "../../api";
-import { tourAtivo } from "../../utils/tourAtivo";
+import { marcarTourAberto, quandoSemTour, tourAtivo } from "../../utils/tourAtivo";
 /* A apresentação (e os ícones dela) só baixa quando há o que mostrar: este
    componente mora no pacote comum do painel, e quase toda carga termina em
    "nada pendente". */
@@ -63,15 +63,20 @@ export function ComunicadoDeNovidades({ tenantSlug, pronto = true, registrar = t
      ar, fica para quando ele acabar (`pronto` volta a valer). */
   useEffect(() => {
     if (!tenantSlug || !pronto || jaPerguntou.current) return undefined;
+    let cancelar = () => {};
     const t = setTimeout(() => {
-      if (tourAtivo()) return;
-      jaPerguntou.current = true;
-      api.novidadesPendente(tenantSlug)
-        .then((r) => { if (r?.novidade && !tourAtivo()) abrir(r.novidade, "comunicado"); })
-        .catch(() => {});
+      cancelar = quandoSemTour(() => {
+        jaPerguntou.current = true;
+        api.novidadesPendente(tenantSlug)
+          .then((r) => { if (r?.novidade && !tourAtivo()) abrir(r.novidade, "comunicado"); })
+          .catch(() => {});
+      });
     }, 2500);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); cancelar(); };
   }, [tenantSlug, pronto, abrir]);
+
+  // Aberta, segura a fila dos outros avisos (o comunicado, o pedido de e-mail).
+  useEffect(() => (aberto ? marcarTourAberto() : undefined), [aberto]);
 
   /* A pedido: a semana pedida, ou a mais recente; a lista alimenta o seletor.
      O pedido é CONSUMIDO na entrada, e a abertura segue sem depender dele:

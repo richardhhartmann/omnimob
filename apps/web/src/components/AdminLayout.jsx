@@ -8,6 +8,8 @@ import { BoasVindasModal } from "./BoasVindasModal";
 import { PulsoTrialModal } from "./PulsoTrialModal";
 import { PedidoDeAvaliacao } from "./PedidoDeAvaliacao";
 import { ComunicadoDeNovidades } from "./novidades/ComunicadoDeNovidades";
+import { ComunicadoAvulso } from "./ComunicadoAvulso";
+import { PedidoDeEmail } from "./PedidoDeEmail";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
 import { relatoriosVisiveis, PARAMETRO_DE } from "../utils/relatorios";
@@ -1062,6 +1064,14 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       {/* A avaliação do painel, para quem já é cliente (o trial tem a pergunta
           acima, e o servidor recusa as duas ao mesmo tempo). Nem na
           demonstração nem com o suporte dentro da conta. */}
+      {/* O aviso avulso da Omnimob e o pedido de e-mail. Os três avisos (estes
+          e as Novidades, abaixo) fazem fila pelo registro de tour: o aberto
+          segura os outros. */}
+      <ComunicadoAvulso tenantSlug={tenantSlug} pronto={contaResolvida && !tourGlobalAtivo} registrar={!demo && !session?.suporte} />
+      {!demo && !session?.suporte ? (
+        <PedidoDeEmail session={session} pronto={contaResolvida && !tourGlobalAtivo} onSessionUpdate={onSessionUpdate} />
+      ) : null}
+
       {/* As Novidades da semana: abrem sozinhas uma vez por pessoa (o servidor
           diz qual e já corta o que ela não alcança) e a pedido, por Ajuda ›
           Notas de versão ou pelo link do e-mail (`?novidades=<chave>`). */}

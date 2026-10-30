@@ -29,6 +29,9 @@ export const ABAS = [
   { chave: "verNovidades", aba: "novidades", rotulo: "Novidades" },
   { chave: "verUso", aba: "uso", rotulo: "Controle de Uso" },
   { chave: "verInteressados", aba: "interessados", rotulo: "Interessados" },
+  { chave: "verComunicados", aba: "comunicados", rotulo: "Comunicados" },
+  { chave: "verEmails", aba: "emails", rotulo: "E-mails dos usuários" },
+  { chave: "verAcessos", aba: "acessos", rotulo: "Contas e acesso" },
   { chave: "verUsuarios", aba: "usuarios", rotulo: "Usuários" },
   { chave: "verCargos", aba: "cargos", rotulo: "Cargos" },
   { chave: "verAuditoria", aba: "auditoria", rotulo: "Auditoria" },
@@ -43,6 +46,7 @@ export const ACOES = [
   { chave: "resolverChamado", exige: "verChamados", rotulo: "Resolver e repriorizar chamados" },
   { chave: "gerenciarUsuarios", exige: "verUsuarios", rotulo: "Criar, editar e desativar usuários" },
   { chave: "publicarNovidades", exige: "verNovidades", rotulo: "Publicar as Novidades para os clientes" },
+  { chave: "encerrarSessoes", exige: "verAcessos", rotulo: "Encerrar a sessão de um usuário" },
 ];
 
 export const PERMISSOES_SUPER_ADMIN = [...ABAS, ...ACOES].map((p) => p.chave);
