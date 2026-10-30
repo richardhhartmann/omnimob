@@ -153,6 +153,11 @@ export async function provisionTenant(input = {}) {
              sistema. Quem assume a conta troca por gente de verdade em
              Configurações; até lá, o cargo basta. */
           nome: "Administrador",
+          /* O e-mail de quem pediu a conta. Sem ele o "esqueci a senha" do
+             primeiro administrador não tinha para onde mandar o link — e quase
+             toda conta de produção nasce por aqui, enquanto o seed do dev já
+             vem com e-mail. Era por isso que a recuperação "funcionava no dev". */
+          email: String(email || "").trim().toLowerCase() || null,
           senha: senhaHash,
           tenantId: tenant.id,
           cargoCodigo: cargo.id,

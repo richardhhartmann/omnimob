@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 
 import { authRouter } from "../src/routes/authRoutes.js";
 import {
-  prisma, limparRestos, criarImobiliariaDeTeste, apagarImobiliaria, subirApi,
+  prisma, limparRestos, criarImobiliariaDeTeste, apagarImobiliaria, subirApi, PREFIXO,
 } from "./helpers.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -82,6 +82,27 @@ test("pedido: identificador vazio não quebra e responde igual", async () => {
 test("pedido: aceita e-mail além do login", async () => {
   const r = await cliente().post("/api/auth/recuperar-senha", { identificador: A.usuario.email });
   assert.equal(r.status, 200);
+});
+
+test("pedido: o administrador que o provisionamento cria tem para onde receber o link", async (t) => {
+  /* Era o defeito de produção: `admin-<slug>` nascia sem e-mail (o endereço
+     ficava só no tenant), e o "esqueci a senha" respondia "enviamos" sem
+     mandar nada. O seed do dev tem e-mail, por isso lá "funcionava". */
+  const { dominioConfigurado } = await import("../src/services/dominioService.js");
+  /* O provisionamento cadastra `<slug>.omnimob.app` na Vercel. Com o token no
+     `.env` local, o teste criaria um subdomínio de verdade; o CI não tem. */
+  if (dominioConfigurado()) return t.skip("VERCEL_TOKEN no ambiente: provisionar criaria um subdomínio real");
+  const { provisionTenant } = await import("../src/services/provisioningService.js");
+
+  const { tenant, adminLogin } = await provisionTenant({
+    name: "Teste provisionamento", slug: `${PREFIXO}prov`, email: " Dono@Exemplo.test ",
+  });
+  try {
+    const admin = await prisma.usuario.findUnique({ where: { login: adminLogin } });
+    assert.equal(admin.email, "dono@exemplo.test");
+  } finally {
+    await apagarImobiliaria(tenant.id);
+  }
 });
 
 test("link: conferência antes de digitar diz o nome de quem vai trocar", async () => {
