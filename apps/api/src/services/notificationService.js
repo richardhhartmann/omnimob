@@ -198,6 +198,15 @@ export async function verificarEmail({ porta, seguro } = {}) {
   }
 }
 
+/* Para onde vai o e-mail de uma PESSOA (recuperação, convite, chamado, aviso,
+   Novidades): a conta Google vinculada vence o e-mail do cadastro. O Google é
+   o endereço que ela provou ser dela ao vincular; o do cadastro foi digitado
+   por alguém e pode estar velho ou errado. Uma regra só, senão cada envio
+   escolheria de um jeito. */
+export function emailDoUsuario(usuario) {
+  return usuario?.googleEmail || usuario?.email || null;
+}
+
 export function isEmailEnabled() {
   return emailTransport() !== null;
 }

@@ -6,7 +6,7 @@ import { requirePermissao } from "../middlewares/permissaoMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
 import { limparCacheDaVitrine } from "../services/dadosDaVitrine.js";
-import { isEmailEnabled, sendEmail } from "../services/notificationService.js";
+import { emailDoUsuario, isEmailEnabled, sendEmail } from "../services/notificationService.js";
 import { emailConviteUsuario } from "../services/emailTemplates.js";
 import { assinarTokenRecuperacao } from "./authRoutes.js";
 
@@ -162,7 +162,7 @@ async function enviarConvite(usuario, { tenant, convidadoPor }) {
   });
   // Disparado e esquecido: o transporte tem teto de 10 s, e prender a criação
   // do usuário por isso deixaria a tela travada. Falha vai para o log.
-  sendEmail({ to: usuario.email, subject: modelo.subject, body: modelo.body, html: modelo.html })
+  sendEmail({ to: emailDoUsuario(usuario), subject: modelo.subject, body: modelo.body, html: modelo.html })
     .catch((e) => console.error("[usuarios/convite] falha ao enviar:", e.message));
   return { enviado: true, link: null };
 }

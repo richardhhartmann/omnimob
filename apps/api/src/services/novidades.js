@@ -1,7 +1,7 @@
 import { PERMISSOES } from "./cargosPadrao.js";
 import { MODULOS, cargoAlcancaModulo, tenantTemModulo } from "./modulos.js";
 import { emailNovidades } from "./emailTemplates.js";
-import { sendEmail, isEmailEnabled } from "./notificationService.js";
+import { emailDoUsuario, sendEmail, isEmailEnabled } from "./notificationService.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    AS NOVIDADES DA SEMANA — a regra, sem rota e sem banco.
@@ -186,15 +186,16 @@ export async function enviarNovidadesPorEmail(prisma, plataforma, novidade) {
   const base = (process.env.APP_URL || "").trim().replace(/\/+$/, "") || "https://omnimob.app";
   const link = `${base}/?novidades=${encodeURIComponent(novidade.chave)}`;
   const usuarios = await prisma.usuario.findMany({
-    where: { ativo: true, email: { not: null }, tenant: { ativo: true } },
-    select: { nome: true, email: true, cargo: true, tenant: { select: { modulos: true } } },
+    where: { ativo: true, OR: [{ email: { not: null } }, { googleEmail: { not: null } }], tenant: { ativo: true } },
+    select: { nome: true, email: true, googleEmail: true, cargo: true, tenant: { select: { modulos: true } } },
   });
   const fila = [];
   for (const u of usuarios) {
     const visto = oQueVe(novidade.conteudo, { tenant: u.tenant, cargo: u.cargo });
-    if (!visto || !u.email?.includes("@")) continue;
+    const para = emailDoUsuario(u);
+    if (!visto || !para?.includes("@")) continue;
     const itens = visto.secoes.flatMap((s) => s.itens.map((i) => ({ titulo: i.titulo, onde: i.onde, rotulo: ROTULO[i.tipo] || "Novo" })));
-    fila.push({ to: u.email, ...emailNovidades({ nome: u.nome, titulo: visto.titulo, versao: novidade.versao, itens, link }) });
+    fila.push({ to: para, ...emailNovidades({ nome: u.nome, titulo: visto.titulo, versao: novidade.versao, itens, link }) });
   }
   /* A equipe da Omnimob recebe a apresentação INTEIRA, sem o corte de cargo,
      com o botão para a aba Novidades: é ela que o cliente vai mencionar. */

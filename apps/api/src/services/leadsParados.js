@@ -1,6 +1,6 @@
 import { prisma } from "../db.js";
 import { emailLeadsParados } from "./emailTemplates.js";
-import { sendEmail } from "./notificationService.js";
+import { emailDoUsuario, sendEmail } from "./notificationService.js";
 
 /**
  * ─── Lead parado ─────────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ export async function avisarLeadsParados({ aplicar = false, agora = new Date() }
       select: {
         id: true, name: true, phone: true, email: true, estagio: true, createdAt: true, avisoParadoEm: true,
         property: { select: { title: true } },
-        responsavel: { select: { nome: true, email: true } },
+        responsavel: { select: { nome: true, email: true, googleEmail: true } },
         eventos: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
       },
       /* Teto por rodada. Uma conta abandonada com mil leads não vira um e-mail
@@ -126,7 +126,7 @@ export async function avisarLeadsParados({ aplicar = false, agora = new Date() }
     const pendentes = parados.filter((l) => !l.avisoParadoEm || new Date(l.avisoParadoEm) < new Date(ultimoToque(l)));
     if (!pendentes.length) continue;
 
-    const destinatarios = [...new Set([tenant.email, ...pendentes.map((l) => l.responsavel?.email)].filter(Boolean))];
+    const destinatarios = [...new Set([tenant.email, ...pendentes.map((l) => emailDoUsuario(l.responsavel))].filter(Boolean))];
     const linhas = pendentes.map((l) => ({
       nome: l.name || "Sem nome",
       contato: l.phone || l.email || "",

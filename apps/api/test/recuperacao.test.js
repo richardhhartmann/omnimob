@@ -105,6 +105,40 @@ test("pedido: o administrador que o provisionamento cria tem para onde receber o
   }
 });
 
+/** Para quem o `sendEmail` tentou mandar. Com o e-mail desligado na suíte, ele
+    registra o destinatário no `console.warn` — é o único rastro do envio. */
+async function destinoDoLink(identificador) {
+  const avisos = [];
+  const original = console.warn;
+  console.warn = (...a) => avisos.push(a.join(" "));
+  try {
+    await cliente().post("/api/auth/recuperar-senha", { identificador });
+    await new Promise((r) => setTimeout(r, 50)); // o envio não é aguardado pela rota
+  } finally {
+    console.warn = original;
+  }
+  return avisos.find((l) => l.includes("[notification:email]")) || "";
+}
+
+test("pedido: com conta Google vinculada, o link vai para o e-mail do Google", async () => {
+  const google = `${PREFIXO}g@gmail.test`;
+  await prisma.usuario.update({ where: { id: A.usuario.id }, data: { googleEmail: google } });
+  try {
+    // O e-mail do cadastro existe, e mesmo assim o do Google tem preferência.
+    assert.match(await destinoDoLink(A.usuario.login), new RegExp(`para ${google} `));
+    // E quem só lembra do Gmail também consegue pedir.
+    assert.match(await destinoDoLink(google.toUpperCase()), new RegExp(`para ${google} `));
+
+    // Sem e-mail no cadastro, o do Google basta.
+    await prisma.usuario.update({ where: { id: A.usuario.id }, data: { email: null } });
+    assert.match(await destinoDoLink(A.usuario.login), new RegExp(`para ${google} `));
+  } finally {
+    await prisma.usuario.update({ where: { id: A.usuario.id }, data: { googleEmail: null, email: A.usuario.email } });
+  }
+  // Sem Google, volta ao e-mail do cadastro.
+  assert.match(await destinoDoLink(A.usuario.login), new RegExp(`para ${A.usuario.email} `));
+});
+
 test("link: conferência antes de digitar diz o nome de quem vai trocar", async () => {
   const usuario = await prisma.usuario.findUnique({ where: { id: A.usuario.id } });
   const r = await cliente().get(`/api/auth/redefinir-senha/${encodeURIComponent(tokenPara(usuario))}`);
