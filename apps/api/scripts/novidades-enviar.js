@@ -61,4 +61,8 @@ if (!r.ok) {
   console.error(`Recusado (${r.status}): ${corpo.error || r.statusText}`);
   process.exit(1);
 }
-console.log(`Rascunho entregue: ${chave} (versão ${corpo.versao}), ${contarItens(conteudo)} novidades. Falta a revisão no super-admin.`);
+console.log(
+  corpo.status === "PUBLICADO"
+    ? `Publicado automaticamente: ${chave} (versão ${corpo.versao}), ${contarItens(conteudo)} novidades.`
+    : `Rascunho entregue: ${chave} (versão ${corpo.versao}), ${contarItens(conteudo)} novidades. Falta a revisão no super-admin.`,
+);

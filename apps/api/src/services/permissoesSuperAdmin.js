@@ -27,6 +27,8 @@ export const ABAS = [
   { chave: "verTutoriais", aba: "tutoriais", rotulo: "Tutoriais" },
   { chave: "verAvaliacoes", aba: "avaliacoes", rotulo: "Avaliações" },
   { chave: "verNovidades", aba: "novidades", rotulo: "Novidades" },
+  { chave: "verUso", aba: "uso", rotulo: "Controle de Uso" },
+  { chave: "verInteressados", aba: "interessados", rotulo: "Interessados" },
   { chave: "verUsuarios", aba: "usuarios", rotulo: "Usuários" },
   { chave: "verCargos", aba: "cargos", rotulo: "Cargos" },
   { chave: "verAuditoria", aba: "auditoria", rotulo: "Auditoria" },

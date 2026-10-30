@@ -39,15 +39,9 @@ const Selo = ({ s }) => <span className="dl-pill" style={TOM[s.tom]} title={s.de
 const dataHora = (iso) => (iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—");
 const duracao = (seg) => (seg < 60 ? `${seg}s` : `${Math.floor(seg / 60)}min ${seg % 60}s`);
 
-/** O ponto de partida de uma semana sem rotina: textos para reescrever no slide. */
-const modeloDaSemana = (chave) => ({
-  mes: chave,
-  titulo: "Novidades da semana",
-  subtitulo: `Omnimob · ${rotuloDaSemana(chave)}`,
-  chamada: "Escreva aqui, numa frase, o espírito da semana.",
-  encerramento: { titulo: "Dúvidas? Fale com a gente", texto: "O suporte está pronto para ajudar a sua equipe a começar a usar cada novidade. Na próxima semana tem mais." },
-  secoes: [{ id: "area-1", titulo: "Área do painel", icone: "Sparkle", resumo: "O que mudou nesta área.", itens: [itemNovo(1)] }],
-});
+/* Só se edita o que a ROTINA entregou: não há "começar a semana à mão". Um
+   rascunho criado aqui ficava preso à semana que já tinha fechado, sem como
+   sair (decisão de 29/10/2026). "+ Novidade" e "+ Área" acrescentam ao dela. */
 function itemNovo(n) {
   return { id: `novidade-${n}`, tipo: "novo", titulo: "Nome da novidade", icone: "Sparkle", paraQue: "Para que serve, em uma ou duas frases.", passos: ["Primeiro passo.", "Segundo passo.", "Terceiro passo."], onde: "Menu › Tela" };
 }
@@ -68,6 +62,20 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
   const [ocupado, setOcupado] = useState("");
   const [aviso, setAviso] = useState(null); // { tom, texto }
   const [porEmail, setPorEmail] = useState(true);
+  /* A publicação automática (linha única no servidor). Ligada, o rascunho que
+     a rotina entrega na terça já sai publicado, sem passar por esta revisão. */
+  const [config, setConfig] = useState(null);
+  useEffect(() => { adminApi.novidadesConfig().then(setConfig).catch(() => {}); }, []);
+  async function mudarConfig(campo, valor) {
+    const novo = { ...config, [campo]: valor };
+    setConfig(novo);
+    try {
+      setConfig(await adminApi.salvarNovidadesConfig(novo));
+    } catch (e) {
+      setConfig(config);
+      setAviso({ tom: "danger", texto: e.message || "Não deu para salvar a publicação automática." });
+    }
+  }
 
   const hoje = diaEmSaoPaulo(new Date());
   const semanaAtual = tercaDaSemana(hoje);
@@ -120,12 +128,6 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
     setAviso({ tom: "info", texto: "Revisão salva." });
   });
 
-  const criarSemana = () => rodar("criar", async () => {
-    await adminApi.salvarNovidade(semanaAtual, modeloDaSemana(semanaAtual));
-    await carregarLista(true);
-    setEscolhida(semanaAtual);
-  });
-
   const publicar = () => rodar("publicar", async () => {
     if (sujo) await adminApi.salvarNovidade(escolhida, rascunho);
     const r = await adminApi.publicarNovidade(escolhida, { email: porEmail });
@@ -133,7 +135,7 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
     setDetalhe((d) => ({ ...d, ...r, conteudo: rascunho }));
     setAviso({
       tom: "info",
-      texto: `Publicada. ${r.email ? (r.email.motivo ? `E-mail não enviado: ${r.email.motivo}.` : `E-mail a caminho de ${r.email.destinatarios} pessoas.`) : "Sem e-mail."}`,
+      texto: `Publicada. ${r.email ? (r.email.motivo ? `E-mail não enviado: ${r.email.motivo}.` : `E-mail a caminho de ${r.email.destinatarios} pessoas (e de ${r.email.equipe} da equipe).`) : "Sem e-mail."}`,
     });
   });
 
@@ -247,6 +249,25 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
         // toda terça, às 15h, chega o rascunho da rotina · clique no texto do slide para reescrever · a apresentação abre uma vez para cada pessoa
       </p>
 
+      {config ? (
+        <div className={`nv-auto${config.automatica ? " is-on" : ""}`}>
+          <div>
+            <strong>Publicação automática {config.automatica ? "ligada" : "desligada"}</strong>
+            <p>
+              {config.automatica
+                ? `O que a rotina entregar na terça sai publicado na hora, sem revisão${config.comEmail ? ", e por e-mail" : ""}.`
+                : "O rascunho de terça espera alguém revisar e publicar aqui."}
+            </p>
+          </div>
+          {podePublicar ? (
+            <div className="nv-auto__chaves">
+              <label><input type="checkbox" checked={config.automatica} onChange={(e) => mudarConfig("automatica", e.target.checked)} /> publicar sozinho</label>
+              <label><input type="checkbox" checked={config.comEmail} disabled={!config.automatica} onChange={(e) => mudarConfig("comEmail", e.target.checked)} /> com e-mail</label>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {erroLista ? <Alert tone="danger">{erroLista}</Alert> : null}
       {!lista && !erroLista ? <p className="dl-mono sa-loading">// lendo as novidades…</p> : null}
 
@@ -256,7 +277,6 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
             <span className="nv-semana nv-semana--vazia" title={semRascunho.detalhe}>
               <span>{rotuloDaSemana(semanaAtual)}</span>
               <Selo s={semRascunho} />
-              <button type="button" className="nv-link" disabled={!!ocupado} onClick={criarSemana}>Começar à mão</button>
             </span>
           ) : null}
           {lista.slice(0, RECENTES).map((n) => (
@@ -366,6 +386,12 @@ export function AdminNovidadesPage({ podePublicar, tenantId = "" }) {
 }
 
 export const NOVIDADES_CSS = `
+.nv-auto { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; padding: 12px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.nv-auto.is-on { border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.06); }
+.nv-auto strong { color: var(--strong); font-size: 13.5px; }
+.nv-auto p { margin: 4px 0 0; font-size: 12px; color: var(--subtle); }
+.nv-auto__chaves { display: flex; gap: 16px; }
+.nv-auto__chaves label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--subtle); cursor: pointer; }
 .nv-semanas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .dl-root .nv-semana {
   display: inline-flex; align-items: center; gap: 10px; width: auto; flex: 0 0 auto; white-space: nowrap; padding: 9px 14px; border-radius: 12px; cursor: pointer;

@@ -360,12 +360,24 @@ publicRouter.post("/interesse", interesseLimiter, async (req, res) => {
     return res.json({ message: "Interesse registrado." });
   }
 
+  /* Guardado ANTES do e-mail: é o que a aba Interessados do super-admin lê, e
+     é o que impede um envio que falhou de perder o interesse para sempre.
+     Se o banco falhar, segue o caminho de antes (só o e-mail). */
+  const guardado = await prisma.interesseComercial
+    .create({ data: { imobiliaria, email, telefone: telefone || null, plano: plano || null, temWhatsapp: Boolean(temWhatsapp) } })
+    .catch((e) => { console.error("[interesse] não guardado:", e.message); return null; });
+  const anotarEnvio = (envio) =>
+    guardado ? prisma.interesseComercial.update({ where: { id: guardado.id }, data: { envio } }).catch(() => {}) : null;
+
   const destino = process.env.CONTATO_EMAIL;
   if (!destino) {
     console.error(
       "[interesse] CONTATO_EMAIL não configurada — interesse recebido e NÃO entregue:",
       JSON.stringify(parsed.data),
     );
+    await anotarEnvio("sem-destino");
+    // Guardado, o interesse não se perdeu: está na aba Interessados.
+    if (guardado) return res.json({ message: "Interesse registrado." });
     return res.status(503).json({
       error: "Canal de contato indisponível no momento. Tente novamente mais tarde.",
     });
@@ -380,7 +392,8 @@ publicRouter.post("/interesse", interesseLimiter, async (req, res) => {
     replyTo: email, // responder no cliente de e-mail já cai no interessado
   });
 
-  if (envio.status === "failed") {
+  await anotarEnvio(envio.status === "failed" ? "falhou" : "enviado");
+  if (envio.status === "failed" && !guardado) {
     console.error("[interesse] envio falhou, interesse perdido:", JSON.stringify(parsed.data));
     return res.status(502).json({ error: "Não foi possível enviar agora. Tente novamente." });
   }

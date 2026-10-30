@@ -107,6 +107,13 @@ const MODELOS = new Set([
    "alguém alterou um usuário", é a própria pessoa entrando. */
 const MODELOS_DA_PLATAFORMA = new Set(["SuperAdmin", "CargoSuperAdmin"]);
 
+/* A imobiliária mexida PELO super-admin (criar, editar, ativar à mão, excluir)
+   também é escrita da plataforma: sem imobiliária no contexto, ela não entrava
+   em trilha nenhuma, e "quem excluiu este cliente?" ficava sem resposta. Vai
+   com `tenantId` nulo — com o id da própria imobiliária, a exclusão apagaria a
+   linha junto (cascata). */
+const TENANT_PELA_PLATAFORMA = "Tenant";
+
 const ACAO = {
   create: "CRIOU", createMany: "CRIOU",
   update: "ALTEROU", updateMany: "ALTEROU", upsert: "ALTEROU",
@@ -191,7 +198,8 @@ export function extensaoDeAuditoria(client) {
           if (!acao || !(MODELOS.has(model) || daPlataforma)) return query(args);
 
           const ctx = contextoAtual();
-          if (daPlataforma ? !ctx?.plataforma : !ctx?.tenantId) return query(args);
+          const tenantPelaPlataforma = model === TENANT_PELA_PLATAFORMA && ctx?.plataforma && !ctx?.tenantId;
+          if (daPlataforma ? !ctx?.plataforma : !(ctx?.tenantId || tenantPelaPlataforma)) return query(args);
 
           /* Só na exclusão vale a leitura extra: depois do delete não há mais o
              que ler, e "excluiu Property cmc3x9…" não é resposta para ninguém. */
@@ -206,7 +214,7 @@ export function extensaoDeAuditoria(client) {
 
           const alvo = anterior || (operation.endsWith("Many") ? null : resultado);
           await registrar(client, {
-            tenantId: daPlataforma ? null : ctx.tenantId,
+            tenantId: daPlataforma || tenantPelaPlataforma ? null : ctx.tenantId,
             usuarioId: ctx.usuarioId,
             usuarioNome: ctx.usuarioNome,
             acao,

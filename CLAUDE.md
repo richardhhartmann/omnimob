@@ -149,7 +149,10 @@ omnimob/
   e `POST /:chave/visto` (quem viu, até onde, quanto tempo). O servidor corta o
   que cada um vê por `modulo` e `permissao`. `PUT /api/novidades/rascunho/:chave`
   é a porta da rotina de terça, com `Bearer NOVIDADES_TOKEN`, montada ANTES.
-  Fluxo inteiro em `docs/novidades/README.md`
+  Com a publicação automática ligada (`NovidadeConfig`, chave na aba), o
+  rascunho já sai publicado. A aba só EDITA o que a rotina entregou — não há
+  "começar a semana à mão" (o rascunho ficava preso à semana errada). Fluxo
+  inteiro em `docs/novidades/README.md`
 - `/api/perfis-busca/*` — o que cada cliente procura + cruzamento com o acervo nos dois sentidos
 - `/api/clientes/*`, `/api/usuarios/*`, `/api/cargos/*` — ERP. **Usuário novo
   nasce sem senha e é ativado por e-mail**: `POST /api/usuarios` exige e-mail e
@@ -161,8 +164,8 @@ omnimob/
   com vários candidatos quem decide a conta é a senha. `test/conviteUsuario.test.js`
 - `/api/admin/*` — painel super-admin (tenants, billing); provisionamento via `provisioningService`.
   **Tem cargo**: `CargoSuperAdmin` com permissão por ABA (`verTenants`,
-  `verChamados`, `verTutoriais`, `verAvaliacoes`, `verNovidades`, `verUsuarios`,
-  `verCargos`, `verAuditoria`, `verSeguranca`) e por AÇÃO (`entrarNoTenant`,
+  `verChamados`, `verTutoriais`, `verAvaliacoes`, `verNovidades`, `verUso`,
+  `verInteressados`, `verUsuarios`, `verCargos`, `verAuditoria`, `verSeguranca`) e por AÇÃO (`entrarNoTenant`,
   `editarTenant`, `excluirTenant`, `resolverChamado`, `gerenciarUsuarios`,
   `publicarNovidades`). A aba **Versionamento** não tem permissão: todo cargo
   vê. A aba vai no endereço (`/admin?aba=chamados`) e cada aba, depois de
@@ -215,6 +218,9 @@ omnimob/
   OAuth e publicação no Mercado Livre, e a ponte de WhatsApp
 - `GET /api/tenants/me/exportar` — tudo da imobiliária num JSON, para
   portabilidade e LGPD
+- `POST /public/interesse` — o formulário comercial da landing. **Guarda** o
+  pedido (`InteresseComercial`) ANTES do e-mail ao comercial: um envio que
+  falhava perdia o interesse para sempre. Lido na aba Interessados
 - `POST /public/erros` — o relato da sentinela do navegador
   (`utils/sentinelaDeErros.js`); vai, junto com os 500 do Express, para
   `services/avisoDeErro.js`. `GET /public/versao` — a versão no ar
@@ -251,7 +257,8 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/avisoDeErro.test.js` | o aviso de erro agrupa o mesmo defeito e avisa uma vez por hora, com teto. **Não toca no banco** |
 | `test/avaliacoes.test.js` | uma avaliação por pessoa; o suporte dentro da conta não avalia pelo cliente; conta em trial não é perguntada; só quem tem `verAvaliacoes` lê |
 | `test/novidadesRegra.test.js` | a validação do conteúdo (texto, tipo, permissão, módulo, print só https) e o corte Hub/Flow/permissão. **Não toca no banco** |
-| `test/novidades.test.js` | a rotina entra só com a chave e nunca sobrescreve a publicada; revisar não é publicar; só-Hub não vê o Omniflow; o comunicado abre uma vez e o registro de quem viu é de quem viu |
+| `test/novidades.test.js` | a rotina entra só com a chave e nunca sobrescreve a publicada; revisar não é publicar e a aba não cria semana; só-Hub não vê o Omniflow; o comunicado abre uma vez e o registro de quem viu é de quem viu; a publicação automática só é ligada por quem publica |
+| `test/interessados.test.js` | o interesse da landing é guardado mesmo sem destino de e-mail; a aba lista e marca atendido; a régua do Controle de Uso (ativa, esfriando, parada, nunca) |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
 cada requisição (ativo? qual cargo?) e ignora o que veio dentro do JWT. Sem
@@ -381,6 +388,10 @@ invisíveis porque com um cliente só o sintoma não aparece.
 - `avisoDeErro.js` — o erro do navegador (`POST /public/erros`) e o 500 do
   Express viram e-mail em `CHAMADOS_INTERNOS_EMAIL`, agrupados por impressão
   digital: uma vez por hora por erro, teto de 20 por hora. Memória do processo
+- `controleDeUso.js` — **quem usa, quem esfriou e quem parou**, tirado da
+  trilha de auditoria (sem rastreamento novo): última escrita, escritas e
+  pessoas em 30 dias, leads, usuários e imóveis ativos por imobiliária. Ler
+  não deixa rastro, então "parada" é "ninguém cadastrou nem mudou nada"
 - `novidades.js` — **as Novidades da semana**: validação do conteúdo, o corte
   por pessoa (`modulo` FLOW = contratou E o cargo alcança; `permissao` = coluna
   do `Cargo`) e o e-mail de cada um com o seu recorte. Porte do
@@ -588,6 +599,8 @@ Modelos principais:
 | `Chamado` / `ChamadoMensagem` | O chamado de suporte e a conversa dentro dele. `status` tem quatro paradas (ver `services/chamados.js`); `autorTipo` é `CLIENTE`, `SUPORTE` ou `SISTEMA` — o terceiro é o que o sistema anota sozinho ("Resolvido por …") e não gera e-mail. `tenantId` copiado na mensagem, para filtrar sem `join` |
 | `PropertyMetricEvent` | Eventos de VIEW/LEAD/SALE para analytics |
 | `Avaliacao` | A nota (1 a 5) que o usuário dá ao painel. Uma por pessoa (`@@unique([tenantId, usuarioId])`), sem FK para o usuário. `lidaEm` nula acende o contador do super-admin |
+| `NovidadeConfig` | A publicação automática das Novidades, numa linha só (`id = 1`) |
+| `InteresseComercial` | Quem pediu contato comercial pela landing, com o resultado do e-mail (`envio`) e a marcação de atendido. Da Omnimob, sem `tenantId` |
 | `Novidade` / `NovidadeVisto` | A apresentação da semana (chave = a terça, `AAAA-MM-DD`; `RASCUNHO` → `PUBLICADO`) e cada vez que alguém a abriu. Sem `tenantId` na `Novidade` de propósito: é da Omnimob, e o corte é por pessoa em `services/novidades.js` |
 | `Negocio` | **Flow.** O negócio no funil. `codigo` é inteiro sequencial porque é um id que PESSOAS dizem em voz alta. Guarda as duas travas (quem validou e quando) e o split congelado |
 | `NegocioEvento` | Histórico do negócio, com `usuarioNome` copiado |
@@ -1142,16 +1155,15 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
   landing — sem erro nenhum, como o preço anual fez quando entrou
 - **A troca de módulo pelo super-admin.** Hoje é `npm run modulos` ou a
   assinatura; falta a tela
-- **A trilha da plataforma só vê usuários e cargos.** A aba Auditoria do
-  super-admin lê as escritas com `tenantId` nulo, e só `SuperAdmin` e
-  `CargoSuperAdmin` são gravados ali: editar ou excluir um TENANT pelo
-  super-admin não deixa linha em trilha nenhuma. "Recuperar senha" de
-  super-admin também não existe — hoje é o convite (só para quem nunca
-  definiu senha) ou mexer no banco
+- **"Recuperar senha" de super-admin** não existe — hoje é o convite (só para
+  quem nunca definiu senha) ou mexer no banco. A trilha da plataforma (aba
+  Auditoria) registra usuários, cargos e as imobiliárias criadas, editadas ou
+  excluídas pelo super-admin (`tenantId` nulo, fora da cascata; os testes
+  limpam essas linhas em `limparRestos`)
 - **A rotina das Novidades na nuvem** precisa ser criada (claude.ai/code, terça
   15h01) e `NOVIDADES_TOKEN` definida na API — ver `docs/novidades/README.md`.
-  A publicação automática e a cópia por e-mail para a equipe, que o VYA tem,
-  não foram portadas
+  A publicação automática vale para todos os clientes (o VYA deixa desmarcar
+  um a um; aqui não)
 - Blog/conteúdo para SEO (o site institucional já existe: `/sobre`, `/contato`, `/termos`, `/privacidade`, `/vitrines`)
 - Testes automatizados e deploy CI/CD (recuperação de senha **já existe** — `POST /api/auth/recuperar-senha`)
 

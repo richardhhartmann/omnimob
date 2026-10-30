@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, Sparkle, Star, UsersThree } from "@phosphor-icons/react";
+import { Buildings, ChartPieSlice, ClipboardText, ClockCounterClockwise, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, Sparkle, Star, UserPlus, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -18,6 +18,8 @@ import { AdminVersoesPage, VERSOES_CSS } from "./admin/AdminVersoesPage";
 import { AdminAuditoriaPage, AUDITORIA_CSS } from "./admin/AdminAuditoriaPage";
 import { AdminAvaliacoesPage, AVALIACOES_CSS } from "./admin/AdminAvaliacoesPage";
 import { AdminNovidadesPage, NOVIDADES_CSS } from "./admin/AdminNovidadesPage";
+import { AdminUsoPage, USO_CSS } from "./admin/AdminUsoPage";
+import { AdminInteressadosPage, INTERESSADOS_CSS } from "./admin/AdminInteressadosPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -168,6 +170,20 @@ const ABAS = [
     nota: "a apresentação semanal para os clientes",
     icone: <Sparkle size={16} />,
   },
+  {
+    chave: "uso",
+    permissao: "verUso",
+    rotulo: "Controle de Uso",
+    nota: "quem usa, quem esfriou e quem parou",
+    icone: <ChartPieSlice size={16} />,
+  },
+  {
+    chave: "interessados",
+    permissao: "verInteressados",
+    rotulo: "Interessados",
+    nota: "quem pediu contato comercial pela landing",
+    icone: <UserPlus size={16} />,
+  },
   /* Sem permissão própria (`null`): todo cargo do painel vê. É a primeira
      pergunta do suporte — "isso já estava no ar quando o cliente reclamou?". */
   {
@@ -220,6 +236,7 @@ const ABAS = [
 const NOTA_DO_FOCO = {
   tenants: "A lista mostra só este cliente.",
   novidades: "A apresentação é a mesma para todos; o Quem viu mostra só as pessoas deste cliente.",
+  interessados: "Esta aba é do site da Omnimob e não muda com o cliente.",
   versoes: "As versões são da Omnimob inteira e não mudam com o cliente.",
   usuarios: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
   cargos: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
@@ -290,6 +307,8 @@ export function SuperAdminPage({ session, onLogout }) {
   const [chamadosAbertos, setChamadosAbertos] = useState(0);
   // Avaliação não lida: o mesmo princípio do contador de chamados.
   const [avaliacoesNovas, setAvaliacoesNovas] = useState(0);
+  // Interessado esperando contato: trabalho do comercial, como chamado aberto.
+  const [interessadosNovos, setInteressadosNovos] = useState(0);
 
   const { confirm, modal: confirmModal } = useConfirm();
   // Qual imobiliária está abrindo agora. Trava o botão daquela linha, e só dela.
@@ -352,6 +371,10 @@ export function SuperAdminPage({ session, onLogout }) {
     if (!permissoes.verAvaliacoes) return;
     adminApi.listAvaliacoes({ naoLidas: "1", limit: 1 }).then((r) => setAvaliacoesNovas(r.naoLidas || 0)).catch(() => {});
   }, [permissoes.verAvaliacoes]);
+  useEffect(() => {
+    if (!permissoes.verInteressados) return;
+    adminApi.listInteressados({ pendentes: "1", limit: 1 }).then((r) => setInteressadosNovos(r.pendentes || 0)).catch(() => {});
+  }, [permissoes.verInteressados]);
 
   /* O que dá para julgar sem rede (tamanho, caracteres, nomes reservados) é
      julgado na hora; só o "esse já é de alguém" pergunta ao servidor, e espera
@@ -660,7 +683,7 @@ export function SuperAdminPage({ session, onLogout }) {
     }
   }
 
-  const badges = { chamados: chamadosAbertos, avaliacoes: avaliacoesNovas };
+  const badges = { chamados: chamadosAbertos, avaliacoes: avaliacoesNovas, interessados: interessadosNovos };
   const abas = abasVisiveis.map((a) => (badges[a.chave] != null ? { ...a, badge: badges[a.chave] } : a));
 
   return (
@@ -677,7 +700,7 @@ export function SuperAdminPage({ session, onLogout }) {
           {tenants.map((t) => <option key={t.id} value={t.slug}>{t.name}</option>)}
         </select>
       ) : null}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}\n${NOVIDADES_CSS}`}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}\n${NOVIDADES_CSS}\n${USO_CSS}\n${INTERESSADOS_CSS}`}
     >
       {confirmModal}
 
@@ -709,6 +732,8 @@ export function SuperAdminPage({ session, onLogout }) {
       {painel("tutoriais", <AdminTutoriaisPage tenantSlug={focoSlug} />)}
       {painel("avaliacoes", <AdminAvaliacoesPage aoContar={setAvaliacoesNovas} tenantId={foco?.id || ""} />)}
       {painel("novidades", <AdminNovidadesPage podePublicar={Boolean(permissoes.publicarNovidades)} tenantId={foco?.id || ""} />)}
+      {painel("uso", <AdminUsoPage tenantSlug={focoSlug} />)}
+      {painel("interessados", <AdminInteressadosPage aoContar={setInteressadosNovos} />)}
       {painel("usuarios", <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} />)}
       {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
       {painel("seguranca", <AdminSegurancaPage />)}

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { timingSafeEqual } from "node:crypto";
-import { prisma } from "../db.js";
+import { plataforma, prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
-import { chaveValida, normalizarNovidade, oQueVe } from "../services/novidades.js";
+import { chaveValida, configDasNovidades, normalizarNovidade, oQueVe, publicarNovidade } from "../services/novidades.js";
 import { daApresentacao } from "../services/versao.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -41,6 +41,13 @@ rascunhoNovidadeRouter.put("/:chave", async (req, res) => {
     if (atual?.status === "PUBLICADO") return res.status(409).json({ error: "Esta semana já foi publicada." });
     const dados = { conteudo, versao: daApresentacao(chave), origem: "agendamento", atualizadoPor: "agendamento" };
     await prisma.novidade.upsert({ where: { chave }, update: dados, create: { chave, ...dados } });
+    /* Com a publicação automática ligada, sai publicado na hora — pelo MESMO
+       caminho do botão Publicar da aba. */
+    const config = await configDasNovidades(prisma);
+    if (config.automatica) {
+      const r = await publicarNovidade(prisma, plataforma, chave, { quem: "publicação automática", email: config.comEmail });
+      return res.json({ chave, versao: dados.versao, status: "PUBLICADO", email: r.email });
+    }
     return res.json({ chave, versao: dados.versao, status: "RASCUNHO" });
   } catch (erro) {
     if (erro.status === 400) return res.status(400).json({ error: erro.message });

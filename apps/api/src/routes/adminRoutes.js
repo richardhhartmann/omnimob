@@ -42,8 +42,9 @@ import {
 import { montarSessao, impressaoDaSenha } from "./authRoutes.js";
 import { ehTenantProtegido, MOTIVO_PROTEGIDO } from "../services/tenantProtegido.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
-import { daApresentacao, historico, versaoAtual } from "../services/versao.js";
-import { chaveValida, enviarNovidadesPorEmail, normalizarNovidade, resumoDaNovidade } from "../services/novidades.js";
+import { historico, versaoAtual } from "../services/versao.js";
+import { chaveValida, configDasNovidades, normalizarNovidade, publicarNovidade, resumoDaNovidade } from "../services/novidades.js";
+import { controleDeUso } from "../services/controleDeUso.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
   COM_CONVERSA as CHAMADO_COM_CONVERSA,
@@ -1629,23 +1630,33 @@ adminRouter.get("/auditoria", requirePermissaoAdmin("verAuditoria"), async (req,
           }
         : {}),
     };
-    const [registros, total, pessoas] = await Promise.all([
-      plataforma.auditoria.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
-      plataforma.auditoria.count({ where }),
-      plataforma.auditoria.groupBy({
+    /* Com o super-admin em outro banco (dev, ver `db.js`), a trilha mora nos
+       dois: usuários e cargos no da plataforma, as imobiliárias mexidas pelo
+       super-admin no desta instância. Lê os dois e intercala por data —
+       pegar as N primeiras de cada um e cortar é a paginação certa. */
+    const fontes = plataformaExterna ? [plataforma, prisma] : [plataforma];
+    const lidas = await Promise.all(fontes.map((c) => Promise.all([
+      c.auditoria.findMany({ where, orderBy: { createdAt: "desc" }, take: page * limit }),
+      c.auditoria.count({ where }),
+      c.auditoria.groupBy({
         by: ["usuarioId", "usuarioNome"],
         where: { ...TRILHA_DA_PLATAFORMA, usuarioId: { not: null } },
         _count: { usuarioId: true },
       }),
-    ]);
+    ])));
+    const registros = lidas.flatMap(([r]) => r).sort((a, b) => b.createdAt - a.createdAt).slice((page - 1) * limit, page * limit);
+    const pessoas = new Map();
+    for (const p of lidas.flatMap(([, , g]) => g)) {
+      const atual = pessoas.get(p.usuarioId) || { id: p.usuarioId, nome: p.usuarioNome || "(sem nome)", total: 0 };
+      atual.total += p._count.usuarioId;
+      pessoas.set(p.usuarioId, atual);
+    }
     return res.json({
       registros,
-      total,
+      total: lidas.reduce((t, [, n]) => t + n, 0),
       page,
       limit,
-      usuarios: pessoas
-        .map((p) => ({ id: p.usuarioId, nome: p.usuarioNome || "(sem nome)", total: p._count.usuarioId }))
-        .sort((a, b) => b.total - a.total),
+      usuarios: [...pessoas.values()].sort((a, b) => b.total - a.total),
     });
   } catch (err) {
     console.error("[GET /admin/auditoria]", err);
@@ -1735,21 +1746,21 @@ adminRouter.get("/novidades/:chave", requirePermissaoAdmin("verNovidades"), asyn
 });
 
 /* Grava a revisão. Vale também numa publicada: corrigir um erro de digitação
-   não pode exigir despublicar. Na nova, cria o rascunho (a semana sem rotina). */
+   não pode exigir despublicar. Só EDITA: a semana nasce da rotina — um
+   rascunho criado aqui ficava preso à semana errada, sem como sair. */
 adminRouter.put("/novidades/:chave", requirePermissaoAdmin("verNovidades"), async (req, res) => {
   const { chave } = req.params;
   if (!chaveValida(chave)) return res.status(400).json({ error: "A chave é a terça da semana, em AAAA-MM-DD." });
   try {
     const conteudo = normalizarNovidade(req.body?.conteudo, chave);
-    const quem = req.superAdmin.nome || req.superAdmin.email;
-    const n = await prisma.novidade.upsert({
+    const n = await prisma.novidade.update({
       where: { chave },
-      update: { conteudo, atualizadoPor: quem },
-      create: { chave, conteudo, versao: daApresentacao(chave), origem: "painel", atualizadoPor: quem },
+      data: { conteudo, atualizadoPor: req.superAdmin.nome || req.superAdmin.email },
     });
     return res.json({ ...resumoDaNovidade(n), conteudo: n.conteudo });
   } catch (err) {
     if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.code === "P2025") return res.status(404).json({ error: "Esta semana ainda não chegou da rotina." });
     console.error("[PUT /admin/novidades/:chave]", err);
     return res.status(500).json({ error: "Erro ao salvar a novidade." });
   }
@@ -1757,18 +1768,42 @@ adminRouter.put("/novidades/:chave", requirePermissaoAdmin("verNovidades"), asyn
 
 adminRouter.post("/novidades/:chave/publicar", requirePermissaoAdmin("publicarNovidades"), async (req, res) => {
   try {
-    const atual = await prisma.novidade.findUnique({ where: { chave: req.params.chave } });
-    if (!atual) return res.status(404).json({ error: "Novidade não encontrada." });
-    const n = await prisma.novidade.update({
-      where: { chave: atual.chave },
-      // Republicar não muda a data: o prazo da semana é contado pela primeira.
-      data: { status: "PUBLICADO", publicadoEm: atual.publicadoEm || new Date(), publicadoPor: req.superAdmin.nome || req.superAdmin.email },
+    const r = await publicarNovidade(prisma, plataforma, req.params.chave, {
+      quem: req.superAdmin.nome || req.superAdmin.email,
+      email: Boolean(req.body?.email),
     });
-    const email = req.body?.email ? await enviarNovidadesPorEmail(prisma, n) : null;
-    return res.json({ ...resumoDaNovidade(n), email });
+    if (!r) return res.status(404).json({ error: "Novidade não encontrada." });
+    return res.json({ ...resumoDaNovidade(r.novidade), email: r.email });
   } catch (err) {
     console.error("[POST /admin/novidades/:chave/publicar]", err);
     return res.status(500).json({ error: "Erro ao publicar." });
+  }
+});
+
+/* A PUBLICAÇÃO AUTOMÁTICA: ligada, o rascunho que a rotina entrega na terça já
+   sai publicado (e por e-mail, com `comEmail`), sem revisão. Ler é de quem vê
+   a aba; mudar, de quem pode publicar — ligar é publicar por antecipação. */
+adminRouter.get("/novidades-config", requirePermissaoAdmin("verNovidades"), async (_req, res) => {
+  try {
+    return res.json(await configDasNovidades(prisma));
+  } catch (err) {
+    console.error("[GET /admin/novidades-config]", err);
+    return res.status(500).json({ error: "Erro ao ler a configuração." });
+  }
+});
+
+adminRouter.put("/novidades-config", requirePermissaoAdmin("publicarNovidades"), async (req, res) => {
+  try {
+    const dados = {
+      automatica: Boolean(req.body?.automatica),
+      comEmail: req.body?.comEmail !== false,
+      atualizadoPor: req.superAdmin.nome || req.superAdmin.email,
+    };
+    const c = await prisma.novidadeConfig.upsert({ where: { id: 1 }, update: dados, create: { id: 1, ...dados } });
+    return res.json(c);
+  } catch (err) {
+    console.error("[PUT /admin/novidades-config]", err);
+    return res.status(500).json({ error: "Erro ao salvar a configuração." });
   }
 });
 
@@ -1816,5 +1851,55 @@ adminRouter.get("/novidades/:chave/vistos", requirePermissaoAdmin("verNovidades"
   } catch (err) {
     console.error("[GET /admin/novidades/:chave/vistos]", err);
     return res.status(500).json({ error: "Erro ao ler quem viu." });
+  }
+});
+
+/* ─── Controle de Uso ─────────────────────────────────────────────────────────
+   Quem usa, quem esfriou e quem parou — tirado da trilha de auditoria, sem
+   rastreamento novo. A régua mora em `services/controleDeUso.js`. */
+adminRouter.get("/uso", requirePermissaoAdmin("verUso"), async (_req, res) => {
+  try {
+    return res.json(await controleDeUso(prisma));
+  } catch (err) {
+    console.error("[GET /admin/uso]", err);
+    return res.status(500).json({ error: "Erro ao medir o uso." });
+  }
+});
+
+/* ─── Interessados da landing ─────────────────────────────────────────────────
+   Quem pediu contato comercial pelo site (`POST /public/interesse`), com o
+   resultado do e-mail ao comercial — um envio que falhou aparece aqui, em vez
+   de se perder. "Atendido" é a marcação de quem já ligou para a pessoa. */
+adminRouter.get("/interessados", requirePermissaoAdmin("verInteressados"), async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+    const where = req.query.pendentes === "1" ? { atendidoEm: null } : {};
+    const [interessados, total, pendentes] = await Promise.all([
+      prisma.interesseComercial.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
+      prisma.interesseComercial.count({ where }),
+      prisma.interesseComercial.count({ where: { atendidoEm: null } }),
+    ]);
+    return res.json({ interessados, total, pendentes, page, limit });
+  } catch (err) {
+    console.error("[GET /admin/interessados]", err);
+    return res.status(500).json({ error: "Erro ao listar os interessados." });
+  }
+});
+
+adminRouter.post("/interessados/:id/atendido", requirePermissaoAdmin("verInteressados"), async (req, res) => {
+  try {
+    const atendido = req.body?.atendido !== false;
+    const i = await prisma.interesseComercial.update({
+      where: { id: req.params.id },
+      data: atendido
+        ? { atendidoEm: new Date(), atendidoPor: req.superAdmin.nome || req.superAdmin.email }
+        : { atendidoEm: null, atendidoPor: null },
+    });
+    return res.json(i);
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Interessado não encontrado." });
+    console.error("[POST /admin/interessados/:id/atendido]", err);
+    return res.status(500).json({ error: "Erro ao marcar como atendido." });
   }
 });

@@ -151,6 +151,8 @@ export async function travarAdminDaPlataforma({ exclusiva = false } = {}) {
  */
 export async function limparRestos() {
   await prisma.tenant.deleteMany({ where: { slug: { startsWith: PREFIXO } } });
+  // A trilha da plataforma escrita por super-admin de teste não vai na cascata de imobiliária nenhuma.
+  await prisma.auditoria.deleteMany({ where: { tenantId: null, usuarioNome: { contains: PREFIXO } } });
   await prisma.tenant.deleteMany({
     where: {
       slug: { startsWith: PREFIXO_GLOBAL },
@@ -224,6 +226,10 @@ export async function criarImobiliariaDeTeste({ plano = "PREMIUM" } = {}) {
 
 export async function apagarImobiliaria(tenantId) {
   await prisma.tenant.delete({ where: { id: tenantId } }).catch(() => {});
+  /* O que o super-admin fez com ela fica na trilha da PLATAFORMA (`tenantId`
+     nulo, ver `services/auditoria.js`) e não vai na cascata: sem isto, cada
+     execução deixaria "alterou imobiliária — Teste …" na aba Auditoria. */
+  await prisma.auditoria.deleteMany({ where: { tenantId: null, entidade: "Tenant", entidadeId: tenantId } });
 }
 
 /**

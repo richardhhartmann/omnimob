@@ -588,6 +588,40 @@ model Novidade {
   @@map("tb_novidade")
 }
 
+/// A publicação AUTOMÁTICA das Novidades, numa linha só (id = 1). Ligada, o
+/// rascunho que a rotina entrega já sai publicado (e por e-mail, se `comEmail`),
+/// sem revisão. Desligada (o padrão), uma pessoa revisa e publica.
+model NovidadeConfig {
+  id            Int      @id @default(1)
+  automatica    Boolean  @default(false)
+  comEmail      Boolean  @default(true)
+  atualizadoPor String?
+  updatedAt     DateTime @updatedAt
+
+  @@map("tb_novidade_config")
+}
+
+/// Quem pediu contato comercial pela landing (`POST /public/interesse`). Antes
+/// só virava e-mail, e um envio que falhava perdia o interesse para sempre.
+/// Da Omnimob, sem `tenantId`: a pessoa ainda não é cliente.
+model InteresseComercial {
+  id          String    @id @default(cuid())
+  imobiliaria String
+  email       String
+  telefone    String?
+  plano       String?
+  temWhatsapp Boolean   @default(false)
+  /// Se o e-mail para o comercial saiu: "enviado" | "falhou" | "sem-destino".
+  envio       String?
+  /// Quando alguém da Omnimob marcou como atendido.
+  atendidoEm  DateTime?
+  atendidoPor String?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+  @@map("tb_interesse_comercial")
+}
+
 /// Uma linha por vez que a apresentação abriu para alguém: até onde foi, se
 /// chegou ao fim, quanto tempo ficou. A aba Novidades junta por pessoa. É
 /// também o "já viu", que impede o comunicado de abrir de novo.
@@ -731,6 +765,10 @@ model CargoSuperAdmin {
   verAvaliacoes Boolean @default(false)
   /** Novidades: ver e revisar a apresentação semanal. Publicar é outra caixa. */
   verNovidades  Boolean @default(false)
+  /** Controle de Uso: quem usa, quem esfriou e quem parou (tirado da trilha). */
+  verUso        Boolean @default(false)
+  /** Interessados: quem pediu contato comercial pela landing. */
+  verInteressados Boolean @default(false)
 
   // ── Por ação, dentro da aba ──
   /** Tenants: entrar na conta do cliente como o Administrador dela. */

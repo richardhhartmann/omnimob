@@ -22,7 +22,7 @@ No servidor não há `.git`: o `npm run build` grava `apps/api/versoes.json` (`n
 2. **Revisão no super-admin**, aba **Novidades** (permissão `verNovidades`): a apresentação aparece como o cliente vai ver; clique no texto do slide para reescrever (Enter confirma, Esc desfaz). Embaixo do slide ficam o tipo, quem vê, o ícone, os prints (vão para o Cloudinary) e o botão de tirar a novidade. **Salvar** grava a revisão.
 3. **Publicar** (permissão `publicarNovidades`): a apresentação abre **uma vez** para cada pessoa ao entrar no painel, nos 14 dias seguintes, e fica em **Ajuda › Notas de versão**. Com "mandar por e-mail" marcado, cada pessoa com e-mail recebe a lista do que ela alcança, com um botão para a apresentação (`/?novidades=<terça>`). A rotina nunca sobrescreve uma semana publicada (409).
 
-Sem rotina, dá para começar a semana à mão: na aba, **Começar à mão** cria o rascunho com textos para reescrever, e **+ Novidade** / **+ Área** acrescentam.
+A semana **nasce da rotina**: a aba só edita o rascunho que ela entregou (**+ Novidade** e **+ Área** acrescentam a ele). Não existe "começar à mão" — um rascunho criado na aba ficava preso à semana que já tinha fechado, sem como sair. Sem a rotina, a entrega à mão é pelo script (abaixo).
 
 ## Quem vê o quê
 

@@ -7,7 +7,7 @@ import { ACOES, camposAlterados, horaCompleta, quando } from "../AuditoriaPage";
    AUDITORIA DA PLATAFORMA — quem da Omnimob mexeu em quê.
 
    São as linhas da `Auditoria` com `tenantId` nulo: usuários e cargos deste
-   painel. A régua de leitura (ação, campos, "há 3 min") é a da trilha da
+   painel, e as imobiliárias criadas, editadas ou excluídas por ele. A régua de leitura (ação, campos, "há 3 min") é a da trilha da
    imobiliária, importada de `AuditoriaPage` — duas telas de trilha com dois
    jeitos de dizer "alterou" seriam um lugar a mais para divergir.
 
@@ -18,6 +18,7 @@ import { ACOES, camposAlterados, horaCompleta, quando } from "../AuditoriaPage";
 const ENTIDADES = {
   SuperAdmin: "usuário da plataforma",
   CargoSuperAdmin: "cargo da plataforma",
+  Tenant: "imobiliária",
 };
 
 function rotulosDoCatalogo(catalogo) {
@@ -72,7 +73,7 @@ export function AdminAuditoriaPage({ catalogo }) {
         </h1>
       </Reveal>
 
-      <p className="dl-mono dl-note sa-note">// usuários e cargos da Omnimob · {dados.total} registros</p>
+      <p className="dl-mono dl-note sa-note">// usuários, cargos e imobiliárias mexidos pela equipe da Omnimob · {dados.total} registros</p>
 
       <div className="sa-bar">
         <input className="dl-input sa-search" value={filtros.busca} onChange={mudar("busca")} placeholder="Buscar por nome ou registro…" />
@@ -94,7 +95,7 @@ export function AdminAuditoriaPage({ catalogo }) {
       {!carregando && !dados.registros.length && !erro ? (
         <div className="sa-empty">
           <p className="sa-empty__title">Nada registrado</p>
-          <p className="sa-empty__desc">Criar ou alterar um usuário ou cargo deste painel deixa uma linha aqui.</p>
+          <p className="sa-empty__desc">Criar ou alterar um usuário, um cargo ou uma imobiliária neste painel deixa uma linha aqui.</p>
         </div>
       ) : null}
 

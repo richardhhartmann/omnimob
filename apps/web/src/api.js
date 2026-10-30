@@ -1379,6 +1379,21 @@ export const adminApi = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null && v !== false));
     return adminRequest(`/api/admin/avaliacoes${q.toString() ? `?${q}` : ""}`);
   },
+  // Controle de Uso: `{ resumo, tenants }`, tirado da trilha de auditoria.
+  uso: () => adminRequest("/api/admin/uso"),
+  // Interessados da landing: `{ interessados, total, pendentes }`.
+  listInteressados: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null));
+    return adminRequest(`/api/admin/interessados${q.toString() ? `?${q}` : ""}`);
+  },
+  marcarInteressado: (id, atendido = true) =>
+    adminRequest(`/api/admin/interessados/${id}/atendido`, { method: "POST", body: JSON.stringify({ atendido }) }),
+
+  // A publicação automática das Novidades: `{ automatica, comEmail }`.
+  novidadesConfig: () => adminRequest("/api/admin/novidades-config"),
+  salvarNovidadesConfig: (payload) =>
+    adminRequest("/api/admin/novidades-config", { method: "PUT", body: JSON.stringify(payload) }),
+
   // ─── Novidades da semana (revisão e publicação) ───────────────────────────
   listNovidades: () => adminRequest("/api/admin/novidades"),
   lerNovidadeAdmin: (chave) => adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}`),

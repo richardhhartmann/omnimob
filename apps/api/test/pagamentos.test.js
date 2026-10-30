@@ -59,6 +59,8 @@ test.before(async () => {
 after(async () => {
   await apiT?.fechar?.();
   await prisma.tenant.deleteMany({ where: { slug: { startsWith: PREFIXO } } });
+  // O "ativar à mão" do super-admin fica na trilha da plataforma, fora da cascata.
+  await prisma.auditoria.deleteMany({ where: { tenantId: null, usuarioNome: { contains: PREFIXO } } });
   await prisma.superAdmin.deleteMany({ where: { email: { startsWith: PREFIXO } } });
   await prisma.$disconnect();
 });

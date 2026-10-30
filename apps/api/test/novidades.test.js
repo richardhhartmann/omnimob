@@ -89,8 +89,10 @@ test("novidades da semana", async (t) => {
     assert.equal((await hub.get("/api/novidades/pendente")).json.novidade, null);
   });
 
-  await t.test("revisar não é publicar", async () => {
+  await t.test("revisar não é publicar, e a aba não cria semana", async () => {
     assert.equal((await admin(revisor).get(`/api/admin/novidades/${CHAVE}`)).status, 200);
+    // A semana nasce da rotina: a aba só edita o que existe.
+    assert.equal((await admin(revisor).put("/api/admin/novidades/2099-12-22", { conteudo })).status, 404);
     const revisado = { ...conteudo, chamada: "Chamada reescrita na revisão." };
     const put = await admin(revisor).put(`/api/admin/novidades/${CHAVE}`, { conteudo: revisado });
     assert.equal(put.status, 200, JSON.stringify(put.json));
@@ -139,5 +141,21 @@ test("novidades da semana", async (t) => {
   await t.test("Notas de versão lista a publicada", async () => {
     const r = await hub.get("/api/novidades");
     assert.ok(r.json.novidades.some((n) => n.chave === CHAVE));
+  });
+
+  await t.test("publicação automática: só quem publica liga, e a rotina já sai publicada", async () => {
+    assert.equal((await admin(revisor).put("/api/admin/novidades-config", { automatica: true })).status, 403);
+    const liga = await admin(editor).put("/api/admin/novidades-config", { automatica: true, comEmail: false });
+    assert.equal(liga.status, 200, JSON.stringify(liga.json));
+    try {
+      await prisma.novidade.update({ where: { chave: CHAVE }, data: { status: "RASCUNHO" } });
+      const r = await rotina(TOKEN, conteudo);
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.equal(r.json.status, "PUBLICADO");
+      assert.equal((await prisma.novidade.findUnique({ where: { chave: CHAVE } })).publicadoPor, "publicação automática");
+    } finally {
+      // A configuração é uma linha só, do banco inteiro: volta como estava.
+      await prisma.novidadeConfig.upsert({ where: { id: 1 }, update: { automatica: false }, create: { id: 1, automatica: false } });
+    }
   });
 });

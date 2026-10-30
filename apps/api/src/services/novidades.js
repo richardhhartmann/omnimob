@@ -155,12 +155,33 @@ export function resumoDaNovidade(n) {
 const ROTULO = { novo: "Novo", melhoria: "Melhorou", correcao: "Corrigido", mudanca: "Mudou de lugar" };
 
 /**
+ * Publica a semana: o MESMO caminho para a aba (uma pessoa) e para a rotina
+ * com a publicação automática ligada. Republicar não muda a data — o prazo da
+ * semana é contado pela primeira. Devolve a novidade e, com `email`, quantos
+ * vão receber.
+ */
+export async function publicarNovidade(prisma, plataforma, chave, { quem, email }) {
+  const atual = await prisma.novidade.findUnique({ where: { chave } });
+  if (!atual) return null;
+  const novidade = await prisma.novidade.update({
+    where: { chave },
+    data: { status: "PUBLICADO", publicadoEm: atual.publicadoEm || new Date(), publicadoPor: quem },
+  });
+  return { novidade, email: email ? await enviarNovidadesPorEmail(prisma, plataforma, novidade) : null };
+}
+
+/** A configuração da publicação automática (linha única; ausente = desligada). */
+export async function configDasNovidades(prisma) {
+  return (await prisma.novidadeConfig.findUnique({ where: { id: 1 } })) || { id: 1, automatica: false, comEmail: true };
+}
+
+/**
  * Manda a novidade publicada a quem tem e-mail, cada um com o seu recorte.
  * Disparado e esquecido por quem publica: devolve na hora quantos vão
  * receber, e os envios seguem um de cada vez (o transporte tem teto de 10 s, e
  * mandar centenas juntos estouraria o limite do provedor).
  */
-export async function enviarNovidadesPorEmail(prisma, novidade) {
+export async function enviarNovidadesPorEmail(prisma, plataforma, novidade) {
   if (!isEmailEnabled()) return { destinatarios: 0, motivo: "sem transporte de e-mail neste ambiente" };
   const base = (process.env.APP_URL || "").trim().replace(/\/+$/, "") || "https://omnimob.app";
   const link = `${base}/?novidades=${encodeURIComponent(novidade.chave)}`;
@@ -175,8 +196,16 @@ export async function enviarNovidadesPorEmail(prisma, novidade) {
     const itens = visto.secoes.flatMap((s) => s.itens.map((i) => ({ titulo: i.titulo, onde: i.onde, rotulo: ROTULO[i.tipo] || "Novo" })));
     fila.push({ to: u.email, ...emailNovidades({ nome: u.nome, titulo: visto.titulo, versao: novidade.versao, itens, link }) });
   }
+  /* A equipe da Omnimob recebe a apresentação INTEIRA, sem o corte de cargo,
+     com o botão para a aba Novidades: é ela que o cliente vai mencionar. */
+  const equipe = (await plataforma.superAdmin.findMany({ where: { ativo: true }, select: { nome: true, email: true } }))
+    .filter((a) => a.email?.includes("@"));
+  const todos = (novidade.conteudo?.secoes || []).flatMap((s) => s.itens.map((i) => ({ titulo: i.titulo, onde: i.onde, rotulo: ROTULO[i.tipo] || "Novo" })));
+  for (const a of equipe) {
+    fila.push({ to: a.email, ...emailNovidades({ nome: a.nome, titulo: novidade.conteudo.titulo, versao: novidade.versao, itens: todos, link: `${base}/admin?aba=novidades` }) });
+  }
   (async () => {
     for (const m of fila) await sendEmail({ to: m.to, subject: m.subject, body: m.body, html: m.html }).catch(() => {});
   })();
-  return { destinatarios: fila.length };
+  return { destinatarios: fila.length - equipe.length, equipe: equipe.length };
 }
