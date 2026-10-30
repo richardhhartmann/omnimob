@@ -1,5 +1,12 @@
 import { api } from "../api";
 import { TEMAS } from "../utils/temaDoPainel";
+import {
+  LARGURA_DE_MONITOR_LARGO,
+  aplicarLayoutCentrado,
+  centradoNoAutomatico,
+  layoutCentradoAtual,
+  salvarLayoutCentrado,
+} from "../utils/layoutCentrado";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   IdentificationBadge,
@@ -18,6 +25,9 @@ import {
   ShieldCheck,
   UserCircle,
   Info,
+  Monitor,
+  ArrowsOutLineHorizontal,
+  Columns,
 } from "@phosphor-icons/react";
 import { EditorDeAtalhos } from "./EditorDeAtalhos.jsx";
 import { apenasMudancas } from "../utils/atalhos";
@@ -268,10 +278,45 @@ const ATALHOS = [
 const ABAS_PREFERENCIAS = [
   { id: "aparencia", rotulo: "Aparência", Icone: Palette },
   { id: "atalhos", rotulo: "Atalhos", Icone: Keyboard },
+  { id: "painel", rotulo: "Painel", Icone: Monitor },
 ];
+
+/* O cartão de escolha da aba Painel — o mesmo desenho do cartão de tema (e o
+   mesmo componente do VYA, `CartaoDeEscolha`): miniatura, ícone, rótulo e o
+   rádio. A miniatura de cada variante está em styles.css (`--largo`,
+   `--centrado`). */
+function CartaoDeEscolha({ variante, rotulo, descricao, Icone, ativo, aoClicar }) {
+  return (
+    <button type="button" className={`mpx-tema${ativo ? " is-on" : ""}`} onClick={aoClicar} aria-pressed={ativo}>
+      <span className={`mpx-tema__preview mpx-tema__preview--${variante}`} aria-hidden="true">
+        <i className="mpx-tema__barra" />
+        <span className="mpx-tema__pagina"><i /><i /><i /></span>
+      </span>
+      <span className="mpx-tema__rodape">
+        <span className="mpx-tema__icone" aria-hidden="true"><Icone size={18} weight={ativo ? "fill" : "regular"} /></span>
+        <span className="mpx-tema__texto"><strong>{rotulo}</strong><small>{descricao}</small></span>
+        <span className={`mpx-radio${ativo ? " is-on" : ""}`} aria-hidden="true">{ativo ? <Check size={11} weight="bold" /> : null}</span>
+      </span>
+    </button>
+  );
+}
 
 export function ModalPreferencias({ onClose, tema, aoTrocarTema, session, onSessionUpdate }) {
   const [aba, setAba] = useState("aparencia");
+  /* A aba Painel lê o estado da PRÓPRIA página ao abrir: quem manda é o
+     atributo no <html> (posto pelo script do index.html e pela sessão), não o
+     React — é o que garante que o cartão marcado é o que a tela mostra. */
+  const [centrado, setCentrado] = useState(() => layoutCentradoAtual());
+  const [largura] = useState(() => window.innerWidth);
+  const trocarCentrado = (v) => {
+    setCentrado(v);
+    aplicarLayoutCentrado(v);
+    salvarLayoutCentrado(v);
+    /* Na sessão também: é dela que o painel relê a escolha do servidor, e sem
+       isto a próxima releitura desfaria o que a pessoa acabou de marcar. */
+    onSessionUpdate?.({ ...session, usuario: { ...session?.usuario, layoutCentrado: v } });
+  };
+  const monitorLargo = centradoNoAutomatico(largura);
   const [meus, setMeus] = useState(() => session?.usuario?.atalhos || {});
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState(null);
@@ -372,6 +417,24 @@ export function ModalPreferencias({ onClose, tema, aoTrocarTema, session, onSess
             <p>
               No modo <strong>Automático</strong>, o painel muda junto com o tema do
               dispositivo, sem você precisar voltar aqui.
+            </p>
+          </div>
+        </>
+      ) : aba === "painel" ? (
+        <>
+          <CabecalhoDePagina titulo="Painel" descricao="Como as telas ocupam o espaço do seu monitor." />
+          <Secao Icone={Monitor} titulo="Largura das telas" descricao="Vale para a barra do topo, o cabeçalho e o conteúdo.">
+            <div className="mpx-temas mpx-temas--duplo">
+              <CartaoDeEscolha variante="largo" rotulo="Largura total" descricao="Usa o monitor inteiro" Icone={ArrowsOutLineHorizontal} ativo={!centrado} aoClicar={() => trocarCentrado(false)} />
+              <CartaoDeEscolha variante="centrado" rotulo="Centrado" descricao="Com margem dos dois lados" Icone={Columns} ativo={centrado} aoClicar={() => trocarCentrado(true)} />
+            </div>
+          </Secao>
+          <div className="mpx-dica">
+            <Info size={18} />
+            <p>
+              {monitorLargo
+                ? <>Seu monitor tem <strong>{largura}px</strong> de largura. Acima de {LARGURA_DE_MONITOR_LARGO}px as telas já nascem centradas, porque a linha atravessando tudo cansa de ler.</>
+                : <>Seu monitor tem <strong>{largura}px</strong> de largura. Abaixo de {LARGURA_DE_MONITOR_LARGO}px as telas nascem em largura total.</>}
             </p>
           </div>
         </>

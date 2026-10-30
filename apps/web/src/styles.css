@@ -12077,6 +12077,11 @@ button.mpx-aba:focus-visible {
 
 button.mpx-tema,
 .ds-shell button.mpx-tema {
+  /* Bloco, e não o inline-flex que a regra geral de button dá: com ele a
+     miniatura e o rodapé ficavam LADO A LADO e a miniatura encolhia para 22px
+     de largura. Empilhados, como no VYA. No celular a regra própria (grid,
+     miniatura à esquerda) continua valendo. */
+  display: block;
   min-width: 0;
   width: 100%;
   padding: 0;
@@ -12193,6 +12198,16 @@ button.mpx-tema:focus-visible {
 .mpx-tema__preview--auto .mpx-tema__pagina i {
   background: #9aa0a6;
 }
+
+/* ── Os dois cartões da aba Painel (largura das telas) ──
+   As mesmas miniaturas do VYA: a página inteira ou uma coluna no meio, sobre o
+   fundo neutro do próprio modal — não é tema, então não pinta claro nem escuro. */
+.mpx-temas--duplo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mpx-tema__preview--largo .mpx-tema__pagina { width: 100%; box-sizing: border-box; }
+.mpx-tema__preview--centrado .mpx-tema__pagina { width: 50%; margin: 0 auto; box-sizing: border-box; padding-left: 24px; padding-right: 24px; }
+.mpx-tema__preview--largo, .mpx-tema__preview--centrado { background: var(--mpx-fundo-suave); }
+.mpx-tema__preview--largo .mpx-tema__barra, .mpx-tema__preview--centrado .mpx-tema__barra { background: color-mix(in srgb, var(--mpx-texto-3) 26%, transparent); }
+.mpx-tema__preview--largo .mpx-tema__pagina i, .mpx-tema__preview--centrado .mpx-tema__pagina i { background: color-mix(in srgb, var(--mpx-texto-3) 45%, transparent); }
 
 .mpx-tema__rodape {
   min-height: 62px;
@@ -12812,7 +12827,8 @@ button.mpx-acao-texto:focus-visible {
     padding: 21px 15px 28px;
   }
 
-  .mpx-temas {
+  .mpx-temas,
+  .mpx-temas--duplo {
     grid-template-columns: 1fr;
   }
 

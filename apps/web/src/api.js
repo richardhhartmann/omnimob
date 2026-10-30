@@ -667,6 +667,10 @@ export const api = {
   salvarMeuTema: (tema) =>
     request("/api/auth/meu-tema", { method: "PUT", body: JSON.stringify({ tema }) }),
 
+  // Telas centradas ou em largura total (aba "Painel"). `null` = automático.
+  salvarMeuLayout: (centrado) =>
+    request("/api/auth/meu-layout", { method: "PUT", body: JSON.stringify({ centrado }) }),
+
   // ─── Canais de divulgação ────────────────────────────────────────────────
   // O retrato de cada canal: o que está no ar, quantos imóveis recebe e o que
   // falta configurar. Existe porque o feed dos portais funcionava desde sempre

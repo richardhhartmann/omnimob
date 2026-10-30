@@ -88,6 +88,21 @@
          clientes — e ali dizia ao Google que a página era da Omnimob. Hoje ele
          é injetado só na landing e nas páginas institucionais, por
          `utils/esquemaDaOmnimob.js`. -->
+    <!-- Telas centradas ou em largura total (aba "Painel" das Configurações),
+         decidido ANTES da primeira pintura — sem isto o painel abriria em
+         largura total e pularia para o centro um instante depois. A ordem é a
+         do VYA, menos o servidor, que aqui só chega com a sessão: a cópia do
+         navegador e, sem ela, o automático (centrado a partir de 1800px). O
+         CSS só lê o atributo dentro do painel; a vitrine e a landing não o
+         veem. Ver `utils/layoutCentrado.js` — a chave e o limite são os de lá. -->
+    <script>
+      (function () {
+        var r = document.documentElement, v = null;
+        try { var s = localStorage.getItem("layoutCentrado"); if (s === "1") v = true; else if (s === "0") v = false; } catch (e) {}
+        if (v === null) v = (window.innerWidth || 0) >= 1800;
+        if (v) r.setAttribute("data-layout", "centrado"); else r.removeAttribute("data-layout");
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
