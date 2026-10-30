@@ -733,3 +733,31 @@ export async function analisarPainelGestor(painel = {}, nomeDaImobiliaria = "a i
     acao: String(parsed.acao || "").trim(),
   };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   O TEXTO BATE COM A NOTA? — antes de uma avaliação virar depoimento na
+   landing (`relatosDaParede.js`). Cinco estrelas com "muito ruim" escrito é
+   engano de clique ou ironia, e nos dois casos não vai para a vitrine da
+   Omnimob. A IA só MARCA: quem publica é uma pessoa da Omnimob.
+   ──────────────────────────────────────────────────────────────────────────── */
+export async function coerenciaDaAvaliacao({ nota, comentario }) {
+  const raw = await callGemini(
+    [{
+      text:
+        `Uma pessoa deu nota ${nota} de 5 a um software e escreveu:\n"""${String(comentario || "").slice(0, 2000)}"""\n\n` +
+        `O texto é coerente com essa nota? Responda "NAO_CONDIZ" só quando o texto for claramente ` +
+        `negativo, irônico ou sem relação com o produto (ofensa, propaganda, texto aleatório). ` +
+        `Elogio com uma sugestão de melhoria CONDIZ com nota 4 ou 5.`,
+    }],
+    {
+      system: "Você confere avaliações de clientes antes de publicá-las. É criterioso e não inventa motivo.",
+      responseSchema: {
+        type: "object",
+        properties: { coerencia: { type: "string", enum: ["CONDIZ", "NAO_CONDIZ"] } },
+        required: ["coerencia"],
+      },
+      temperature: 0,
+    },
+  );
+  return JSON.parse(raw).coerencia === "NAO_CONDIZ" ? "NAO_CONDIZ" : "CONDIZ";
+}

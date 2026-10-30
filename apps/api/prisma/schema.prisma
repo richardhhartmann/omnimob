@@ -553,6 +553,19 @@ model Avaliacao {
   tela        String?
   /// Quando alguém da Omnimob marcou como lida. Nula acende o contador da aba.
   lidaEm      DateTime?
+
+  /* ── A parede "Por que Omnimob" da landing ──────────────────────────────
+     Três chaves, e as três precisam abrir: a pessoa CONSENTIU (só com 4+
+     estrelas, comentário escrito e fora do trial — `avaliacaoRoutes`), a IA
+     não achou o texto incoerente com a nota, e alguém da Omnimob PUBLICOU.
+     Consentir não publica: depoimento numa página que vende passa por gente. */
+  /// O cargo de quem avaliou, copiado como o nome: o cartão mostra o de então.
+  usuarioCargo    String?
+  permitePublicar Boolean   @default(false)
+  /// "CONDIZ" | "NAO_CONDIZ"; nula = não conferida (IA fora, ou sem consentimento).
+  coerencia       String?
+  /// Na parede desde quando. Nula = fora dela.
+  publicadaEm     DateTime?
   createdAt   DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -560,7 +573,18 @@ model Avaliacao {
   @@unique([tenantId, usuarioId])
   @@index([createdAt])
   @@index([lidaEm])
+  @@index([publicadaEm])
   @@map("tb_avaliacao")
+}
+
+/// Um depoimento DE EXEMPLO da parede da landing que a Omnimob tirou do ar.
+/// Os exemplos moram no código (`web/src/data/relatosDemo.js`); aqui fica só a
+/// exceção, por isso a ausência é "no ar". Conteúdo da plataforma, sem tenant.
+model RelatoDemoOculto {
+  chave    String   @id
+  ocultoEm DateTime @default(now())
+
+  @@map("tb_relato_demo_oculto")
 }
 
 /// As NOVIDADES da semana: a apresentação que conta aos clientes o que mudou.

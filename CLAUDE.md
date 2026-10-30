@@ -265,6 +265,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/suporteChamados.test.js` | a conversa do chamado: B não lê nem escreve no chamado da A pelo número real (404); o corretor não lê o do colega; o ciclo ABERTO → AGUARDANDO_CLIENTE → EM_ATENDIMENTO → RESOLVIDO → reaberto pelos dois lados; novidade acende e apaga ao abrir; chamado interno só pelo token e só para a casa; a conversa some com a imobiliária |
 | `test/demo.test.js` | a sessão de demonstração lê tudo e não escreve nada — imóvel, cargo e o próprio progresso do tour recebem 403 `SOMENTE_DEMO`; o token normal da mesma pessoa continua escrevendo. Sem `DEMO_TENANT_SLUG`, 404 |
 | `test/superAdminPermissoes.test.js` | cargo "Suporte" recebe 403 no `entrar`/`editar`/`excluir` mesmo chamando a URL; rebaixar vale na requisição seguinte; Administrador não perde as chaves da casa; convite é de uso único; a escrita entra na `Auditoria` com `tenantId` nulo e a aba Auditoria só a lê com `verAuditoria`; o Versionamento abre para todo cargo |
+| `test/paredeDeRelatos.test.js` | a avaliação que vira depoimento na landing: o servidor só aceita o consentimento que a tela podia oferecer (4+ estrelas, com texto, fora do trial); o "5 estrelas, muito ruim" que a IA marcou não publica; a landing recebe só o que o cartão mostra |
 | `test/versao.test.js` | a régua MAIOR.SEMANA.ENTREGA: a semana vira terça 15h01 de Brasília e a entrega recomeça a cada semana. **Não toca no banco** |
 | `test/avisoDeErro.test.js` | o aviso de erro agrupa o mesmo defeito e avisa uma vez por hora, com teto. **Não toca no banco** |
 | `test/avaliacoes.test.js` | uma avaliação por pessoa; o suporte dentro da conta não avalia pelo cliente; conta em trial não é perguntada; só quem tem `verAvaliacoes` lê |
@@ -683,6 +684,7 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
 | `test/normalizacao.test.js` | migração de config antigo, espelho legado, tolerância a lixo |
 | `test/imagemResponsiva.test.js` | as URLs de foto redimensionada (Cloudinary/Unsplash; o resto intocado) e a trava do pacote: só as páginas da vitrine entram por `import` estático no `App.jsx` |
 | `test/dadosEstruturados.test.js` | o JSON-LD: endereço oculto não vaza, número ausente não vira zero, e o anúncio só vira `Product` com preço E foto (sem os dois, o Rich Results Test acusa erro) |
+| `test/relatosDaParede.test.js` | a parede "Por que Omnimob": reais primeiro, exemplos completando as 24 vagas, o exemplo desligado devolvendo a vaga — a mesma função na landing e na aba do super-admin |
 
 ### Rotas principais (App.jsx)
 ```

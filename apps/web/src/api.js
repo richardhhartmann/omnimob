@@ -1211,6 +1211,8 @@ export const api = {
 
   // As vitrines que estão no ar, para a página /vitrines. Público e sem sessão.
   listarVitrinesPublicas: () => request("/public/vitrines"),
+  // A parede "Por que Omnimob": `{ reais, ocultos }` (ver `utils/relatosDaParede.js`).
+  relatosDaParede: () => request("/public/relatos"),
 
   /* O endereço da vitrine (slug) que sai deste nome está livre? Consultado
      enquanto a pessoa digita, para o conflito aparecer com o nome ainda em
@@ -1427,6 +1429,12 @@ export const adminApi = {
   // Sem `ids`, marca TODAS as não lidas.
   marcarAvaliacoesLidas: (ids) =>
     adminRequest("/api/admin/avaliacoes/lidas", { method: "POST", body: JSON.stringify(ids ? { ids } : {}) }),
+  // A parede da landing: `{ limite, reais, ocultos }`, pôr/tirar uma real, ligar/desligar um exemplo.
+  paredeDeRelatos: () => adminRequest("/api/admin/avaliacoes/parede"),
+  publicarAvaliacao: (id, publicar) =>
+    adminRequest(`/api/admin/avaliacoes/${encodeURIComponent(id)}/parede`, { method: "POST", body: JSON.stringify({ publicar }) }),
+  relatoDemoNoAr: (chave, noAr) =>
+    adminRequest(`/api/admin/avaliacoes/demo/${encodeURIComponent(chave)}`, { method: "POST", body: JSON.stringify({ noAr }) }),
 
   /* A trilha da plataforma (`tenantId` nulo): `{ registros, total, page,
      limit, usuarios }`. Os filtros vazios não vão na URL. */

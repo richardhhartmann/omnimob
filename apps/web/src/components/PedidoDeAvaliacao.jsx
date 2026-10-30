@@ -29,6 +29,11 @@ import { CSS_DO_PULSO } from "./PulsoTrialModal";
 const ESPERA_MS = 2400;
 const ROTA_DO_EDITOR = /\/vitrine\/[^/]+\/editar/;
 const ROTULOS = ["", "Muito ruim", "Ruim", "Mais ou menos", "Bom", "Excelente"];
+/* A partir de quantas estrelas a pessoa pode deixar a avaliação ir para a
+   parede "Por que Omnimob" da landing. Espelho de `NOTA_MINIMA_PARA_PUBLICAR`
+   (`api/services/relatosDaParede.js`), que confere de novo. Conta em teste
+   nunca chega aqui: o servidor não pergunta. */
+const NOTA_PARA_PUBLICAR = 4;
 
 export function PedidoDeAvaliacao({ tenantSlug, tenantId, usuarioId, pronto = true }) {
   const { pathname } = useLocation();
@@ -36,6 +41,7 @@ export function PedidoDeAvaliacao({ tenantSlug, tenantId, usuarioId, pronto = tr
   const [nota, setNota] = useState(0);
   const [sobre, setSobre] = useState(0);
   const [comentario, setComentario] = useState("");
+  const [publicar, setPublicar] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState("");
   const [obrigado, setObrigado] = useState(false);
@@ -65,6 +71,7 @@ export function PedidoDeAvaliacao({ tenantSlug, tenantId, usuarioId, pronto = tr
           if (tourAtivo()) { devolverPendenciaDeAvaliacao(window.location.pathname); return; }
           setNota(0);
           setComentario("");
+          setPublicar(false);
           setFalha("");
           setObrigado(false);
           setAberto(true);
@@ -82,12 +89,16 @@ export function PedidoDeAvaliacao({ tenantSlug, tenantId, usuarioId, pronto = tr
     return () => document.removeEventListener("keydown", aoTeclar);
   }, [aberto, enviando]);
 
+  const positiva = nota >= NOTA_PARA_PUBLICAR;
+  // Sem texto não há o que mostrar na landing: a caixa só aparece com comentário.
+  const podePublicar = positiva && Boolean(comentario.trim());
+
   async function enviar() {
     if (!nota || enviando) return;
     setEnviando(true);
     setFalha("");
     try {
-      await api.avaliar(tenantSlug, { nota, comentario: comentario.trim() || null, tela: pathname });
+      await api.avaliar(tenantSlug, { nota, comentario: comentario.trim() || null, tela: pathname, permitePublicar: podePublicar && publicar });
       encerrarPulsoDeAvaliacao();
       setObrigado(true);
     } catch (e) {
@@ -146,7 +157,7 @@ export function PedidoDeAvaliacao({ tenantSlug, tenantId, usuarioId, pronto = tr
               <p className="pa-rotulo" aria-live="polite">{ROTULOS[mostrada] || " "}</p>
 
               <label className="pt-campo">
-                <span className="pt-campo__rotulo">O que você mudaria? (opcional)</span>
+                <span className="pt-campo__rotulo">{positiva ? "O que mais te ajuda no dia a dia? (opcional)" : "O que você mudaria? (opcional)"}</span>
                 <textarea
                   className="pt-campo__area"
                   rows={3}
@@ -155,6 +166,16 @@ export function PedidoDeAvaliacao({ tenantSlug, tenantId, usuarioId, pronto = tr
                   onChange={(e) => setComentario(e.target.value)}
                 />
               </label>
+
+              {podePublicar ? (
+                <label className="pa-publicar">
+                  <input type="checkbox" checked={publicar} onChange={(e) => setPublicar(e.target.checked)} />
+                  <span>
+                    Pode publicar esta avaliação no site da Omnimob, com meu nome, cargo e imobiliária.
+                    <small>A equipe revisa antes, e só publica se você marcar.</small>
+                  </span>
+                </label>
+              ) : null}
 
               {falha ? <p className="pt-falha">{falha}</p> : null}
 
@@ -182,4 +203,7 @@ const CSS = `
 .pa-estrela.is-on { color: #fbbf24; }
 .pa-estrela:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; border-radius: 6px; }
 .pa-rotulo { min-height: 18px; margin: 0 0 10px; font-size: 12.5px; color: #94a3b8; }
+.pa-publicar { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 2px; font-size: 13px; line-height: 1.45; color: #cbd5e1; cursor: pointer; }
+.pa-publicar input { width: auto; margin-top: 3px; accent-color: #fbbf24; }
+.pa-publicar small { display: block; margin-top: 2px; font-size: 11.5px; color: #94a3b8; }
 `;
