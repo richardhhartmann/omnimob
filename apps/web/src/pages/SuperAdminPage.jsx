@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Buildings, GraduationCap, IdentificationBadge, Lifebuoy, ShieldCheck, UsersThree } from "@phosphor-icons/react";
+import { Buildings, ChartPieSlice, ClipboardText, ClockCounterClockwise, EnvelopeSimple, GraduationCap, IdentificationBadge, Key, Lifebuoy, Megaphone, ShieldCheck, Sparkle, Star, UserPlus, UsersThree } from "@phosphor-icons/react";
 import { api, adminApi, setApiToken } from "../api";
 import { saveSession } from "../session";
 import { AdminShell } from "../components/AdminShell";
@@ -14,6 +14,15 @@ import { AdminTutoriaisPage, TUTORIAIS_CSS } from "./admin/AdminTutoriaisPage";
 import { AdminSegurancaPage, SEGURANCA_CSS } from "./admin/AdminSegurancaPage";
 import { AdminUsuariosPage, USUARIOS_CSS } from "./admin/AdminUsuariosPage";
 import { AdminCargosPage, CARGOS_CSS } from "./admin/AdminCargosPage";
+import { AdminVersoesPage, VERSOES_CSS } from "./admin/AdminVersoesPage";
+import { AdminAuditoriaPage, AUDITORIA_CSS } from "./admin/AdminAuditoriaPage";
+import { AdminAvaliacoesPage, AVALIACOES_CSS } from "./admin/AdminAvaliacoesPage";
+import { AdminNovidadesPage, NOVIDADES_CSS } from "./admin/AdminNovidadesPage";
+import { AdminUsoPage, USO_CSS } from "./admin/AdminUsoPage";
+import { AdminInteressadosPage, INTERESSADOS_CSS } from "./admin/AdminInteressadosPage";
+import { AdminComunicadosPage, COMUNICADOS_CSS } from "./admin/AdminComunicadosPage";
+import { AdminEmailsPage } from "./admin/AdminEmailsPage";
+import { AdminAcessosPage, ACESSOS_CSS } from "./admin/AdminAcessosPage";
 import {
   ACCENT_SOFT,
   Alert,
@@ -150,6 +159,64 @@ const ABAS = [
     nota: "quanto do tour cada pessoa percorreu",
     icone: <GraduationCap size={16} />,
   },
+  {
+    chave: "avaliacoes",
+    permissao: "verAvaliacoes",
+    rotulo: "Avaliações",
+    nota: "o que os usuários acham do painel",
+    icone: <Star size={16} />,
+  },
+  {
+    chave: "novidades",
+    permissao: "verNovidades",
+    rotulo: "Novidades",
+    nota: "a apresentação semanal para os clientes",
+    icone: <Sparkle size={16} />,
+  },
+  {
+    chave: "comunicados",
+    permissao: "verComunicados",
+    rotulo: "Comunicados",
+    nota: "o aviso avulso, para um cliente ou para todos",
+    icone: <Megaphone size={16} />,
+  },
+  {
+    chave: "uso",
+    permissao: "verUso",
+    rotulo: "Controle de Uso",
+    nota: "quem usa, quem esfriou e quem parou",
+    icone: <ChartPieSlice size={16} />,
+  },
+  {
+    chave: "interessados",
+    permissao: "verInteressados",
+    rotulo: "Interessados",
+    nota: "quem pediu contato comercial pela landing",
+    icone: <UserPlus size={16} />,
+  },
+  {
+    chave: "emails",
+    permissao: "verEmails",
+    rotulo: "E-mails",
+    nota: "quem usa o painel sem e-mail cadastrado",
+    icone: <EnvelopeSimple size={16} />,
+  },
+  {
+    chave: "acessos",
+    permissao: "verAcessos",
+    rotulo: "Contas e acesso",
+    nota: "sessões abertas, convites pendentes e Google",
+    icone: <Key size={16} />,
+  },
+  /* Sem permissão própria (`null`): todo cargo do painel vê. É a primeira
+     pergunta do suporte — "isso já estava no ar quando o cliente reclamou?". */
+  {
+    chave: "versoes",
+    permissao: null,
+    rotulo: "Versionamento",
+    nota: "as versões da Omnimob e o que cada uma mudou",
+    icone: <ClockCounterClockwise size={16} />,
+  },
   /* Quem opera a plataforma, e o que cada um alcança. Depois das abas de
      rotina e antes da conta própria: é gestão, não operação. */
   {
@@ -166,6 +233,13 @@ const ABAS = [
     nota: "permissões por aba e por ação",
     icone: <IdentificationBadge size={16} />,
   },
+  {
+    chave: "auditoria",
+    permissao: "verAuditoria",
+    rotulo: "Auditoria",
+    nota: "quem da Omnimob mexeu em usuários e cargos",
+    icone: <ClipboardText size={16} />,
+  },
   /* Por último, e é o lugar certo: não é rotina, é a conta de quem opera. Só
      se mexe nela ao trocar de celular ou ao ligar o segundo fator. */
   {
@@ -177,7 +251,26 @@ const ABAS = [
   },
 ];
 
-const abasPermitidas = (permissoes) => ABAS.filter((a) => permissoes?.[a.permissao]);
+/* `permissoes` nulo é "ainda não sei" (antes do `/eu`): nem a aba livre aparece,
+   senão um cargo vazio veria o Versionamento piscar antes do aviso de vazio. */
+/* ── O CLIENTE EM FOCO (porte do painel do VYA) ──
+   Mora no endereço (`?cliente=<slug>`): recarregar ou mandar o link mantém. As
+   abas com dado de cliente mostram só o dele; as da equipe dizem que não mudam.
+   Abas fora deste mapa: "mostrando só o que é deste cliente". */
+const NOTA_DO_FOCO = {
+  tenants: "A lista mostra só este cliente.",
+  novidades: "A apresentação é a mesma para todos; o Quem viu mostra só as pessoas deste cliente.",
+  interessados: "Esta aba é do site da Omnimob e não muda com o cliente.",
+  comunicados: "O formulário já vem para este cliente; a lista mostra todos os avisos.",
+  versoes: "As versões são da Omnimob inteira e não mudam com o cliente.",
+  usuarios: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
+  cargos: "Esta aba é da equipe da Omnimob e não muda com o cliente.",
+  auditoria: "A trilha é da equipe da Omnimob e não muda com o cliente.",
+  seguranca: "Esta aba é da sua conta e não muda com o cliente.",
+};
+
+const abasPermitidas = (permissoes) =>
+  permissoes ? ABAS.filter((a) => a.permissao === null || permissoes[a.permissao]) : [];
 
 export function SuperAdminPage({ session, onLogout }) {
   const navegar = useNavigate();
@@ -188,17 +281,46 @@ export function SuperAdminPage({ session, onLogout }) {
     id: session?.id || null,
     cargoId: session?.cargoId ?? null,
     permissoes: session?.permissoes || null,
+    versao: null,
+    catalogo: null,
   }));
   const permissoes = eu.permissoes || {};
-  const abasVisiveis = abasPermitidas(permissoes);
-  const [abaEscolhida, setAba] = useState("tenants");
+  const abasVisiveis = abasPermitidas(eu.permissoes);
+  /* A aba mora no endereço (`?aba=`): F5 volta nela, e um link — o de um
+     e-mail de chamado, por exemplo — abre direto onde precisa. */
+  const [abaEscolhida, setAbaEscolhida] = useState(() => new URLSearchParams(window.location.search).get("aba") || "tenants");
+  function setAba(chave) {
+    setAbaEscolhida(chave);
+    const url = new URL(window.location.href);
+    url.searchParams.set("aba", chave);
+    window.history.replaceState(null, "", url);
+  }
   /* A aba escolhida só vale se o cargo a alcança; senão cai na primeira que
-     alcança. É o "não abre por URL" desta tela, que troca de aba por estado. */
+     alcança. O endereço é só um pedido: o cargo continua decidindo. */
   const aba = abasVisiveis.some((a) => a.chave === abaEscolhida) ? abaEscolhida : abasVisiveis[0]?.chave;
+  /* Cada aba monta na primeira vez que abre e depois fica montada, escondida:
+     a resposta pela metade num chamado ou a busca digitada não se perdem numa
+     ida e volta (o mesmo do painel do VYA). */
+  const [montadas, setMontadas] = useState(() => new Set());
+  const [focoSlug, setFocoSlug] = useState(() => new URLSearchParams(window.location.search).get("cliente") || "");
+  function focar(slug) {
+    setFocoSlug(slug);
+    const url = new URL(window.location.href);
+    if (slug) url.searchParams.set("cliente", slug);
+    else url.searchParams.delete("cliente");
+    window.history.replaceState(null, "", url);
+  }
+  useEffect(() => {
+    if (aba) setMontadas((m) => (m.has(aba) ? m : new Set(m).add(aba)));
+  }, [aba]);
+  const painel = (chave, conteudo) =>
+    montadas.has(chave) && abasVisiveis.some((a) => a.chave === chave) ? (
+      <section key={chave} hidden={aba !== chave}>{conteudo}</section>
+    ) : null;
 
   useEffect(() => {
     adminApi.eu()
-      .then((r) => setEu({ id: r.id, cargoId: r.cargoId ?? null, permissoes: r.permissoes }))
+      .then((r) => setEu({ id: r.id, cargoId: r.cargoId ?? null, permissoes: r.permissoes, versao: r.versao || null, catalogo: r.catalogo || null }))
       .catch((err) => {
         /* Acesso encerrado (desativado, token velho): sai avisando, em vez de
            deixar a tela cheia de 401. */
@@ -208,6 +330,10 @@ export function SuperAdminPage({ session, onLogout }) {
   // Contado pela aba de chamados quando ela carrega, e exibido no menu — é o
   // único número do painel que pede ação imediata.
   const [chamadosAbertos, setChamadosAbertos] = useState(0);
+  // Avaliação não lida: o mesmo princípio do contador de chamados.
+  const [avaliacoesNovas, setAvaliacoesNovas] = useState(0);
+  // Interessado esperando contato: trabalho do comercial, como chamado aberto.
+  const [interessadosNovos, setInteressadosNovos] = useState(0);
 
   const { confirm, modal: confirmModal } = useConfirm();
   // Qual imobiliária está abrindo agora. Trava o botão daquela linha, e só dela.
@@ -266,6 +392,14 @@ export function SuperAdminPage({ session, onLogout }) {
       .then((r) => setChamadosAbertos((r.porStatus?.ABERTO || 0) + (r.porStatus?.EM_ATENDIMENTO || 0)))
       .catch(() => {});
   }, [permissoes.verChamados]);
+  useEffect(() => {
+    if (!permissoes.verAvaliacoes) return;
+    adminApi.listAvaliacoes({ naoLidas: "1", limit: 1 }).then((r) => setAvaliacoesNovas(r.naoLidas || 0)).catch(() => {});
+  }, [permissoes.verAvaliacoes]);
+  useEffect(() => {
+    if (!permissoes.verInteressados) return;
+    adminApi.listInteressados({ pendentes: "1", limit: 1 }).then((r) => setInteressadosNovos(r.pendentes || 0)).catch(() => {});
+  }, [permissoes.verInteressados]);
 
   /* O que dá para julgar sem rede (tamanho, caracteres, nomes reservados) é
      julgado na hora; só o "esse já é de alguém" pergunta ao servidor, e espera
@@ -333,9 +467,12 @@ export function SuperAdminPage({ session, onLogout }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tenants;
-    return tenants.filter((t) => `${t.name} ${t.slug} ${t.email}`.toLowerCase().includes(q));
-  }, [tenants, search]);
+    const doFoco = focoSlug ? tenants.filter((t) => t.slug === focoSlug) : tenants;
+    if (!q) return doFoco;
+    return doFoco.filter((t) => `${t.name} ${t.slug} ${t.email}`.toLowerCase().includes(q));
+  }, [tenants, search, focoSlug]);
+  // O nome chega com a lista; até lá (ou se o slug sumiu dela), o próprio slug.
+  const foco = focoSlug ? tenants.find((t) => t.slug === focoSlug) || { id: "", slug: focoSlug, name: focoSlug } : null;
 
   function openCreate() {
     setEditingId(null);
@@ -571,7 +708,8 @@ export function SuperAdminPage({ session, onLogout }) {
     }
   }
 
-  const abas = abasVisiveis.map((a) => (a.chave === "chamados" ? { ...a, badge: chamadosAbertos } : a));
+  const badges = { chamados: chamadosAbertos, avaliacoes: avaliacoesNovas, interessados: interessadosNovos };
+  const abas = abasVisiveis.map((a) => (badges[a.chave] != null ? { ...a, badge: badges[a.chave] } : a));
 
   return (
     <AdminShell
@@ -580,7 +718,14 @@ export function SuperAdminPage({ session, onLogout }) {
       abas={abas}
       aba={aba}
       aoTrocarAba={setAba}
-      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}`}
+      versao={eu.versao}
+      seletor={permissoes.verTenants && tenants.length ? (
+        <select className="dl-input as-foco" value={focoSlug} onChange={(e) => focar(e.target.value)} aria-label="Cliente em foco">
+          <option value="">Todos os clientes</option>
+          {tenants.map((t) => <option key={t.id} value={t.slug}>{t.name}</option>)}
+        </select>
+      ) : null}
+      css={`${CSS}\n${CHAMADOS_CSS}\n${TUTORIAIS_CSS}\n${SEGURANCA_CSS}\n${USUARIOS_CSS}\n${CARGOS_CSS}\n${VERSOES_CSS}\n${AUDITORIA_CSS}\n${AVALIACOES_CSS}\n${NOVIDADES_CSS}\n${USO_CSS}\n${INTERESSADOS_CSS}\n${COMUNICADOS_CSS}\n${ACESSOS_CSS}`}
     >
       {confirmModal}
 
@@ -593,15 +738,37 @@ export function SuperAdminPage({ session, onLogout }) {
         </div>
       ) : null}
 
-      {aba === "chamados" ? (
-        <AdminChamadosPage aoContar={setChamadosAbertos} />
+      {foco && aba ? (
+        <div className="sa-foco">
+          <div>
+            <strong>{foco.name}</strong> <span className="dl-mono">/{foco.slug}</span>
+            <p>{NOTA_DO_FOCO[aba] || "Mostrando só o que é deste cliente."}</p>
+          </div>
+          {permissoes.entrarNoTenant && foco.id ? (
+            <Button as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false} disabled={entrando === foco.id} onClick={() => entrarComo(foco)}>
+              {entrando === foco.id ? "Entrando…" : "Entrar como administrador"}
+            </Button>
+          ) : null}
+          <button type="button" className="sa-foco__fechar" onClick={() => focar("")} aria-label="Voltar a todos os clientes" title="Voltar a todos os clientes">×</button>
+        </div>
       ) : null}
-      {aba === "tutoriais" ? <AdminTutoriaisPage /> : null}
-      {aba === "usuarios" ? <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} /> : null}
-      {aba === "cargos" ? <AdminCargosPage meuCargoId={eu.cargoId} /> : null}
-      {aba === "seguranca" ? <AdminSegurancaPage /> : null}
 
-      {aba === "tenants" ? (
+      {painel("chamados", <AdminChamadosPage aoContar={setChamadosAbertos} ativa={aba === "chamados"} tenantSlug={focoSlug} />)}
+      {painel("tutoriais", <AdminTutoriaisPage tenantSlug={focoSlug} />)}
+      {painel("avaliacoes", <AdminAvaliacoesPage aoContar={setAvaliacoesNovas} tenantId={foco?.id || ""} />)}
+      {painel("novidades", <AdminNovidadesPage podePublicar={Boolean(permissoes.publicarNovidades)} tenantId={foco?.id || ""} />)}
+      {painel("uso", <AdminUsoPage tenantSlug={focoSlug} />)}
+      {painel("interessados", <AdminInteressadosPage aoContar={setInteressadosNovos} />)}
+      {painel("comunicados", <AdminComunicadosPage tenants={tenants} foco={foco?.id ? foco : null} />)}
+      {painel("emails", <AdminEmailsPage tenantId={foco?.id || ""} />)}
+      {painel("acessos", <AdminAcessosPage tenantId={foco?.id || ""} podeEncerrar={Boolean(permissoes.encerrarSessoes)} />)}
+      {painel("usuarios", <AdminUsuariosPage podeGerenciar={Boolean(permissoes.gerenciarUsuarios)} euId={eu.id} />)}
+      {painel("cargos", <AdminCargosPage meuCargoId={eu.cargoId} />)}
+      {painel("seguranca", <AdminSegurancaPage />)}
+      {painel("versoes", <AdminVersoesPage />)}
+      {painel("auditoria", <AdminAuditoriaPage catalogo={eu.catalogo} />)}
+
+      {painel("tenants", (
         <>
         {/* ── Cabeçalho ── */}
         <Reveal className="sa-head">
@@ -722,7 +889,7 @@ export function SuperAdminPage({ session, onLogout }) {
           })}
         </div>
         </>
-      ) : null}
+      ))}
 
       {/* ── A senha reemitida ─────────────────────────────────────────────
           O MESMO desenho do cartão de credenciais da criação (`sa-credenciais`),
@@ -1051,6 +1218,22 @@ export function SuperAdminPage({ session, onLogout }) {
 /* Só o que é DESTA aba. A moldura — fundo, topbar, sidebar — mora no
    `AdminShell`, junto do JSX que a usa. */
 const CSS = `
+/* ── O cliente em foco: a faixa no topo das abas ── */
+.sa-foco {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 20px; padding: 12px 16px; border-radius: 14px;
+  background: rgba(99,102,241,0.07); border: 1px solid rgba(99,102,241,0.30);
+}
+.sa-foco > div { flex: 1; min-width: 0; }
+.sa-foco strong { color: var(--strong); font-size: 14px; }
+.sa-foco .dl-mono { color: var(--placeholder); font-size: 9.5px; text-transform: none; }
+.sa-foco p { margin: 4px 0 0; font-size: 12px; color: var(--subtle); }
+.dl-root .sa-foco__fechar {
+  width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 17px; line-height: 1;
+  background: none; border: 1px solid var(--line); color: var(--subtle); box-shadow: none; transform: none;
+}
+.dl-root .sa-foco__fechar:hover { color: var(--strong); border-color: #34343c; background: none; box-shadow: none; transform: none; }
+
 /* ── O add-on do Flow, no formulario de tenant ──
    No ROSA do modulo (#ec0b5b), e nao no jade que estava aqui: o Flow tem uma
    cor so, e ela e a da palavra "flow" na arte.────────────────────────────

@@ -16,7 +16,7 @@ import { Button, OmnimobStyles, LogoLockup } from "../styles/omnimobKit";
    próximo assunto (faxina de trials, métricas) não teria onde entrar.
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, children }) {
+export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, versao, seletor, children }) {
   const atual = abas.find((a) => a.chave === aba) || abas[0];
 
   return (
@@ -41,6 +41,9 @@ export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, chi
 
       <div className="as-shell">
         <aside className="as-side">
+          {/* O cliente em foco (`?cliente=`): as abas com dado de cliente
+              passam a mostrar só o dele. */}
+          {seletor}
           <span className="dl-mono as-side__label">PLATAFORMA</span>
           <nav className="as-nav">
             {abas.map((a) => (
@@ -61,6 +64,13 @@ export function AdminShell({ session, onLogout, abas, aba, aoTrocarAba, css, chi
           </nav>
 
           {atual?.nota ? <p className="dl-mono as-side__nota">// {atual.nota}</p> : null}
+          {/* A versão e o commit no ar — o mesmo número que o cliente lê no
+              menu dele. É por aqui que se responde "o conserto já subiu?". */}
+          {versao ? (
+            <p className="dl-mono as-side__versao" title="Versão e commit no ar">
+              v{versao.numero || "?"}{versao.commit ? ` · ${versao.commit}` : ""}
+            </p>
+          ) : null}
         </aside>
 
         <main className="as-main">{children}</main>
@@ -139,6 +149,13 @@ const SHELL_CSS = `
   border-top: 1px solid var(--line-soft); margin-top: 6px;
 }
 
+.as-side__versao {
+  color: #55555f; font-size: 9px; letter-spacing: 0.06em; text-transform: none;
+  padding: 10px 12px 0; border-top: 1px solid var(--line-soft);
+}
+
+.as-foco { width: 100%; font-size: 12.5px; padding-top: 8px; padding-bottom: 8px; }
+
 .as-main { flex: 1; min-width: 0; }
 
 @media (max-width: 720px) {
@@ -154,7 +171,7 @@ const SHELL_CSS = `
     position: static; width: 100%; flex: none;
     flex-direction: row; align-items: center; gap: 8px; overflow-x: auto;
   }
-  .as-side__label, .as-side__nota { display: none; }
+  .as-side__label, .as-side__nota, .as-side__versao { display: none; }
   .as-nav { flex-direction: row; gap: 6px; }
   .dl-root .as-item { width: auto; white-space: nowrap; }
 }

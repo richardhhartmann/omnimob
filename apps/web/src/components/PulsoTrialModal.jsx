@@ -861,3 +861,6 @@ const CSS = `
 `;
 
 export default PulsoTrialModal;
+
+// A mesma caixa serve ao pedido de avaliação (`PedidoDeAvaliacao`): um desenho de modal só.
+export { CSS as CSS_DO_PULSO };

@@ -42,6 +42,10 @@ import {
 import { montarSessao, impressaoDaSenha } from "./authRoutes.js";
 import { ehTenantProtegido, MOTIVO_PROTEGIDO } from "../services/tenantProtegido.js";
 import { CARGO_ADMIN } from "../services/cargosPadrao.js";
+import { historico, versaoAtual } from "../services/versao.js";
+import { chaveValida, configDasNovidades, normalizarNovidade, publicarNovidade, resumoDaNovidade } from "../services/novidades.js";
+import { controleDeUso } from "../services/controleDeUso.js";
+import { dispositivoDe } from "../services/sessoes.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
   COM_CONVERSA as CHAMADO_COM_CONVERSA,
@@ -340,7 +344,15 @@ adminRouter.use(requireSuperAdmin);
    seguinte em vez de daqui a sete dias. */
 adminRouter.get("/eu", (req, res) => {
   const { id, nome, email, cargoId, cargoNome, permissoes } = req.superAdmin;
-  return res.json({ id, nome, email, cargoId, cargo: cargoNome, permissoes, catalogo: catalogoDePermissoes() });
+  return res.json({ id, nome, email, cargoId, cargo: cargoNome, permissoes, catalogo: catalogoDePermissoes(), versao: versaoAtual() });
+});
+
+/* As versões da Omnimob e o que cada uma mudou (`services/versao.js`). Sem
+   permissão própria: todo cargo do painel vê, porque é a primeira pergunta do
+   suporte ("isso já estava no ar quando o cliente reclamou?"). */
+adminRouter.get("/versoes", (_req, res) => {
+  const h = historico();
+  return res.json({ ...(h || { versoes: [], antes: null }), indisponivel: !h, no_ar: versaoAtual() });
 });
 
 /* ─── Segundo fator: ligar, conferir e desligar ───────────────────────────────
@@ -1585,5 +1597,480 @@ adminRouter.delete("/cargos/:id", requirePermissaoAdmin("verCargos"), async (req
   } catch (err) {
     console.error("[DELETE /admin/cargos/:id]", err);
     return res.status(500).json({ error: "Erro ao excluir cargo." });
+  }
+});
+
+/* ─── A trilha da PLATAFORMA ──────────────────────────────────────────────────
+
+   As escritas de super-admin (usuários e cargos da Omnimob) já entravam na
+   `Auditoria` com `tenantId` nulo; faltava onde lê-las. Só leitura, como a da
+   imobiliária, e do cliente `plataforma`: é para o banco da plataforma que
+   essas linhas vão (ver `db.js`).
+
+   Paginada por página, e os filtros saem do que existe na trilha — o mesmo
+   desenho de `auditoriaRoutes`, para as duas telas se lerem igual. */
+const TRILHA_DA_PLATAFORMA = { tenantId: null };
+
+adminRouter.get("/auditoria", requirePermissaoAdmin("verAuditoria"), async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+    const { acao, entidade, usuarioId, busca } = req.query;
+    const where = {
+      ...TRILHA_DA_PLATAFORMA,
+      ...(acao ? { acao: String(acao) } : {}),
+      ...(entidade ? { entidade: String(entidade) } : {}),
+      ...(usuarioId ? { usuarioId: String(usuarioId) } : {}),
+      ...(busca
+        ? {
+            OR: [
+              { resumo: { contains: String(busca), mode: "insensitive" } },
+              { usuarioNome: { contains: String(busca), mode: "insensitive" } },
+              { entidadeId: String(busca) },
+            ],
+          }
+        : {}),
+    };
+    /* Com o super-admin em outro banco (dev, ver `db.js`), a trilha mora nos
+       dois: usuários e cargos no da plataforma, as imobiliárias mexidas pelo
+       super-admin no desta instância. Lê os dois e intercala por data —
+       pegar as N primeiras de cada um e cortar é a paginação certa. */
+    const fontes = plataformaExterna ? [plataforma, prisma] : [plataforma];
+    const lidas = await Promise.all(fontes.map((c) => Promise.all([
+      c.auditoria.findMany({ where, orderBy: { createdAt: "desc" }, take: page * limit }),
+      c.auditoria.count({ where }),
+      c.auditoria.groupBy({
+        by: ["usuarioId", "usuarioNome"],
+        where: { ...TRILHA_DA_PLATAFORMA, usuarioId: { not: null } },
+        _count: { usuarioId: true },
+      }),
+    ])));
+    const registros = lidas.flatMap(([r]) => r).sort((a, b) => b.createdAt - a.createdAt).slice((page - 1) * limit, page * limit);
+    const pessoas = new Map();
+    for (const p of lidas.flatMap(([, , g]) => g)) {
+      const atual = pessoas.get(p.usuarioId) || { id: p.usuarioId, nome: p.usuarioNome || "(sem nome)", total: 0 };
+      atual.total += p._count.usuarioId;
+      pessoas.set(p.usuarioId, atual);
+    }
+    return res.json({
+      registros,
+      total: lidas.reduce((t, [, n]) => t + n, 0),
+      page,
+      limit,
+      usuarios: [...pessoas.values()].sort((a, b) => b.total - a.total),
+    });
+  } catch (err) {
+    console.error("[GET /admin/auditoria]", err);
+    return res.status(500).json({ error: "Erro ao buscar a trilha da plataforma." });
+  }
+});
+
+/* ─── Avaliações ──────────────────────────────────────────────────────────────
+
+   A nota que os usuários dão ao painel (`avaliacaoRoutes`). As mais recentes
+   primeiro, paginadas no servidor, com o resumo do filtro (média e quantas de
+   cada nota) e o total de NÃO LIDAS de todos os clientes — é ele que acende o
+   contador do menu. Abrir a aba não marca nada como lido: é o botão. */
+adminRouter.get("/avaliacoes", requirePermissaoAdmin("verAvaliacoes"), async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
+    const nota = Number(req.query.nota);
+    const where = {
+      ...(req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {}),
+      ...(nota >= 1 && nota <= 5 ? { nota } : {}),
+      ...(req.query.naoLidas === "1" ? { lidaEm: null } : {}),
+    };
+    const [avaliacoes, total, porNota, naoLidas] = await Promise.all([
+      prisma.avaliacao.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { tenant: { select: { id: true, name: true, slug: true } } },
+      }),
+      prisma.avaliacao.count({ where }),
+      prisma.avaliacao.groupBy({ by: ["nota"], where: { ...where, nota: undefined }, _count: { nota: true } }),
+      prisma.avaliacao.count({ where: { lidaEm: null } }),
+    ]);
+    const distribuicao = Object.fromEntries([1, 2, 3, 4, 5].map((n) => [n, porNota.find((p) => p.nota === n)?._count.nota || 0]));
+    const respostas = Object.values(distribuicao).reduce((s, n) => s + n, 0);
+    const media = respostas ? Object.entries(distribuicao).reduce((s, [n, q]) => s + Number(n) * q, 0) / respostas : null;
+    return res.json({ avaliacoes, total, page, limit, naoLidas, distribuicao, media });
+  } catch (err) {
+    console.error("[GET /admin/avaliacoes]", err);
+    return res.status(500).json({ error: "Erro ao carregar as avaliações." });
+  }
+});
+
+/* Marca como lidas as `ids` do corpo, ou TODAS as não lidas sem `ids`. */
+adminRouter.post("/avaliacoes/lidas", requirePermissaoAdmin("verAvaliacoes"), async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+    const r = await prisma.avaliacao.updateMany({
+      where: { lidaEm: null, ...(ids ? { id: { in: ids } } : {}) },
+      data: { lidaEm: new Date() },
+    });
+    return res.json({ marcadas: r.count });
+  } catch (err) {
+    console.error("[POST /admin/avaliacoes/lidas]", err);
+    return res.status(500).json({ error: "Erro ao marcar como lidas." });
+  }
+});
+
+/* ─── Novidades ───────────────────────────────────────────────────────────────
+
+   A revisão antes de ir para os clientes. A rotina de terça deixa o rascunho
+   (`novidadeRoutes`); aqui se lê, reescreve, anexa os prints e publica. A
+   regra (validação, o que cada um vê, o e-mail) é de `services/novidades.js`.
+   Ver: `verNovidades`. Publicar (vai para todos os clientes, e por e-mail):
+   `publicarNovidades`. */
+adminRouter.get("/novidades", requirePermissaoAdmin("verNovidades"), async (_req, res) => {
+  try {
+    const todas = await prisma.novidade.findMany({ orderBy: { chave: "desc" } });
+    return res.json({ novidades: todas.map(resumoDaNovidade) });
+  } catch (err) {
+    console.error("[GET /admin/novidades]", err);
+    return res.status(500).json({ error: "Erro ao listar as novidades." });
+  }
+});
+
+adminRouter.get("/novidades/:chave", requirePermissaoAdmin("verNovidades"), async (req, res) => {
+  try {
+    const n = await prisma.novidade.findUnique({ where: { chave: req.params.chave } });
+    if (!n) return res.status(404).json({ error: "Novidade não encontrada." });
+    return res.json({ ...resumoDaNovidade(n), conteudo: n.conteudo });
+  } catch (err) {
+    console.error("[GET /admin/novidades/:chave]", err);
+    return res.status(500).json({ error: "Erro ao abrir a novidade." });
+  }
+});
+
+/* Grava a revisão. Vale também numa publicada: corrigir um erro de digitação
+   não pode exigir despublicar. Só EDITA: a semana nasce da rotina — um
+   rascunho criado aqui ficava preso à semana errada, sem como sair. */
+adminRouter.put("/novidades/:chave", requirePermissaoAdmin("verNovidades"), async (req, res) => {
+  const { chave } = req.params;
+  if (!chaveValida(chave)) return res.status(400).json({ error: "A chave é a terça da semana, em AAAA-MM-DD." });
+  try {
+    const conteudo = normalizarNovidade(req.body?.conteudo, chave);
+    const n = await prisma.novidade.update({
+      where: { chave },
+      data: { conteudo, atualizadoPor: req.superAdmin.nome || req.superAdmin.email },
+    });
+    return res.json({ ...resumoDaNovidade(n), conteudo: n.conteudo });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.code === "P2025") return res.status(404).json({ error: "Esta semana ainda não chegou da rotina." });
+    console.error("[PUT /admin/novidades/:chave]", err);
+    return res.status(500).json({ error: "Erro ao salvar a novidade." });
+  }
+});
+
+adminRouter.post("/novidades/:chave/publicar", requirePermissaoAdmin("publicarNovidades"), async (req, res) => {
+  try {
+    const r = await publicarNovidade(prisma, plataforma, req.params.chave, {
+      quem: req.superAdmin.nome || req.superAdmin.email,
+      email: Boolean(req.body?.email),
+    });
+    if (!r) return res.status(404).json({ error: "Novidade não encontrada." });
+    return res.json({ ...resumoDaNovidade(r.novidade), email: r.email });
+  } catch (err) {
+    console.error("[POST /admin/novidades/:chave/publicar]", err);
+    return res.status(500).json({ error: "Erro ao publicar." });
+  }
+});
+
+/* A PUBLICAÇÃO AUTOMÁTICA: ligada, o rascunho que a rotina entrega na terça já
+   sai publicado (e por e-mail, com `comEmail`), sem revisão. Ler é de quem vê
+   a aba; mudar, de quem pode publicar — ligar é publicar por antecipação. */
+adminRouter.get("/novidades-config", requirePermissaoAdmin("verNovidades"), async (_req, res) => {
+  try {
+    return res.json(await configDasNovidades(prisma));
+  } catch (err) {
+    console.error("[GET /admin/novidades-config]", err);
+    return res.status(500).json({ error: "Erro ao ler a configuração." });
+  }
+});
+
+adminRouter.put("/novidades-config", requirePermissaoAdmin("publicarNovidades"), async (req, res) => {
+  try {
+    const dados = {
+      automatica: Boolean(req.body?.automatica),
+      comEmail: req.body?.comEmail !== false,
+      atualizadoPor: req.superAdmin.nome || req.superAdmin.email,
+    };
+    const c = await prisma.novidadeConfig.upsert({ where: { id: 1 }, update: dados, create: { id: 1, ...dados } });
+    return res.json(c);
+  } catch (err) {
+    console.error("[PUT /admin/novidades-config]", err);
+    return res.status(500).json({ error: "Erro ao salvar a configuração." });
+  }
+});
+
+/* Volta a rascunho: some do comunicado e de Notas de versão. Quem já viu
+   continua contado. */
+adminRouter.post("/novidades/:chave/despublicar", requirePermissaoAdmin("publicarNovidades"), async (req, res) => {
+  try {
+    const n = await prisma.novidade.update({ where: { chave: req.params.chave }, data: { status: "RASCUNHO" } });
+    return res.json(resumoDaNovidade(n));
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Novidade não encontrada." });
+    console.error("[POST /admin/novidades/:chave/despublicar]", err);
+    return res.status(500).json({ error: "Erro ao despublicar." });
+  }
+});
+
+/* QUEM VIU: uma linha por pessoa, juntando as aberturas — primeira e última
+   vez, quantas vezes, até onde foi, quanto tempo ficou e em que aparelho. */
+adminRouter.get("/novidades/:chave/vistos", requirePermissaoAdmin("verNovidades"), async (req, res) => {
+  try {
+    const linhas = await prisma.novidadeVisto.findMany({
+      where: { chave: req.params.chave, ...(req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {}) },
+      include: { tenant: { select: { name: true, slug: true } } },
+      orderBy: { abertoEm: "asc" },
+    });
+    const porPessoa = new Map();
+    for (const l of linhas) {
+      const p = porPessoa.get(l.usuarioId) || {
+        usuarioId: l.usuarioId, usuarioNome: l.usuarioNome, tenant: l.tenant,
+        primeiraEm: l.abertoEm, ultimaEm: l.ultimoEm, vezes: 0, slideMax: 0, totalSlides: 0,
+        chegouAoFim: false, segundos: 0, dispositivos: [], origens: [],
+      };
+      p.vezes += 1;
+      p.ultimaEm = l.ultimoEm > p.ultimaEm ? l.ultimoEm : p.ultimaEm;
+      p.slideMax = Math.max(p.slideMax, l.slideMax);
+      p.totalSlides = Math.max(p.totalSlides, l.totalSlides);
+      p.chegouAoFim ||= l.chegouAoFim;
+      p.segundos += Math.max(0, Math.round(((l.fechadoEm || l.ultimoEm) - l.abertoEm) / 1000));
+      if (l.dispositivo && !p.dispositivos.includes(l.dispositivo)) p.dispositivos.push(l.dispositivo);
+      if (l.origem && !p.origens.includes(l.origem)) p.origens.push(l.origem);
+      porPessoa.set(l.usuarioId, p);
+    }
+    const pessoas = [...porPessoa.values()].sort((a, b) => b.ultimaEm - a.ultimaEm);
+    return res.json({ pessoas, total: pessoas.length });
+  } catch (err) {
+    console.error("[GET /admin/novidades/:chave/vistos]", err);
+    return res.status(500).json({ error: "Erro ao ler quem viu." });
+  }
+});
+
+/* ─── Controle de Uso ─────────────────────────────────────────────────────────
+   Quem usa, quem esfriou e quem parou — tirado da trilha de auditoria, sem
+   rastreamento novo. A régua mora em `services/controleDeUso.js`. */
+adminRouter.get("/uso", requirePermissaoAdmin("verUso"), async (_req, res) => {
+  try {
+    return res.json(await controleDeUso(prisma));
+  } catch (err) {
+    console.error("[GET /admin/uso]", err);
+    return res.status(500).json({ error: "Erro ao medir o uso." });
+  }
+});
+
+/* ─── Interessados da landing ─────────────────────────────────────────────────
+   Quem pediu contato comercial pelo site (`POST /public/interesse`), com o
+   resultado do e-mail ao comercial — um envio que falhou aparece aqui, em vez
+   de se perder. "Atendido" é a marcação de quem já ligou para a pessoa. */
+adminRouter.get("/interessados", requirePermissaoAdmin("verInteressados"), async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+    const where = req.query.pendentes === "1" ? { atendidoEm: null } : {};
+    const [interessados, total, pendentes] = await Promise.all([
+      prisma.interesseComercial.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
+      prisma.interesseComercial.count({ where }),
+      prisma.interesseComercial.count({ where: { atendidoEm: null } }),
+    ]);
+    return res.json({ interessados, total, pendentes, page, limit });
+  } catch (err) {
+    console.error("[GET /admin/interessados]", err);
+    return res.status(500).json({ error: "Erro ao listar os interessados." });
+  }
+});
+
+adminRouter.post("/interessados/:id/atendido", requirePermissaoAdmin("verInteressados"), async (req, res) => {
+  try {
+    const atendido = req.body?.atendido !== false;
+    const i = await prisma.interesseComercial.update({
+      where: { id: req.params.id },
+      data: atendido
+        ? { atendidoEm: new Date(), atendidoPor: req.superAdmin.nome || req.superAdmin.email }
+        : { atendidoEm: null, atendidoPor: null },
+    });
+    return res.json(i);
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Interessado não encontrado." });
+    console.error("[POST /admin/interessados/:id/atendido]", err);
+    return res.status(500).json({ error: "Erro ao marcar como atendido." });
+  }
+});
+
+/* ─── Comunicados avulsos ─────────────────────────────────────────────────────
+   O aviso que não é novidade de produto, para um cliente ou para todos
+   (`comunicadoRoutes`). Ver e mandar: `verComunicados`. Não se edita: um
+   aviso já visto por metade da equipe não pode mudar por baixo da outra
+   metade — encerra-se e manda-se outro. */
+const nomesDosTenants = async (ids) =>
+  new Map((await prisma.tenant.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, slug: true } })).map((t) => [t.id, t]));
+
+adminRouter.get("/comunicados", requirePermissaoAdmin("verComunicados"), async (_req, res) => {
+  try {
+    const lista = await prisma.comunicado.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: { _count: { select: { vistos: true } } },
+    });
+    const tenants = await nomesDosTenants(lista.map((c) => c.tenantId).filter(Boolean));
+    return res.json({
+      comunicados: lista.map(({ _count, ...c }) => ({
+        ...c,
+        vistos: _count.vistos,
+        tenant: c.tenantId ? tenants.get(c.tenantId) || { id: c.tenantId, name: "(imobiliária removida)", slug: "" } : null,
+        valendo: c.ativo && (!c.expiraEm || c.expiraEm > new Date()),
+      })),
+    });
+  } catch (err) {
+    console.error("[GET /admin/comunicados]", err);
+    return res.status(500).json({ error: "Erro ao listar os comunicados." });
+  }
+});
+
+adminRouter.post("/comunicados", requirePermissaoAdmin("verComunicados"), async (req, res) => {
+  try {
+    const titulo = String(req.body?.titulo || "").trim();
+    const texto = String(req.body?.texto || "").trim();
+    if (!titulo || titulo.length > 80) return res.status(400).json({ error: "O título tem de 1 a 80 caracteres." });
+    if (!texto || texto.length > 1500) return res.status(400).json({ error: "O texto tem de 1 a 1500 caracteres." });
+    const tenantId = req.body?.tenantId ? String(req.body.tenantId) : null;
+    if (tenantId && !(await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } }))) {
+      return res.status(400).json({ error: "Imobiliária não encontrada." });
+    }
+    const expiraEm = req.body?.expiraEm ? new Date(req.body.expiraEm) : null;
+    if (expiraEm && (Number.isNaN(expiraEm.getTime()) || expiraEm <= new Date())) {
+      return res.status(400).json({ error: "O prazo precisa ser uma data futura." });
+    }
+    const c = await prisma.comunicado.create({
+      data: { titulo, texto, tenantId, expiraEm, criadoPor: req.superAdmin.nome || req.superAdmin.email },
+    });
+    return res.status(201).json(c);
+  } catch (err) {
+    console.error("[POST /admin/comunicados]", err);
+    return res.status(500).json({ error: "Erro ao mandar o comunicado." });
+  }
+});
+
+adminRouter.post("/comunicados/:id/encerrar", requirePermissaoAdmin("verComunicados"), async (req, res) => {
+  try {
+    const c = await prisma.comunicado.update({ where: { id: req.params.id }, data: { ativo: false } });
+    return res.json(c);
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Comunicado não encontrado." });
+    console.error("[POST /admin/comunicados/:id/encerrar]", err);
+    return res.status(500).json({ error: "Erro ao encerrar o comunicado." });
+  }
+});
+
+/* ─── E-mails dos usuários ────────────────────────────────────────────────────
+   De todos os clientes juntos: quem tem e-mail e quem usa o painel SEM ter —
+   é para o e-mail que vão as Novidades e a recuperação de senha. "Usando" é
+   ter sessão nos últimos 30 dias (`SessaoUsuario`). Só leitura: corrigir o
+   e-mail é do administrador da imobiliária, ou da própria pessoa pelo pedido
+   de e-mail do painel. */
+adminRouter.get("/emails", requirePermissaoAdmin("verEmails"), async (req, res) => {
+  try {
+    const desde = new Date(Date.now() - 30 * 864e5);
+    const where = { ativo: true, tenant: { ativo: true }, ...(req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {}) };
+    const [usuarios, uso] = await Promise.all([
+      prisma.usuario.findMany({
+        where,
+        select: { id: true, nome: true, login: true, email: true, tenantId: true, cargo: { select: { descricao: true } }, tenant: { select: { name: true, slug: true } } },
+        orderBy: { nome: "asc" },
+      }),
+      prisma.sessaoUsuario.groupBy({ by: ["usuarioId"], where: { ultimoUsoEm: { gte: desde } }, _max: { ultimoUsoEm: true } }),
+    ]);
+    const ultimoUso = new Map(uso.map((u) => [u.usuarioId, u._max.ultimoUsoEm]));
+    const semEmail = usuarios
+      .filter((u) => !u.email)
+      .map((u) => ({ ...u, cargo: u.cargo?.descricao || null, ultimoUsoEm: ultimoUso.get(u.id) || null }))
+      // Quem usa sem e-mail primeiro: é a pessoa que mais perde.
+      .sort((a, b) => (b.ultimoUsoEm ? +new Date(b.ultimoUsoEm) : 0) - (a.ultimoUsoEm ? +new Date(a.ultimoUsoEm) : 0));
+    return res.json({
+      resumo: {
+        usuarios: usuarios.length,
+        comEmail: usuarios.length - semEmail.length,
+        semEmail: semEmail.length,
+        usandoSemEmail: semEmail.filter((u) => u.ultimoUsoEm).length,
+      },
+      semEmail,
+    });
+  } catch (err) {
+    console.error("[GET /admin/emails]", err);
+    return res.status(500).json({ error: "Erro ao listar os e-mails." });
+  }
+});
+
+/* ─── Contas e acesso ─────────────────────────────────────────────────────────
+   As sessões abertas (registradas no primeiro uso, `services/sessoes.js`),
+   quem ainda não ativou a conta pelo convite e quem entra com o Google.
+   Encerrar uma sessão é gravar o jti em `SessaoRevogada` — o mesmo "sair" do
+   painel —, e a pessoa cai no login na requisição seguinte: `encerrarSessoes`. */
+adminRouter.get("/acessos", requirePermissaoAdmin("verAcessos"), async (req, res) => {
+  try {
+    const agora = new Date();
+    const doTenant = req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {};
+    const [sessoes, convites, google] = await Promise.all([
+      prisma.sessaoUsuario.findMany({
+        where: { ...doTenant, expiraEm: { gt: agora } },
+        orderBy: { ultimoUsoEm: "desc" },
+        take: 300,
+        include: {
+          usuario: { select: { nome: true, login: true, sessoesRevogadas: { select: { jti: true } } } },
+          tenant: { select: { name: true, slug: true } },
+        },
+      }),
+      prisma.usuario.findMany({
+        where: { ...doTenant, ativo: true, senha: "" },
+        select: { id: true, nome: true, email: true, createdAt: true, tenant: { select: { name: true, slug: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.usuario.count({ where: { ...doTenant, ativo: true, googleId: { not: null } } }),
+    ]);
+    const ativas = sessoes
+      .filter((s) => !s.usuario.sessoesRevogadas.some((r) => r.jti === s.jti))
+      .map(({ usuario, userAgent, ...s }) => ({
+        ...s,
+        dispositivo: dispositivoDe(userAgent),
+        usuario: { id: s.usuarioId, nome: usuario.nome, login: usuario.login },
+      }));
+    return res.json({
+      resumo: {
+        sessoes: ativas.length,
+        pessoas: new Set(ativas.map((s) => s.usuarioId)).size,
+        convitesPendentes: convites.length,
+        comGoogle: google,
+      },
+      sessoes: ativas,
+      convites,
+    });
+  } catch (err) {
+    console.error("[GET /admin/acessos]", err);
+    return res.status(500).json({ error: "Erro ao listar os acessos." });
+  }
+});
+
+adminRouter.post("/acessos/:jti/encerrar", requirePermissaoAdmin("encerrarSessoes"), async (req, res) => {
+  try {
+    const sessao = await prisma.sessaoUsuario.findUnique({ where: { jti: req.params.jti } });
+    if (!sessao) return res.status(404).json({ error: "Sessão não encontrada." });
+    await prisma.sessaoRevogada.upsert({
+      where: { usuarioId_jti: { usuarioId: sessao.usuarioId, jti: sessao.jti } },
+      update: {},
+      create: { usuarioId: sessao.usuarioId, jti: sessao.jti, expiraEm: sessao.expiraEm },
+    });
+    return res.json({ encerrada: true });
+  } catch (err) {
+    console.error("[POST /admin/acessos/:jti/encerrar]", err);
+    return res.status(500).json({ error: "Erro ao encerrar a sessão." });
   }
 });

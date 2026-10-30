@@ -11,6 +11,9 @@ import { auditoriaRouter } from "./routes/auditoriaRoutes.js";
 import { authRouter } from "./routes/authRoutes.js";
 import { cargoRouter } from "./routes/cargoRoutes.js";
 import { chamadoRouter } from "./routes/chamadoRoutes.js";
+import { avaliacaoRouter } from "./routes/avaliacaoRoutes.js";
+import { comunicadoRouter } from "./routes/comunicadoRoutes.js";
+import { novidadeRouter, rascunhoNovidadeRouter } from "./routes/novidadeRoutes.js";
 import { importacaoRouter } from "./routes/importacaoRoutes.js";
 import { apiPublicaRouter } from "./routes/apiPublicaRoutes.js";
 import { chavesApiRouter } from "./routes/chavesApiRoutes.js";
@@ -38,6 +41,7 @@ import { tutorialRouter } from "./routes/tutorialRoutes.js";
 import { usuarioRouter } from "./routes/usuarioRoutes.js";
 import { getHealth } from "./services/healthService.js";
 import { contextoDeAuditoria } from "./services/auditoria.js";
+import { avisarErro } from "./services/avisoDeErro.js";
 
 dotenv.config();
 
@@ -239,6 +243,12 @@ app.use("/api/perfis-busca", perfilBuscaRouter);
 app.use("/api/usuarios", usuarioRouter);
 app.use("/api/tutorial", tutorialRouter);
 app.use("/api/chamados", chamadoRouter);
+app.use("/api/avaliacoes", avaliacaoRouter);
+app.use("/api/comunicados", comunicadoRouter);
+/* A rotina de terça entrega o rascunho com a chave própria (NOVIDADES_TOKEN):
+   montada ANTES, senão o `requireAuth` do router da imobiliária a engoliria. */
+app.use("/api/novidades/rascunho", rascunhoNovidadeRouter);
+app.use("/api/novidades", novidadeRouter);
 app.use("/api/importacao", importacaoRouter);
 app.use("/api/chaves-api", chavesApiRouter);
 app.use("/api/webhooks-saida", webhookRouter);
@@ -290,7 +300,7 @@ app.use("/public", publicRouter);
    responder JSON para um robô que só entende marcação. */
 app.use("/previa", previaRouter);
 
-app.use((error, _req, res, _next) => {
+app.use((error, req, res, _next) => {
   console.error(error);
   /* ── 500 É PARA DEFEITO NOSSO ─────────────────────────────────────────────
      O `express.json()` lança com `status: 400` quando o CLIENTE manda um corpo
@@ -302,6 +312,8 @@ app.use((error, _req, res, _next) => {
   if (Number.isInteger(status) && status >= 400 && status < 500) {
     return res.status(status).json({ error: "Requisição inválida." });
   }
+  // O 500 que ninguém previu vai para a mesma caixa dos erros do navegador.
+  avisarErro({ origem: "servidor", mensagem: error?.message || String(error), pilha: error?.stack, url: `${req.method} ${req.originalUrl}` });
   res.status(500).json({ error: "Erro interno no servidor." });
 });
 

@@ -1,0 +1,77 @@
+{
+  "mes": "2026-11-03",
+  "titulo": "Novidades da versão 1.1",
+  "subtitulo": "Omnimob · semana de 27/10 a 03/11",
+  "chamada": "A semana em que ficou mais fácil acompanhar o suporte, entrar no painel e saber o que mudou a cada versão.",
+  "encerramento": {
+    "titulo": "Dúvidas? Fale com a gente",
+    "texto": "O suporte está pronto para ajudar a sua equipe a começar a usar cada novidade. Na próxima semana tem mais."
+  },
+  "secoes": [
+    {
+      "id": "ajuda",
+      "titulo": "Ajuda e suporte",
+      "icone": "Lifebuoy",
+      "resumo": "Fale com o suporte e acompanhe cada resposta sem sair do painel.",
+      "itens": [
+        {
+          "id": "meus-chamados",
+          "tipo": "novo",
+          "titulo": "Meus chamados",
+          "icone": "ChatsCircle",
+          "paraQue": "Acompanhar a conversa de cada chamado aberto com o suporte: o que você mandou, o que respondemos e em que pé está.",
+          "passos": [
+            "Abra o menu do seu perfil e vá em Ajuda › Meus chamados.",
+            "Clique num chamado para ver a conversa inteira e responder ali mesmo.",
+            "Quando estiver resolvido, use Já resolvi; se voltar a acontecer, reabra."
+          ],
+          "onde": "Ajuda › Meus chamados"
+        },
+        {
+          "id": "notas-de-versao",
+          "tipo": "novo",
+          "titulo": "Notas de versão",
+          "icone": "Notebook",
+          "paraQue": "Rever as novidades de cada semana quando quiser e saber em qual versão da Omnimob você está.",
+          "passos": [
+            "Abra o menu do seu perfil e vá em Ajuda › Notas de versão.",
+            "Escolha a semana que quer rever.",
+            "Use as setas do teclado para passar os slides."
+          ],
+          "onde": "Ajuda › Notas de versão"
+        }
+      ]
+    },
+    {
+      "id": "acesso",
+      "titulo": "Acesso e segurança",
+      "icone": "ShieldCheck",
+      "resumo": "Entrar ficou mais simples para toda a equipe.",
+      "itens": [
+        {
+          "id": "login-por-email",
+          "tipo": "melhoria",
+          "titulo": "Entrar com o e-mail",
+          "icone": "Envelope",
+          "paraQue": "Usar o e-mail cadastrado no lugar do login na tela de entrada, sem precisar lembrar de mais um nome de usuário.",
+          "passos": [
+            "Na tela de entrada, digite o seu e-mail ou o seu login.",
+            "Informe a senha de sempre.",
+            "Se tiver acesso a mais de uma imobiliária, a senha decide qual abre."
+          ],
+          "onde": "Tela de entrada"
+        },
+        {
+          "id": "convite-por-email",
+          "tipo": "correcao",
+          "titulo": "Convite de usuário",
+          "icone": "UserPlus",
+          "paraQue": "O link do convite para um usuário novo agora vale uma vez só e expira em 24 horas, como o de recuperar a senha.",
+          "passos": [],
+          "onde": "Equipe › Usuários",
+          "permissao": "gerenciarUsuarios"
+        }
+      ]
+    }
+  ]
+}

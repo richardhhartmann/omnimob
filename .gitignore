@@ -11,3 +11,5 @@ apps/api/prisma/dev.db-journal
 *.log
 .claude/worktrees
 ~$*
+# A versão que o build grava (scripts/versao.js --gravar); sai do git, não do repositório.
+apps/api/versoes.json

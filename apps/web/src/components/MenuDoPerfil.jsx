@@ -164,7 +164,7 @@ function textoDaNovidade(n) {
 
 export function MenuDoPerfil({
   aberto, aoFechar, usuario, tenant, ancoraRef,
-  aoAbrirAjuda, aoAbrirChamado, aoAbrirSuporte, aoAbrirPreferencias, aoAbrirPerfil, aoSair,
+  aoAbrirAjuda, aoAbrirChamado, aoAbrirSuporte, aoAbrirNovidades, aoAbrirPreferencias, aoAbrirPerfil, aoSair,
   aoVincularGoogle, chamados = { aguardando: 0, novidades: 0 },
 }) {
   const navegar = useNavigate();
@@ -180,6 +180,14 @@ export function MenuDoPerfil({
     if (!aberto) return;
     api.googleDisponivel().then(setGoogle).catch(() => {});
   }, [aberto]);
+
+  /* A versão no ar, para a pessoa dizer ao suporte qual tem ("estou na
+     1.4.2"). Uma vez por menu aberto: muda a cada deploy, não a cada clique. */
+  const [versao, setVersao] = useState(null);
+  useEffect(() => {
+    if (!aberto || versao) return;
+    api.versao().then(setVersao).catch(() => {});
+  }, [aberto, versao]);
 
   /* AS NOVIDADES DOS CHAMADOS — o que o suporte respondeu ou resolveu e a
      pessoa ainda não abriu, cada uma com a última fala. Perguntado só quando
@@ -404,11 +412,14 @@ export function MenuDoPerfil({
               <span className="mp-linha__icone"><LifebuoyIcon size={17} /></span>
               <span className="mp-linha__texto">Central de ajuda</span>
             </button>
-            {/* Notas de versão não existem como página. Desabilitado e
-                anunciado, pelo mesmo motivo do Google acima. */}
-            <button type="button" className="mp-linha" disabled title="Ainda não disponível">
+            {/* As Novidades de cada semana (a apresentação), e a versão no ar
+                para a pessoa dizer ao suporte qual tem. */}
+            <button type="button" className="mp-linha" onClick={() => { aoFechar(); aoAbrirNovidades?.(); }}>
               <span className="mp-linha__icone"><Notebook size={17} /></span>
-              <span className="mp-linha__texto">Notas de versão<small>em breve</small></span>
+              <span className="mp-linha__texto">
+                Notas de versão
+                {versao?.numero && versao.numero !== "dev" ? <small>você está na Omnimob {versao.numero}</small> : null}
+              </span>
             </button>
             <span className="mp-risco" role="separator" />
             {/* Abrem em aba nova: são páginas públicas, e tirar alguém do painel

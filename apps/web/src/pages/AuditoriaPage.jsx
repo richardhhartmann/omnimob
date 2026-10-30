@@ -19,7 +19,7 @@ import { SelectCustom } from "../components/SelectCustom.jsx";
    Trilha que o usuário pode reescrever não serve para o que ela existe.
    ──────────────────────────────────────────────────────────────────────────── */
 
-const ACOES = {
+export const ACOES = {
   CRIOU:   { rotulo: "Criou",    cor: "#10b981", Icon: PlusCircle },
   ALTEROU: { rotulo: "Alterou",  cor: "#f59e0b", Icon: PencilSimple },
   EXCLUIU: { rotulo: "Excluiu",  cor: "#ef4444", Icon: Trash },
@@ -44,7 +44,7 @@ const ENTIDADES = {
 
 const nomeDaEntidade = (e) => ENTIDADES[e] || e;
 
-function quando(iso) {
+export function quando(iso) {
   const d = new Date(iso);
   const agora = new Date();
   const min = Math.floor((agora - d) / 60000);
@@ -58,13 +58,13 @@ function quando(iso) {
   return d.toLocaleDateString("pt-BR");
 }
 
-const horaCompleta = (iso) =>
+export const horaCompleta = (iso) =>
   new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" });
 
 /* Os campos alterados, em linguagem de gente e sem o ruído do ORM.
    `connect`, `increment` e afins são vocabulário do Prisma e não dizem nada a
    quem lê — mas o NOME do campo diz, e é ele que a pessoa procura. */
-function camposAlterados(dados) {
+export function camposAlterados(dados) {
   if (!dados || typeof dados !== "object") return [];
   return Object.entries(dados)
     .filter(([k]) => !["id", "tenantId", "updatedAt", "createdAt"].includes(k))

@@ -22,6 +22,18 @@ export function setAdminToken(token) {
   adminToken = token;
 }
 
+/* O relato da sentinela (`utils/sentinelaDeErros.js`). Fora do `request` de
+   propósito: um erro aqui não pode disparar outro relato, nem contar como
+   ação no pulso. `keepalive` para sair mesmo com a aba fechando. */
+export function enviarRelatoDeErro(corpo) {
+  fetch(`${API_URL}/public/erros`, {
+    method: "POST",
+    keepalive: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  }).catch(() => {});
+}
+
 function normalizeErrorMessage(body) {
   if (!body || typeof body !== "object") return "Erro na requisicao.";
   if (body.details?.fieldErrors && typeof body.details.fieldErrors === "object") {
@@ -111,6 +123,8 @@ export const api = {
      estar logado, porque vincular é uma afirmação sobre quem você já provou
      ser. Ver `authRoutes`. */
   googleDisponivel: () => request("/api/auth/google/disponivel"),
+  // A versão no ar (`{ numero, commit }`), a mesma do rodapé do super-admin.
+  versao: () => request("/public/versao"),
 
   entrarComGoogle: (credential) =>
     request("/api/auth/google/entrar", { method: "POST", body: JSON.stringify({ credential }) }),
@@ -1227,6 +1241,34 @@ export const api = {
   chamadosPendentes: (tenantSlug) =>
     request("/api/chamados/pendentes", { headers: { "x-tenant-slug": tenantSlug } }),
   /* O que mudou e a pessoa ainda não viu, com a última fala de cada um. */
+  /* A avaliação do painel: `minhaAvaliacao` diz se é para perguntar (quem
+     decide é o servidor), `avaliar` grava a nota. Ver `avaliacaoRoutes`. */
+  // O aviso avulso da Omnimob (`comunicadoRoutes`): o pendente e o "já vi".
+  comunicadoPendente: (tenantSlug) => request("/api/comunicados/pendente", { headers: { "x-tenant-slug": tenantSlug } }),
+  marcarComunicadoVisto: (tenantSlug, id) =>
+    request(`/api/comunicados/${encodeURIComponent(id)}/visto`, { method: "POST", headers: { "x-tenant-slug": tenantSlug } }),
+  // Só preenche: o servidor recusa trocar um e-mail que já existe.
+  cadastrarMeuEmail: (tenantSlug, email) =>
+    request("/api/auth/meu-email", { method: "PUT", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify({ email }) }),
+
+  /* As Novidades da semana (`novidadeRoutes`), já cortadas pelo servidor para
+     esta pessoa. `pendente` é o comunicado que abre sozinho; a lista e a
+     leitura servem a Ajuda › Notas de versão. */
+  novidadesPendente: (tenantSlug) => request("/api/novidades/pendente", { headers: { "x-tenant-slug": tenantSlug } }),
+  listarNovidades: (tenantSlug) => request("/api/novidades", { headers: { "x-tenant-slug": tenantSlug } }),
+  lerNovidade: (tenantSlug, chave) =>
+    request(`/api/novidades/${encodeURIComponent(chave)}`, { headers: { "x-tenant-slug": tenantSlug } }),
+  // `keepalive` no fechamento: a aba pode estar fechando junto.
+  registrarVistoNovidade: (tenantSlug, chave, corpo, { keepalive = false } = {}) =>
+    request(`/api/novidades/${encodeURIComponent(chave)}/visto`, {
+      method: "POST",
+      keepalive,
+      headers: { "x-tenant-slug": tenantSlug },
+      body: JSON.stringify(corpo),
+    }),
+  minhaAvaliacao: (tenantSlug) => request("/api/avaliacoes/minha", { headers: { "x-tenant-slug": tenantSlug } }),
+  avaliar: (tenantSlug, payload) =>
+    request("/api/avaliacoes", { method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(payload) }),
   chamadosNovidades: (tenantSlug) =>
     request("/api/chamados/novidades", { headers: { "x-tenant-slug": tenantSlug } }),
 
@@ -1336,6 +1378,62 @@ export const adminApi = {
   // Progresso bruto dos tutoriais por tenant e usuário; a porcentagem é
   // calculada na tela, que é quem conhece o fluxo.
   listTutoriais: () => adminRequest("/api/admin/tutoriais"),
+
+  // As versões da Omnimob, uma por PR na main (`services/versao.js`).
+  listVersoes: () => adminRequest("/api/admin/versoes"),
+
+  // Avaliações: `{ avaliacoes, total, naoLidas, distribuicao, media }`.
+  listAvaliacoes: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null && v !== false));
+    return adminRequest(`/api/admin/avaliacoes${q.toString() ? `?${q}` : ""}`);
+  },
+  // Comunicados avulsos: a lista (com quantos viram), mandar e encerrar.
+  listComunicados: () => adminRequest("/api/admin/comunicados"),
+  criarComunicado: (payload) => adminRequest("/api/admin/comunicados", { method: "POST", body: JSON.stringify(payload) }),
+  encerrarComunicado: (id) => adminRequest(`/api/admin/comunicados/${id}/encerrar`, { method: "POST" }),
+  // E-mails dos usuários: `{ resumo, semEmail }`.
+  listEmails: (tenantId = "") => adminRequest(`/api/admin/emails${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`),
+  // Contas e acesso: `{ resumo, sessoes, convites }`; encerrar derruba a sessão.
+  listAcessos: (tenantId = "") => adminRequest(`/api/admin/acessos${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`),
+  encerrarSessao: (jti) => adminRequest(`/api/admin/acessos/${encodeURIComponent(jti)}/encerrar`, { method: "POST" }),
+
+  // Controle de Uso: `{ resumo, tenants }`, tirado da trilha de auditoria.
+  uso: () => adminRequest("/api/admin/uso"),
+  // Interessados da landing: `{ interessados, total, pendentes }`.
+  listInteressados: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null));
+    return adminRequest(`/api/admin/interessados${q.toString() ? `?${q}` : ""}`);
+  },
+  marcarInteressado: (id, atendido = true) =>
+    adminRequest(`/api/admin/interessados/${id}/atendido`, { method: "POST", body: JSON.stringify({ atendido }) }),
+
+  // A publicação automática das Novidades: `{ automatica, comEmail }`.
+  novidadesConfig: () => adminRequest("/api/admin/novidades-config"),
+  salvarNovidadesConfig: (payload) =>
+    adminRequest("/api/admin/novidades-config", { method: "PUT", body: JSON.stringify(payload) }),
+
+  // ─── Novidades da semana (revisão e publicação) ───────────────────────────
+  listNovidades: () => adminRequest("/api/admin/novidades"),
+  lerNovidadeAdmin: (chave) => adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}`),
+  salvarNovidade: (chave, conteudo) =>
+    adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}`, { method: "PUT", body: JSON.stringify({ conteudo }) }),
+  // `{ email: true }` manda a cada pessoa o recorte dela; a resposta diz para quantas.
+  publicarNovidade: (chave, payload = {}) =>
+    adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}/publicar`, { method: "POST", body: JSON.stringify(payload) }),
+  despublicarNovidade: (chave) => adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}/despublicar`, { method: "POST" }),
+  vistosNovidade: (chave, tenantId = "") =>
+    adminRequest(`/api/admin/novidades/${encodeURIComponent(chave)}/vistos${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`),
+
+  // Sem `ids`, marca TODAS as não lidas.
+  marcarAvaliacoesLidas: (ids) =>
+    adminRequest("/api/admin/avaliacoes/lidas", { method: "POST", body: JSON.stringify(ids ? { ids } : {}) }),
+
+  /* A trilha da plataforma (`tenantId` nulo): `{ registros, total, page,
+     limit, usuarios }`. Os filtros vazios não vão na URL. */
+  listAuditoria: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== "" && v != null));
+    return adminRequest(`/api/admin/auditoria${q.toString() ? `?${q}` : ""}`);
+  },
 
   /* ─── Quem sou e o que alcanço ─────────────────────────────────────────────
      Relido do banco a cada chamada. O painel chama ao abrir: é o que faz um

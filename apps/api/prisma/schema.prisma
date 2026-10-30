@@ -499,6 +499,11 @@ model Tenant {
   vendas       Venda[]
   chamados     Chamado[]
   pesquisas    PesquisaTrial[]
+  avaliacoes   Avaliacao[]
+  comunicadosVistos ComunicadoVisto[]
+  consumosIa   ConsumoIA[]
+  sessoes      SessaoUsuario[]
+  novidadesVistas NovidadeVisto[]
 
   auditorias  Auditoria[]
   leadEventos LeadEvento[]
@@ -530,6 +535,204 @@ model Tenant {
  * dispensa a pergunta no computador do escritório a receberia de novo no
  * celular alguns minutos depois.
  */
+/// "O que você está achando da Omnimob?" — a nota que o usuário dá ao painel,
+/// pedida de vez em quando depois de trabalho feito (`web/utils/pulsoAvaliacao.js`).
+/// UMA por pessoa: quem respondeu não é perguntado de novo, e é o índice único
+/// que garante. Lida pela aba Avaliações do super-admin. Conta em trial não é
+/// perguntada aqui — ela já tem a `PesquisaTrial`.
+model Avaliacao {
+  id          String    @id @default(cuid())
+  tenantId    String
+  /// Sem FK, como a `Auditoria`: a opinião sobrevive a quem a deu.
+  usuarioId   String
+  usuarioNome String
+  /// 1 a 5 estrelas.
+  nota        Int
+  comentario  String?
+  /// Onde a pessoa estava quando respondeu (a rota do painel).
+  tela        String?
+  /// Quando alguém da Omnimob marcou como lida. Nula acende o contador da aba.
+  lidaEm      DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, usuarioId])
+  @@index([createdAt])
+  @@index([lidaEm])
+  @@map("tb_avaliacao")
+}
+
+/// As NOVIDADES da semana: a apresentação que conta aos clientes o que mudou.
+/// Chega como RASCUNHO pela rotina de terça (`PUT /api/novidades/rascunho/:chave`),
+/// é revisada e publicada no super-admin, e aparece UMA vez para cada pessoa ao
+/// entrar no painel. Sem `tenantId` de propósito: é da Omnimob, igual para todos —
+/// quem corta o que cada um vê é `services/novidades.js` (módulo e permissão).
+/// Ver `docs/novidades/README.md`.
+model Novidade {
+  /// A terça em que a semana fecha (AAAA-MM-DD). É a chave que a rotina manda.
+  chave         String    @id
+  /// RASCUNHO | PUBLICADO
+  status        String    @default("RASCUNHO")
+  /// O mesmo formato do `docs/novidades/exemplo/conteudo.json`.
+  conteudo      Json
+  /// MAIOR.SEMANA (`services/versao.js` › daApresentacao).
+  versao        String?
+  /// "agendamento" (a rotina) ou "painel".
+  origem        String?
+  atualizadoPor String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  publicadoEm   DateTime?
+  publicadoPor  String?
+
+  vistos NovidadeVisto[]
+
+  @@map("tb_novidade")
+}
+
+/// O COMUNICADO AVULSO: o aviso que não é novidade de produto ("manutenção no
+/// sábado às 22h"). De um cliente (`tenantId`) ou de todos (nulo). Abre UMA vez
+/// para cada pessoa ao entrar no painel, enquanto estiver ativo e no prazo.
+model Comunicado {
+  id        String    @id @default(cuid())
+  titulo    String
+  texto     String
+  /// Nulo = todos os clientes. Sem FK: o comunicado é da Omnimob, e o de um
+  /// cliente que saiu fica no histórico da aba.
+  tenantId  String?
+  ativo     Boolean   @default(true)
+  /// Depois disto não abre mais para ninguém (nulo = até encerrar à mão).
+  expiraEm  DateTime?
+  criadoPor String?
+  createdAt DateTime  @default(now())
+
+  vistos ComunicadoVisto[]
+
+  @@index([ativo, createdAt])
+  @@map("tb_comunicado")
+}
+
+model ComunicadoVisto {
+  id           String   @id @default(cuid())
+  comunicadoId String
+  tenantId     String
+  usuarioId    String
+  vistoEm      DateTime @default(now())
+
+  comunicado Comunicado @relation(fields: [comunicadoId], references: [id], onDelete: Cascade)
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([comunicadoId, usuarioId])
+  @@map("tb_comunicado_visto")
+}
+
+/// Cada chamada ao Gemini, com os tokens que ela gastou. Gravada num ponto só
+/// (`aiService.callGemini`), com a imobiliária, a pessoa e a rota tiradas do
+/// contexto da auditoria — rota nova de IA entra na conta sozinha.
+model ConsumoIA {
+  id            String   @id @default(cuid())
+  tenantId      String
+  usuarioId     String?
+  /// A rota que pediu ("POST /api/properties/:id/ai/gerar"): é o "recurso".
+  rota          String?
+  tokensEntrada Int      @default(0)
+  tokensSaida   Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("tb_consumo_ia")
+}
+
+/// Uma SESSÃO do painel, pelo `jti` do token. Registrada no primeiro uso (e o
+/// uso, de 5 em 5 minutos) pelo `requireAuth` — assim toda origem de token
+/// (senha, Google, demonstração, "Entrar" do suporte) entra sem ninguém
+/// lembrar. Encerrar é gravar o `jti` em `SessaoRevogada`, que já existia.
+model SessaoUsuario {
+  jti         String   @id
+  usuarioId   String
+  tenantId    String
+  /// "painel" | "demo" | "reativacao" | "suporte"
+  tipo        String   @default("painel")
+  ip          String?
+  userAgent   String?
+  criadaEm    DateTime @default(now())
+  ultimoUsoEm DateTime @default(now())
+  expiraEm    DateTime
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, expiraEm])
+  @@index([usuarioId])
+  @@map("tb_sessao_usuario")
+}
+
+/// A publicação AUTOMÁTICA das Novidades, numa linha só (id = 1). Ligada, o
+/// rascunho que a rotina entrega já sai publicado (e por e-mail, se `comEmail`),
+/// sem revisão. Desligada (o padrão), uma pessoa revisa e publica.
+model NovidadeConfig {
+  id            Int      @id @default(1)
+  automatica    Boolean  @default(false)
+  comEmail      Boolean  @default(true)
+  atualizadoPor String?
+  updatedAt     DateTime @updatedAt
+
+  @@map("tb_novidade_config")
+}
+
+/// Quem pediu contato comercial pela landing (`POST /public/interesse`). Antes
+/// só virava e-mail, e um envio que falhava perdia o interesse para sempre.
+/// Da Omnimob, sem `tenantId`: a pessoa ainda não é cliente.
+model InteresseComercial {
+  id          String    @id @default(cuid())
+  imobiliaria String
+  email       String
+  telefone    String?
+  plano       String?
+  temWhatsapp Boolean   @default(false)
+  /// Se o e-mail para o comercial saiu: "enviado" | "falhou" | "sem-destino".
+  envio       String?
+  /// Quando alguém da Omnimob marcou como atendido.
+  atendidoEm  DateTime?
+  atendidoPor String?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+  @@map("tb_interesse_comercial")
+}
+
+/// Uma linha por vez que a apresentação abriu para alguém: até onde foi, se
+/// chegou ao fim, quanto tempo ficou. A aba Novidades junta por pessoa. É
+/// também o "já viu", que impede o comunicado de abrir de novo.
+model NovidadeVisto {
+  id          String    @id @default(cuid())
+  chave       String
+  tenantId    String
+  /// Sem FK, como a `Auditoria`: o registro sobrevive a quem viu.
+  usuarioId   String
+  usuarioNome String
+  /// "comunicado" (abriu sozinho) ou "menu" (Ajuda › Notas de versão).
+  origem      String?
+  /// "celular" | "computador"
+  dispositivo String?
+  totalSlides Int       @default(0)
+  slideMax    Int       @default(1)
+  chegouAoFim Boolean   @default(false)
+  abertoEm    DateTime  @default(now())
+  ultimoEm    DateTime  @default(now())
+  fechadoEm   DateTime?
+
+  novidade Novidade @relation(fields: [chave], references: [chave], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([chave, tenantId])
+  @@index([usuarioId, chave])
+  @@map("tb_novidade_visto")
+}
+
 model PesquisaTrial {
   id         String   @id @default(cuid())
   tenantId   String   @map("tenant_id")
@@ -638,6 +841,22 @@ model CargoSuperAdmin {
   verSeguranca Boolean @default(false)
   verUsuarios  Boolean @default(false)
   verCargos    Boolean @default(false)
+  /** Auditoria: quem da Omnimob mexeu em quê (a trilha com `tenantId` nulo). */
+  verAuditoria  Boolean @default(false)
+  /** Avaliações: as notas que os usuários das imobiliárias dão ao painel. */
+  verAvaliacoes Boolean @default(false)
+  /** Novidades: ver e revisar a apresentação semanal. Publicar é outra caixa. */
+  verNovidades  Boolean @default(false)
+  /** Controle de Uso: quem usa, quem esfriou e quem parou (tirado da trilha). */
+  verUso        Boolean @default(false)
+  /** Interessados: quem pediu contato comercial pela landing. */
+  verInteressados Boolean @default(false)
+  /** Comunicados: ver e mandar o aviso avulso (um cliente ou todos). */
+  verComunicados Boolean @default(false)
+  /** E-mails dos usuários: quem tem e quem usa sem ter. */
+  verEmails      Boolean @default(false)
+  /** Contas e acesso: as sessões abertas, convites pendentes e o Google. */
+  verAcessos     Boolean @default(false)
 
   // ── Por ação, dentro da aba ──
   /** Tenants: entrar na conta do cliente como o Administrador dela. */
@@ -650,6 +869,10 @@ model CargoSuperAdmin {
   resolverChamado Boolean @default(false)
   /** Usuários: criar, editar, desativar e reenviar convite. */
   gerenciarUsuarios Boolean @default(false)
+  /** Novidades: publicar para todos os clientes (e mandar o e-mail). */
+  publicarNovidades Boolean @default(false)
+  /** Contas e acesso: encerrar a sessão de alguém (derruba na hora). */
+  encerrarSessoes   Boolean @default(false)
 
   superAdmins SuperAdmin[]
 
@@ -912,6 +1135,7 @@ model Usuario {
   @@map("tb_usuario")
 
   sessoesRevogadas SessaoRevogada[]
+  sessoes          SessaoUsuario[]
 }
 
 /**

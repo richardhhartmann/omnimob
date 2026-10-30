@@ -221,4 +221,44 @@ test("cargos do super-admin", async (t) => {
     const criacao = linhas.find((l) => l.acao === "CRIOU" && l.entidade === "SuperAdmin");
     assert.equal(criacao.dados.senha, "‹oculto›");
   });
+
+  await t.test("a trilha da plataforma é lida pela aba Auditoria, e só por quem tem a aba", async () => {
+    assert.equal((await como(atendente).get("/api/admin/auditoria")).status, 403);
+
+    const r = await como(chefe).get(`/api/admin/auditoria?usuarioId=${chefe.id}&acao=CRIOU`);
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.ok(r.json.registros.some((l) => l.entidade === "CargoSuperAdmin"));
+    // Só a plataforma: linha de imobiliária nenhuma entra aqui.
+    assert.ok(r.json.registros.every((l) => l.tenantId === null));
+    assert.ok(r.json.usuarios.some((u) => u.id === chefe.id));
+  });
+
+  await t.test("editar uma imobiliária pelo super-admin entra na trilha da plataforma", async () => {
+    const nome = `${PREFIXO}Renomeada`;
+    const r = await como(chefe).put(`/api/admin/tenants/${imobiliaria.tenant.id}`, { name: nome });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    const trilha = await como(chefe).get(`/api/admin/auditoria?usuarioId=${chefe.id}`);
+    const linha = trilha.json.registros.find((l) => l.entidade === "Tenant" && l.entidadeId === imobiliaria.tenant.id);
+    assert.ok(linha, "a edição aparece na aba Auditoria");
+    assert.equal(linha.tenantId, null, "sem imobiliária: a exclusão dela não apaga a linha");
+    assert.equal(linha.acao, "ALTEROU");
+  });
+
+  await t.test("Controle de Uso e Interessados abrem só com a aba", async () => {
+    assert.equal((await como(atendente).get("/api/admin/uso")).status, 403);
+    assert.equal((await como(atendente).get("/api/admin/interessados")).status, 403);
+    const uso = await como(chefe).get("/api/admin/uso");
+    assert.equal(uso.status, 200, JSON.stringify(uso.json));
+    const daTeste = uso.json.tenants.find((t) => t.id === imobiliaria.tenant.id);
+    assert.ok(daTeste);
+    assert.ok(["ativa", "esfriando", "parada", "nunca"].includes(daTeste.situacao));
+    assert.equal(daTeste.usuarios, 1);
+  });
+
+  await t.test("o Versionamento abre para todo cargo do painel", async () => {
+    const r = await como(atendente).get("/api/admin/versoes");
+    assert.equal(r.status, 200);
+    assert.ok(r.json.no_ar?.numero);
+    assert.ok(Array.isArray(r.json.versoes));
+  });
 });

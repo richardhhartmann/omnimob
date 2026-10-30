@@ -139,7 +139,7 @@ function falasDe(c) {
   ];
 }
 
-export function AdminChamadosPage({ aoContar }) {
+export function AdminChamadosPage({ aoContar, ativa = true, tenantSlug = "" }) {
   const [todos, setTodos] = useState([]);
   const [porStatus, setPorStatus] = useState({});
   const [internosAbertos, setInternosAbertos] = useState(0);
@@ -203,6 +203,8 @@ export function AdminChamadosPage({ aoContar }) {
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return todos.filter((c) => {
+      // O cliente em foco: o contador do menu continua o de todos.
+      if (tenantSlug && c.tenantSlug !== tenantSlug) return false;
       if (filtro === "abertos" && c.resolvido) return false;
       if (filtro === "nossa" && !NOSSA_VEZ[c.status]) return false;
       if (filtro === "resolvidos" && !c.resolvido) return false;
@@ -211,7 +213,7 @@ export function AdminChamadosPage({ aoContar }) {
       return [c.titulo, c.tenantNome, c.tenantSlug, c.usuario, c.abertoPor].some((v) => String(v || "").toLowerCase().includes(termo))
         || String(c.numero) === termo.replace(/^#|^n[ºo°]?\s*/, "");
     });
-  }, [todos, filtro, busca]);
+  }, [todos, filtro, busca, tenantSlug]);
 
   /* Uma resposta do servidor atualiza a conversa guardada e a linha da lista
      — sempre pelo número do PEDIDO. */
@@ -267,17 +269,18 @@ export function AdminChamadosPage({ aoContar }) {
     ajustar();
     window.addEventListener("resize", ajustar);
     return () => window.removeEventListener("resize", ajustar);
-  }, [carregouUmaVez]);
+    // `ativa`: escondida, a aba mede topo 0; a altura certa só sai ao reaparecer.
+  }, [carregouUmaVez, ativa]);
 
   /* A conversa aberta e a fila se atualizam sozinhas: a conversa a cada 15 s,
      a fila a cada 30 s — o contador da aba é o que avisa que chegou trabalho. */
   useEffect(() => {
     const id = setInterval(() => {
-      if (document.hidden || aberta == null || enviando) return;
+      if (document.hidden || !ativa || aberta == null || enviando) return;
       atualizarConversa(aberta, true);
     }, 15000);
     return () => clearInterval(id);
-  }, [aberta, enviando, atualizarConversa]);
+  }, [aberta, enviando, atualizarConversa, ativa]);
   useEffect(() => {
     const id = setInterval(() => { if (!document.hidden) carregarLista(true); }, 30000);
     return () => clearInterval(id);

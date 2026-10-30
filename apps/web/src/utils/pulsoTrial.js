@@ -31,6 +31,7 @@
    ──────────────────────────────────────────────────────────────────────────── */
 
 import { lerDoTenant, gravarNoTenant, CHAVES } from "./chaveDoTenant";
+import { contarParaAvaliacao } from "./pulsoAvaliacao";
 
 // ─── 1. Barramento de ações CRUD ─────────────────────────────────────────────
 
@@ -96,6 +97,8 @@ export function notificarRequisicao(path, metodo) {
     registrarAcao(achada.origem);
     // Conta como uso; a pergunta espera a pessoa sair da página.
     marcarPendencia(achada.origem);
+    // O pedido de avaliação conta as MESMAS operações, com contador próprio.
+    contarParaAvaliacao(achada.origem);
   } catch { /* o pulso é acessório: nunca atrapalha a requisição */ }
 }
 

@@ -20,6 +20,8 @@ import { portalPorCaminho, portaisDoImovel } from "../services/portais.js";
 import { proximoResponsavel } from "../services/distribuicaoLeads.js";
 import { dadosDaVitrine } from "../services/dadosDaVitrine.js";
 import { emitir } from "../services/webhooks.js";
+import { versaoAtual } from "../services/versao.js";
+import { avisarErro } from "../services/avisoDeErro.js";
 import {
   criarTrial,
   assinarConvite,
@@ -358,12 +360,24 @@ publicRouter.post("/interesse", interesseLimiter, async (req, res) => {
     return res.json({ message: "Interesse registrado." });
   }
 
+  /* Guardado ANTES do e-mail: é o que a aba Interessados do super-admin lê, e
+     é o que impede um envio que falhou de perder o interesse para sempre.
+     Se o banco falhar, segue o caminho de antes (só o e-mail). */
+  const guardado = await prisma.interesseComercial
+    .create({ data: { imobiliaria, email, telefone: telefone || null, plano: plano || null, temWhatsapp: Boolean(temWhatsapp) } })
+    .catch((e) => { console.error("[interesse] não guardado:", e.message); return null; });
+  const anotarEnvio = (envio) =>
+    guardado ? prisma.interesseComercial.update({ where: { id: guardado.id }, data: { envio } }).catch(() => {}) : null;
+
   const destino = process.env.CONTATO_EMAIL;
   if (!destino) {
     console.error(
       "[interesse] CONTATO_EMAIL não configurada — interesse recebido e NÃO entregue:",
       JSON.stringify(parsed.data),
     );
+    await anotarEnvio("sem-destino");
+    // Guardado, o interesse não se perdeu: está na aba Interessados.
+    if (guardado) return res.json({ message: "Interesse registrado." });
     return res.status(503).json({
       error: "Canal de contato indisponível no momento. Tente novamente mais tarde.",
     });
@@ -378,7 +392,8 @@ publicRouter.post("/interesse", interesseLimiter, async (req, res) => {
     replyTo: email, // responder no cliente de e-mail já cai no interessado
   });
 
-  if (envio.status === "failed") {
+  await anotarEnvio(envio.status === "failed" ? "falhou" : "enviado");
+  if (envio.status === "failed" && !guardado) {
     console.error("[interesse] envio falhou, interesse perdido:", JSON.stringify(parsed.data));
     return res.status(502).json({ error: "Não foi possível enviar agora. Tente novamente." });
   }
@@ -705,6 +720,34 @@ publicRouter.get("/:slug/marca", async (req, res) => {
     return res.status(500).json({ error: "Erro interno no servidor." });
   }
 });
+
+/* O relato de erro do navegador (`web/src/utils/sentinelaDeErros.js`). Público
+   porque quebra também na vitrine e no login, onde não há sessão; por isso o
+   limite e o corte de cada campo — é texto de qualquer um indo para um e-mail.
+   Responde 204 sempre: quem relata não tem o que fazer com a resposta. */
+const errosLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+const corte = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+publicRouter.post("/erros", errosLimiter, (req, res) => {
+  const b = req.body || {};
+  if (corte(b.mensagem, 1)) {
+    avisarErro({
+      origem: "navegador",
+      mensagem: corte(b.mensagem, 500),
+      pilha: corte(b.pilha, 4000),
+      url: corte(b.url, 500),
+      contexto: {
+        Imobiliária: corte(b.tenant, 80),
+        Usuário: corte(b.usuario, 80),
+        Navegador: corte(req.headers["user-agent"], 200),
+      },
+    });
+  }
+  return res.status(204).end();
+});
+
+/* A versão no ar (`services/versao.js`), para o painel do cliente mostrar a
+   dele. Pública e sem banco: é o que o suporte pede ao cliente ler. */
+publicRouter.get("/versao", (_req, res) => res.json(versaoAtual()));
 
 publicRouter.get("/planos", async (_req, res) => {
   try {
