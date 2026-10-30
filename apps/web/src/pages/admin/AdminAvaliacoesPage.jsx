@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "../../api";
 import { Alert, Button, Eyebrow, Reveal } from "../../styles/omnimobKit";
+import { montarParede } from "../../utils/relatosDaParede";
 
 /* ────────────────────────────────────────────────────────────────────────────
    AVALIAÇÕES — o que os usuários das imobiliárias acham do painel.
@@ -11,6 +12,11 @@ import { Alert, Button, Eyebrow, Reveal } from "../../styles/omnimobKit";
    lido: é o botão de cada uma, ou "todas".
 
    `tenantId` filtra um cliente (o cliente em foco do painel).
+
+   E a PAREDE "Por que Omnimob" da landing: quem autorizou a publicação ganha
+   o botão de pôr no ar (travado se a IA achou o texto incoerente com a nota),
+   e os depoimentos de exemplo ligam e desligam aqui. A parede é montada pela
+   mesma `montarParede` da landing, então "sem vaga" aqui é sem vaga lá.
    ──────────────────────────────────────────────────────────────────────────── */
 
 const estrelas = (n) => "★".repeat(n) + "☆".repeat(5 - n);
@@ -19,7 +25,8 @@ const COR = { 1: "#f87171", 2: "#fb923c", 3: "#fbbf24", 4: "#a3e635", 5: "#34d39
 export function AdminAvaliacoesPage({ aoContar, tenantId = "" }) {
   const [dados, setDados] = useState(null);
   const [pagina, setPagina] = useState(1);
-  const [filtros, setFiltros] = useState({ nota: "", naoLidas: false });
+  const [filtros, setFiltros] = useState({ nota: "", naoLidas: false, publicaveis: false });
+  const [parede, setParede] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
@@ -27,8 +34,12 @@ export function AdminAvaliacoesPage({ aoContar, tenantId = "" }) {
     setCarregando(true);
     setErro("");
     try {
-      const r = await adminApi.listAvaliacoes({ ...filtros, naoLidas: filtros.naoLidas ? "1" : "", tenantId, page: pagina });
+      const [r, p] = await Promise.all([
+        adminApi.listAvaliacoes({ ...filtros, naoLidas: filtros.naoLidas ? "1" : "", publicaveis: filtros.publicaveis ? "1" : "", tenantId, page: pagina }),
+        adminApi.paredeDeRelatos(),
+      ]);
       setDados(r);
+      setParede(p);
       aoContar?.(r.naoLidas);
     } catch (e) {
       setErro(e.message || "Erro ao carregar as avaliações.");
@@ -47,6 +58,19 @@ export function AdminAvaliacoesPage({ aoContar, tenantId = "" }) {
       setErro(e.message || "Erro ao marcar como lida.");
     }
   }
+
+  async function naParede(acao) {
+    setErro("");
+    try {
+      await acao();
+      await carregar();
+    } catch (e) {
+      setErro(e.message || "Erro ao mudar a parede.");
+    }
+  }
+
+  const montada = parede ? montarParede(parede) : null;
+  const reaisNoAr = parede?.reais.length || 0;
 
   const mudar = (campo, valor) => {
     setPagina(1);
@@ -98,6 +122,10 @@ export function AdminAvaliacoesPage({ aoContar, tenantId = "" }) {
           <input type="checkbox" checked={filtros.naoLidas} onChange={(e) => mudar("naoLidas", e.target.checked)} />
           Só as não lidas{dados ? ` (${dados.naoLidas})` : ""}
         </label>
+        <label className="av-check">
+          <input type="checkbox" checked={filtros.publicaveis} onChange={(e) => mudar("publicaveis", e.target.checked)} />
+          Só as que autorizaram publicar
+        </label>
         {dados?.naoLidas ? (
           <Button as="button" type="button" variant="outline" className="dl-btn--sm" arrow={false} onClick={() => marcar(null)}>
             Marcar todas como lidas
@@ -130,9 +158,50 @@ export function AdminAvaliacoesPage({ aoContar, tenantId = "" }) {
               )}
             </div>
             {a.comentario ? <p className="av-item__texto">“{a.comentario}”</p> : null}
+            {a.permitePublicar ? (
+              <div className="av-parede">
+                <span className="av-selo">autorizou publicar</span>
+                <span className={`av-selo av-selo--${a.coerencia === "NAO_CONDIZ" ? "ruim" : a.coerencia === "CONDIZ" ? "bom" : "neutro"}`}>
+                  {a.coerencia === "NAO_CONDIZ" ? "IA: texto não condiz com a nota" : a.coerencia === "CONDIZ" ? "IA: texto condiz" : "IA: não conferido"}
+                </span>
+                <Button
+                  as="button" type="button" variant={a.publicadaEm ? "ghost" : "outline"} className="dl-btn--sm" arrow={false}
+                  disabled={!a.publicadaEm && (a.coerencia === "NAO_CONDIZ" || reaisNoAr >= (parede?.limite || 24))}
+                  onClick={() => naParede(() => adminApi.publicarAvaliacao(a.id, !a.publicadaEm))}
+                >
+                  {a.publicadaEm ? "Tirar da landing" : "Pôr na landing"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
+
+      {montada ? (
+        <section className="av-demos">
+          <h2 className="av-demos__titulo">Parede da landing</h2>
+          <p className="av-demos__desc">
+            {reaisNoAr} de {parede.limite} vagas com avaliações reais. Os exemplos completam o resto, na ordem abaixo;
+            cada real que entra tira do ar o último exemplo ligado.
+          </p>
+          <div className="sa-list">
+            {montada.estadoDosExemplos.map((d) => (
+              <div key={d.chave} className="av-item av-item--demo">
+                <div className="av-item__topo">
+                  <span className="av-selo">demo</span>
+                  <strong className="av-item__quem">{d.nome}</strong>
+                  <span className="dl-mono av-item__onde">{d.imobiliaria}</span>
+                  <span className={`av-selo av-selo--${d.noAr ? "bom" : "neutro"}`}>{d.noAr ? "no ar" : d.ligado ? "sem vaga" : "desligado"}</span>
+                  <button type="button" className="av-lida" onClick={() => naParede(() => adminApi.relatoDemoNoAr(d.chave, !d.ligado))}>
+                    {d.ligado ? "Desligar" : "Ligar"}
+                  </button>
+                </div>
+                <p className="av-item__texto">“{d.frase}”</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {paginas > 1 ? (
         <div className="au-paginas">
@@ -169,6 +238,14 @@ export const AVALIACOES_CSS = `
 .av-item__quem { font-size: 13.5px; color: var(--strong); }
 .av-item__onde, .av-item__quando { color: var(--placeholder); font-size: 9px; text-transform: none; }
 .av-item__quando { margin-left: auto; }
+.av-parede { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.av-selo { font-size: 10.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--subtle); }
+.av-selo--bom { color: #34d399; border-color: rgba(52,211,153,0.4); }
+.av-selo--ruim { color: #f87171; border-color: rgba(248,113,113,0.45); }
+.av-demos { margin-top: 32px; }
+.av-demos__titulo { margin: 0 0 4px; font-size: 18px; color: var(--strong); }
+.av-demos__desc { margin: 0 0 14px; font-size: 13px; color: var(--subtle); }
+.av-item--demo .av-item__texto { color: var(--subtle); }
 .av-item__texto { margin: 10px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--default); white-space: pre-wrap; }
 .dl-root .av-lida {
   width: auto; font-family: inherit; font-size: 11.5px; color: var(--accent-soft); background: none; border: none; padding: 0; cursor: pointer; box-shadow: none; transform: none;

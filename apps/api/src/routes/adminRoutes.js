@@ -46,6 +46,7 @@ import { historico, versaoAtual } from "../services/versao.js";
 import { chaveValida, configDasNovidades, normalizarNovidade, publicarNovidade, resumoDaNovidade } from "../services/novidades.js";
 import { controleDeUso } from "../services/controleDeUso.js";
 import { dispositivoDe } from "../services/sessoes.js";
+import { LIMITE_DA_PAREDE, publicavel, relatosNoAr } from "../services/relatosDaParede.js";
 import {
   COM_CONTAGEM as CHAMADO_COM_CONTAGEM,
   COM_CONVERSA as CHAMADO_COM_CONVERSA,
@@ -1680,6 +1681,7 @@ adminRouter.get("/avaliacoes", requirePermissaoAdmin("verAvaliacoes"), async (re
       ...(req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {}),
       ...(nota >= 1 && nota <= 5 ? { nota } : {}),
       ...(req.query.naoLidas === "1" ? { lidaEm: null } : {}),
+      ...(req.query.publicaveis === "1" ? { permitePublicar: true } : {}),
     };
     const [avaliacoes, total, porNota, naoLidas] = await Promise.all([
       prisma.avaliacao.findMany({
@@ -1715,6 +1717,60 @@ adminRouter.post("/avaliacoes/lidas", requirePermissaoAdmin("verAvaliacoes"), as
   } catch (err) {
     console.error("[POST /admin/avaliacoes/lidas]", err);
     return res.status(500).json({ error: "Erro ao marcar como lidas." });
+  }
+});
+
+/* ── A parede "Por que Omnimob" ──────────────────────────────────────────────
+   O que está no ar, e as duas chaves: pôr ou tirar uma avaliação real, ligar
+   ou desligar um depoimento de exemplo. As regras moram em
+   `services/relatosDaParede.js`; quem monta a parede (reais primeiro, exemplos
+   completando as vagas) é a tela, com a mesma função da landing.
+   shortcut: publicar usa a `verAvaliacoes`; uma permissão de AÇÃO própria
+   exige migration no banco da plataforma (compartilhado dev/prod) — criar
+   quando houver quem veja as avaliações sem dever publicá-las. */
+adminRouter.get("/avaliacoes/parede", requirePermissaoAdmin("verAvaliacoes"), async (_req, res) => {
+  try {
+    return res.json({ limite: LIMITE_DA_PAREDE, ...(await relatosNoAr(prisma)) });
+  } catch (err) {
+    console.error("[GET /admin/avaliacoes/parede]", err);
+    return res.status(500).json({ error: "Erro ao carregar a parede." });
+  }
+});
+
+adminRouter.post("/avaliacoes/:id/parede", requirePermissaoAdmin("verAvaliacoes"), async (req, res) => {
+  try {
+    const publicar = Boolean(req.body?.publicar);
+    const avaliacao = await prisma.avaliacao.findUnique({ where: { id: String(req.params.id) } });
+    if (!avaliacao) return res.status(404).json({ error: "Avaliação não encontrada." });
+    if (publicar) {
+      if (!avaliacao.permitePublicar) return res.status(409).json({ error: "Quem avaliou não autorizou a publicação." });
+      if (!publicavel(avaliacao)) return res.status(409).json({ error: "O texto não condiz com a nota; não vai para a landing." });
+      const noAr = await prisma.avaliacao.count({ where: { publicadaEm: { not: null } } });
+      if (!avaliacao.publicadaEm && noAr >= LIMITE_DA_PAREDE) {
+        return res.status(409).json({ error: `A parede já tem ${LIMITE_DA_PAREDE} avaliações reais. Tire uma do ar antes.` });
+      }
+    }
+    const atualizada = await prisma.avaliacao.update({
+      where: { id: avaliacao.id },
+      data: { publicadaEm: publicar ? avaliacao.publicadaEm || new Date() : null },
+      select: { id: true, publicadaEm: true },
+    });
+    return res.json(atualizada);
+  } catch (err) {
+    console.error("[POST /admin/avaliacoes/:id/parede]", err);
+    return res.status(500).json({ error: "Erro ao publicar a avaliação." });
+  }
+});
+
+adminRouter.post("/avaliacoes/demo/:chave", requirePermissaoAdmin("verAvaliacoes"), async (req, res) => {
+  try {
+    const chave = String(req.params.chave).slice(0, 120);
+    if (req.body?.noAr) await prisma.relatoDemoOculto.deleteMany({ where: { chave } });
+    else await prisma.relatoDemoOculto.upsert({ where: { chave }, create: { chave }, update: {} });
+    return res.json({ chave, noAr: Boolean(req.body?.noAr) });
+  } catch (err) {
+    console.error("[POST /admin/avaliacoes/demo/:chave]", err);
+    return res.status(500).json({ error: "Erro ao mudar o depoimento de exemplo." });
   }
 });
 

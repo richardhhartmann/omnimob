@@ -22,6 +22,7 @@ import { dadosDaVitrine } from "../services/dadosDaVitrine.js";
 import { emitir } from "../services/webhooks.js";
 import { versaoAtual } from "../services/versao.js";
 import { avisarErro } from "../services/avisoDeErro.js";
+import { relatosNoAr } from "../services/relatosDaParede.js";
 import {
   criarTrial,
   assinarConvite,
@@ -789,6 +790,21 @@ function xml(texto) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+/* ── A parede "Por que Omnimob" da landing ───────────────────────────────────
+   As avaliações reais que a Omnimob publicou (com o consentimento de quem as
+   escreveu) e os depoimentos de exemplo tirados do ar. A landing monta a
+   parede com os exemplos que já carrega: se isto falhar, ela segue com eles.
+   Sai só o que o cartão mostra — nome, cargo, imobiliária, cidade e o texto. */
+publicRouter.get("/relatos", async (_req, res) => {
+  try {
+    res.set("Cache-Control", "public, max-age=300, s-maxage=300");
+    return res.json(await relatosNoAr(prisma));
+  } catch (err) {
+    console.error("[GET /public/relatos]", err);
+    return res.status(500).json({ error: "Erro ao carregar os relatos." });
+  }
+});
 
 /* ── Vitrines publicadas ─────────────────────────────────────────────────────
    Alimenta a página `/vitrines` da Omnimob: as vitrines que estão de fato no

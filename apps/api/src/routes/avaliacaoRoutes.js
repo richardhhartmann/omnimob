@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { requireTenant } from "../middlewares/tenantMiddleware.js";
+import { conferirCoerencia, podeConsentir } from "../services/relatosDaParede.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    "O que você está achando da Omnimob?" — do lado da imobiliária.
@@ -52,6 +53,9 @@ const avaliacaoSchema = z.object({
   nota: z.number().int().min(1).max(5),
   comentario: z.string().trim().max(2000).optional().nullable(),
   tela: z.string().trim().max(200).optional().nullable(),
+  /* "Pode publicar na página da Omnimob". A tela só oferece com 4+ estrelas e
+     comentário; o servidor confere de novo, e fora disso grava `false`. */
+  permitePublicar: z.boolean().optional(),
 });
 
 avaliacaoRouter.post("/", async (req, res) => {
@@ -61,19 +65,26 @@ avaliacaoRouter.post("/", async (req, res) => {
   }
   const lido = avaliacaoSchema.safeParse(req.body || {});
   if (!lido.success) return res.status(400).json({ error: "Escolha de 1 a 5 estrelas.", details: lido.error.flatten() });
+  const { nota, comentario } = lido.data;
+  const permitePublicar = Boolean(lido.data.permitePublicar) &&
+    podeConsentir({ nota, comentario, trial: motivo === "trial" || motivo === "demonstracao" });
   try {
     const criada = await prisma.avaliacao.create({
       data: {
         tenantId: req.tenant.id,
         usuarioId: req.authUserId,
         usuarioNome: req.authUserNome || "",
-        nota: lido.data.nota,
-        comentario: lido.data.comentario || null,
+        usuarioCargo: req.authCargo?.descricao || null,
+        nota,
+        comentario: comentario || null,
         tela: lido.data.tela || null,
+        permitePublicar,
       },
-      select: { id: true, nota: true },
+      select: { id: true, nota: true, comentario: true, permitePublicar: true },
     });
-    return res.status(201).json(criada);
+    // Só quem pode ir para a landing gasta uma chamada de IA.
+    if (permitePublicar) conferirCoerencia(prisma, criada);
+    return res.status(201).json({ id: criada.id, nota: criada.nota, permitePublicar });
   } catch (erro) {
     if (erro.code === "P2002") return res.status(409).json({ error: "Você já avaliou. Obrigado!" });
     console.error("[POST /avaliacoes]", erro);
