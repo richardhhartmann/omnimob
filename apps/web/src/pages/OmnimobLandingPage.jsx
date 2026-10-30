@@ -3064,13 +3064,16 @@ ${GV4_CSS}`} />
               >
                 <span className="dl-hero__demo-brilho" aria-hidden="true" />
                 <DashboardMockup />
-                {/* A pílula roxa, no CENTRO do mockup (50% / 50%), com o
-                    cursor: "clique aqui e faça o tour". Por cima da imagem,
-                    como um botão de play sobre um vídeo. */}
+                {/* A pílula no CENTRO do mockup (50% / 50%), como um botão
+                    de play sobre um vídeo. É o botão de destaque da página
+                    (`dl-btn--accent`): mesmo índigo, mesma pílula, o ícone
+                    no mesmo círculo da seta dos outros botões. */}
                 <span className="dl-hero__demo-selo" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M5 3l14 8.5-6.2 1.3L16 19l-2.6 1.5-3.2-6.1L5 18.5V3z" />
-                  </svg>
+                  <span className="dl-hero__demo-play">
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+                      <path d="M2.2 1.1v7.8L8.8 5z" />
+                    </svg>
+                  </span>
                   Faça um tour guiado
                 </span>
               </Link>
@@ -3958,9 +3961,9 @@ const CSS = `
    Referencia: a imagem do produto e um <a>, com um borrao roxo grande atras
    (150% de largura, deslocado para cima e para a esquerda, blur de 90px). O
    mockup ja tem um brilho proprio (.dl-stage__glow), menor; este e a nevoa de
-   fundo, mais larga e mais fraca, e os dois convivem. A etiqueta no canto
-   inferior diz o que o clique faz e cresce um pouco no hover — o mockup
-   sozinho nao parece clicavel, e e por isso que ela existe.
+   fundo, mais larga e mais fraca, e os dois convivem. O selo no centro diz o
+   que o clique faz e cresce um pouco no hover — o mockup sozinho nao parece
+   clicavel, e e por isso que ele existe.
    (Sem crases nestes comentarios: template literal.) */
 .dl-hero__demo {
   position: relative; display: block; color: inherit; text-decoration: none;
@@ -3973,21 +3976,31 @@ const CSS = `
   background: #6d28d9; opacity: 0.2; filter: blur(90px);
 }
 .dl-hero__demo .dl-stage { position: relative; z-index: 1; }
+/* O selo e o botao de destaque da pagina (dl-btn--accent) posto sobre a
+   imagem: o mesmo indigo, a mesma pilula e o icone no mesmo circulo
+   translucido da seta. Era um retangulo violeta a 75% de opacidade, de um
+   roxo que nao aparece em nenhum outro lugar, e lavado sobre o grafico. O
+   halo (o primeiro box-shadow) separa a pilula do mockup sem esconder nada. */
 .dl-hero__demo-selo {
   position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  display: inline-flex; align-items: center; gap: 9px; white-space: nowrap;
-  padding: 11px 20px 11px 16px; border-radius: 12px;
-  background: linear-gradient(180deg, #6d28d9 0%, #4c1d95 100%);
-  border: 1px solid rgba(196,181,253,0.35);
-  box-shadow: 0 14px 34px -12px rgba(109,40,217,0.75), inset 0 1px 0 rgba(255,255,255,0.18);
-  color: #fff; font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
-  opacity: 0.75;
+  display: inline-flex; align-items: center; gap: 10px; white-space: nowrap;
+  padding: 7px 20px 7px 7px; border-radius: 999px;
+  background: var(--accent); color: #fff;
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 0 0 6px rgba(99,102,241,0.16), 0 18px 40px -14px rgba(99,102,241,0.8);
+  font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  transition: transform 0.25s var(--ease-out), box-shadow 0.25s ease, background 0.18s ease;
 }
-.dl-hero__demo-selo svg { flex: none; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.35)); }
+.dl-hero__demo-play {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 28px; height: 28px; border-radius: 999px; background: rgba(255,255,255,0.18);
+}
+/* O triangulo pesa a esquerda; 1px para a direita o centra no olho. */
+.dl-hero__demo-play svg { margin-left: 1px; }
 .dl-hero__demo:hover .dl-hero__demo-selo {
   transform: translate(-50%, -50%) scale(1.04);
-  box-shadow: 0 20px 40px -12px rgba(109,40,217,0.9), inset 0 1px 0 rgba(255,255,255,0.22);
+  background: #5457e0;
+  box-shadow: 0 0 0 9px rgba(99,102,241,0.14), 0 22px 44px -14px rgba(99,102,241,0.9);
 }
 /* O mockup endireita no hover do palco; com o link em volta, o hover e do
    link inteiro — inclusive da etiqueta. */
@@ -6899,7 +6912,8 @@ ${editorCSS()}
   .dl-hero__copy > * { order: 1; margin-bottom: 22px; }
   .dl-stage { order: 2; margin-bottom: 24px; width: 100%; }
   .dl-hero__copy > :last-child { order: 3; margin-bottom: 0; }
-  .dl-hero__demo-selo { font-size: 13.5px; padding: 9px 16px 9px 13px; }
+  .dl-hero__demo-selo { font-size: 13px; padding: 6px 16px 6px 6px; }
+  .dl-hero__demo-play { width: 24px; height: 24px; }
   /* Mesmo motivo do .dl-hero__grid: "center" serve à grade de duas colunas do
      desktop, mas em coluna ele encolhe cada bloco até o conteúdo e centraliza.
      Quem denunciava era o eyebrow — por ser inline-flex, ele é o mais estreito
