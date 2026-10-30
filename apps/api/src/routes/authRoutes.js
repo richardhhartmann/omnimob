@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import { prisma } from "../db.js";
-import { sendEmail } from "../services/notificationService.js";
+import { emailDoUsuario, sendEmail } from "../services/notificationService.js";
 import { emailRecuperarSenha } from "../services/emailTemplates.js";
 import { requireAuth, ESCOPO_REATIVACAO, ESCOPO_DEMO } from "../middlewares/authMiddleware.js";
 import { googleConfigurado, verificarTokenDoGoogle } from "../services/google.js";
@@ -971,19 +971,22 @@ authRouter.post("/recuperar-senha", async (req, res) => {
 
     /* Aceita login ou e-mail: quem esqueceu a senha costuma não lembrar do
        login com sufixo da imobiliária ("joao-imobiliaria-centro"), e o e-mail
-       é o que a pessoa sabe de cor. */
+       é o que a pessoa sabe de cor. O do Google também vale: é para ele que o
+       link vai, quando há conta vinculada. */
     const usuario = await prisma.usuario.findFirst({
       where: {
         ativo: true,
         OR: [
           { login: identificador },
           { email: { equals: identificador, mode: "insensitive" } },
+          { googleEmail: { equals: identificador, mode: "insensitive" } },
         ],
       },
       include: { tenant: true },
     });
+    const destino = emailDoUsuario(usuario);
 
-    if (!usuario?.email) {
+    if (!destino) {
       /* Sem e-mail não há para onde mandar. Fica registrado porque é acionável:
          o administrador da imobiliária precisa preencher o e-mail da pessoa na
          tela de Usuários, e sem este log ninguém fica sabendo que alguém
@@ -1007,7 +1010,7 @@ authRouter.post("/recuperar-senha", async (req, res) => {
     /* O envio NÃO é aguardado antes de responder. O transporte tem teto de 10s
        por tentativa, e prender a requisição por isso faria a tela parecer
        travada — além de transformar a demora num sinal de que a conta existe. */
-    sendEmail({ to: usuario.email, subject: modelo.subject, body: modelo.body, html: modelo.html })
+    sendEmail({ to: destino, subject: modelo.subject, body: modelo.body, html: modelo.html })
       .catch((e) => console.error("[recuperar-senha] falha ao enviar:", e.message));
 
     return res.json(resposta);

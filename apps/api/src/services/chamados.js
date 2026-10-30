@@ -1,6 +1,6 @@
 import { prisma } from "../db.js";
 import { emailChamadoInterno, emailRespostaChamado } from "./emailTemplates.js";
-import { sendEmail } from "./notificationService.js";
+import { emailDoUsuario, sendEmail } from "./notificationService.js";
 
 /* ────────────────────────────────────────────────────────────────────────────
    A conversa de um chamado — regra única para os DOIS lados.
@@ -295,11 +295,11 @@ export async function contadoresDoCliente(tenantId, usuarioId, { suporte = false
 async function avisarCliente(chamado, mensagem) {
   const [usuario, tenant] = await Promise.all([
     chamado.usuarioId
-      ? prisma.usuario.findFirst({ where: { id: chamado.usuarioId, tenantId: chamado.tenantId, ativo: true }, select: { nome: true, email: true } })
+      ? prisma.usuario.findFirst({ where: { id: chamado.usuarioId, tenantId: chamado.tenantId, ativo: true }, select: { nome: true, email: true, googleEmail: true } })
       : null,
     prisma.tenant.findUnique({ where: { id: chamado.tenantId }, select: { name: true, email: true } }),
   ]);
-  const para = usuario?.email || tenant?.email;
+  const para = emailDoUsuario(usuario) || tenant?.email;
   if (!para) {
     console.warn(`[chamados] #${chamado.numero} sem e-mail para avisar (nem quem abriu, nem a imobiliária).`);
     return;
