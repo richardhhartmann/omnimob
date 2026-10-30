@@ -37,6 +37,7 @@ import { ProvedorDeCabecalho } from "../utils/contextoDeCabecalho.jsx";
 import { ModalRascunhosDeImovel } from "./RascunhosDeImovel.jsx";
 import { ModalPreferencias, ModalMeusDados } from "./ModaisDoPerfil.jsx";
 import { TEMAS, observarSistema, temaEfetivo, temaEscolhido } from "../utils/temaDoPainel";
+import { sincronizarComOServidor } from "../utils/layoutCentrado";
 import { lerDoTenant, lerDoUsuario, gravarNoUsuario, CHAVES } from "../utils/chaveDoTenant";
 import { clearSession } from "../session";
 import { useBrilhoDeBorda } from "../utils/brilhoDeBorda";
@@ -336,6 +337,14 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
   }, [efetivo]);
   // Só com "auto" o sistema operacional manda; nos outros a escolha é explícita.
   useEffect(() => observarSistema(escolhido, setEfetivo), [escolhido]);
+
+  /* Telas centradas ou em largura total (aba "Painel"). O script do index.html
+     já decidiu antes da primeira pintura, pela cópia do navegador ou pelo
+     automático; a escolha gravada no SERVIDOR chega com a sessão e é a única
+     que pode contrariá-lo — é o que faz a escolha feita noutra máquina valer
+     aqui. Nula ("nunca escolhi") não mexe em nada. */
+  const layoutDoServidor = session?.usuario?.layoutCentrado;
+  useEffect(() => { sincronizarComOServidor(layoutDoServidor); }, [layoutDoServidor]);
 
   /* A troca grava e segue — sem esperar a rede. Um tema que só muda depois da
      resposta pisca; e se a gravação falhar, a pior consequência é a preferência
@@ -1693,6 +1702,76 @@ const CSS = `
    como uma coisa so. */
 .ds-side.is-aberta ~ .ds-coluna .main-content { padding-left: calc(var(--s-avanco) + 28px); }
 .ds-coluna .main-content { transition: padding-left 0.2s cubic-bezier(0.4,0,0.2,1); }
+
+/* ── O LAYOUT CENTRADO (aba Painel das Configuracoes) ──────────────────────
+   Porte do VYA, com as mesmas contas. Com html[data-layout=centrado] — posto
+   pelo script do index.html antes da primeira pintura, e trocado ao vivo pelo
+   modal; ver utils/layoutCentrado.js —, a barra do topo, o cabecalho da tela e
+   o conteudo ficam numa coluna de no maximo --largura-centrada, com a sobra
+   dividida entre os dois lados.
+
+   --s-recuo e o quanto a barra aberta avanca sobre a coluna (zero fechada). A
+   coluna que centra e a que SOBRA depois dele, entao o recuo entra somado a
+   esquerda e descontado da largura. O max() segura o respiro de sempre (28px)
+   quando a tela e estreita demais para haver sobra.
+
+   O editor de vitrine fica de fora: ele precisa da tela inteira, e a prancheta
+   ja centra a folha sozinha. */
+.ds-shell { --s-recuo: 0px; --largura-centrada: 1320px; }
+.ds-shell:has(.ds-side.is-aberta) { --s-recuo: var(--s-avanco); }
+html[data-layout="centrado"] .ds-shell .ds-coluna .ds-topo,
+html[data-layout="centrado"] .ds-shell .ds-coluna .main-content:not(.main-content--editor-vitrine) {
+  padding-left: max(calc(var(--s-recuo) + 28px), calc(var(--s-recuo) + (100% - var(--s-recuo) - var(--largura-centrada)) / 2));
+  padding-right: max(28px, calc((100% - var(--s-recuo) - var(--largura-centrada)) / 2));
+}
+/* A faixa do topo ocupa a janela inteira (a coluna comeca depois da tira),
+   por isso a tira entra na conta: a busca termina na mesma vertical em que o
+   conteudo termina. */
+html[data-layout="centrado"] .ds-shell .ds-topbar {
+  padding-right: max(28px, calc((100% - var(--s-rail) - var(--s-recuo) - var(--largura-centrada)) / 2));
+}
+/* A marca comeca onde o CONTEUDO comeca. Com as telas centradas, o conteudo
+   recua para o meio e a marca ficava sozinha na ponta esquerda, sem nada
+   embaixo dela. Alinhados, a faixa do topo e a pagina tem a mesma margem.
+
+   A conta: a coluna comeca depois da tira (--s-rail) mais o avanco da barra
+   aberta (--s-recuo), e dentro dela o conteudo ainda recua metade da sobra ate
+   --largura-centrada. Do resultado tiram-se o recuo do grupo (20px), o
+   hamburguer (40px) e o vao (8px) — o que ja existe a esquerda da marca. O
+   max(0px) segura a marca no lugar quando a tela e estreita demais. */
+html[data-layout="centrado"] .ds-shell {
+  --alinhamento-marca: max(0px, calc(
+    var(--s-rail) + var(--s-recuo)
+    + max(28px, (100vw - var(--s-rail) - var(--s-recuo) - var(--largura-centrada)) / 2)
+    - 68px
+  ));
+}
+/* O grupo cresce para caber o empurrao; o HAMBURGUER fica onde estava, colado
+   na tira da barra lateral. So a marca anda. A largura da marca vira FIXA (a
+   que ela ja tinha: o grupo menos hamburguer, vao e recuo): solto o grupo, o
+   flex 1 dela nao teria sobra para dividir e ela colapsaria para zero. */
+html[data-layout="centrado"] .ds-shell .ds-topbar__grupo { width: auto; }
+html[data-layout="centrado"] .ds-shell .ds-topbar .ds-mod {
+  flex: none;
+  width: calc(var(--s-aberta) - 68px);
+  margin-left: var(--alinhamento-marca);
+  transition: margin-left 0.25s ease;
+}
+/* O modal troca o atributo na hora; a transicao evita o pulo. */
+.ds-shell .ds-coluna .ds-topo, .ds-shell .ds-topbar { transition: padding 0.25s ease; }
+.ds-shell .ds-coluna .main-content { transition: padding 0.25s ease; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-layout="centrado"] .ds-shell .ds-topbar .ds-mod,
+  .ds-shell .ds-coluna .ds-topo, .ds-shell .ds-topbar, .ds-shell .ds-coluna .main-content { transition: none; }
+}
+/* No celular nenhum recuo vale: o respiro e o do celular de sempre, e a marca
+   fica no lugar dela. */
+@media (max-width: 900px) {
+  html[data-layout="centrado"] .ds-shell { --alinhamento-marca: 0px; }
+  html[data-layout="centrado"] .ds-shell .ds-coluna .ds-topo,
+  html[data-layout="centrado"] .ds-shell .ds-coluna .main-content:not(.main-content--editor-vitrine) { padding-left: 18px; padding-right: 18px; }
+  html[data-layout="centrado"] .ds-shell .ds-topbar { padding-right: 18px; }
+}
 
 /* ── A FAIXA DE MARCA NAO SE MEXE, E ISSO E O DESENHO ──────────────────────
    Ela e a unica peca da coluna que nao cede espaco, e o hamburguer ao lado dela

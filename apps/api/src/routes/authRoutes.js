@@ -111,6 +111,8 @@ export function montarSessao(usuario, { escopo = null, validade = null, suporte 
          aqui apagaria essa distinção e o administrador nunca mais alcançaria
          esta pessoa ao definir o padrão da casa. */
       temaPainel: usuario.temaPainel ?? null,
+      // Mesma regra do tema: nulo é "nunca escolhi", e aí vale o automático.
+      layoutCentrado: usuario.layoutCentrado ?? null,
       atalhos: usuario.atalhos ?? null,
       /* O que o menu do perfil precisa saber sobre o vínculo. O `googleId` NÃO
          vai: ele é identificador de outra plataforma e não tem uso nenhum na
@@ -348,6 +350,7 @@ authRouter.post("/login", async (req, res) => {
       include: { tenant: true, cargo: true },
     });
     Object.assign(usuario, { tenant: conta.tenant, cargo: conta.cargo, temaPainel: conta.temaPainel,
+      layoutCentrado: conta.layoutCentrado,
       atalhos: conta.atalhos, googleId: conta.googleId, googleEmail: conta.googleEmail,
       googleFoto: conta.googleFoto, googleNome: conta.googleNome, googleVinculadoEm: conta.googleVinculadoEm });
 
@@ -674,6 +677,27 @@ authRouter.put("/meu-email", requireAuth, async (req, res) => {
   }
 });
 
+/* ── TELAS CENTRADAS OU EM LARGURA TOTAL ─────────────────────────────────────
+   A escolha da aba "Painel" das Configurações. Da PESSOA, e não da imobiliária:
+   é o monitor de cada um que decide. Gravada aqui para valer nas outras
+   máquinas; o navegador guarda uma cópia para aplicar antes da primeira
+   pintura (ver `utils/layoutCentrado.js`, no web).
+
+   `null` volta ao automático — mesma regra do tema: nulo é "nunca escolhi". */
+authRouter.put("/meu-layout", requireAuth, async (req, res) => {
+  try {
+    const bruto = req.body?.centrado;
+    if (bruto !== null && typeof bruto !== "boolean") {
+      return res.status(400).json({ error: "Escolha inválida." });
+    }
+    await prisma.usuario.update({ where: { id: req.authUserId }, data: { layoutCentrado: bruto } });
+    return res.json({ layoutCentrado: bruto });
+  } catch (erro) {
+    console.error("[auth] layout:", erro);
+    return res.status(500).json({ error: "Erro ao salvar a largura das telas." });
+  }
+});
+
 authRouter.put("/meu-tema", requireAuth, async (req, res) => {
   try {
     const bruto = req.body?.tema;
@@ -832,6 +856,8 @@ authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {
       cargo: cargoDaSessao(usuario.cargo),
       // Mesma regra do login: nulo significa "nunca escolhi tema".
       temaPainel: usuario.temaPainel ?? null,
+      // Mesma regra do tema: nulo é "nunca escolhi", e aí vale o automático.
+      layoutCentrado: usuario.layoutCentrado ?? null,
       atalhos: usuario.atalhos ?? null,
       /* O vínculo com o Google vem por aqui também: o painel relê `/auth/me` na
          montagem e no foco, e é essa releitura que faz o menu do perfil mudar

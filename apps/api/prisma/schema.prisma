@@ -1111,6 +1111,15 @@ model Usuario {
    */
   temaPainel      String?  @map("usu_tema_painel")
 
+  /**
+   * Telas CENTRADAS ou em largura total — escolha DESTA pessoa, não da
+   * imobiliária (aba "Painel" das Configurações; ver `utils/layoutCentrado.js`).
+   * NULO é "nunca escolhi": vale o automático, que centra só em monitor largo
+   * (a partir de 1800px), onde a linha atravessando a tela inteira cansa de
+   * ler. Gravado no servidor para valer nas outras máquinas da pessoa.
+   */
+  layoutCentrado  Boolean? @map("usu_layout_centrado")
+
   /* Atalhos de teclado DESTA pessoa. Só o que ela mudou em relação ao padrão da
    * imobiliária — gravar a tabela inteira congelaria a escolha dela num
    * instantâneo do catálogo, e um atalho novo nunca chegaria a quem já mexeu.
