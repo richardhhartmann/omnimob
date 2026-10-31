@@ -14,6 +14,8 @@ import { baseDaVitrine } from "../utils/enderecoVitrine";
 import { planoInfo } from "../utils/planos";
 import { relatoriosVisiveis, PARAMETRO_DE } from "../utils/relatorios";
 import { gruposDoModulo } from "./navegacaoDoPainel.jsx";
+import { PersonalizarBarra } from "./PersonalizarBarra.jsx";
+import { barraDe, filtrarPorSecao, secaoAtiva } from "../utils/barraLateral";
 import { FLOW, HUB, MODULOS, SIMBOLO_OMNIMOB, moduloDaRota, moduloInfo, modulosDoUsuario } from "../utils/modulos";
 import { SeletorDeModulo } from "./SeletorDeModulo.jsx";
 import { PrimeiroAcessoTour } from "./PrimeiroAcessoTour";
@@ -64,6 +66,10 @@ import {
   ClockCounterClockwise,
   List,
   MagnifyingGlass,
+  Star,
+  CaretUpDown,
+  SlidersHorizontal,
+  Check,
 } from "@phosphor-icons/react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -923,8 +929,8 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
      `ds-foot` e a mecânica de recolher/expandir são os mesmos
      elementos nos dois módulos, na mesma posição — é isso que faz a troca
      parecer virar de página em vez de entrar em outro sistema. */
-  const grupos = useMemo(
-    () => gruposDoModulo(moduloAtivo, {
+  const ctxDaNavegacao = useMemo(
+    () => ({
       cargo,
       plano: session?.tenant?.plano,
       temFlow: disponiveis.includes(FLOW),
@@ -942,12 +948,74 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
       },
     }),
     [
-      moduloAtivo, cargo, session?.tenant?.plano, disponiveis, navigate, leadsBadge, negociosBadge,
+      cargo, session?.tenant?.plano, disponiveis, navigate, leadsBadge, negociosBadge,
       menuDeImoveis, showcaseEditorLink, showcaseLink,
       isDashboard, isGerenciarImoveis, isImovelList, isInsights, isLeads, isTiposImovel,
       isClientes, isUsuarios, isCargos, isAuditoria, isConfiguracoes, isShowcaseEditor,
       p, ver,
     ],
+  );
+  const grupos = useMemo(() => gruposDoModulo(moduloAtivo, ctxDaNavegacao), [moduloAtivo, ctxDaNavegacao]);
+
+  /* ── A BARRA PERSONALIZADA (seções da pessoa) ───────────────────────────────
+     A regra (filtrar, criar seção, marcar) mora em `utils/barraLateral.js`.
+     A barra INTEIRA (`grupos`) continua sendo a fonte da busca, do ícone da
+     tela e do histórico: uma tela fora da seção continua achável.
+
+     OTIMISTA, como o resto do painel: a barra muda na hora (na sessão) e o
+     pedido vai em segundo plano. Marcar dez caixas seguidas no editor vira UM
+     pedido (meio segundo de sossego); se o servidor recusar, a barra volta à
+     última versão que ele aceitou e a torrada diz o motivo.
+
+     Na demonstração não existe: lá nada se grava, e a conta é de todos. */
+  const barraLateral = useMemo(() => barraDe(session?.usuario?.barraLateral), [session?.usuario?.barraLateral]);
+  const secaoDaBarra = demo ? null : secaoAtiva(barraLateral);
+  const gruposDaBarra = useMemo(() => filtrarPorSecao(grupos, secaoDaBarra), [grupos, secaoDaBarra]);
+  const [personalizando, setPersonalizando] = useState(false);
+  const [seletorDaSecao, setSeletorDaSecao] = useState(false);
+  const sessaoRef = useRef(session);
+  useEffect(() => { sessaoRef.current = session; }, [session]);
+  const barraConfirmada = useRef(barraLateral);
+  const barraPendente = useRef(null);
+  const relogioDaBarra = useRef(null);
+  const aplicarBarra = useCallback((b) => {
+    const s = sessaoRef.current;
+    if (!s) return;
+    const proxima = { ...s, usuario: { ...s.usuario, barraLateral: b.secoes.length ? b : null } };
+    sessaoRef.current = proxima;
+    onSessionUpdate?.(proxima);
+  }, [onSessionUpdate]);
+  const enviarBarra = useCallback(async () => {
+    const valor = barraPendente.current;
+    barraPendente.current = null;
+    if (!valor) return;
+    try {
+      await api.salvarMinhaBarra(valor);
+      barraConfirmada.current = valor;
+    } catch (e) {
+      // Outra mudança já está na fila: ela leva o estado novo, e não há o que desfazer.
+      if (barraPendente.current) return;
+      aplicarBarra(barraConfirmada.current);
+      showToast(e?.message || "Não consegui salvar a barra lateral.", "error");
+    }
+  }, [aplicarBarra, showToast]);
+  const mudarBarra = useCallback((nova) => {
+    aplicarBarra(nova);
+    barraPendente.current = nova;
+    if (relogioDaBarra.current) clearTimeout(relogioDaBarra.current);
+    relogioDaBarra.current = setTimeout(() => { relogioDaBarra.current = null; void enviarBarra(); }, 500);
+  }, [aplicarBarra, enviarBarra]);
+  /* Saindo da página com uma mudança na fila, ela vai na hora. */
+  useEffect(() => {
+    const sair = () => { if (barraPendente.current) void enviarBarra(); };
+    window.addEventListener("pagehide", sair);
+    return () => window.removeEventListener("pagehide", sair);
+  }, [enviarBarra]);
+  /* O editor mostra a barra inteira de CADA módulo que a pessoa alcança: a
+     mesma seção vale nos dois (ver o cabeçalho de utils/barraLateral.js). */
+  const modulosDoEditor = useMemo(
+    () => disponiveis.map((m) => ({ key: m, nome: moduloInfo(m).nome, grupos: gruposDoModulo(m, ctxDaNavegacao) })),
+    [disponiveis, ctxDaNavegacao],
   );
 
   /* ── O ÍCONE DA TELA, no cabeçalho ────────────────────────────────────────
@@ -1150,6 +1218,19 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
         />
       ) : null}
 
+      {/* O editor das seções da barra (sai por portal, como o resto). */}
+      {!demo ? (
+        <PersonalizarBarra
+          aberto={personalizando}
+          aoFechar={() => setPersonalizando(false)}
+          modulos={modulosDoEditor}
+          barra={barraLateral}
+          aoMudar={mudarBarra}
+          secaoInicial={barraLateral.ativa}
+          acento={infoModulo.acento}
+        />
+      ) : null}
+
       {/* A paleta. Fora do `.ds-shell` como os outros modais do layout: ela sai
           por portal, e o que importa é ela existir enquanto o painel existir. */}
       <BuscaDeAtalhos
@@ -1332,7 +1413,53 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
 
           {/* Navegação */}
           <nav className="ds-nav" id="ds-navegacao">
-            {grupos.map((grupo, gi) => (
+            {/* O seletor de seção: só existe para quem já criou alguma, e só com
+                a barra aberta (o CSS o esconde na tira recolhida). As opções
+                abrem logo abaixo dele, dentro da barra — um balão por portal
+                sairia do hover que mantém a barra aberta. */}
+            {!demo && barraLateral.secoes.length ? (
+              <div className={`ds-secao${seletorDaSecao ? " is-aberto" : ""}`}>
+                <button
+                  type="button"
+                  className={`ds-secao__seletor${secaoDaBarra ? " is-secao" : ""}`}
+                  aria-expanded={seletorDaSecao}
+                  title="Trocar a seção da barra"
+                  onClick={() => setSeletorDaSecao((v) => !v)}
+                >
+                  {secaoDaBarra ? <Star size={16} weight="fill" /> : <SquaresFour size={16} weight="duotone" />}
+                  <span className="ds-secao__nome">{secaoDaBarra ? secaoDaBarra.nome : "Barra inteira"}</span>
+                  <CaretUpDown size={14} weight="bold" className="ds-secao__seta" />
+                </button>
+                {seletorDaSecao ? (
+                  <div className="ds-secao__opcoes" role="menu">
+                    {[{ id: null, nome: "Barra inteira" }, ...barraLateral.secoes].map((s) => {
+                      const atual = (secaoDaBarra?.id ?? null) === s.id;
+                      return (
+                        <button key={s.id ?? "inteira"} type="button" role="menuitemradio" aria-checked={atual}
+                          className={`ds-secao__opcao${atual ? " is-atual" : ""}`}
+                          onClick={() => { setSeletorDaSecao(false); if (!atual) mudarBarra({ ...barraLateral, ativa: s.id }); }}>
+                          {s.id ? <Star size={15} weight={atual ? "fill" : "duotone"} /> : <SquaresFour size={15} weight={atual ? "fill" : "duotone"} />}
+                          <span>{s.nome}</span>
+                          {atual ? <Check size={13} weight="bold" className="ds-secao__marca" /> : null}
+                        </button>
+                      );
+                    })}
+                    <button type="button" className="ds-secao__opcao ds-secao__opcao--editar"
+                      onClick={() => { setSeletorDaSecao(false); setPersonalizando(true); }}>
+                      <SlidersHorizontal size={15} weight="regular" />
+                      <span>Personalizar barra lateral</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {secaoDaBarra && !gruposDaBarra.length ? (
+              <p className="ds-secao-vazia">
+                Nada de <strong>{secaoDaBarra.nome}</strong> no {infoModulo.nome}.{" "}
+                <button type="button" onClick={() => setPersonalizando(true)}>Escolher telas</button>
+              </p>
+            ) : null}
+            {gruposDaBarra.map((grupo, gi) => (
               <div className="ds-group" key={grupo.label || `g-${gi}`}>
                 {/* Recolhida, o nome do grupo simplesmente NÃO aparece.
 
@@ -1367,8 +1494,10 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                         `aria-hidden` e `tabIndex: -1` quando fechado: o bloco
                         continua no DOM para poder animar, e sem isso o Tab
                         entraria em itens invisíveis. */}
+                    {/* Numa seção, os subitens escolhidos ficam sempre à mostra:
+                        é para isso que a pessoa os escolheu. */}
                     {item.subitens?.length ? (
-                      <div className={`ds-sub${item.active ? " is-open" : ""}`} aria-hidden={!item.active}>
+                      <div className={`ds-sub${item.active || secaoDaBarra ? " is-open" : ""}`} aria-hidden={!(item.active || secaoDaBarra)}>
                         <div className="ds-sub__inner">
                           <span className="ds-sub__rail" aria-hidden="true" />
                           {item.subitens.map((sub, si) => (
@@ -1383,7 +1512,7 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                               data-tour={`nav-${sub.key}`}
                               className={`ds-subitem${sub.active ? " is-active" : ""}`}
                               style={{ "--i": si }}
-                              tabIndex={item.active ? 0 : -1}
+                              tabIndex={item.active || secaoDaBarra ? 0 : -1}
                               onClick={sub.onClick}
                             >
                               <span className="ds-subitem__icon">
@@ -1464,6 +1593,14 @@ export function AdminLayout({ session, onLogout, onSessionUpdate }) {
                   </button>
                 ))}
               </div>
+            ) : null}
+
+            {/* No fim da barra aberta, como no Notion: leva ao editor das seções. */}
+            {!demo ? (
+              <button type="button" className="ds-personalizar" onClick={() => setPersonalizando(true)}>
+                <SlidersHorizontal size={17} weight="regular" />
+                <span>Personalizar barra lateral</span>
+              </button>
             ) : null}
           </nav>
 
@@ -2679,6 +2816,66 @@ html[data-layout="centrado"] .ds-shell .ds-topbar .ds-mod {
   border-top: 1px solid var(--s-sep);
 }
 .ds-side:not(.is-aberta):not(.is-fechando) .ds-modulos { display: none; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A BARRA PERSONALIZADA — o seletor de secao no topo, o aviso de secao vazia
+   e o Personalizar barra lateral no fim (ver utils/barraLateral.js)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Os tres so existem com a barra ABERTA: na tira de icones nao ha onde
+   escrever o nome da secao, e quem esta numa secao continua vendo, na tira, so
+   os icones dela. As opcoes do seletor abrem DENTRO da barra, logo abaixo
+   dele: um balao por portal tiraria o ponteiro do hover que segura a barra.
+   (Sem crases nestes comentarios: template literal.) */
+.ds-secao { margin: 0 12px; display: flex; flex-direction: column; gap: 2px; }
+.ds-shell .ds-secao__seletor {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--s-border);
+  background: transparent; color: var(--s-strong); cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 600; text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ds-shell .ds-secao__seletor:hover, .ds-secao.is-aberto .ds-secao__seletor { background: var(--s-hover); }
+.ds-shell .ds-secao__seletor > svg:first-child { flex: none; color: var(--s-text); }
+.ds-shell .ds-secao__seletor.is-secao > svg:first-child { color: var(--modulo-acento, #6366f1); }
+.ds-secao__nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-shell .ds-secao__seta { flex: none; color: var(--s-rotulo); }
+.ds-secao__opcoes {
+  display: flex; flex-direction: column; gap: 1px; padding: 4px;
+  border: 1px solid var(--s-border); border-radius: 10px;
+  animation: dsSecaoAbre 0.14s ease both;
+}
+@keyframes dsSecaoAbre { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ds-secao__opcoes { animation: none; } }
+.ds-shell .ds-secao__opcao {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 8px; border-radius: 8px; border: 0; background: transparent;
+  color: var(--s-text); cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 500; text-align: left;
+}
+.ds-shell .ds-secao__opcao:hover { background: var(--s-hover); color: var(--s-strong); }
+.ds-shell .ds-secao__opcao.is-atual { color: var(--s-strong); font-weight: 600; }
+.ds-shell .ds-secao__opcao > svg:first-child { flex: none; color: var(--modulo-acento, #6366f1); }
+.ds-secao__opcao > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-shell .ds-secao__marca { flex: none; color: var(--modulo-acento, #6366f1); }
+.ds-shell .ds-secao__opcao--editar { margin-top: 3px; border-top: 1px solid var(--s-border); border-radius: 0 0 8px 8px; padding-top: 9px; }
+.ds-shell .ds-secao__opcao--editar > svg:first-child { color: var(--s-text); }
+.ds-secao-vazia { margin: 0; padding: 4px 25px; font-size: 12px; line-height: 1.5; color: var(--s-text); }
+.ds-secao-vazia strong { color: var(--s-strong); font-weight: 600; }
+.ds-shell .ds-secao-vazia button {
+  display: inline; width: auto; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--modulo-acento, #6366f1); text-decoration: underline; text-underline-offset: 2px;
+}
+.ds-shell .ds-personalizar {
+  display: flex; align-items: center; gap: 10px; width: auto;
+  margin: 2px 12px 12px; padding: 8px 13px; border-radius: 10px; border: 0;
+  background: transparent; color: var(--s-rotulo); cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 500; text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ds-shell .ds-personalizar:hover { background: var(--s-hover); color: var(--s-strong); }
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-secao,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-secao-vazia,
+.ds-side:not(.is-aberta):not(.is-fechando) .ds-personalizar { display: none; }
 
 /* ── O ITEM E A ARTE, E MAIS NADA ──────────────────────────────────────────
 

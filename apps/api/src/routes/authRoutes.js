@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
@@ -14,6 +15,7 @@ import { loginSchema } from "../validators/authValidators.js";
 import { PERMISSOES, CARGO_ADMIN } from "../services/cargosPadrao.js";
 import { modulosDoTenant } from "../services/modulos.js";
 import { normalizarAtalhos } from "../services/atalhos.js";
+import { barraGravada, normalizarBarra } from "../services/barraLateral.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "omnimob-dev-secret";
 
@@ -114,6 +116,8 @@ export function montarSessao(usuario, { escopo = null, validade = null, suporte 
       // Mesma regra do tema: nulo é "nunca escolhi", e aí vale o automático.
       layoutCentrado: usuario.layoutCentrado ?? null,
       atalhos: usuario.atalhos ?? null,
+      // As seções da barra lateral desta pessoa; nulo = nunca personalizou.
+      barraLateral: barraGravada(usuario.barraLateral),
       /* O que o menu do perfil precisa saber sobre o vínculo. O `googleId` NÃO
          vai: ele é identificador de outra plataforma e não tem uso nenhum na
          tela — mandar seria expor sem motivo. */
@@ -351,7 +355,7 @@ authRouter.post("/login", async (req, res) => {
     });
     Object.assign(usuario, { tenant: conta.tenant, cargo: conta.cargo, temaPainel: conta.temaPainel,
       layoutCentrado: conta.layoutCentrado,
-      atalhos: conta.atalhos, googleId: conta.googleId, googleEmail: conta.googleEmail,
+      atalhos: conta.atalhos, barraLateral: conta.barraLateral, googleId: conta.googleId, googleEmail: conta.googleEmail,
       googleFoto: conta.googleFoto, googleNome: conta.googleNome, googleVinculadoEm: conta.googleVinculadoEm });
 
     /* ── A IMOBILIÁRIA ainda vale? ─────────────────────────────────────────
@@ -677,6 +681,24 @@ authRouter.put("/meu-email", requireAuth, async (req, res) => {
   }
 });
 
+/* ── A BARRA LATERAL PERSONALIZADA ───────────────────────────────────────────
+   As seções da pessoa ("Favoritos", "Fechamento do mês") e qual está ligada.
+   Da PESSOA, e não da imobiliária; gravada aqui para valer nas outras máquinas
+   e depois de entrar de novo. Só o FORMATO é cobrado (ver
+   `services/barraLateral.js`). `null` apaga tudo: volta a barra inteira. */
+authRouter.put("/minha-barra", requireAuth, async (req, res) => {
+  try {
+    const barra = normalizarBarra(req.body?.barra);
+    if (barra === null) return res.status(400).json({ error: "Barra lateral inválida." });
+    const gravar = barra.secoes.length ? barra : null;
+    await prisma.usuario.update({ where: { id: req.authUserId }, data: { barraLateral: gravar ?? Prisma.DbNull } });
+    return res.json({ barraLateral: gravar });
+  } catch (erro) {
+    console.error("[auth] barra lateral:", erro);
+    return res.status(500).json({ error: "Erro ao salvar a barra lateral." });
+  }
+});
+
 /* ── TELAS CENTRADAS OU EM LARGURA TOTAL ─────────────────────────────────────
    A escolha da aba "Painel" das Configurações. Da PESSOA, e não da imobiliária:
    é o monitor de cada um que decide. Gravada aqui para valer nas outras
@@ -859,6 +881,7 @@ authRouter.get("/me", requireAuth, requireTenant, async (req, res) => {
       // Mesma regra do tema: nulo é "nunca escolhi", e aí vale o automático.
       layoutCentrado: usuario.layoutCentrado ?? null,
       atalhos: usuario.atalhos ?? null,
+      barraLateral: barraGravada(usuario.barraLateral),
       /* O vínculo com o Google vem por aqui também: o painel relê `/auth/me` na
          montagem e no foco, e é essa releitura que faz o menu do perfil mudar
          de "vincular" para "vinculado" logo depois de a pessoa vincular. */

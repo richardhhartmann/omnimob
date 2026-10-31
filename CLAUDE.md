@@ -160,6 +160,14 @@ omnimob/
   do painel — comunicado, Novidades, pedido de e-mail — fazem FILA pelo
   registro de tour (`utils/tourAtivo.js › quandoSemTour`): o aberto segura os
   outros
+- `PUT /api/auth/minha-barra` — **a barra lateral personalizada** da pessoa
+  (porte do VYA): seções ("Favoritos") com as telas que ela mais usa e qual
+  está ligada, em `Usuario.barraLateral`; volta na sessão como
+  `usuario.barraLateral`. O servidor só cobra o formato
+  (`services/barraLateral.js`); a regra mora em `utils/barraLateral.js` e o
+  editor em `components/PersonalizarBarra.jsx`. A mesma seção vale nos dois
+  módulos; a busca, o ícone da tela e o histórico continuam lendo a barra
+  inteira. Não existe na demonstração
 - `PUT /api/auth/meu-email` — o **pedido de e-mail** (`PedidoDeEmail`, no
   máximo a cada 7 dias): quem está sem e-mail cadastra o próprio. Só
   PREENCHE — trocar um e-mail existente é do administrador, porque é o caminho
@@ -272,6 +280,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/novidadesRegra.test.js` | a validação do conteúdo (texto, tipo, permissão, módulo, print só https) e o corte Hub/Flow/permissão. **Não toca no banco** |
 | `test/novidades.test.js` | a rotina entra só com a chave e nunca sobrescreve a publicada; revisar não é publicar e a aba não cria semana; só-Hub não vê o Omniflow; o comunicado abre uma vez e o registro de quem viu é de quem viu; a publicação automática só é ligada por quem publica |
 | `test/contasEComunicados.test.js` | o comunicado de um cliente não aparece para outro (nem marcado pelo id real) e abre uma vez; o pedido de e-mail só preenche, nunca troca; a sessão aparece no primeiro uso e "encerrar" derruba na requisição seguinte (e só com `encerrarSessoes`); o consumo de IA entra no Controle de Uso |
+| `test/barraLateral.test.js` | as seções da barra lateral: a de A não mexe na de B; lixo é recusado sem apagar a que estava; apagar a última seção volta a nulo ("nunca personalizou") |
 | `test/interessados.test.js` | o interesse da landing é guardado mesmo sem destino de e-mail; a aba lista e marca atendido; a régua do Controle de Uso (ativa, esfriando, parada, nunca) |
 
 **Segurança — o que o token NÃO decide:** `requireAuth` lê o usuário do banco a
@@ -684,6 +693,7 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
 | `test/normalizacao.test.js` | migração de config antigo, espelho legado, tolerância a lixo |
 | `test/imagemResponsiva.test.js` | as URLs de foto redimensionada (Cloudinary/Unsplash; o resto intocado) e a trava do pacote: só as páginas da vitrine entram por `import` estático no `App.jsx` |
 | `test/dadosEstruturados.test.js` | o JSON-LD: endereço oculto não vaza, número ausente não vira zero, e o anúncio só vira `Product` com preço E foto (sem os dois, o Rich Results Test acusa erro) |
+| `test/barraLateral.test.js` | a barra personalizada: a seção mostra só o escolhido com o pai em volta; chave que o cargo não alcança não reabre nada; criar, renomear, mover e apagar seções |
 | `test/relatosDaParede.test.js` | a parede "Por que Omnimob": reais primeiro, exemplos completando as 24 vagas, o exemplo desligado devolvendo a vaga — a mesma função na landing e na aba do super-admin |
 
 ### Rotas principais (App.jsx)

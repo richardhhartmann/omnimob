@@ -671,6 +671,10 @@ export const api = {
   salvarMeuLayout: (centrado) =>
     request("/api/auth/meu-layout", { method: "PUT", body: JSON.stringify({ centrado }) }),
 
+  // As seções da barra lateral desta pessoa (ver utils/barraLateral.js).
+  salvarMinhaBarra: (barra) =>
+    request("/api/auth/minha-barra", { method: "PUT", body: JSON.stringify({ barra }) }),
+
   // ─── Canais de divulgação ────────────────────────────────────────────────
   // O retrato de cada canal: o que está no ar, quantos imóveis recebe e o que
   // falta configurar. Existe porque o feed dos portais funcionava desde sempre
