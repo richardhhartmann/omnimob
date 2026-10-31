@@ -1125,6 +1125,12 @@ model Usuario {
    * instantâneo do catálogo, e um atalho novo nunca chegaria a quem já mexeu.
    * Formato: `{ "dashboard.imoveis": "j" }`. Ver `utils/atalhos.js`. */
   atalhos         Json?    @map("usu_atalhos")
+
+  /* A barra lateral personalizada DESTA pessoa: as seções que ela criou
+   * ("Favoritos") com as telas que mais usa, e qual está ligada. Nulo = nunca
+   * personalizou, a barra inteira de sempre. Formato e regras em
+   * `services/barraLateral.js` (e `utils/barraLateral.js`, no web). */
+  barraLateral    Json?    @map("usu_barra_lateral")
   foto            String?  @map("usu_foto")
   creci           String?  @map("usu_creci")
   whatsapp        String   @default("") @map("usu_whatsapp")
