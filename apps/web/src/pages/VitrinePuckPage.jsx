@@ -21,7 +21,8 @@ import { ICONES, MenuDoEditor } from "../puck/MenuDoEditor.jsx";
 import { PodarSecoesVazias } from "../puck/PodarSecoesVazias.jsx";
 import { CartaoDaGaveta } from "../puck/PreviaDaPeca.jsx";
 import { BarraDaSelecao } from "../puck/BarraDaSelecao.jsx";
-import { documentoDaVersao, guardarVersao, lerHistorico, quandoFoi } from "../puck/historicoDeVersoes.js";
+import { documentoDaVersao, lerHistorico, quandoFoi } from "../puck/historicoDeVersoes.js";
+import { criarAutosave } from "../puck/autosave.js";
 import { BUILDER_TEMPLATES } from "../components/builder/data/templates";
 import { PreviaDoModelo } from "../components/builder/data/PreviaDoModelo.jsx";
 import { baseDaVitrine } from "../utils/enderecoVitrine";
@@ -33,8 +34,8 @@ import { EditorEsqueleto } from "../components/builder/EditorEsqueleto.jsx";
    É esta a tela de "editar página", para todo mundo — não há mais dois editores
    a escolher. Quem nunca migrou entra e vê a própria vitrine já TRADUZIDA de
    coordenadas para árvore, pronta para editar; quem já migrou vê o documento
-   gravado. O clássico continua existindo em `/editar/classico` para o suporte, sem
-   botão que leve até ele daqui.
+   gravado. O editor clássico foi removido em 31/10/2026; `/editar/classico`
+   redireciona para cá.
 
    ── A ABERTURA NÃO GRAVA ──
 
@@ -42,12 +43,21 @@ import { EditorEsqueleto } from "../components/builder/EditorEsqueleto.jsx";
    trava explícita: sem ela, abrir o editor e não mexer em nada já migraria a
    imobiliária. Ver `aoMudar`.
 
-   ── O QUE É GRAVADO, E ONDE ──
+   ── RASCUNHO E PUBLICAR (31/10/2026) ──
 
-   Uma chamada só, com as duas coisas que a prancheta edita:
+   O autosave grava um RASCUNHO (`/api/editor-vitrine/rascunho`), que a vitrine
+   pública não lê. Só o botão "Publicar" leva ao ar. Antes, cada alteração ia ao
+   ar um segundo depois: apagar a grade de imóveis para recolocá-la mais abaixo
+   deixava o visitante vendo a página sem imóveis.
+
+   Na publicação o SERVIDOR grava, com o que estiver no banco naquela hora:
 
      showcaseConfig.puck   o documento — peças, ordem, textos, estilos de bloco
      colunas do Tenant     manchete, descrição, e-mail, WhatsApp
+
+   Dois editores abertos não se apagam mais: cada gravação leva a versão do
+   rascunho em que se baseou, e a velha é recusada — a tela para de gravar e
+   oferece recarregar. Ver `routes/editorVitrineRoutes.js` na API.
 
    Os segundos parecem documento e não são: são o cadastro da imobiliária, o
    mesmo que alimenta as Configurações e o feed dos portais. Ver o cabeçalho de
@@ -56,9 +66,9 @@ import { EditorEsqueleto } from "../components/builder/EditorEsqueleto.jsx";
    ── A VOLTA É REAL ──
 
    O formato antigo (`layout`, `mobileLayout`, `widgets`) fica gravado, intocado,
-   ao lado do novo. Voltar ao editor antigo é apagar UMA chave (`puck`) — e a
-   página de antes volta inteira, porque nunca chegou a sair. O botão que fazia
-   isso saiu desta tela; a operação continua possível para o suporte.
+   ao lado do novo. Voltar a ele é apagar UMA chave (`puck`) — e a página de
+   antes volta inteira, porque nunca chegou a sair. É operação do suporte:
+   `npm run vitrines-classicas -- --slug=X --voltar --aplicar`, na API.
 
    Não há tradução de volta, e não vai haver: árvore não tem coordenada, e
    inventar posições para o caminho inverso produziria uma terceira página, que
@@ -165,8 +175,19 @@ export function VitrinePuckPage() {
      em vez de dois booleanos porque as duas nunca convivem — e dois
      booleanos permitem o estado impossível de ambas abertas. */
   const [gaveta, setGaveta] = useState(null);
+  /* As versões PUBLICADAS, do servidor; e as antigas deste navegador (o
+     histórico de antes de 31/10/2026, que vivia só no localStorage). */
   const [versoes, setVersoes] = useState([]);
+  const [versoesLocais, setVersoesLocais] = useState([]);
   const [linkCopiado, setLinkCopiado] = useState(false);
+  /* Há rascunho no servidor (alterações não publicadas)? */
+  const [temRascunho, setTemRascunho] = useState(false);
+  const [situacao, setSituacao] = useState("em-dia");
+  const [publicando, setPublicando] = useState(false);
+  /* Outra aba ou pessoa gravou por cima: a mensagem do servidor, e a tela para. */
+  const [conflito, setConflito] = useState(null);
+  /* Sobe para buscar tudo de novo (recarregar depois de um conflito). */
+  const [recarga, setRecarga] = useState(0);
 
   /* ── A ALTURA É MEDIDA, NÃO DECLARADA ─────────────────────────────────────
      O Puck desenha a prévia num iframe e assume a altura do contêiner: sem uma
@@ -197,13 +218,15 @@ export function VitrinePuckPage() {
      mexido em nada. A referência guarda o documento como ele chegou; enquanto o
      que o Puck devolve for igual, não há o que salvar.
 
-     A gravação é uma só e serve às duas coisas — não existe rascunho separado
-     da página no ar. Foi assim que o editor antigo sempre funcionou, e ter dois
-     estados publicáveis exigiria uma conversa sobre versões que este produto
-     ainda não tem. */
+     Desde 31/10/2026 a gravação é de RASCUNHO, e não da página no ar: quem
+     leva ao ar é o "Publicar". Ver o cabeçalho deste arquivo. */
   const cadastroRef = useRef({});
-  const temporizador = useRef(null);
-  const publicarRef = useRef(null);
+  /* A versão do rascunho em que esta tela se baseia (0 = não há rascunho). */
+  const versaoRef = useRef(0);
+  /* O documento mais recente que o Puck entregou: o cadastro editado na
+     prancheta não muda o documento, e precisa de um para ir junto. */
+  const ultimoDocumento = useRef(null);
+  const gravarRef = useRef(null);
 
   /* ── A TRAVA: SÓ GRAVA DEPOIS DE UMA AÇÃO DE VERDADE ─────────────────────
 
@@ -218,16 +241,17 @@ export function VitrinePuckPage() {
      arrastar, digitar num campo, excluir uma peça — e também o despacho da
      nossa ponte de edição no lugar. Enquanto ninguém agiu, não há o que
      salvar, por mais que o documento mude de forma por dentro. */
-  const armado = useRef(false);
-  const armar = useCallback(() => { armado.current = true; }, []);
-
+  /* A regra (a trava, uma gravação de cada vez, a falha que não se perde) mora
+     em `puck/autosave.js`, que tem teste. Aqui só se liga. */
+  const autosave = useMemo(() => criarAutosave({
+    gravar: (dados) => gravarRef.current(dados),
+    aoMudarSituacao: setSituacao,
+  }), []);
+  const armar = useCallback(() => autosave.armar(), [autosave]);
   const aoMudar = useCallback((dados) => {
-    if (!armado.current) return;
-    if (temporizador.current) clearTimeout(temporizador.current);
-    temporizador.current = setTimeout(() => publicarRef.current?.(dados), 1000);
-  }, []);
-
-  useEffect(() => () => { if (temporizador.current) clearTimeout(temporizador.current); }, []);
+    ultimoDocumento.current = dados;
+    autosave.aoMudar(dados);
+  }, [autosave]);
 
   useLayoutEffect(() => {
     /* ── SEM OBSERVADOR NO CORPO ───────────────────────────────────────────
@@ -291,7 +315,53 @@ export function VitrinePuckPage() {
      mesma chamada. */
   useEffect(() => { loadShowcaseFonts(); }, []);
 
-  useEffect(() => { setVersoes(lerHistorico(carga.tenant?.id)); }, [carga.tenant?.id]);
+  /* ── A SAÍDA DA PÁGINA ─────────────────────────────────────────────────────
+     O autosave espera um segundo de silêncio. Quem fechava a aba nesse
+     segundo, ou depois de uma gravação que falhou, perdia a última alteração
+     sem aviso nenhum. Agora:
+
+       · fechar/recarregar a aba com algo não salvo pede confirmação
+         (`beforeunload`: o navegador mostra o aviso dele, o texto não é nosso);
+       · o que estiver pendente vai na saída com `keepalive`, que o navegador
+         termina mesmo com a aba fechando — inclusive ao sair do editor por um
+         link do próprio painel (o desmonte).
+
+     `keepalive` tem teto de 64 kB por pedido; uma página maior que isso vai
+     sem ele, no melhor esforço. */
+  const enviarNaSaidaRef = useRef(null);
+  enviarNaSaidaRef.current = () => {
+    const dados = autosave.pendente;
+    if (!dados || autosave.situacao === "pausado") return;
+    const corpo = corpoDoRascunho(dados);
+    const pequeno = JSON.stringify(corpo).length < 60_000;
+    autosave.descartar();
+    api.salvarRascunhoDaVitrine(tenantSlug, corpo, { keepalive: pequeno }).catch(() => {});
+  };
+  useEffect(() => {
+    const aoSair = () => enviarNaSaidaRef.current?.();
+    const aoFechar = (e) => {
+      if (!autosave.temPendencia()) return undefined;
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("pagehide", aoSair);
+    window.addEventListener("beforeunload", aoFechar);
+    return () => {
+      window.removeEventListener("pagehide", aoSair);
+      window.removeEventListener("beforeunload", aoFechar);
+      aoSair(); // saiu do editor sem fechar a aba
+    };
+  }, [autosave]);
+
+  useEffect(() => { setVersoesLocais(lerHistorico(carga.tenant?.id)); }, [carga.tenant?.id]);
+
+  const lerVersoes = useCallback(() => {
+    api.listarVersoesDaVitrine(tenantSlug)
+      .then((r) => setVersoes(r?.versoes || []))
+      .catch(() => setVersoes([]));
+  }, [tenantSlug]);
+  useEffect(() => { if (carga.estado === "pronto") lerVersoes(); }, [carga.estado, lerVersoes]);
 
   useEffect(() => {
     if (carga.estado !== "pronto") return undefined;
@@ -304,10 +374,13 @@ export function VitrinePuckPage() {
     let vivo = true;
     setCarga({ estado: "carregando" });
 
-    api
-      .getPublicShowcase(tenantSlug)
-      .then((resposta) => {
+    /* O que está no ar vem da vitrine pública; o rascunho, da rota do editor.
+       Se o rascunho não puder ser lido, a tela NÃO abre: abrir sem ele faria o
+       autosave criar outro por cima do que existe. */
+    Promise.all([api.getPublicShowcase(tenantSlug), api.lerRascunhoDaVitrine(tenantSlug)])
+      .then(([resposta, doEditor]) => {
         if (!vivo) return;
+        const rascunho = doEditor?.rascunho || null;
         const cru = resposta?.tenant?.showcaseConfig;
         /* Já publicado pelo Puck? Então o documento GRAVADO é a verdade, e
            traduzir de novo seria jogar fora tudo o que a pessoa editou aqui —
@@ -324,16 +397,26 @@ export function VitrinePuckPage() {
         for (const campo of CAMPOS_DO_CADASTRO) {
           if (resposta?.tenant?.[campo]) semente[campo] = resposta.tenant[campo];
         }
-        const documento = jaMigrada || data;
+        /* Com rascunho, é ELE que se edita: é o trabalho que ainda não foi ao
+           ar. O cadastro editado nele (manchete, WhatsApp…) também volta, para
+           a prancheta mostrar o que a pessoa escreveu e não o que está no ar. */
+        const documento = rascunho?.documento ? structuredClone(rascunho.documento) : (jaMigrada || data);
         documento.root = { ...documento.root, props: { ...semente, ...(documento.root?.props || {}) } };
+        cadastroRef.current = { ...(rascunho?.cadastro || {}) };
+        versaoRef.current = rascunho?.versao || 0;
+        ultimoDocumento.current = documento;
+        autosave.reiniciar();
+        setTemRascunho(Boolean(rascunho));
+        setConflito(null);
 
         setCarga({
           estado: "pronto",
           configCru: cru && typeof cru === "object" ? cru : {},
           data: documento,
-          avisos: jaMigrada ? [] : avisos,
+          avisos: jaMigrada || rascunho ? [] : avisos,
           noAr: Boolean(jaMigrada),
-          tenant: resposta?.tenant || null,
+          rascunhoDe: rascunho ? { quando: rascunho.atualizadoEm, quem: rascunho.atualizadoPorNome } : null,
+          tenant: resposta?.tenant ? { ...resposta.tenant, ...(rascunho?.cadastro || {}) } : null,
           properties: resposta?.properties || [],
           vitrine: resposta?.vitrine || null,
         });
@@ -344,7 +427,7 @@ export function VitrinePuckPage() {
       });
 
     return () => { vivo = false; };
-  }, [tenantSlug]);
+  }, [tenantSlug, recarga, autosave]);
 
   /* `metadata` é o que chega ao `resolveData` de cada componente e ao `root`.
      Vai dentro de um `useMemo` porque um objeto novo a cada render faria o Puck
@@ -359,9 +442,12 @@ export function VitrinePuckPage() {
          descobre a diferença depois de publicar. */
       aoEditarCadastro: (campo, valor) => {
         cadastroRef.current = { ...cadastroRef.current, [campo]: valor };
-        /* Editar o cadastro é ação de gente, e não muda o documento — sem isto
-           uma alteração só na manchete nunca seria gravada. */
-        armado.current = true;
+        /* Editar o cadastro é ação de gente, e não muda o documento: sem isto
+           uma alteração só na manchete nunca seria gravada. Antes ela só
+           ARMAVA o autosave e esperava a próxima mudança do documento, que
+           podia não vir — a manchete se perdia ao fechar a aba. */
+        autosave.armar();
+        if (ultimoDocumento.current) autosave.aoMudar(ultimoDocumento.current);
       },
       pagina: {
         tenant: carga.tenant ? { ...carga.tenant, name: carga.tenant.name || tenantSlug } : null,
@@ -372,61 +458,86 @@ export function VitrinePuckPage() {
         erro: "",
       },
     }),
-    [tenantSlug, carga.vitrine, carga.tenant, carga.properties],
+    [tenantSlug, carga.vitrine, carga.tenant, carga.properties, autosave],
   );
 
-  /* ── PUBLICAR ─────────────────────────────────────────────────────────────
-     Grava o documento do Puck DENTRO do `showcaseConfig`, ao lado do formato
-     antigo — que não é tocado. É o que torna a migração reversível: enquanto
-     `layout`, `mobileLayout` e `widgets` seguirem gravados, voltar ao editor
-     antigo é apagar uma chave, e a página de antes volta inteira.
+  /* ── O RASCUNHO ───────────────────────────────────────────────────────────
+     O corpo de uma gravação: o documento, as opções de página que a vitrine lê
+     de fora dele, e o cadastro editado na prancheta. A conta das opções e do
+     cadastro é feita AQUI, e o servidor só confere a lista de chaves — um
+     segundo cálculo lá divergiria no primeiro controle novo. */
+  function corpoDoRascunho(dados) {
+    return {
+      documento: { content: dados.content, root: dados.root || {} },
+      opcoes: opcoesDaPagina(dados.root),
+      /* O inspetor da Página vem depois do `cadastroRef` de propósito: se a
+         pessoa mexeu nos dois lugares, o inspetor é a escolha mais recente. */
+      cadastro: { ...cadastroRef.current, ...doCadastro(dados.root) },
+      versao: versaoRef.current,
+    };
+  }
 
-     Espalha o config CRU, e não o normalizado: normalizar aqui reescreveria o
-     documento de quem só fez uma alteração — e uma migração que muda o que
-     não foi pedido é como se perde a confiança num beta. */
-  async function publicar(dados) {
-    setRecado("Salvando…");
+  async function gravarRascunho(dados) {
     try {
-      await api.updateTenantProfile(tenantSlug, {
-        /* O cadastro vai JUNTO, na mesma chamada. Manchete, e-mail e WhatsApp
-           são editados na prancheta como qualquer outro texto, mas são colunas
-           do `Tenant` e não do documento — ver o cabeçalho de `PonteDeEdicao`.
-           Duas chamadas separadas deixariam meio salvamento no ar se a segunda
-           falhasse. */
-        ...cadastroRef.current,
-        /* E o que foi editado no inspetor da Página. Vem depois do
-           `cadastroRef` de propósito: se a pessoa mexeu nos dois lugares, o
-           campo do inspetor é a escolha mais recente e explícita. */
-        ...doCadastro(dados.root),
-        showcaseConfig: {
-          ...carga.configCru,
-          /* As opções da página VOLTAM para o nível de cima do showcaseConfig, e
-             não ficam só dentro do documento: quem lê tema, fonte e cores na
-             vitrine publicada é `classeDeAparencia`/`estiloDoTema`, que
-             recebem o config normalizado — não o documento do Puck. Deixá-las
-             só lá dentro faria o controle funcionar no editor e não surtir
-             efeito nenhum no ar. */
-          ...opcoesDaPagina(dados.root),
-          puck: { content: dados.content, root: dados.root || {} },
-        },
-      });
-      setCarga((antes) => ({ ...antes, noAr: true, configCru: { ...antes.configCru, puck: dados } }));
-      /* Um instantâneo por publicação. O desfazer do Puck só alcança a sessão
-         aberta; isto é o que permite voltar a algo de ontem. */
-      setVersoes(guardarVersao(carga.tenant?.id, dados));
-      setRecado("Salvo.");
+      const r = await api.salvarRascunhoDaVitrine(tenantSlug, corpoDoRascunho(dados));
+      versaoRef.current = r.versao;
+      setTemRascunho(true);
+      setRecado("");
     } catch (erro) {
-      setRecado(erro?.message || "Não consegui salvar.");
+      if (erro?.status === 409) {
+        autosave.pausar();
+        setConflito(erro.message);
+        setRecado("");
+      }
+      throw erro;
+    }
+  }
+  gravarRef.current = gravarRascunho;
+
+  /* ── PUBLICAR ─────────────────────────────────────────────────────────────
+     Primeiro garante que o rascunho está gravado (inclusive o que ainda
+     esperava o segundo de silêncio), depois pede ao servidor para levá-lo ao
+     ar. Quem mescla no `showcaseConfig` é o servidor, com o que estiver no
+     banco naquela hora — ver o cabeçalho deste arquivo. */
+  async function publicar() {
+    if (publicando) return;
+    setPublicando(true);
+    try {
+      const salvo = await autosave.agora();
+      if (!salvo) { setRecado("Não consegui salvar o rascunho, então nada foi publicado."); return; }
+      if (!versaoRef.current) { setRecado("Não há alterações para publicar."); return; }
+      await api.publicarVitrine(tenantSlug, versaoRef.current);
+      versaoRef.current = 0;
+      setTemRascunho(false);
+      setCarga((antes) => ({ ...antes, noAr: true, rascunhoDe: null }));
+      lerVersoes();
+      setRecado("Publicado. A vitrine já mostra esta versão.");
+    } catch (erro) {
+      if (erro?.status === 409) { autosave.pausar(); setConflito(erro.message); setRecado(""); }
+      else setRecado(erro?.message || "Não consegui publicar.");
+    } finally {
+      setPublicando(false);
     }
   }
 
-  publicarRef.current = publicar;
+  async function descartarRascunho() {
+    if (!window.confirm("Descartar as alterações não publicadas? A página volta a ser a que está no ar.")) return;
+    autosave.descartar();
+    try {
+      await api.descartarRascunhoDaVitrine(tenantSlug);
+      setRecarga((n) => n + 1);
+    } catch (erro) {
+      setRecado(erro?.message || "Não consegui descartar o rascunho.");
+    }
+  }
 
   /* Troca o documento inteiro e marca como mexido, para o autosave gravar.
      Sem armar, aplicar um modelo ficaria só na tela até a pessoa mexer em
      outra coisa — e ela publicaria achando que já estava salvo. */
   function trocarDocumento(documento) {
-    armado.current = true;
+    autosave.armar();
+    ultimoDocumento.current = documento;
+    autosave.aoMudar(documento);
     setCarga((antes) => ({ ...antes, data: documento, chave: (antes.chave || 0) + 1 }));
   }
 
@@ -437,15 +548,29 @@ export function VitrinePuckPage() {
     const { data } = traduzirParaPuck({ ...carga.configCru, ...modelo.config });
     trocarDocumento(data);
     setGaveta(null);
-    setRecado(`Modelo "${modelo.name}" aplicado. Nada foi gravado ainda — confira e publique.`);
+    setRecado(`Modelo "${modelo.name}" aplicado no rascunho. Confira e publique.`);
   }
 
-  function restaurarVersao(versao) {
+  /* Restaurar NÃO publica: a versão volta como rascunho, e a pessoa confere. */
+  async function restaurarVersao(versao) {
+    try {
+      const { versao: completa } = await api.lerVersaoDaVitrine(tenantSlug, versao.id);
+      cadastroRef.current = { ...cadastroRef.current, ...(completa.cadastro || {}) };
+      trocarDocumento(structuredClone(completa.documento));
+      setGaveta(null);
+      setRecado(`Versão de ${quandoFoi(new Date(versao.publicadoEm).getTime())} restaurada no rascunho. Publique para valer no ar.`);
+    } catch (erro) {
+      setRecado(erro?.message || "Não consegui abrir esta versão.");
+    }
+  }
+
+  /* As antigas, do localStorage: só o documento (o cadastro não era guardado). */
+  function restaurarVersaoLocal(versao) {
     const documento = documentoDaVersao(versao);
     if (!documento) { setRecado("Esta versão está ilegível."); return; }
     trocarDocumento(documento);
     setGaveta(null);
-    setRecado(`Versão de ${quandoFoi(versao.quando)} restaurada. Publique para valer no ar.`);
+    setRecado(`Versão de ${quandoFoi(versao.quando)} restaurada no rascunho. Publique para valer no ar.`);
   }
 
   function recomecar() {
@@ -454,7 +579,7 @@ export function VitrinePuckPage() {
        edição feita no editor novo, que é o arrependimento real. */
     const { data } = traduzirParaPuck(carga.configCru);
     trocarDocumento(data);
-    setRecado("A página voltou ao ponto de partida. Publique para valer no ar.");
+    setRecado("O rascunho voltou ao ponto de partida. Publique para valer no ar.");
   }
 
   async function copiarLink() {
@@ -472,8 +597,10 @@ export function VitrinePuckPage() {
       Icone: ICONES.LinkSimple, acao: copiarLink },
     { rotulo: "Modelos de página", ajuda: "Trocar a montagem inteira por uma pronta",
       Icone: ICONES.Layout, acao: () => setGaveta("modelos") },
-    { rotulo: "Histórico de versões", ajuda: versoes.length ? `${versoes.length} guardada(s) neste navegador` : "Nada guardado ainda",
-      Icone: ICONES.ClockCounterClockwise, desativado: !versoes.length, acao: () => setGaveta("historico") },
+    { rotulo: "Histórico de versões", ajuda: versoes.length ? `${versoes.length} publicação(ões) guardada(s)` : "Nada publicado ainda",
+      Icone: ICONES.ClockCounterClockwise, desativado: !versoes.length && !versoesLocais.length, acao: () => setGaveta("historico") },
+    ...(temRascunho ? [{ rotulo: "Descartar rascunho", ajuda: "Volta à página que está no ar", perigo: true,
+      Icone: ICONES.ArrowCounterClockwise, acao: () => void descartarRascunho() }] : []),
     { rotulo: "Recomeçar", ajuda: "Volta ao ponto de partida desta vitrine", perigo: true,
       Icone: ICONES.ArrowCounterClockwise, acao: recomecar },
   ];
@@ -540,12 +667,8 @@ export function VitrinePuckPage() {
         overrides={SOBRESCRITAS}
         headerTitle="Editar Página"
         metadata={metadata}
-        /* SEM o botão "Publicar". O `children` que o Puck entrega aqui é só
-           ele — e a página já se publica sozinha: um segundo depois de cada
-           ação, o autosave grava o documento que a vitrine desenha (não existe
-           rascunho separado, ver AUTOSAVE). O botão sobrava como uma promessa
-           de "agora vai para o ar" que não acrescentava nada, e fazia a pessoa
-           achar que o que editou ainda não estava publicado. */
+        /* O `children` que o Puck entrega aqui é o botão "Publicar" DELE, e
+           não é usado: o nosso, mais abaixo, sabe se há rascunho a publicar. */
         renderHeaderActions={() => (
           <>
             {/* Não desenha nada: é o vigia que apaga seção que ficou sem peça
@@ -556,12 +679,33 @@ export function VitrinePuckPage() {
                 Também não desenha nada no cabeçalho: ela é fixa na tela. */}
             <BarraDaSelecao />
             <MenuDoEditor itens={ACOES} />
+            {/* O "Publicar" voltou (31/10/2026), agora com sentido: o autosave
+                grava um RASCUNHO, e só este botão leva ao ar. Apagado quando
+                não há nada a publicar, para a pessoa saber que o ar está em dia. */}
+            <button
+              type="button"
+              className="puck-publicar"
+              onClick={() => void publicar()}
+              disabled={publicando || Boolean(conflito) || (!temRascunho && situacao === "em-dia")}
+              title={temRascunho || situacao !== "em-dia" ? "Levar as alterações para a vitrine pública" : "Nada a publicar: a vitrine já está como esta página"}
+            >
+              {publicando ? "Publicando…" : "Publicar"}
+            </button>
           </>
         )}
         onAction={armar}
         onChange={aoMudar}
       />
       </FotosDoAcervo>
+
+      {/* Outra aba ou outra pessoa gravou por cima. A tela para de gravar e
+          oferece recarregar: insistir apagaria o trabalho do outro. */}
+      {conflito ? (
+        <div className="puck-conflito" role="alert">
+          <p><strong>{conflito}</strong> O que você mudou nesta aba depois disso não foi salvo.</p>
+          <button type="button" onClick={() => setRecarga((n) => n + 1)}>Recarregar</button>
+        </div>
+      ) : null}
 
       {gaveta ? (
         <div className="puck-gaveta" role="dialog" aria-label={gaveta === "modelos" ? "Modelos de página" : "Histórico de versões"}>
@@ -584,33 +728,43 @@ export function VitrinePuckPage() {
             </div>
           ) : (
             <div className="puck-gaveta__corpo">
-              <p>Guardadas neste navegador, uma por publicação. Não saem daqui e não vão para o banco.</p>
+              <p>Uma por publicação, guardadas na sua conta: aparecem em qualquer computador. Restaurar traz a versão para o rascunho, sem publicar.</p>
               {versoes.map((versao) => (
-                <button key={versao.quando} type="button" className="puck-gaveta__item" onClick={() => restaurarVersao(versao)}>
-                  <strong>{quandoFoi(versao.quando)}</strong>
-                  <em>Restaurar esta versão</em>
+                <button key={versao.id} type="button" className="puck-gaveta__item" onClick={() => void restaurarVersao(versao)}>
+                  <strong>{quandoFoi(new Date(versao.publicadoEm).getTime())}</strong>
+                  <em>{versao.publicadoPorNome ? `Publicada por ${versao.publicadoPorNome} · ` : ""}Restaurar esta versão</em>
                 </button>
               ))}
+              {versoesLocais.length ? (
+                <>
+                  <p className="puck-gaveta__sub">Antigas, guardadas só neste navegador:</p>
+                  {versoesLocais.map((versao) => (
+                    <button key={versao.quando} type="button" className="puck-gaveta__item" onClick={() => restaurarVersaoLocal(versao)}>
+                      <strong>{quandoFoi(versao.quando)}</strong>
+                      <em>Restaurar esta versão</em>
+                    </button>
+                  ))}
+                </>
+              ) : null}
             </div>
           )}
         </div>
       ) : null}
 
-      {/* A barra de situação. Diz o que está NO AR, que é a única pergunta que
-          importa quando existem dois renderizadores para a mesma página.
-
-          Ela oferecia "Voltar ao editor antigo", e deixou de oferecer: era a
-          porta de saída do beta, e no editor de todo dia virou um botão que
-          apaga o documento com um clique. A volta continua existindo para o
-          suporte — `/editar/classico` segue no ar —, só não mora mais aqui. */}
-      <div className={`puck-situacao${carga.noAr ? " puck-situacao--no-ar" : ""}`}>
+      {/* A barra de situação. Responde as duas perguntas que importam: o que
+          está NO AR, e se o que estou vendo já foi salvo. */}
+      <div className={`puck-situacao${temRascunho || situacao !== "em-dia" ? " puck-situacao--rascunho" : carga.noAr ? " puck-situacao--no-ar" : ""}`}>
         <span className="puck-situacao__ponto" aria-hidden />
         <span>
-          {carga.noAr
-            ? "A vitrine pública está desenhando por este documento."
-            : "Rascunho. A vitrine pública passa a desenhar por este documento na sua primeira alteração."}
+          {temRascunho || situacao !== "em-dia"
+            ? "Alterações não publicadas. A vitrine pública continua como estava até você publicar."
+            : carga.noAr
+              ? "Publicado. A vitrine pública está igual a esta página."
+              : "A vitrine pública ainda usa o formato antigo. Ela passa a desenhar por esta página quando você publicar."}
         </span>
-        {recado ? <em className="puck-situacao__recado">{recado}</em> : null}
+        {situacao === "salvando" ? <em className="puck-situacao__recado">Salvando rascunho…</em>
+          : situacao === "falhou" ? <em className="puck-situacao__recado puck-situacao__recado--erro">Não consegui salvar. Tento de novo na próxima alteração.</em>
+            : recado ? <em className="puck-situacao__recado">{recado}</em> : null}
       </div>
 
     </div>

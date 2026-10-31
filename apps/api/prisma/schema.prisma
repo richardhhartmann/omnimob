@@ -518,6 +518,8 @@ model Tenant {
   contratos       Contrato[]
   fontesCaptacao  FonteCaptacao[]
   captacaoEventos CaptacaoEvento[]
+  rascunhoVitrine RascunhoVitrine?
+  versoesVitrine  VersaoVitrine[]
 
   @@map("tb_tenants")
 }
@@ -2697,4 +2699,51 @@ model ImpulsoMovimento {
 
   @@index([tenantId, createdAt])
   @@map("tb_impulso_movimento")
+}
+
+/// O RASCUNHO do editor de vitrine (31/10/2026). Um por imobiliária: é a página
+/// sendo desenhada, e não a que está no ar. O autosave grava aqui; o "Publicar"
+/// copia para `Tenant.showcaseConfig` e apaga a linha. Ver `routes/editorVitrineRoutes.js`.
+///
+/// `versao` sobe a cada gravação e é o que impede dois editores abertos de
+/// apagarem o trabalho um do outro: quem grava manda a versão em que se baseou,
+/// e a diferente é recusada (409).
+model RascunhoVitrine {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  /// O documento do Puck ({ content, root }).
+  documento         Json
+  /// As opções de PÁGINA que a vitrine lê do nível de cima do showcaseConfig
+  /// (tema, fonte, cores, zebra…), já calculadas pela tela.
+  opcoes            Json
+  /// Os campos do cadastro editados na prancheta (logo, slogan, descrição, WhatsApp, e-mail).
+  cadastro          Json
+  versao            Int      @default(1)
+  atualizadoPorId   String?
+  atualizadoPorNome String?
+  atualizadoEm      DateTime @updatedAt
+  criadoEm          DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tb_vitrine_rascunho")
+}
+
+/// Cada PUBLICAÇÃO da vitrine, para voltar a algo de ontem em qualquer
+/// computador. Antes o histórico vivia no localStorage de um navegador só.
+/// Teto por imobiliária em `editorVitrineRoutes.js` (as mais antigas saem).
+model VersaoVitrine {
+  id               String   @id @default(cuid())
+  tenantId         String
+  documento        Json
+  opcoes           Json
+  cadastro         Json
+  publicadoPorId   String?
+  publicadoPorNome String?
+  publicadoEm      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, publicadoEm])
+  @@map("tb_vitrine_versao")
 }

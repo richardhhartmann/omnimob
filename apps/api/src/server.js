@@ -37,6 +37,7 @@ import { iniciarAvisosDeVencimento } from "./services/avisoVencimento.js";
 import { socialRouter } from "./routes/socialRoutes.js";
 import { socialWebhookRouter } from "./routes/socialWebhookRoutes.js";
 import { tenantRouter } from "./routes/tenantRoutes.js";
+import { editorVitrineRouter } from "./routes/editorVitrineRoutes.js";
 import { tutorialRouter } from "./routes/tutorialRoutes.js";
 import { usuarioRouter } from "./routes/usuarioRoutes.js";
 import { getHealth } from "./services/healthService.js";
@@ -236,6 +237,9 @@ app.get("/health", async (_req, res) => {
 app.use("/api/admin", adminRouter);
 app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/tenants", tenantRouter);
+/* O rascunho, a publicação e as versões do editor de vitrine (ver o cabeçalho
+   do router). Fora de `/api/tenants` para não disputar rota com o `PUT /me`. */
+app.use("/api/editor-vitrine", editorVitrineRouter);
 app.use("/api/properties", propertyRouter);
 app.use("/api/leads", leadRouter);
 app.use("/api/auditoria", auditoriaRouter);

@@ -196,6 +196,26 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  /* O editor de vitrine: rascunho, publicação e versões (ver
+     `apps/api/src/routes/editorVitrineRoutes.js`). `keepalive` é o envio da
+     saída da página: o navegador termina o pedido mesmo com a aba fechando. */
+  lerRascunhoDaVitrine: (tenantSlug) =>
+    request("/api/editor-vitrine", { headers: { "x-tenant-slug": tenantSlug } }),
+  salvarRascunhoDaVitrine: (tenantSlug, corpo, { keepalive = false } = {}) =>
+    request("/api/editor-vitrine/rascunho", {
+      method: "PUT", keepalive, headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify(corpo),
+    }),
+  descartarRascunhoDaVitrine: (tenantSlug) =>
+    request("/api/editor-vitrine/rascunho", { method: "DELETE", headers: { "x-tenant-slug": tenantSlug } }),
+  publicarVitrine: (tenantSlug, versao) =>
+    request("/api/editor-vitrine/publicar", {
+      method: "POST", headers: { "x-tenant-slug": tenantSlug }, body: JSON.stringify({ versao }),
+    }),
+  listarVersoesDaVitrine: (tenantSlug) =>
+    request("/api/editor-vitrine/versoes", { headers: { "x-tenant-slug": tenantSlug } }),
+  lerVersaoDaVitrine: (tenantSlug, id) =>
+    request(`/api/editor-vitrine/versoes/${encodeURIComponent(id)}`, { headers: { "x-tenant-slug": tenantSlug } }),
+
   updateTenantConfiguracao: (tenantSlug, payload) =>
     request("/api/tenants/me/configuracao", {
       method: "PUT",
