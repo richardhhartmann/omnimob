@@ -30,6 +30,7 @@
     "test:isolamento": "node ../../scripts/com-env.mjs -- node --test test/isolamento.test.js",
     "conferir-nomes": "node ../web/scripts/conferir-imports.mjs src",
     "modulos": "node ../../scripts/com-env.mjs -- node scripts/modulos.js",
+    "vitrines-classicas": "node ../../scripts/com-env.mjs -- node scripts/vitrinesClassicas.js",
     "demonstracao": "node ../../scripts/com-env.mjs -- node scripts/demonstracao.js"
   },
   "dependencies": {
