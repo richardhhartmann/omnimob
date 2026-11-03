@@ -66,14 +66,13 @@ const AdminConvitePage = doPainel("AdminConvitePage");
 
 const OmnimobLandingPage = telaTardia(() =>
   import("./pages/OmnimobLandingPage").then((m) => ({ default: m.OmnimobLandingPage })));
-const ShowcaseEditorPage = telaTardia(() =>
-  import("./pages/ShowcaseEditorPage").then((m) => ({ default: m.ShowcaseEditorPage })));
-/* O editor de vitrine. Sob demanda pela mesma razão do de cima: é uma tela
-   inteira, aberta de propósito, e o Puck é uma dependência grande.
+/* O editor de vitrine. Sob demanda: é uma tela inteira, aberta de propósito, e
+   o Puck é uma dependência grande.
 
-   O `ShowcaseEditorPage` acima virou o CLÁSSICO — segue carregado sob demanda
-   e segue com rota própria enquanto houver imobiliária no formato de
-   coordenadas. Nenhum botão leva até ele: a rota é a volta do SUPORTE. */
+   O editor CLÁSSICO (`ShowcaseEditorPage`) foi removido em 31/10/2026. A volta
+   do suporte ao formato antigo deixou de depender dele: a vitrine pública
+   ainda desenha o formato de coordenadas, e devolver uma imobiliária a ele é
+   `npm run vitrines-classicas -- --slug=X --voltar --aplicar` (na API). */
 const VitrinePuckPage = telaTardia(() =>
   import("./pages/VitrinePuckPage").then((m) => ({ default: m.VitrinePuckPage })));
 const SuperAdminPage = telaTardia(() =>
@@ -796,23 +795,18 @@ export default function App() {
             o documento gravado. A tradução acontece na abertura e não grava
             nada sozinha — ver `VitrinePuckPage`.
 
-            O editor antigo não sumiu: ele ficou em `/editar/classico`.
-            Enquanto houver imobiliária no formato de coordenadas essa volta
-            precisa existir de verdade — uma migração sem porta de saída é uma
-            aposta. Mas ela é do SUPORTE: o botão "Voltar ao editor antigo" saiu
-            do editor (OMNI-15), porque no uso de todo dia ele era um clique que
-            apagava o documento. Voltar é apagar a chave `puck` do
-            `showcaseConfig` e abrir esta rota. */}
+            O editor antigo foi removido (31/10/2026). A porta de saída da
+            migração continua existindo para o SUPORTE, sem ele: a vitrine
+            pública ainda desenha o formato de coordenadas, e voltar uma
+            imobiliária para ele é apagar a chave `puck` do `showcaseConfig`
+            (`npm run vitrines-classicas -- --slug=X --voltar --aplicar`). */}
         <Route path="/vitrine/:tenantSlug/editar" element={
           cargo?.editarPagina
             ? <VitrinePuckPage />
             : <Navigate to={defaultPublicPath} replace />
         } />
-        <Route path="/vitrine/:tenantSlug/editar/classico" element={
-          cargo?.editarPagina
-            ? <ShowcaseEditorPage session={session} onSessionUpdate={setSession} />
-            : <Navigate to={defaultPublicPath} replace />
-        } />
+        {/* O endereço do clássico continua levando a algum lugar: ao editor. */}
+        <Route path="/vitrine/:tenantSlug/editar/classico" element={<Navigate to=".." relative="path" replace />} />
         {/* O endereço da avaliação continua valendo: links já circularam, e um
             404 numa URL que alguém guardou é pior que um apelido. */}
         <Route path="/vitrine/:tenantSlug/puck" element={

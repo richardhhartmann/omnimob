@@ -160,6 +160,15 @@ omnimob/
   do painel — comunicado, Novidades, pedido de e-mail — fazem FILA pelo
   registro de tour (`utils/tourAtivo.js › quandoSemTour`): o aberto segura os
   outros
+- `/api/editor-vitrine/*` — **o rascunho, a publicação e as versões do editor
+  de vitrine** (`editarPagina`). O autosave grava um RASCUNHO
+  (`RascunhoVitrine`, um por imobiliária) que a vitrine pública não lê; só
+  `POST /publicar` leva ao ar, mesclando no `showcaseConfig` QUE ESTÁ NO BANCO
+  (e não na cópia de quando a tela abriu) e gravando uma `VersaoVitrine` (teto
+  de 30). Cada gravação manda a `versao` do rascunho em que se baseou: a velha
+  recebe 409 `CONFLITO_DE_VERSAO` — dois editores abertos não se apagam mais.
+  As opções de página e o cadastro passam por lista fechada de chaves.
+  `test/editorVitrine.test.js`
 - `PUT /api/auth/minha-barra` — **a barra lateral personalizada** da pessoa
   (porte do VYA): seções ("Favoritos") com as telas que ela mais usa e qual
   está ligada, em `Usuario.barraLateral`; volta na sessão como
@@ -280,6 +289,7 @@ de função pura os pegaria. Cada arquivo cria imobiliárias descartáveis com s
 | `test/novidadesRegra.test.js` | a validação do conteúdo (texto, tipo, permissão, módulo, print só https) e o corte Hub/Flow/permissão. **Não toca no banco** |
 | `test/novidades.test.js` | a rotina entra só com a chave e nunca sobrescreve a publicada; revisar não é publicar e a aba não cria semana; só-Hub não vê o Omniflow; o comunicado abre uma vez e o registro de quem viu é de quem viu; a publicação automática só é ligada por quem publica |
 | `test/contasEComunicados.test.js` | o comunicado de um cliente não aparece para outro (nem marcado pelo id real) e abre uma vez; o pedido de e-mail só preenche, nunca troca; a sessão aparece no primeiro uso e "encerrar" derruba na requisição seguinte (e só com `encerrarSessoes`); o consumo de IA entra no Controle de Uso |
+| `test/editorVitrine.test.js` | o rascunho não aparece no ar antes do "Publicar"; publicar não apaga o que outra tela gravou no `showcaseConfig`; duas abas: a versão velha recebe 409 e não apaga a outra; chave fora da lista (`puck`, `widgets`, `plano`) é recusada; teto de versões; B não abre a versão de A pelo id real |
 | `test/barraLateral.test.js` | as seções da barra lateral: a de A não mexe na de B; lixo é recusado sem apagar a que estava; apagar a última seção volta a nulo ("nunca personalizou") |
 | `test/interessados.test.js` | o interesse da landing é guardado mesmo sem destino de e-mail; a aba lista e marca atendido; a régua do Controle de Uso (ativa, esfriando, parada, nunca) |
 
@@ -644,6 +654,7 @@ Modelos principais:
 | `NegocioDocumento` | Comprovação cadastral. Arquivo no Cloudinary; `verificado` é separado de "existe o arquivo" |
 | `ModeloContrato` / `Contrato` | A minuta em branco e a preenchida. O `corpo` do contrato é **congelado** — editar o modelo não muda contrato assinado |
 | `ContratoSignatario` | Quem assina. Sem FK: testemunha e procurador não são cadastro |
+| `RascunhoVitrine` / `VersaoVitrine` | O rascunho do editor de vitrine (um por imobiliária, com `versao` para recusar dois editores) e cada publicação (as 30 mais recentes). Fora da trilha de auditoria: o autosave grava a cada segundo de silêncio. Ver `routes/editorVitrineRoutes.js` |
 | `FonteCaptacao` / `CaptacaoEvento` | A porta de cada portal, e o corpo CRU de cada chamada (90 dias). Sem o corpo original não há como descobrir por que um portal parou |
 
 **Campos que a vitrine lê:** `Usuario.exibirNaVitrine` (opt-in), `foto`,
@@ -693,6 +704,7 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
 | `test/normalizacao.test.js` | migração de config antigo, espelho legado, tolerância a lixo |
 | `test/imagemResponsiva.test.js` | as URLs de foto redimensionada (Cloudinary/Unsplash; o resto intocado) e a trava do pacote: só as páginas da vitrine entram por `import` estático no `App.jsx` |
 | `test/dadosEstruturados.test.js` | o JSON-LD: endereço oculto não vaza, número ausente não vira zero, e o anúncio só vira `Product` com preço E foto (sem os dois, o Rich Results Test acusa erro) |
+| `test/autosave.test.js` | a trava do autosave do editor (`puck/autosave.js`): abrir sem mexer não grava (a normalização do Puck dispara `onChange` sozinha); uma gravação de cada vez; a falha volta a ser pendente; `agora()` espera tudo antes de publicar |
 | `test/barraLateral.test.js` | a barra personalizada: a seção mostra só o escolhido com o pai em volta; chave que o cargo não alcança não reabre nada; criar, renomear, mover e apagar seções |
 | `test/relatosDaParede.test.js` | a parede "Por que Omnimob": reais primeiro, exemplos completando as 24 vagas, o exemplo desligado devolvendo a vaga — a mesma função na landing e na aba do super-admin |
 
@@ -720,7 +732,7 @@ esbuild que já vem dentro do Vite, então nenhuma dependência nova entrou.
                                             Regra em `utils/regioes.js` (espelho em
                                             `api/services/paginasDeRegiao.js`; teste cobra que
                                             os dois são o mesmo código)
-/vitrine/:tenantSlug/editar     → ShowcaseEditorPage (editor)
+/vitrine/:tenantSlug/editar     → VitrinePuckPage (o editor, com Puck). /editar/classico redireciona
 /                               → DashboardPage (admin)
 /leads                          → LeadsPage
 /auditoria                      → AuditoriaPage (registro de atividade)
@@ -772,7 +784,7 @@ src/
     ├── PropertyInsightsPage.jsx
     ├── ShowcasePage.jsx
     ├── ShowcasePropertyPage.jsx
-    └── ShowcaseEditorPage.jsx    ← só compõe o editor; a lógica mora em components/builder
+    └── VitrinePuckPage.jsx       ← o editor (Puck); as peças e a ponte moram em src/puck
 ```
 
 **Env vars do web (`.env` em `apps/web`):**
@@ -837,6 +849,16 @@ significaria mostrar algo que a vitrine não tem.
 `npm test` em `apps/web` renderiza cada peça nos dois modos e exige HTML
 idêntico depois de remover as afordâncias de edição. Se alguém acrescentar um
 invólucro ou um padding só de um lado, o teste aponta.
+
+> **O editor CLÁSSICO foi removido em 31/10/2026** (`ShowcaseEditorPage`,
+> `builder/canvas`, `builder/hooks`, `builder/panels`, `builder/toolbar`,
+> `builder/ia`). O que segue sobre peças, engine, física e alturas continua
+> valendo para a **vitrine pública**, que ainda desenha o formato de
+> coordenadas das imobiliárias que nunca publicaram pelo editor novo. De
+> `components/builder` ficaram só `data/` (modelos, biblioteca, temas) e o
+> `EditorEsqueleto`, que o Puck usa. Quantas faltam migrar e a volta de uma
+> imobiliária ao formato antigo: `npm run vitrines-classicas` (na API). O CSS
+> do clássico (`.editor-shell` no `styles.css`) ainda não foi limpo.
 
 ### A regra que organiza tudo
 
@@ -907,6 +929,12 @@ pausado durante o gesto.
 
 ### Assistente de IA (Premium)
 
+> **A tela do assistente saiu junto com o editor clássico** (ela só existia
+> lá, e desde a migração para o Puck nenhum botão levava até ela). A API
+> (`POST /api/ai/vitrine`, `services/vitrineIA.js`) continua, à espera do porte
+> para o Puck — que precisa de outro vocabulário de operações, porque o Puck é
+> árvore e não coordenadas.
+
 `components/builder/ia/` + `apps/api/src/services/vitrineIA.js`. A pessoa escreve
 "deixe com cara de alto padrão" e vê as peças se moverem, uma a uma, com o motivo
 de cada passo em português ao lado.
@@ -950,12 +978,17 @@ vence o da página. Os modelos (`BUILDER_TEMPLATES`) trazem esses valores como
 identidade própria (o "Luxo" é largo e arejado; o "Compacta", justo e sem
 zebra).
 
-**Publicação e editor antigo:** o editor do Puck não tem botão "Publicar" —
-um segundo depois de cada ação o autosave grava o documento que a vitrine
-desenha (não há rascunho separado), e a vitrine ainda no formato antigo migra
-na primeira alteração. O editor clássico segue em `/editar/classico`, mas
-nenhum botão leva até ele: a volta (apagar a chave `puck` do `showcaseConfig`)
-é operação do suporte, não do uso de todo dia.
+**Rascunho e publicação (31/10/2026):** o autosave (`puck/autosave.js`, um
+segundo de silêncio) grava um RASCUNHO em `/api/editor-vitrine/rascunho`, e só
+o botão **Publicar** leva ao ar — antes cada alteração ia ao ar sozinha. A
+trava da abertura (nada grava antes do `onAction` do Puck), a fila de uma
+gravação por vez e a falha que volta a ser pendente moram no módulo e têm teste.
+Conflito de versão (outra aba ou pessoa) pausa o autosave e mostra "Recarregar".
+Fechar a aba com algo não salvo pede confirmação, e o pendente vai na saída com
+`keepalive`. O histórico de versões vem do servidor; as antigas do
+`localStorage` aparecem à parte. A vitrine ainda no formato antigo migra na
+primeira PUBLICAÇÃO; a volta (apagar a chave `puck`) é
+`npm run vitrines-classicas -- --slug=X --voltar --aplicar`.
 
 **A gaveta do editor** tem categorias (`categories` em `configVitrine`) e a
 `other` é invisível: a `Secao` (colunas) e a peça genérica `Widget` seguem na
@@ -1192,6 +1225,8 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
   `STRIPE_PRICE_{BASICO,PROFISSIONAL,PREMIUM}_FLOW[_ANUAL]`; enquanto elas não
   existirem no ambiente, o pacote Hub+Flow não é vendável e o alternador some da
   landing — sem erro nenhum, como o preço anual fez quando entrou
+- **O assistente de IA da vitrine no Puck.** A tela saiu com o editor
+  clássico; a API (`/api/ai/vitrine`) segue pronta para o porte
 - **A troca de módulo pelo super-admin.** Hoje é `npm run modulos` ou a
   assinatura; falta a tela
 - **"Recuperar senha" de super-admin** não existe — hoje é o convite (só para
@@ -1224,6 +1259,7 @@ Compartilham o que importa (paleta, tipografia, logotipo) via `styles/omnimobKit
 | `npm run prisma:seed:dev` | Imobiliárias de exemplo + catálogos |
 | `npm run versao` | A versão do HEAD (`-- --semana AAAA-MM-DD` dá a MAIOR.SEMANA de uma terça; `-- --gravar` é o do build) |
 | `npm run novidades -- <pasta>` | Entrega `<pasta>/conteudo.json` como rascunho das Novidades (`--conferir` só valida). Precisa de `NOVIDADES_TOKEN`; `OMNIMOB_API_URL` troca o destino |
+| `npm run vitrines-classicas` | Conta as vitrines no editor novo, no formato antigo (coordenadas) e nunca personalizadas, e lista as do formato antigo. `-- --slug=X --voltar` devolve uma ao formato antigo (tira a chave `puck` e o rascunho; as versões ficam). Ensaio por padrão; `--aplicar` grava |
 | `npm run demonstracao` | A imobiliária `demonstracao` do "Ver por dentro": a `imobiliaria-centro` do seed com outro slug, logins `demo-*`, **fotos de imóvel de verdade** (Unsplash, escolhidas por tipo), Premium com os dois módulos, EM_DIA e sem vencimento (não cai na faxina). Idempotente; a senha do `demo-admin` é aleatória e sai UMA vez (`-- --senha-nova` gera outra). `INFISICAL_ENV=prod` para produção. O seed exporta as funções e aceita os dados por parâmetro justamente para este script não duplicá-lo |
 
 > O subdomínio de cada imobiliária é cadastrado **individualmente** na Vercel no
